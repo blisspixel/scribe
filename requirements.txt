@@ -1,0 +1,35 @@
+# Core dependencies for Scribe transcription system
+# Install with: pip install -r requirements.txt
+
+# Deep Learning and Audio
+torch>=2.0.0
+torchaudio>=2.0.0
+faster-whisper>=0.10.0
+numpy>=1.24.0
+
+# OpenAI API
+openai>=1.0.0
+httpx>=0.24.0
+
+# Audio Processing
+pydub>=0.25.1
+
+# CLI and UI
+rich>=13.0.0
+typer>=0.9.0
+tqdm>=4.65.0
+colorama>=0.4.6
+
+# Configuration and Validation
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
+
+# Document Generation
+python-docx>=1.0.0
+
+# OBS Integration
+obsws-python>=1.5.0
+
+# Utilities
+tenacity>=8.2.0
