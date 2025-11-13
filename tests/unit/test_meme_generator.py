@@ -171,3 +171,233 @@ class TestMemeConfig:
 
 # TODO: Add integration tests for meme generation with proper mocking
 # The QA loop and refinement features need complex mocking that requires more setup
+
+
+
+class TestMemeGeneratorSafetyHandling:
+    """Test safety filter handling and retry logic."""
+    
+    def test_analyze_transcript_with_default_params(self):
+        """Test _analyze_transcript_for_meme with default parameters."""
+        from scribe.utils.meme_generator import _analyze_transcript_for_meme
+        
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.output_text = '{"template": "test", "concept": "test concept", "top_text": "TOP", "bottom_text": "BOTTOM", "image_prompt": "test prompt"}'
+        mock_response.output = []
+        mock_client.responses.create.return_value = mock_response
+        
+        config = MemeConfig()
+        result = _analyze_transcript_for_meme(
+            mock_client,
+            "Test transcript",
+            config,
+            show_reasoning=False
+        )
+        
+        assert result is not None
+        assert result["template"] == "test"
+        assert result["concept"] == "test concept"
+    
+    def test_analyze_transcript_with_safety_params(self):
+        """Test _analyze_transcript_for_meme with make_safer=True."""
+        from scribe.utils.meme_generator import _analyze_transcript_for_meme
+        
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.output_text = '{"template": "safe", "concept": "safe concept", "top_text": "SAFE", "bottom_text": "HUMOR", "image_prompt": "safe prompt"}'
+        mock_response.output = []
+        mock_client.responses.create.return_value = mock_response
+        
+        config = MemeConfig(spice_level=7)
+        previous_attempt = {"template": "edgy", "concept": "edgy concept"}
+        
+        result = _analyze_transcript_for_meme(
+            mock_client,
+            "Test transcript",
+            config,
+            show_reasoning=False,
+            previous_attempt=previous_attempt,
+            make_safer=True
+        )
+        
+        assert result is not None
+        # Spice level should be reduced by 2
+        assert config.spice_level == 5
+    
+    def test_spice_level_reduction_respects_minimum(self):
+        """Test that spice level reduction doesn't go below 1."""
+        from scribe.utils.meme_generator import _analyze_transcript_for_meme
+        
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.output_text = '{"template": "test", "concept": "test", "top_text": "A", "bottom_text": "B", "image_prompt": "test"}'
+        mock_response.output = []
+        mock_client.responses.create.return_value = mock_response
+        
+        config = MemeConfig(spice_level=2)
+        
+        _analyze_transcript_for_meme(
+            mock_client,
+            "Test transcript",
+            config,
+            make_safer=True
+        )
+        
+        # Should be max(1, 2-2) = 1
+        assert config.spice_level == 1
+    
+    def test_generate_meme_image_safety_block_detection(self):
+        """Test that safety blocks are detected correctly."""
+        from scribe.utils.meme_generator import _generate_meme_image
+        from openai import OpenAI
+        
+        mock_client = Mock(spec=OpenAI)
+        mock_error = Exception("Error code: 400 - {'error': {'message': 'Your request was rejected by the safety system.', 'code': 'moderation_blocked'}}")
+        mock_client.images.generate.side_effect = mock_error
+        
+        config = MemeConfig()
+        meme_concept = {
+            "template": "test",
+            "top_text": "TEST",
+            "bottom_text": "MEME",
+            "image_prompt": "test prompt",
+            "optimal_size": "1024x1024"
+        }
+        
+        result = _generate_meme_image(
+            mock_client,
+            meme_concept,
+            config,
+            Path("test_meme.png")
+        )
+        
+        # Should return special "SAFETY_BLOCKED" string
+        assert result == "SAFETY_BLOCKED"
+    
+    def test_generate_meme_image_other_errors_return_none(self):
+        """Test that non-safety errors return None."""
+        from scribe.utils.meme_generator import _generate_meme_image
+        from openai import OpenAI
+        
+        mock_client = Mock(spec=OpenAI)
+        mock_error = Exception("Network error")
+        mock_client.images.generate.side_effect = mock_error
+        
+        config = MemeConfig()
+        meme_concept = {
+            "template": "test",
+            "top_text": "TEST",
+            "bottom_text": "MEME",
+            "image_prompt": "test prompt",
+            "optimal_size": "1024x1024"
+        }
+        
+        result = _generate_meme_image(
+            mock_client,
+            meme_concept,
+            config,
+            Path("test_meme.png")
+        )
+        
+        # Should return None for non-safety errors
+        assert result is None
+
+
+class TestMemeConfigSpiceLevel:
+    """Test spice level configuration and validation."""
+    
+    def test_spice_level_default(self):
+        """Test default spice level is 5."""
+        config = MemeConfig()
+        assert config.spice_level == 5
+    
+    def test_spice_level_custom(self):
+        """Test custom spice level."""
+        config = MemeConfig(spice_level=8)
+        assert config.spice_level == 8
+    
+    def test_spice_level_minimum(self):
+        """Test spice level can be 0."""
+        config = MemeConfig(spice_level=0)
+        assert config.spice_level == 0
+    
+    def test_spice_level_maximum(self):
+        """Test spice level can be 10."""
+        config = MemeConfig(spice_level=10)
+        assert config.spice_level == 10
+    
+    def test_spice_level_from_env(self):
+        """Test spice level from environment variable."""
+        with patch.dict(os.environ, {'SCRIBE_HUMOR_SPICE': '7'}):
+            config = MemeConfig.from_env()
+            assert config.spice_level == 7
+    
+    def test_spice_level_type_is_int(self):
+        """Test that spice_level is always an int, not a slice."""
+        config = MemeConfig()
+        assert isinstance(config.spice_level, int)
+        assert not isinstance(config.spice_level, slice)
+    
+    def test_spice_descriptions_access(self):
+        """Test that spice_descriptions can be accessed with int keys."""
+        spice_descriptions = {
+            0: "DISABLED",
+            1: "MILD",
+            5: "HONEST",
+            10: "SPICY"
+        }
+        
+        config = MemeConfig(spice_level=5)
+        
+        # This should not raise "unhashable type: 'slice'" error
+        desc = spice_descriptions.get(config.spice_level, "DEFAULT")
+        assert desc == "HONEST"
+    
+    def test_spice_level_not_slice_object(self):
+        """Test that spice_level is never a slice object."""
+        config = MemeConfig()
+        
+        # Ensure it's not a slice
+        assert not isinstance(config.spice_level, slice)
+        
+        # Ensure it can be used as a dict key
+        test_dict = {5: "value"}
+        result = test_dict.get(config.spice_level)
+        assert result == "value"
+
+
+class TestCLIParameterPassing:
+    """Test that CLI commands pass parameters correctly."""
+    
+    def test_rec_shortcut_passes_humor_flags(self):
+        """Test that rec shortcut passes no_joke and no_meme flags."""
+        from scribe.cli.main import rec_shortcut
+        
+        with patch('scribe.cli.main.record') as mock_record:
+            rec_shortcut(name="Test Meeting")
+            
+            # Verify record was called with correct parameters
+            mock_record.assert_called_once()
+            call_kwargs = mock_record.call_args.kwargs
+            
+            assert call_kwargs['name'] == "Test Meeting"
+            assert call_kwargs['auto_transcribe'] is True
+            assert call_kwargs['method'] == "auto"
+            assert call_kwargs['no_joke'] is False
+            assert call_kwargs['no_meme'] is False
+    
+    def test_rec_shortcut_without_name(self):
+        """Test that rec shortcut works without name."""
+        from scribe.cli.main import rec_shortcut
+        
+        with patch('scribe.cli.main.record') as mock_record:
+            rec_shortcut(name=None)
+            
+            # Verify record was called with correct parameters
+            mock_record.assert_called_once()
+            call_kwargs = mock_record.call_args.kwargs
+            
+            assert call_kwargs['name'] is None
+            assert call_kwargs['no_joke'] is False
+            assert call_kwargs['no_meme'] is False
