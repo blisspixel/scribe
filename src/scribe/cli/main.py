@@ -604,12 +604,17 @@ def record(
             console.print("[bold green]Recording & Transcription Complete[/bold green]")
             console.print()
             
+            # Debug: Log the flags
+            logger.info(f"Humor flags: no_joke={no_joke}, no_meme={no_meme}, has_api_key={bool(config.openai_api_key)}")
+            
             # Generate joke (enabled by default)
             if not no_joke:
                 if config.openai_api_key:
                     try:
-                        console.print("[cyan]Generating joke...[/cyan]")
-                        result = generate_transcript_joke(transcript_path, config.openai_api_key)
+                        # Quiet spinner for joke generation
+                        from scribe.utils.spinner import show_spinner
+                        with show_spinner("Generating joke"):
+                            result = generate_transcript_joke(transcript_path, config.openai_api_key)
                         if result:
                             joke_text, comedy_style = result
                             
@@ -648,13 +653,20 @@ def record(
             if not no_meme:
                 if config.openai_api_key:
                     try:
-                        console.print("[cyan]Generating meme...[/cyan]")
+                        # Quiet spinner for meme generation
+                        from scribe.utils.spinner import show_spinner
                         from scribe.utils.meme_generator import generate_meeting_meme
-                        meme_result = generate_meeting_meme(
-                            transcript_path,
-                            output_dir=config.output_folder,
-                            api_key=config.openai_api_key
-                        )
+                        
+                        with show_spinner("Generating meme") as spinner:
+                            meme_result = generate_meeting_meme(
+                                transcript_path,
+                                output_dir=config.output_folder,
+                                api_key=config.openai_api_key
+                            )
+                            if meme_result and meme_result.get("final_path"):
+                                spinner.success("Meme generated")
+                            else:
+                                spinner.error("Meme generation failed")
                         if meme_result and meme_result.get("final_path"):
                             meme_path = meme_result["final_path"]
                             console.print(f"[green]✓ Meme generated[/green]")
@@ -720,7 +732,7 @@ def rec_shortcut(
       scribe rec Board-Meeting
     """
     # Call the record command directly with auto-transcribe enabled
-    record(name=name, auto_transcribe=True, method="auto")
+    record(name=name, auto_transcribe=True, method="auto", no_joke=False, no_meme=False)
 
 
 @app.command()

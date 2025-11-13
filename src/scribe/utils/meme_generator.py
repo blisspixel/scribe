@@ -21,12 +21,14 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True), override=False)
 
 logger = logging.getLogger("meme_generator")
+# Only show ERROR level messages by default (not INFO/DEBUG)
+# Users can set MEME_LOG_LEVEL=DEBUG for verbose output
+logger.setLevel(getattr(logging, os.getenv("MEME_LOG_LEVEL", "ERROR").upper(), logging.ERROR))
 if not logger.handlers:
     handler = logging.StreamHandler()
     fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(fmt)
     logger.addHandler(handler)
-logger.setLevel(getattr(logging, os.getenv("MEME_LOG_LEVEL", "WARNING").upper(), logging.WARNING))
 
 
 @dataclass
@@ -100,7 +102,9 @@ def _analyze_transcript_for_meme(
     client: OpenAI,
     transcript: str,
     config: MemeConfig,
-    show_reasoning: bool = False
+    show_reasoning: bool = False,
+    previous_attempt: Optional[Dict[str, Any]] = None,
+    make_safer: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Use GPT-5 to analyze transcript and create meme concept.
@@ -117,6 +121,11 @@ def _analyze_transcript_for_meme(
     # Log transcript length for transparency
     transcript_length = len(transcript)
     logger.info(f"Analyzing transcript for meme concept... (transcript length: {transcript_length} characters)")
+    
+    # If previous attempt was blocked, reduce spice level and add safety guidance
+    if make_safer:
+        logger.info("Generating safer meme concept after safety filter block")
+        config.spice_level = max(1, config.spice_level - 2)  # Reduce by 2 levels
     
     # Spice level descriptions
     spice_descriptions = {
@@ -147,6 +156,24 @@ def _analyze_transcript_for_meme(
     else:  # Level 10
         spice_guidance = "NO FILTER. Say what everyone was thinking but would never say out loud. Expose the absurdity, the dysfunction, the collective delusion. Be savage but accurate. This is 'I can't believe this app said that' territory. Make it so honest it stings."
     
+    # Add guidance to avoid previous concept if it was blocked
+    safety_guidance = ""
+    if previous_attempt and make_safer:
+        prev_template = previous_attempt.get("template", "unknown")
+        prev_concept = previous_attempt.get("concept", "unknown")
+        safety_guidance = f"""
+IMPORTANT - PREVIOUS ATTEMPT BLOCKED:
+The previous meme concept was rejected by the safety filter:
+- Template: {prev_template}
+- Concept: {prev_concept}
+
+Generate a COMPLETELY DIFFERENT concept that is:
+- More professional and office-appropriate
+- Avoids any potentially controversial imagery
+- Focuses on universal workplace humor
+- Uses simple, clean visual concepts
+"""
+    
     analysis_prompt = f"""You are a PhD-level meme theorist. You understand Benign Violation Theory, semiotics, Grice's Maxims, and comedic theory. But you're not a robot following a checklist—you're an AGENTIC creative who uses these tools to find what's genuinely hilarious.
 
 FULL TRANSCRIPT ({transcript_length} characters):
@@ -157,6 +184,8 @@ Create a meme that makes people laugh and say "OH MY GOD, YES, EXACTLY!"
 
 SPICE LEVEL: {config.spice_level}/10 - {spice_desc}
 {spice_guidance}
+
+{safety_guidance}
 
 YOUR THEORETICAL TOOLKIT (use these as lenses, not rules):
 
@@ -216,7 +245,7 @@ Think deeply. Be creative. Make it HILARIOUS.
 """
 
     try:
-        # Use Responses API for GPT-5 with high reasoning
+        # Use Responses API for GPT-5 with medium reasoning (high can take 5+ minutes)
         response = client.responses.create(
             model=config.model,
             input=[
@@ -235,7 +264,7 @@ Think deeply. Use your full reasoning capacity. Find the perfect moment ANYWHERE
 Respond with valid JSON only."""},
                 {"role": "user", "content": analysis_prompt}
             ],
-            reasoning={"effort": "high"}  # Let GPT-5 think deeply
+            reasoning={"effort": "medium"}  # Medium is faster than high (30s vs 5+ min)
         )
         
         # Extract text from response
@@ -621,8 +650,16 @@ def _generate_meme_image(
         return output_path
         
     except Exception as e:
-        logger.error(f"Failed to generate meme image: {e}")
-        return None
+        error_str = str(e)
+        
+        # Check if it's a safety/moderation error
+        if "moderation_blocked" in error_str or "safety system" in error_str:
+            logger.warning(f"Image generation blocked by safety filter: {e}")
+            # Return special error code so caller can try a different concept
+            return "SAFETY_BLOCKED"
+        else:
+            logger.error(f"Failed to generate meme image: {e}")
+            return None
 
 
 def generate_meeting_meme(
@@ -656,7 +693,9 @@ def generate_meeting_meme(
         logger.error("No OpenAI API key provided")
         return None
     
-    client = OpenAI(api_key=api_key)
+    # Create client with timeout to prevent hanging (default: 120 seconds)
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key, timeout=config.timeout)
     
     # Read transcript
     try:
@@ -708,7 +747,22 @@ def generate_meeting_meme(
         attempt_path = output_dir / f"{transcript_path.stem}_meme_attempt{attempt}.{config.output_format}"
         
         meme_path = _generate_meme_image(client, meme_concept, config, attempt_path)
-        if not meme_path:
+        
+        # Handle safety filter blocks by generating a completely new concept
+        if meme_path == "SAFETY_BLOCKED":
+            logger.warning(f"Meme concept blocked by safety filter on attempt {attempt}, generating new concept...")
+            # Generate a completely new meme concept (safer, more professional)
+            meme_concept = _analyze_transcript_for_meme(
+                client, 
+                transcript_text, 
+                config,
+                previous_attempt=meme_concept,  # Pass previous to avoid similar concepts
+                make_safer=True  # Request a safer concept
+            )
+            # Try again with new concept
+            meme_path = _generate_meme_image(client, meme_concept, config, attempt_path)
+        
+        if not meme_path or meme_path == "SAFETY_BLOCKED":
             logger.error(f"Failed to generate meme image on attempt {attempt}")
             continue
         
@@ -744,11 +798,22 @@ def generate_meeting_meme(
             
             if score >= config.qa_threshold:
                 logger.info(f"Meme passed QA with score {score}/10")
-                # Copy best attempt to final meme.png
+                # Rename best attempt to final meme.png (no duplication)
                 final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-                import shutil
-                shutil.copy2(meme_path, final_path)
+                
+                # If final already exists (shouldn't happen), remove it first
+                if final_path.exists():
+                    final_path.unlink()
+                
+                # Rename instead of copy (no duplication)
+                meme_path.rename(final_path)
                 logger.info(f"Best meme saved as: {final_path}")
+                
+                # Update the path in all_attempts to reflect the rename
+                for att in all_attempts:
+                    if att["path"] == meme_path:
+                        att["path"] = final_path
+                
                 return {
                     "final_path": final_path,
                     "attempts": all_attempts,
@@ -766,10 +831,19 @@ def generate_meeting_meme(
                 "attempt": attempt,
                 "score": None
             })
-            # Copy to final meme.png
+            # Rename to final meme.png (no duplication)
             final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-            import shutil
-            shutil.copy2(meme_path, final_path)
+            
+            # If final already exists (shouldn't happen), remove it first
+            if final_path.exists():
+                final_path.unlink()
+            
+            # Rename instead of copy (no duplication)
+            meme_path.rename(final_path)
+            
+            # Update the path in all_attempts to reflect the rename
+            all_attempts[0]["path"] = final_path
+            
             return {
                 "final_path": final_path,
                 "attempts": all_attempts,
@@ -782,17 +856,27 @@ def generate_meeting_meme(
         best_attempt = max(all_attempts, key=lambda x: x["score"] if x["score"] is not None else 0)
         logger.warning(f"No meme met QA threshold. Using best attempt (score: {best_attempt['score']}/10)")
         
-        # Copy best attempt to final meme.png
+        # Rename best attempt to final meme.png (no duplication)
         final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-        import shutil
-        shutil.copy2(best_attempt["path"], final_path)
+        
+        # If final already exists (shouldn't happen), remove it first
+        if final_path.exists():
+            final_path.unlink()
+        
+        # Rename instead of copy (no duplication)
+        best_attempt["path"].rename(final_path)
         logger.info(f"Best meme saved as: {final_path}")
+        
+        # Update the path in all_attempts to reflect the rename
+        for att in all_attempts:
+            if att["path"] == best_attempt["path"]:
+                att["path"] = final_path
         
         # Log all attempts for user review
         logger.info(f"Generated {len(all_attempts)} meme attempts:")
         for att in all_attempts:
             score_str = f"{att['score']}/10" if att['score'] is not None else "N/A"
-            logger.info(f"  Attempt {att['attempt']}: {att['path']} (score: {score_str})")
+            logger.info(f"  Attempt {att['attempt']}: {att['path'].name} (score: {score_str})")
         
         return {
             "final_path": final_path,
