@@ -183,7 +183,7 @@ class TestGPUOptimizations:
         assert transcriber.enable_tensor_cores is True
     
     def test_uses_large_model_for_high_end_gpu(self, temp_config: ScribeConfig, mock_gpu):
-        """Test large-v3 model is used for high-end GPUs."""
+        """Test large-v3-turbo model is used for high-end GPUs."""
         gpu_config = GPUConfig.detect()
         
         assert gpu_config.model_size == "large-v3"

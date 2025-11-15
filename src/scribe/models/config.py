@@ -16,7 +16,7 @@ from scribe.exceptions import ValidationError
 
 
 TranscriptionMethod = Literal["auto", "local", "openai"]
-ModelSize = Literal["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
+ModelSize = Literal["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"]
 
 
 class ScribeConfig(BaseSettings):
@@ -70,7 +70,7 @@ class ScribeConfig(BaseSettings):
     # Transcription settings
     default_model: ModelSize = Field(
         default="large-v3",
-        description="Default Whisper model size"
+        description="Default Whisper model size (large-v3 = best quality, large-v3-turbo = faster)"
     )
     
     default_language: str = Field(
@@ -91,8 +91,8 @@ class ScribeConfig(BaseSettings):
     )
     
     openai_model: str = Field(
-        default="gpt-4o-transcribe",
-        description="OpenAI transcription model"
+        default="gpt-4o-transcribe-diarize",
+        description="OpenAI transcription model (with speaker diarization)"
     )
     
     # Hugging Face settings (for speaker diarization)

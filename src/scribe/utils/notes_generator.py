@@ -1,8 +1,10 @@
 """
-Meeting Notes Generator using GPT-5 with agentic reasoning.
+Meeting Notes Generator using AI with agentic reasoning.
 
 Transforms meeting transcripts into comprehensive, structured notes
 with business and technical context using multi-step AI analysis.
+
+Supports multiple AI providers (OpenAI, XAI/Grok, etc.) via the provider system.
 """
 
 import os
@@ -52,7 +54,7 @@ class NotesConfig:
 
 class NotesGenerator:
     """
-    Generates structured meeting notes from transcripts using GPT-5.
+    Generates structured meeting notes from transcripts using AI providers.
 
     Multi-step agentic reasoning:
     1. Generate detailed summary (prose)
@@ -60,48 +62,81 @@ class NotesGenerator:
     3. Refine and polish (JSON, strict schema)
 
     Design goals:
-    - Never drop content: no self-imposed output caps.
-    - Strict JSON for structured phases via prompt fallback.
-    - Lossless segmentation with overlap when single-pass would exceed practical limits.
-    - No streaming.
+    - Provider-agnostic: works with OpenAI, XAI/Grok, and other providers
+    - Never drop content: no self-imposed output caps
+    - Strict JSON for structured phases via prompt fallback
+    - Lossless segmentation with overlap when single-pass would exceed practical limits
+    - No streaming
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         model: str = "gpt-5",
-        max_retries: int = 3
+        max_retries: int = 3,
+        provider_name: Optional[str] = None
     ):
         """
-        Initialize notes generator with OpenAI configuration.
+        Initialize notes generator with AI provider configuration.
 
         Args:
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
-            model: GPT model to use (default: gpt-5)
+            api_key: API key (defaults to provider-specific env var)
+            model: Model to use (default: gpt-5 for OpenAI, grok-4-fast-reasoning for XAI)
             max_retries: Maximum retry attempts for API calls
+            provider_name: AI provider to use (openai, xai) - defaults to SCRIBE_NOTES_PROVIDER env var
 
         Raises:
             NotesGenerationError: If API key is missing
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise NotesGenerationError(
-                "OpenAI API key not found. Set OPENAI_API_KEY environment variable."
+        # Try to use provider system
+        self.provider = None
+        self.use_provider = False
+        
+        try:
+            from scribe.providers import get_provider
+            self.provider = get_provider(
+                feature="notes",
+                api_key=api_key,
+                model=model if model != "gpt-5" else None,  # Let provider choose default
+                provider_name=provider_name,
+            )
+            self.use_provider = True
+            logger.info(f"Using provider: {self.provider.config.provider_name} | model: {self.provider.config.model}")
+            
+            # Set config from provider
+            self.config = NotesConfig(
+                api_key=self.provider.config.api_key,
+                model=self.provider.config.model,
+                max_retries=max_retries
+            )
+            self.api_key = self.provider.config.api_key
+            
+        except Exception as e:
+            logger.debug(f"Provider system not available, falling back to OpenAI: {e}")
+            self.use_provider = False
+            
+            # Fallback to OpenAI - get key from environment if not provided
+            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not self.api_key:
+                raise NotesGenerationError(
+                    "API key not found. Set OPENAI_API_KEY or XAI_API_KEY environment variable, "
+                    "or pass api_key parameter."
+                )
+
+            self.config = NotesConfig(
+                api_key=self.api_key,
+                model=model,
+                max_retries=max_retries
             )
 
-        self.config = NotesConfig(
-            api_key=self.api_key,
-            model=model,
-            max_retries=max_retries
-        )
-
+        # Always create OpenAI client for now (will migrate to provider in future)
         self.client = OpenAI(api_key=self.api_key)
         try:
             import importlib.metadata as im
             logger.info(f"openai SDK version: {im.version('openai')}")
         except Exception:
             pass
-        logger.info(f"Initialized NotesGenerator with model={model}")
+        logger.info(f"Initialized NotesGenerator with model={self.config.model}")
 
     def generate_notes(
         self,
@@ -227,20 +262,65 @@ class NotesGenerator:
         """
         Lightweight JSON fixer for common issues if the model returns near-JSON in fallback mode.
         """
+        import re
+        
         raw = s.strip()
+        
         # Trim code fences if present
         if raw.startswith("```"):
             raw = raw.strip("`").lstrip()
             if raw.lower().startswith("json"):
                 raw = raw[4:].lstrip()
+        
+        # Remove any text before the first {
+        first_brace = raw.find("{")
+        if first_brace > 0:
+            raw = raw[first_brace:]
+        
+        # Remove any text after the last }
+        last_brace = raw.rfind("}")
+        if last_brace > 0 and last_brace < len(raw) - 1:
+            raw = raw[:last_brace + 1]
+        
+        # Fix missing commas between array elements (common Grok issue)
+        # Pattern: "text" "text" should be "text", "text"
+        raw = re.sub(r'"\s+"', '", "', raw)
+        
+        # Fix missing commas between array elements with newlines
+        # Pattern: "text"\n"text" should be "text",\n"text"
+        raw = re.sub(r'"\s*\n\s*"', '",\n"', raw)
+        
         # Balance braces if obviously off by one
         open_braces = raw.count("{")
         close_braces = raw.count("}")
         if open_braces > close_braces:
             raw = raw + ("}" * (open_braces - close_braces))
+        elif close_braces > open_braces:
+            # Remove extra closing braces from the end
+            diff = close_braces - open_braces
+            for _ in range(diff):
+                last_close = raw.rfind("}")
+                if last_close > 0:
+                    raw = raw[:last_close] + raw[last_close + 1:]
+        
+        # Balance brackets - add missing ] before the final }
+        open_brackets = raw.count("[")
+        close_brackets = raw.count("]")
+        if open_brackets > close_brackets:
+            # Find the last } and insert ] before it
+            last_brace_pos = raw.rfind("}")
+            if last_brace_pos > 0:
+                missing_brackets = "]" * (open_brackets - close_brackets)
+                raw = raw[:last_brace_pos] + missing_brackets + raw[last_brace_pos:]
+            else:
+                raw = raw + ("]" * (open_brackets - close_brackets))
+        
         # Remove trailing commas in common places
-        raw = raw.replace(",\n}", "\n}")
-        raw = raw.replace(",\n]", "\n]")
+        raw = re.sub(r',(\s*[}\]])', r'\1', raw)
+        
+        # Fix common quote issues
+        raw = raw.replace('\\"', '"')  # Unescape quotes
+        
         return raw
 
     @retry(
@@ -257,14 +337,14 @@ class NotesGenerator:
         json_schema: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        Call GPT-5 Responses API with retry logic (non-streaming).
+        Call AI provider with retry logic (provider-agnostic).
 
         Args:
             input_text: Input prompt text
-            reasoning_effort: minimal | low | medium | high
-            verbosity: low | medium | high
+            reasoning_effort: minimal | low | medium | high (ignored for non-OpenAI providers)
+            verbosity: low | medium | high (ignored for non-OpenAI providers)
             phase: phase name for telemetry
-            json_schema: optional JSON schema for strict structured output (prompt-enforced)
+            json_schema: optional JSON schema for strict structured output
 
         Returns:
             (response content string, metrics dict)
@@ -272,56 +352,76 @@ class NotesGenerator:
         try:
             start_time = time.time()
 
-            prompt_text = input_text
-            if json_schema is not None:
-                prompt_text = self._build_json_schema_prompt_hint(json_schema) + "\n\n" + input_text
+            # Use provider if available, otherwise fall back to OpenAI client
+            if self.use_provider:
+                # Provider-agnostic path
+                messages = [{"role": "user", "content": input_text}]
+                
+                # Determine max tokens based on phase
+                max_tokens = 4000 if json_schema else 2000
+                
+                response = self.provider.chat_completion_with_json(
+                    messages=messages,
+                    json_schema=json_schema,
+                    max_tokens=max_tokens
+                )
+                
+                content = response["content"]
+                tokens_used = response.get("usage", {}).get("total_tokens", 0)
+                
+            else:
+                # OpenAI Responses API path (legacy)
+                prompt_text = input_text
+                if json_schema is not None:
+                    prompt_text = self._build_json_schema_prompt_hint(json_schema) + "\n\n" + input_text
 
-            params: Dict[str, Any] = {
-                "model": self.config.model,
-                "input": [
-                    {"role": "user", "content": [{"type": "input_text", "text": prompt_text}]}
-                ],
-                "reasoning": {"effort": reasoning_effort},
-                "text": {"verbosity": verbosity},
-                # No temperature/top_p/logprobs per GPT-5 guidance
-            }
+                params: Dict[str, Any] = {
+                    "model": self.config.model,
+                    "input": [
+                        {"role": "user", "content": [{"type": "input_text", "text": prompt_text}]}
+                    ],
+                    "reasoning": {"effort": reasoning_effort},
+                    "text": {"verbosity": verbosity},
+                }
 
-            resp = self.client.responses.create(**params)
+                resp = self.client.responses.create(**params)
 
-            # Defensive retry only if server marks response incomplete due to a cap
-            if getattr(resp, "status", None) == "incomplete":
-                inc = getattr(resp, "incomplete_details", None)
-                reason = getattr(inc, "reason", None) if inc else None
-                if reason == "max_output_tokens":
-                    logger.warning("Server reported max_output_tokens cap; retrying with lower reasoning.")
-                    params["reasoning"] = {"effort": "low"}
-                    resp = self.client.responses.create(**params)
+                # Defensive retry only if server marks response incomplete due to a cap
+                if getattr(resp, "status", None) == "incomplete":
+                    inc = getattr(resp, "incomplete_details", None)
+                    reason = getattr(inc, "reason", None) if inc else None
+                    if reason == "max_output_tokens":
+                        logger.warning("Server reported max_output_tokens cap; retrying with lower reasoning.")
+                        params["reasoning"] = {"effort": "low"}
+                        resp = self.client.responses.create(**params)
 
-            content = self._extract_output_text(resp)
+                content = self._extract_output_text(resp)
+                if not content:
+                    status = getattr(resp, "status", None)
+                    inc = getattr(resp, "incomplete_details", None)
+                    inc_reason = getattr(inc, "reason", None) if inc else None
+                    raise APIError(f"Empty response. status={status}, incomplete_reason={inc_reason}")
+
+                usage = getattr(resp, "usage", None)
+                tokens_used = getattr(usage, "total_tokens", 0) if usage else 0
+
             if not content:
-                status = getattr(resp, "status", None)
-                inc = getattr(resp, "incomplete_details", None)
-                inc_reason = getattr(inc, "reason", None) if inc else None
-                raise APIError(f"Empty response. status={status}, incomplete_reason={inc_reason}")
-
-            usage = getattr(resp, "usage", None)
-            tokens_used = getattr(usage, "total_tokens", 0) if usage else 0
+                raise APIError("Empty response from AI provider")
 
             metrics = {
                 "phase": phase,
                 "duration_sec": round(time.time() - start_time, 2),
                 "tokens": tokens_used,
-                "reasoning_effort": reasoning_effort,
-                "verbosity": verbosity,
+                "provider": self.provider.config.provider_name if self.use_provider else "openai",
+                "model": self.config.model,
                 "structured_output": json_schema is not None,
-                "schema_enforced_by_api": False  # prompt-only in this version
             }
-            logger.info(f"GPT-5 API metrics: {json.dumps(metrics)}")
+            logger.info(f"AI API metrics: {json.dumps(metrics)}")
             return content.strip(), metrics
 
         except Exception as e:
-            logger.error(f"GPT-5 API call failed: {e}")
-            raise APIError(f"OpenAI API call failed: {e}")
+            logger.error(f"AI API call failed: {e}")
+            raise APIError(f"AI API call failed: {e}")
 
     # ---------------- Pipeline Steps ----------------
 
@@ -479,13 +579,27 @@ CRITICAL FORMATTING RULES:
             )
             try:
                 breakdown = json.loads(response_text)
-            except json.JSONDecodeError:
-                breakdown = json.loads(self._repair_json_lenient(response_text))
+            except json.JSONDecodeError as e1:
+                logger.debug(f"Initial JSON parse failed: {e1}, attempting repair...")
+                try:
+                    repaired = self._repair_json_lenient(response_text)
+                    breakdown = json.loads(repaired)
+                    logger.debug("JSON repair successful")
+                except json.JSONDecodeError as e2:
+                    logger.error(f"JSON repair failed: {e2}")
+                    logger.error(f"Response preview (first 500 chars): {response_text[:500]}")
+                    logger.error(f"Response preview (last 500 chars): {response_text[-500:]}")
+                    # Write full response to debug file
+                    debug_file = Path("debug_json_response.txt")
+                    debug_file.write_text(response_text, encoding="utf-8")
+                    logger.error(f"Full response written to: {debug_file.absolute()}")
+                    raise ValidationError(f"Invalid JSON response: {e2}. Original error: {e1}")
             self._validate_breakdown_keys(breakdown)
             logger.info(f"Generated breakdown with {len(breakdown)} sections")
             return breakdown
         except json.JSONDecodeError as e:
-            raise ValidationError(f"Invalid JSON response from GPT-5: {e}")
+            provider_name = self.provider.config.provider_name if self.use_provider else "OpenAI"
+            raise ValidationError(f"Invalid JSON response from {provider_name}: {e}")
         except Exception as e:
             raise NotesGenerationError(f"Failed to generate analytical breakdown: {e}")
 

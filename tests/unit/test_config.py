@@ -423,3 +423,4 @@ class TestConfigEdgeCases:
         config = ScribeConfig(output_folder=tmp_path / "test")
         
         assert config.output_folder.exists()
+

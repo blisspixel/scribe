@@ -7,6 +7,7 @@ transcription, recording, and system information.
 
 from pathlib import Path
 from typing import Optional
+import time
 
 import typer
 from rich.console import Console
@@ -26,7 +27,7 @@ from scribe.utils.logging import setup_logging, console, get_logger
 from scribe.utils.joke_generator import generate_transcript_joke, ARCHETYPE_DISPLAY_NAMES
 
 logger = get_logger(__name__)
-from scribe.exceptions import ScribeError
+from scribe.exceptions import ScribeError, ProcessError
 
 # Create Typer app
 app = typer.Typer(
@@ -124,18 +125,62 @@ def transcribe_command(
         if keep_all:
             config.keep_intermediate_files = True
         
+        # Validate audio file first
+        audio_path = validate_file_path(str(audio_file))
+        
         # Setup logging
         meeting_name = audio_file.stem
         logger = setup_logging(meeting_name, config.log_folder)
+        workflow_start_time = time.time()
+        
+        # Get audio duration for progress estimation
+        from scribe.utils.audio import get_audio_duration
+        audio_duration = get_audio_duration(audio_path)
+        duration_mins = int(audio_duration / 60) if audio_duration else 0
+        
+        # Check what features are actually enabled
+        has_api_key = bool(config.openai_api_key)
+        will_generate_notes = not no_notes and config.enable_notes and has_api_key
+        will_generate_joke = not no_joke and has_api_key
+        will_generate_meme = not no_meme and has_api_key
+        include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
+        
+        # Build feature list for display
+        outputs = ["transcript"]
+        if will_generate_notes:
+            outputs.append("notes")
+        if will_generate_joke:
+            outputs.append("joke")
+        if will_generate_meme:
+            outputs.append("meme")
+        
+        # Build panel content
+        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines.append(f"[white]{audio_file.name}[/white]")
+        
+        if duration_mins:
+            panel_lines.append(f"[dim]Duration: {duration_mins} minutes[/dim]")
+        
+        panel_lines.append(f"[dim]Generating: {', '.join(outputs)}[/dim]")
         
         console.print(Panel.fit(
-            f"[bold cyan]Scribe Transcription System v{__version__}[/bold cyan]\n"
-            f"File: {audio_file.name}",
-            border_style="cyan"
+            "\n".join(panel_lines),
+            border_style="cyan",
+            padding=(0, 1)
         ))
+        console.print()
         
-        # Validate audio file
-        audio_path = validate_file_path(str(audio_file))
+        # Initialize unified progress with adaptive performance tracking
+        from scribe.utils.unified_progress import UnifiedProgress
+        import platform
+        import hashlib
+        
+        # Generate stable machine ID from hardware info
+        machine_info = f"{platform.node()}-{platform.processor()}"
+        machine_id = hashlib.md5(machine_info.encode()).hexdigest()[:16]
+        
+        unified_progress = UnifiedProgress(audio_duration, machine_id=machine_id, include_api_features=include_api_features)
+        unified_progress.start()
         
         # Create session
         session = TranscriptionSession.create(meeting_name)
@@ -145,21 +190,20 @@ def transcribe_command(
         transcriber = Transcriber(config)
         chosen_method = transcriber.choose_method(method)
         
-        # Convert audio to optimal format based on transcription method
+        # Phase 1: Preparing audio (0-15%)
         if chosen_method == "local":
-            # Local GPU transcription requires 16kHz mono WAV with normalized audio
-            console.print("[cyan]Converting to WAV with normalized audio...[/cyan]")
+            unified_progress.update_phase("preparing", 0.0)
             try:
                 from scribe.core.converter import Converter
                 converter = Converter()
-                
-                # Convert with timeout protection (won't hang indefinitely)
-                # Uses dynaudnorm for proper audio normalization
-                audio_file = converter.convert_to_wav(audio_path)
-                
-                console.print("[green]✓ Converted to WAV[/green]")
-                console.print()
-                console.print("[cyan]Transcribing with local NVIDIA GPU...[/cyan]")
+                # Suppress converter's own progress (unified progress handles it)
+                # Pass callback to update unified progress during conversion
+                audio_file = converter.convert_to_wav(
+                    audio_path, 
+                    show_progress=False,
+                    progress_callback=lambda p: unified_progress.update_phase("preparing", p)
+                )
+                unified_progress.update_phase("preparing", 1.0)
             except ProcessError as e:
                 console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                 console.print("[yellow]Tip: Check that ffmpeg is installed and the audio file is valid[/yellow]")
@@ -194,7 +238,7 @@ def transcribe_command(
                         console.print("[yellow]Tip: Try using local GPU transcription for very long recordings[/yellow]")
                         raise typer.Exit(1)
                     
-                    console.print(f"[green]✓ Converted to MP3 ({compressed_size_mb:.1f}MB)[/green]")
+                    console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
                 except ProcessError as e:
                     console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                     console.print("[yellow]Tip: Check that ffmpeg is installed and the audio file is valid[/yellow]")
@@ -205,16 +249,34 @@ def transcribe_command(
             else:
                 # File size OK - use original audio file
                 audio_file = audio_path
-            
             console.print()
-            console.print("[cyan]Transcribing with OpenAI API...[/cyan]")
         
-        # Perform transcription (conversion already done above)
-        transcript_path = transcriber.transcribe(
-            audio_file,
-            method=chosen_method,
-            session=session
-        )
+        # Phase 2: Transcribing (18-68%)
+        unified_progress.update_phase("transcribing", 0.0)
+        
+        # Start a thread to update progress during transcription
+        import threading
+        transcription_done = threading.Event()
+        
+        def update_transcription_progress():
+            while not transcription_done.is_set():
+                unified_progress.refresh()
+                time.sleep(1.0)
+        
+        progress_thread = threading.Thread(target=update_transcription_progress, daemon=True)
+        progress_thread.start()
+        
+        try:
+            transcript_path = transcriber.transcribe(
+                audio_file,
+                method=chosen_method,
+                session=session
+            )
+        finally:
+            transcription_done.set()
+            progress_thread.join(timeout=1.0)
+        
+        unified_progress.update_phase("transcribing", 1.0)
         
         # Verify transcript was created and has content
         if not transcript_path or not transcript_path.exists():
@@ -225,153 +287,107 @@ def transcribe_command(
             console.print("[red]Error: Transcription failed - output file is empty[/red]")
             raise typer.Exit(1)
         
+        # Phase 3: Finishing (85-100%)
+        unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
+        
         # Generate DOCX
         if not no_docx:
-            console.print("[cyan]Generating DOCX document...[/cyan]")
             try:
                 docx_path = txt_to_docx(transcript_path)
                 session.add_file(docx_path, "docx")
-                console.print(f"[green]DOCX created: {docx_path.name}[/green]")
             except Exception as e:
-                console.print(f"[yellow]DOCX generation failed: {e}[/yellow]")
+                logger.error(f"DOCX generation failed: {e}")
         
         # Generate meeting notes if enabled
         notes_path = None
         if not no_notes and config.enable_notes and config.openai_api_key:
-            console.print("[cyan]Generating meeting notes...[/cyan]")
+            unified_progress.update_phase("finishing", 0.2, "Generating notes")
             try:
                 from scribe.utils.notes_generator import NotesGenerator
                 notes_generator = NotesGenerator(
-                    api_key=config.openai_api_key,
-                    model=config.notes_model
+                    api_key=None,  # Let provider factory get the right key
+                    model=config.notes_model,
+                    provider_name=None  # Will use SCRIBE_NOTES_PROVIDER env var
                 )
                 notes_path = notes_generator.generate_notes(transcript_path)
                 session.add_file(notes_path, "notes")
-                console.print(f"[green]✓ Notes generated: {notes_path.name}[/green]")
             except Exception as e:
                 logger.error(f"Notes generation failed: {e}")
-                console.print(f"[yellow]Notes generation failed: {e}[/yellow]")
+        
+        # Generate joke if enabled
+        if not no_joke and config.openai_api_key:
+            unified_progress.update_phase("finishing", 0.6, "Generating joke")
+            result = generate_transcript_joke(transcript_path, config.openai_api_key)
+            if result:
+                joke_text, comedy_style = result
+                
+                # Save joke to session for later display
+                if not hasattr(session, 'joke_data'):
+                    session.joke_data = {"text": joke_text, "style": comedy_style}
+        
+        # Generate meme from transcript (enabled by default)
+        if not no_meme and config.openai_api_key:
+            from scribe.utils.meme_generator import generate_meeting_meme
+            
+            def meme_progress(attempt, max_attempts, score):
+                """Update progress during meme generation"""
+                if score is None:
+                    unified_progress.update_phase("finishing", 0.8, f"Generating meme (attempt {attempt}/{max_attempts})")
+                else:
+                    unified_progress.update_phase("finishing", 0.8, f"Refining meme (score: {score:.1f}/10, attempt {attempt}/{max_attempts})")
+            
+            unified_progress.update_phase("finishing", 0.8, "Generating meme")
+            meme_result = generate_meeting_meme(
+                transcript_path,
+                output_dir=config.output_folder,
+                api_key=None,  # Let provider system choose the right key
+                progress_callback=meme_progress
+            )
+            
+            if meme_result:
+                meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
+                session.add_file(meme_path, "meme")
         
         # Cleanup
         if not keep_all:
-            console.print("[cyan]Cleaning up intermediate files...[/cyan]")
+            unified_progress.update_phase("finishing", 0.95, "Cleaning up")
             deleted = transcriber.cleanup_intermediate_files(audio_path.parent)
-            if deleted:
-                console.print(f"[green]Cleaned up {len(deleted)} files[/green]")
+        
+        # Complete unified progress
+        unified_progress.update_phase("finishing", 1.0)
+        unified_progress.complete()
         
         # Complete session
         session.complete(success=True)
         summary_path = session.save_summary(config.output_folder)
-        
-        console.print()
-        console.print("[bold green]Transcription Complete[/bold green]")
         console.print()
         
-        # Generate agentic AI joke (enabled by default)
-        if not no_joke:
-            if config.openai_api_key:
-                console.print("[cyan]Generating joke...[/cyan]")
-                result = generate_transcript_joke(transcript_path, config.openai_api_key)
-                if result:
-                    joke_text, comedy_style = result
-                    
-                    # Get human-readable archetype name for display
-                    style_display = ARCHETYPE_DISPLAY_NAMES.get(
-                        comedy_style, 
-                        comedy_style.replace("_", " ").title()
-                    )
-                    
-                    # Display joke cleanly: archetype name in cyan, joke in white
-                    console.print()
-                    console.print(f"[bold cyan]{style_display}:[/bold cyan]")
-                    console.print(f"[white]{joke_text}[/white]")
-                    console.print()
-                    
-                    # Save joke to session summary for future reference
-                    if summary_path:
-                        import json
-                        try:
-                            with open(summary_path, "r", encoding="utf-8") as f:
-                                summary_data = json.load(f)
-                            summary_data["joke"] = {
-                                "text": joke_text,
-                                "style": comedy_style
-                            }
-                            with open(summary_path, "w", encoding="utf-8") as f:
-                                json.dump(summary_data, f, indent=2)
-                        except Exception as e:
-                            logger.warning(f"Failed to add joke to summary: {e}")
-            else:
-                logger.info("Skipping joke generation - OpenAI API key not configured")
+        # Display joke if generated
+        if hasattr(session, 'joke_data') and session.joke_data:
+            joke_text = session.joke_data["text"]
+            console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
+            console.print()
         
-        # Generate meme from transcript (enabled by default)
-        if not no_meme:
-            if config.openai_api_key:
-                from scribe.utils.spinner import show_spinner
-                from scribe.utils.meme_generator import generate_meeting_meme
-                
-                with show_spinner("Generating meme") as spinner:
-                    meme_result = generate_meeting_meme(
-                        transcript_path,
-                        output_dir=config.output_folder,
-                        api_key=config.openai_api_key
-                    )
-                    
-                    if meme_result:
-                        meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
-                        attempts = meme_result.get("attempts", []) if isinstance(meme_result, dict) else []
-                        best_score = meme_result.get("best_score") if isinstance(meme_result, dict) else None
-                        
-                        # Show success with score
-                        if best_score is not None:
-                            spinner.success("Meme generated", extra=f"score: {best_score:.1f}/10")
-                        else:
-                            spinner.success("Meme generated")
-                        
-                        # Store meme path and attempts for display later
-                        session.add_file(meme_path, "meme")
-                        session.meme_attempts = attempts  # Store all attempts
-                    else:
-                        spinner.error("Failed to generate meme")
-                        logger.warning("Failed to generate meme")
-            else:
-                logger.info("Skipping meme generation - OpenAI API key not configured")
-        
-        # Display output files with clickable links
-        # Order: Meme → Notes → DOCX → Transcript (TXT is what user usually clicks)
-        console.print("[bold cyan]Output Files:[/bold cyan]")
+        # Display output files - simple names with clickable links
+        console.print("[bold cyan]Output:[/bold cyan]")
         console.print()
         
-        # Meme image (clickable link) - shown first after joke
-        if session.meme_file:
-            meme_path = session.meme_file
-            url_path = str(meme_path).replace("\\", "/")
-            console.print(f"  Meme:       [link=file:///{url_path}]{meme_path}[/link]")
-            
-            # Show all meme attempts if multiple were generated
-            if hasattr(session, 'meme_attempts') and len(session.meme_attempts) > 1:
-                console.print(f"\n  [dim]All meme attempts:[/dim]")
-                for attempt in session.meme_attempts:
-                    score_str = f"{attempt['score']:.1f}/10" if attempt['score'] is not None else "N/A"
-                    attempt_path = attempt['path']
-                    url_path = str(attempt_path).replace("\\", "/")
-                    console.print(f"  [dim]  Attempt {attempt['attempt']} (score: {score_str}): [link=file:///{url_path}]{attempt_path}[/link][/dim]")
-                console.print()
+        # Show just filenames, but make them clickable
+        if transcript_path:
+            url_path = str(transcript_path).replace("\\", "/")
+            console.print(f"  [link=file:///{url_path}]{transcript_path.name}[/link]")
         
-        # Notes file (clickable link)
+        if not no_docx and session.docx_file:
+            url_path = str(session.docx_file).replace("\\", "/")
+            console.print(f"  [link=file:///{url_path}]{session.docx_file.name}[/link]")
+        
         if notes_path:
             url_path = str(notes_path).replace("\\", "/")
-            console.print(f"  Notes:      [link=file:///{url_path}]{notes_path}[/link]")
+            console.print(f"  [link=file:///{url_path}]{notes_path.name}[/link]")
         
-        # DOCX document (clickable link)
-        if not no_docx and session.docx_file:
-            docx_path = session.docx_file
-            url_path = str(docx_path).replace("\\", "/")
-            console.print(f"  Document:   [link=file:///{url_path}]{docx_path}[/link]")
-        
-        # Transcript file (clickable link) - shown last as it's most commonly clicked
-        url_path = str(transcript_path).replace("\\", "/")
-        console.print(f"  Transcript: [link=file:///{url_path}]{transcript_path}[/link]")
+        if session.meme_file:
+            url_path = str(session.meme_file).replace("\\", "/")
+            console.print(f"  [link=file:///{url_path}]{session.meme_file.name}[/link]")
         
         console.print()
         
@@ -483,6 +499,8 @@ def record(
         console.print(f"File: {recording_path}\n")
         
         # Auto-transcribe if requested
+        # Note: Could use unified progress here, but record command shows individual
+        # progress bars for each step which provides more detail during the workflow
         if auto_transcribe:
             console.print("[cyan]Starting automatic transcription...[/cyan]\n")
             
@@ -496,7 +514,6 @@ def record(
             # Convert audio to optimal format based on transcription method
             if chosen_method == "local":
                 # Local GPU transcription requires 16kHz mono WAV with normalized audio
-                console.print("[cyan]Converting to WAV with normalized audio...[/cyan]")
                 try:
                     from scribe.core.converter import Converter
                     converter = Converter()
@@ -505,7 +522,6 @@ def record(
                     # Uses dynaudnorm for proper audio normalization
                     audio_file = converter.convert_to_wav(recording_path)
                     
-                    console.print("[green]✓ Converted to WAV[/green]")
                     console.print()
                     console.print("[cyan]Transcribing with local NVIDIA GPU...[/cyan]")
                 except ProcessError as e:
@@ -542,7 +558,7 @@ def record(
                             console.print("[yellow]Tip: Try using local GPU transcription for very long recordings[/yellow]")
                             raise typer.Exit(1)
                         
-                        console.print(f"[green]✓ Converted to MP3 ({compressed_size_mb:.1f}MB)[/green]")
+                        console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
                     except ProcessError as e:
                         console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                         console.print("[yellow]Tip: Check that ffmpeg is installed and the recording file is valid[/yellow]")
@@ -565,11 +581,9 @@ def record(
             )
             
             # Generate DOCX
-            console.print("[cyan]Generating DOCX document...[/cyan]")
             try:
                 docx_path = txt_to_docx(transcript_path)
                 session.add_file(docx_path, "docx")
-                console.print(f"[green]DOCX created: {docx_path.name}[/green]")
             except Exception as e:
                 console.print(f"[yellow]DOCX generation failed: {e}[/yellow]")
             
@@ -580,21 +594,20 @@ def record(
                 try:
                     from scribe.utils.notes_generator import NotesGenerator
                     notes_generator = NotesGenerator(
-                        api_key=config.openai_api_key,
-                        model=config.notes_model
+                        api_key=None,  # Let provider factory get the right key
+                        model=config.notes_model,
+                        provider_name=None  # Will use SCRIBE_NOTES_PROVIDER env var
                     )
                     notes_path = notes_generator.generate_notes(transcript_path)
                     session.add_file(notes_path, "notes")
-                    console.print(f"[green]✓ Notes generated: {notes_path.name}[/green]")
                 except Exception as e:
                     logger.error(f"Notes generation failed: {e}")
                     console.print(f"[yellow]Notes generation failed: {e}[/yellow]")
             
             # Cleanup
-            console.print("[cyan]Cleaning up intermediate files...[/cyan]")
             deleted = transcriber.cleanup_intermediate_files(recording_path.parent)
             if deleted:
-                console.print(f"[green]Cleaned up {len(deleted)} files[/green]")
+                logger.debug(f"Cleaned up {len(deleted)} intermediate files")
             
             # Complete session
             session.complete(success=True)
@@ -661,7 +674,7 @@ def record(
                             meme_result = generate_meeting_meme(
                                 transcript_path,
                                 output_dir=config.output_folder,
-                                api_key=config.openai_api_key
+                                api_key=None  # Let provider system choose the right key
                             )
                             if meme_result and meme_result.get("final_path"):
                                 spinner.success("Meme generated")
@@ -669,7 +682,7 @@ def record(
                                 spinner.error("Meme generation failed")
                         if meme_result and meme_result.get("final_path"):
                             meme_path = meme_result["final_path"]
-                            console.print(f"[green]✓ Meme generated[/green]")
+                            logger.info("Meme generated")
                             console.print()
                             session.add_file(meme_path, "meme")
                         else:
@@ -682,8 +695,8 @@ def record(
                     logger.info("Skipping meme generation - OpenAI API key not configured")
             
             # Display output files with clickable links
-            # Order: Meme → Notes → DOCX → Transcript → Recording
-            console.print("[bold cyan]Output Files:[/bold cyan]")
+            # Order: Transcript (txt) → Document (docx) → Notes → Recording → Meme
+            console.print("[bold cyan]Output:[/bold cyan]")
             console.print()
             
             # Helper to format clickable file links
@@ -692,14 +705,14 @@ def record(
                 url_path = str(path).replace("\\", "/")
                 return f"  {label:<11} [link=file:///{url_path}]{path}[/link]"
             
-            if session.meme_file:
-                console.print(format_file_link("Meme:", session.meme_file))
-            if notes_path:
-                console.print(format_file_link("Notes:", notes_path))
+            console.print(format_file_link("Transcript:", transcript_path))
             if session.docx_file:
                 console.print(format_file_link("Document:", session.docx_file))
-            console.print(format_file_link("Transcript:", transcript_path))
+            if notes_path:
+                console.print(format_file_link("Notes:", notes_path))
             console.print(format_file_link("Recording:", recording_path))
+            if session.meme_file:
+                console.print(format_file_link("Meme:", session.meme_file))
             console.print()
         
     except ScribeError as e:
@@ -746,6 +759,16 @@ def joke(
         None,
         "--spice",
         help="Humor intensity 0-10 (0=off, 5=default, 10=spicy)"
+    ),
+    archetype: Optional[str] = typer.Option(
+        None,
+        "--archetype",
+        help="Force specific comedy archetype (translator, trickster, fool_scholar, etc.)"
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        help="AI provider to use (openai, xai)"
     )
 ):
     """
@@ -770,8 +793,17 @@ def joke(
             console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
-        console.print(f"\n[cyan]Analyzing:[/cyan] {transcript_file.name}")
-        console.print("[cyan]Generating joke...[/cyan]\n")
+        # Display header
+        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        panel_lines.append(f"[dim]Generating: joke[/dim]")
+        
+        console.print(Panel.fit(
+            "\n".join(panel_lines),
+            border_style="cyan",
+            padding=(0, 1)
+        ))
+        console.print()
         
         # Create humor config with spice level
         from scribe.utils.joke_generator import HumorConfig
@@ -784,18 +816,25 @@ def joke(
             else:
                 console.print(f"[bold yellow]Warning:[/bold yellow] Invalid spice level {spice} (must be 0-10), using default")
         
-        # Generate joke
-        result = generate_transcript_joke(transcript_file, humor_config)
+        if archetype is not None:
+            humor_config.archetype = archetype
+        
+        # Generate joke with progress
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[cyan]{task.description}"),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Generating joke...", total=None)
+            result = generate_transcript_joke(transcript_file, humor_config, provider_name=provider)
+        
+        console.print()
         
         if result:
             joke_text, comedy_style = result
-            
-            # Get proper archetype display name
-            style_display = ARCHETYPE_DISPLAY_NAMES.get(comedy_style, comedy_style.replace("_", " ").title())
-            
-            # Display joke cleanly: archetype name in cyan, joke in white
-            console.print(f"[bold cyan]{style_display}:[/bold cyan]")
-            console.print(f"[white]{joke_text}[/white]")
+            console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
             console.print()
         else:
             console.print("[bold yellow]Warning:[/bold yellow] Failed to generate joke")
@@ -859,11 +898,21 @@ def meme(
             console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
-        console.print(f"\n[cyan]Analyzing:[/cyan] {transcript_file.name}\n")
+        # Display header
+        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        panel_lines.append(f"[dim]Generating: meme[/dim]")
         
-        # Generate meme with spinner
-        from scribe.utils.spinner import show_spinner
+        console.print(Panel.fit(
+            "\n".join(panel_lines),
+            border_style="cyan",
+            padding=(0, 1)
+        ))
+        console.print()
+        
+        # Generate meme with progress
         from scribe.utils.meme_generator import generate_meeting_meme, MemeConfig
+        from rich.progress import Progress, SpinnerColumn, TextColumn
         
         # Create meme config with spice level
         meme_config = MemeConfig.from_env()
@@ -873,13 +922,19 @@ def meme(
             else:
                 console.print(f"[bold yellow]Warning:[/bold yellow] Invalid spice level {spice} (must be 0-10), using default")
         
-        with show_spinner("Generating meme") as spinner:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[cyan]{task.description}"),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Generating meme...", total=None)
             if output:
                 # Use specified output path
                 meme_result = generate_meeting_meme(
                     transcript_file,
                     output_dir=output.parent if output.parent != Path('.') else None,
-                    api_key=config.openai_api_key,
+                    api_key=None,  # Let provider system choose the right key
                     config=meme_config,
                     show_reasoning=show_reasoning
                 )
@@ -896,26 +951,23 @@ def meme(
                 # Use default output location
                 meme_result = generate_meeting_meme(
                     transcript_file,
-                    api_key=config.openai_api_key,
+                    api_key=None,  # Let provider system choose the right key
                     config=meme_config,
                     show_reasoning=show_reasoning
                 )
                 meme_path = meme_result["final_path"] if (meme_result and isinstance(meme_result, dict)) else meme_result
             
-            if meme_path:
-                # Extract attempts info
-                attempts = meme_result.get("attempts", []) if isinstance(meme_result, dict) else []
-                best_score = meme_result.get("best_score") if isinstance(meme_result, dict) else None
-                
-                # Show success with score
-                if best_score is not None:
-                    spinner.success("Meme generated", extra=f"score: {best_score:.1f}/10")
-                else:
-                    spinner.success("Meme generated")
-            else:
-                spinner.error("Failed to generate meme")
-                console.print("[dim]Check your OpenAI API key and try again[/dim]")
-                raise typer.Exit(1)
+        
+        console.print()
+        
+        if not meme_path:
+            console.print("[bold yellow]Warning:[/bold yellow] Failed to generate meme")
+            console.print("[dim]Check your OpenAI API key and try again[/dim]")
+            raise typer.Exit(1)
+        
+        # Extract attempts info
+        attempts = meme_result.get("attempts", []) if isinstance(meme_result, dict) else []
+        best_score = meme_result.get("best_score") if isinstance(meme_result, dict) else None
         
         # Display results
         console.print()
@@ -959,12 +1011,17 @@ def notes(
         None,
         "--model",
         help="GPT model to use (default: gpt-5)"
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        help="AI provider to use (openai, xai)"
     )
 ):
     """
     Generate structured meeting notes from a transcript.
     
-    Uses GPT-5 to analyze the transcript and create comprehensive notes with:
+    Uses AI (OpenAI, XAI/Grok, etc.) to analyze the transcript and create comprehensive notes with:
     - Detailed summary
     - Current state (business & technical)
     - Drivers and blockers
@@ -972,7 +1029,7 @@ def notes(
     
     Example: scribe notes transcript.txt
     Example: scribe notes transcript.txt --output ./notes/meeting.md
-    Example: scribe notes transcript.txt --model gpt-5-mini
+    Example: scribe notes transcript.txt --provider xai
     """
     try:
         config = ScribeConfig()
@@ -987,22 +1044,38 @@ def notes(
             console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
-        console.print(f"\n[cyan]Analyzing:[/cyan] {transcript_file.name}")
-        console.print("[cyan]Generating meeting notes...[/cyan]")
-        console.print("[dim]This may take 30-60 seconds...[/dim]\n")
+        # Display header
+        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        panel_lines.append(f"[dim]Generating: notes[/dim]")
         
-        # Generate notes
+        console.print(Panel.fit(
+            "\n".join(panel_lines),
+            border_style="cyan",
+            padding=(0, 1)
+        ))
+        console.print()
+        
+        # Generate notes with progress
         from scribe.utils.notes_generator import NotesGenerator
+        from rich.progress import Progress, SpinnerColumn, TextColumn
         
         notes_model = model or config.notes_model
         notes_generator = NotesGenerator(
-            api_key=config.openai_api_key,
-            model=notes_model
+            api_key=None,  # Let provider factory get the right key
+            model=notes_model,
+            provider_name=provider
         )
         
-        notes_path = notes_generator.generate_notes(transcript_file, output)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[cyan]{task.description}"),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Generating notes...", total=None)
+            notes_path = notes_generator.generate_notes(transcript_file, output)
         
-        console.print(f"\n[bold green]✓[/bold green] Notes generated successfully!")
         console.print()
         
         # Convert to absolute path with forward slashes for clickable link
@@ -1231,6 +1304,171 @@ def version():
     console.print(f"[bold cyan]Scribe[/bold cyan] version [bold]{__version__}[/bold]")
 
 
+@app.command()
+def clean(
+    input_file: Path = typer.Argument(
+        ...,
+        help="Path to audio/video file to clean",
+        exists=True
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output path (default: input_cleaned.ext)"
+    ),
+    threshold: str = typer.Option(
+        "-50dB",
+        "--threshold", "-t",
+        help="Silence threshold (e.g., -50dB, -40dB)"
+    ),
+    duration: float = typer.Option(
+        2.0,
+        "--duration", "-d",
+        help="Minimum silence duration to remove (seconds)"
+    ),
+    analyze_only: bool = typer.Option(
+        False,
+        "--analyze", "-a",
+        help="Only analyze silence, don't remove it"
+    ),
+    trim_to: Optional[str] = typer.Option(
+        None,
+        "--trim",
+        help="Trim to specific time (e.g., '01:42:00' for 1h 42m, or '6120' for seconds)"
+    )
+):
+    """
+    Remove silence from audio/video files or trim to specific duration.
+    
+    Useful for cleaning up recordings left running overnight or with long pauses.
+    Uses FFmpeg to detect and remove silent sections while preserving audio quality.
+    
+    Example: scribe clean long_recording.mp4
+    Example: scribe clean recording.mp4 --threshold -40dB --duration 3.0
+    Example: scribe clean recording.mp4 --analyze (just show how much silence)
+    Example: scribe clean recording.mp4 --trim 01:42:00 (trim to 1h 42m)
+    """
+    try:
+        from scribe.utils.silence_remover import remove_silence, analyze_silence, trim_file
+        from scribe.utils.audio import get_audio_duration
+        
+        # Display header
+        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines.append(f"[white]{input_file.name}[/white]")
+        
+        # Get original duration
+        original_duration = get_audio_duration(input_file)
+        if original_duration:
+            original_mins = int(original_duration / 60)
+            panel_lines.append(f"[dim]Original duration: {original_mins} minutes ({original_duration:.1f}s)[/dim]")
+        
+        if trim_to:
+            panel_lines.append(f"[dim]Mode: Trim to {trim_to}[/dim]")
+        elif analyze_only:
+            panel_lines.append(f"[dim]Mode: Analyze only[/dim]")
+        else:
+            panel_lines.append(f"[dim]Mode: Remove silence[/dim]")
+            panel_lines.append(f"[dim]Threshold: {threshold}, Min duration: {duration}s[/dim]")
+        
+        console.print(Panel.fit(
+            "\n".join(panel_lines),
+            border_style="cyan",
+            padding=(0, 1)
+        ))
+        console.print()
+        
+        # Handle trim mode
+        if trim_to:
+            console.print(f"[cyan]Trimming to {trim_to}...[/cyan]")
+            console.print("[dim]This is fast - just copying, no re-encoding...[/dim]")
+            console.print()
+            
+            output_path = trim_file(input_file, output, trim_to)
+            
+            # Get new duration
+            new_duration = get_audio_duration(output_path)
+            if new_duration:
+                new_mins = int(new_duration / 60)
+                new_hours = new_mins / 60
+                
+                console.print()
+                console.print(f"[bold green]Success![/bold green]")
+                console.print(f"  Original: {original_mins} minutes ({original_mins/60:.1f} hours)")
+                console.print(f"  Trimmed:  {new_mins} minutes ({new_hours:.1f} hours)")
+                console.print()
+                console.print(f"[bold]Output:[/bold] {output_path}")
+            else:
+                console.print()
+                console.print(f"[bold green]Success![/bold green]")
+                console.print(f"[bold]Output:[/bold] {output_path}")
+            
+            return
+        
+        if analyze_only:
+            # Just analyze
+            console.print("[cyan]Analyzing silence...[/cyan]")
+            analysis = analyze_silence(input_file, threshold, duration)
+            
+            console.print()
+            console.print(f"[bold]Silence Analysis:[/bold]")
+            console.print(f"  Total silence: {analysis['total_silence_minutes']:.1f} minutes ({analysis['total_silence_seconds']:.1f}s)")
+            console.print(f"  Silent periods: {analysis['silence_periods']}")
+            
+            if analysis['silence_periods'] > 0:
+                console.print()
+                console.print(f"[dim]First few silent periods:[/dim]")
+                for i, period in enumerate(analysis['periods'][:5], 1):
+                    start_min = int(period['start'] / 60)
+                    duration_sec = period['duration']
+                    console.print(f"  {i}. At {start_min}m: {duration_sec:.1f}s of silence")
+                
+                if analysis['silence_periods'] > 5:
+                    console.print(f"  ... and {analysis['silence_periods'] - 5} more")
+            
+            console.print()
+            console.print(f"[green]To remove silence, run without --analyze flag[/green]")
+            
+        else:
+            # Remove silence
+            console.print("[cyan]Removing silence...[/cyan]")
+            console.print("[dim]This may take a few minutes for large files...[/dim]")
+            console.print()
+            
+            output_path = remove_silence(
+                input_file,
+                output,
+                threshold,
+                duration
+            )
+            
+            # Get file sizes for comparison
+            original_size = input_file.stat().st_size / (1024 * 1024)  # MB
+            new_size = output_path.stat().st_size / (1024 * 1024)  # MB
+            size_reduction = ((original_size - new_size) / original_size) * 100
+            
+            console.print()
+            console.print(f"[bold green]Success![/bold green]")
+            console.print(f"  Original size: {original_size:.1f} MB")
+            console.print(f"  Cleaned size:  {new_size:.1f} MB")
+            console.print(f"  Reduction:     {size_reduction:.1f}%")
+            console.print()
+            console.print(f"[dim]Note: Silent sections are reduced to near-silence.[/dim]")
+            console.print(f"[dim]This makes transcription much faster as Whisper skips silent parts.[/dim]")
+            console.print()
+            console.print(f"[bold]Output:[/bold] {output_path}")
+        
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except RuntimeError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        logger.exception("Unexpected error in clean command")
+        raise typer.Exit(1)
+
+
 def main():
     """Main entry point with smart command detection."""
     import sys
@@ -1239,7 +1477,7 @@ def main():
     if len(sys.argv) > 1:
         first_arg = sys.argv[1]
         # Check if it's not a known command and looks like a file
-        known_commands = ['transcribe', 'record', 'info', 'version', 'doctor', 'support-bundle', 'diagnose', '--help', '-h', '--version']
+        known_commands = ['transcribe', 'record', 'joke', 'meme', 'notes', 'clean', 'info', 'version', 'doctor', 'support-bundle', 'diagnose', '--help', '-h', '--version']
         if first_arg not in known_commands and not first_arg.startswith('-'):
             # Check if it looks like a file path
             if '.' in first_arg or '/' in first_arg or '\\' in first_arg or Path(first_arg).exists():

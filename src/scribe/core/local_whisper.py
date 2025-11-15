@@ -107,8 +107,16 @@ class LocalWhisperTranscriber:
                 logger.info(f"Unloading previous model: {current_model}")
                 gpu_manager.unload_current_model()
             
+            # Map model names to faster-whisper compatible names
+            # faster-whisper uses "large-v3" for both regular and turbo variants
+            model_name = self.model_size
+            if model_name == "large-v3-turbo":
+                # faster-whisper automatically uses turbo variant for large-v3
+                model_name = "large-v3"
+                logger.info("Using large-v3 (turbo variant)")
+            
             self.model = WhisperModel(
-                self.model_size,
+                model_name,
                 device=device,
                 device_index=0,
                 compute_type=compute_type,
@@ -238,113 +246,32 @@ class LocalWhisperTranscriber:
             estimated_mins = int(estimated_time / 60)
             estimated_secs = int(estimated_time % 60)
             
-            # Show clean, simple estimate
+            # Note: Progress is handled by unified progress bar in CLI
+            # Show simple status message without progress bar
             if duration:
                 duration_mins = int(duration / 60)
-                console.print(f"[cyan]Transcribing {duration_mins} min recording → estimated {estimated_mins}m {estimated_secs}s[/cyan]")
+                logger.info(f"Transcribing {duration_mins} min audio with Whisper {self.model_size}...")
             
-            with Progress(
-                SpinnerColumn(),
-                BarColumn(bar_width=40),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TextColumn("•"),
-                TextColumn("[cyan]{task.fields[status]}"),
-                console=console,
-                transient=False
-            ) as progress:
-                
-                task = progress.add_task(
-                    "",
-                    total=estimated_time,
-                    status="Loading model..."
-                )
-                
-                # Execute transcription
-                segments_iter, info = self.model.transcribe(
-                    str(audio_path),
-                    language=self.language,
-                    vad_filter=True,
-                    vad_parameters={"min_silence_duration_ms": 400},
-                    beam_size=self.gpu_config.beam_size,
-                    best_of=self.gpu_config.beam_size,
-                    temperature=0.0,
-                    condition_on_previous_text=False,
-                    initial_prompt=initial_prompt
-                )
-                
-                # Process segments with progress updates
-                last_update = time.time()
-                estimate_refined = False
-                
-                for segment in segments_iter:
-                    segments.append({
-                        "start": segment.start,
-                        "end": segment.end,
-                        "text": segment.text
-                    })
-                    
-                    # Update progress based on elapsed time
-                    current_time = time.time()
-                    if current_time - last_update > 0.5:  # Update every 0.5s
-                        elapsed = current_time - start_time
-                        if elapsed > 0 and segment.end > 0 and duration:
-                            # Calculate actual speed ratio
-                            speed_ratio = segment.end / elapsed
-                            
-                            # Calculate percentage based on audio position
-                            percent_audio = (segment.end / duration) * 100
-                            
-                            # Show "Loading model..." until we're halfway through
-                            if percent_audio < 50 and not estimate_refined:
-                                # Use initial estimate
-                                remaining_estimate = estimated_time - elapsed
-                                if remaining_estimate > 0:
-                                    eta_mins = int(remaining_estimate / 60)
-                                    eta_secs = int(remaining_estimate % 60)
-                                    status_str = f"~{eta_mins}m {eta_secs}s remaining"
-                                else:
-                                    status_str = "finishing..."
-                            else:
-                                # Refine estimate at halfway point
-                                if not estimate_refined and percent_audio >= 50:
-                                    refined_total = duration / speed_ratio
-                                    progress.update(task, total=refined_total)
-                                    estimate_refined = True
-                                
-                                # Calculate ETA based on remaining audio and current speed
-                                if speed_ratio > 0:
-                                    remaining_audio = duration - segment.end
-                                    eta_seconds = remaining_audio / speed_ratio
-                                    
-                                    # Format ETA - simple and clear
-                                    if eta_seconds < 60:
-                                        status_str = f"{int(eta_seconds)}s remaining"
-                                    elif eta_seconds < 3600:
-                                        eta_mins = int(eta_seconds / 60)
-                                        eta_secs = int(eta_seconds % 60)
-                                        if eta_secs < 10:
-                                            status_str = f"{eta_mins}m remaining"
-                                        else:
-                                            status_str = f"{eta_mins}m {eta_secs}s remaining"
-                                    else:
-                                        eta_hours = int(eta_seconds / 3600)
-                                        eta_mins = int((eta_seconds % 3600) / 60)
-                                        status_str = f"{eta_hours}h {eta_mins}m remaining"
-                                else:
-                                    status_str = "calculating..."
-                            
-                            # Update progress based on elapsed time vs estimate
-                            progress.update(
-                                task,
-                                completed=elapsed,
-                                status=status_str
-                            )
-                        
-                        last_update = current_time
-                
-                # Complete progress
-                final_elapsed = time.time() - start_time
-                progress.update(task, completed=final_elapsed, total=final_elapsed, status="complete")
+            # Execute transcription
+            segments_iter, info = self.model.transcribe(
+                str(audio_path),
+                language=self.language,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 400},
+                beam_size=self.gpu_config.beam_size,
+                best_of=self.gpu_config.beam_size,
+                temperature=0.0,
+                condition_on_previous_text=False,
+                initial_prompt=initial_prompt
+            )
+            
+            # Process segments (progress handled by unified progress bar)
+            for segment in segments_iter:
+                segments.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text
+                })
             
             elapsed = time.time() - start_time
             

@@ -181,15 +181,16 @@ class TestMemeGeneratorSafetyHandling:
         """Test _analyze_transcript_for_meme with default parameters."""
         from scribe.utils.meme_generator import _analyze_transcript_for_meme
         
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.output_text = '{"template": "test", "concept": "test concept", "top_text": "TOP", "bottom_text": "BOTTOM", "image_prompt": "test prompt"}'
-        mock_response.output = []
-        mock_client.responses.create.return_value = mock_response
+        # Mock provider interface
+        mock_provider = Mock()
+        mock_provider.chat_completion.return_value = {
+            "content": '{"template": "test", "concept": "test concept", "top_text": "TOP", "bottom_text": "BOTTOM", "image_prompt": "test prompt"}',
+            "usage": {"total_tokens": 100}
+        }
         
         config = MemeConfig()
         result = _analyze_transcript_for_meme(
-            mock_client,
+            mock_provider,
             "Test transcript",
             config,
             show_reasoning=False
@@ -203,17 +204,18 @@ class TestMemeGeneratorSafetyHandling:
         """Test _analyze_transcript_for_meme with make_safer=True."""
         from scribe.utils.meme_generator import _analyze_transcript_for_meme
         
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.output_text = '{"template": "safe", "concept": "safe concept", "top_text": "SAFE", "bottom_text": "HUMOR", "image_prompt": "safe prompt"}'
-        mock_response.output = []
-        mock_client.responses.create.return_value = mock_response
+        # Mock provider interface
+        mock_provider = Mock()
+        mock_provider.chat_completion.return_value = {
+            "content": '{"template": "safe", "concept": "safe concept", "top_text": "SAFE", "bottom_text": "HUMOR", "image_prompt": "safe prompt"}',
+            "usage": {"total_tokens": 100}
+        }
         
         config = MemeConfig(spice_level=7)
         previous_attempt = {"template": "edgy", "concept": "edgy concept"}
         
         result = _analyze_transcript_for_meme(
-            mock_client,
+            mock_provider,
             "Test transcript",
             config,
             show_reasoning=False,
@@ -250,11 +252,11 @@ class TestMemeGeneratorSafetyHandling:
     def test_generate_meme_image_safety_block_detection(self):
         """Test that safety blocks are detected correctly."""
         from scribe.utils.meme_generator import _generate_meme_image
-        from openai import OpenAI
         
-        mock_client = Mock(spec=OpenAI)
+        # Mock provider interface
+        mock_provider = Mock()
         mock_error = Exception("Error code: 400 - {'error': {'message': 'Your request was rejected by the safety system.', 'code': 'moderation_blocked'}}")
-        mock_client.images.generate.side_effect = mock_error
+        mock_provider.generate_image.side_effect = mock_error
         
         config = MemeConfig()
         meme_concept = {
@@ -266,7 +268,7 @@ class TestMemeGeneratorSafetyHandling:
         }
         
         result = _generate_meme_image(
-            mock_client,
+            mock_provider,
             meme_concept,
             config,
             Path("test_meme.png")

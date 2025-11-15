@@ -32,7 +32,7 @@ class TestProgressEstimation:
         )
         
         transcriber = LocalWhisperTranscriber(
-            model_size="large-v3",
+            model_size="large-v3-turbo",
             language="en",
             gpu_config=gpu_config
         )
@@ -55,7 +55,7 @@ class TestProgressEstimation:
         )
         
         transcriber = LocalWhisperTranscriber(
-            model_size="large-v3",
+            model_size="large-v3-turbo",
             language="en",
             gpu_config=gpu_config
         )
@@ -533,3 +533,4 @@ class TestEdgeCases:
         estimated_time = 60 if not duration else duration / expected_speed
         
         assert estimated_time == 60
+

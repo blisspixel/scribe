@@ -154,8 +154,8 @@ class TranscriptionSession:
             data["end_time"] = self.end_time.isoformat()
         
         # Convert Path objects to strings
-        for key in ["source_file", "audio_file", "transcript_file", "docx_file"]:
-            if data[key]:
+        for key in ["source_file", "audio_file", "transcript_file", "docx_file", "meme_file"]:
+            if data.get(key):
                 data[key] = str(data[key])
         
         data["files_created"] = [str(f) for f in self.files_created]

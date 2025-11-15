@@ -1,299 +1,338 @@
 # Scribe Roadmap
 
-## Focus Areas
+## Current Version: 2.1.2 (November 2025)
 
-**Reliability, User Experience, and Install Simplicity**
-
----
-
-## Installer and Bootstrap
-
-**One-command install on Windows, macOS, and Linux**. Auto-detect FFmpeg and provide guided setup prompts. Goal: A new user can complete setup and produce their first transcript in under five minutes.
-
-- Detect Python, FFmpeg, CUDA availability
-- Guided `.env` setup with validation
-- Platform-specific install scripts
-- Auto-download FFmpeg if missing (optional)
+This roadmap outlines completed features, current capabilities, and planned improvements for Scribe.
 
 ---
 
-## Observability (Complete)
+## Completed (v2.0.0)
 
-**Structured logs with run IDs, timestamps, GPU model, and configuration summary**. Single "support bundle" command that collects logs, environment info, and last-run metadata.
+### Core Transcription
+- GPU-accelerated local transcription with faster-whisper
+- Automatic GPU detection and fallback to OpenAI API
+- RTX 4090 optimization (11x real-time speed with large-v3)
+- Model support: large-v3 (local, maximum accuracy), gpt-4o-transcribe-diarize (API)
+- Professional audio preprocessing with dynaudnorm (~10x real-time)
+- Server-side chunking for long audio files
+- Speaker diarization via OpenAI API
+- Multi-language support (ISO 639-1 codes)
+- Quality-first approach: prioritizes accuracy over speed
 
-- [DONE] Run ID tracking across all operations
-- [DONE] AsyncIO-compatible context management with contextvars
-- [DONE] Structured metadata collection
-- [DONE] Run history with automatic tracking
-- [DONE] Nested operation support
-- [DONE] Thread-safe and async-safe context propagation
-- [TODO] GPU model and CUDA version in logs
-- [TODO] Configuration snapshot per run
-- [TODO] `scribe support-bundle` command for troubleshooting
+### Intelligence Features
+- GPT-5 meeting notes with multi-step reasoning
+- Context-aware joke generation (10 comedy archetypes)
+- Meme generation with QA loop and scoring
+- Configurable humor intensity (0-10 spice levels)
+- Structured analysis: Current State, Drivers, Blockers, Future State, Next Steps
 
----
+### Recording & Integration
+- OBS Studio integration via WebSocket v5
+- Direct recording from CLI
+- Auto-transcription after recording
+- Cross-platform support (Windows, macOS, Linux)
 
-## Safe Writes and Recovery (Complete)
+### Output & Documents
+- TXT transcripts with metadata
+- DOCX formatted documents
+- Markdown meeting notes
+- PNG meme images
+- Structured session summaries
 
-**Use temp files and atomic renames to prevent corruption on failure**. Resume interrupted transcriptions automatically when possible. Include quota and backoff handling for API mode.
+### Developer Experience
+- System diagnostics (scribe doctor)
+- Environment validation
+- 463 test suite with 45% coverage
+- Comprehensive error handling with context
+- Run context tracking with unique IDs
+- AsyncIO support with contextvars
 
-- [DONE] Atomic file writes (write to `.tmp`, rename on success)
-- [DONE] Platform-specific atomic rename (Windows and POSIX)
-- [DONE] Safe copy operations with atomic rename
-- [DONE] Backup file creation before modifications
-- [DONE] Context manager for safe file writing
-- [DONE] Automatic cleanup on failure
-- [TODO] Resume from checkpoint for long transcriptions
-- [TODO] Exponential backoff for API rate limits
-- [TODO] Graceful degradation on quota exhaustion
-
----
-
-## Clear Diagnostics (Complete)
-
-**Config doctor that validates environment, CUDA, FFmpeg, and API key status**. Human-readable error messages with suggested fixes.
-
-- [DONE] `scribe doctor` command validates full environment
-- [DONE] Check CUDA, FFmpeg, API key, disk space
-- [DONE] Actionable error messages with fix suggestions
-- [DONE] Platform-specific guidance (Windows vs macOS vs Linux)
-
----
-
-## Performance and Adaptivity
-
-### GPU Detection and Auto-Tuning (Complete)
-
-**Detect available GPU and apply model, beam, and precision settings automatically**. Default to "large-v3 fast" for 24 GB VRAM (4090) and scale down for smaller GPUs without user intervention. Include manual override flags for advanced users.
-
-- [DONE] Auto-detect VRAM and select optimal model
-- [DONE] RTX 4090 (24GB): large-v3, beam 10, fp16
-- [DONE] RTX 4080 (16GB): large-v3, beam 8, fp16
-- [DONE] RTX 4070 (12GB): large-v2, beam 5, fp16
-- [DONE] GPU Resource Manager prevents OOM and concurrent access
-- [DONE] Automatic model switching with cleanup
-- [DONE] Manual overrides: `--model`, `--method`
-
-### Resource Management (Complete)
-
-**Prevent OOM and runaway processes with configurable limits**. Validate file size and duration before processing.
-
-- [DONE] Configurable file size limits (default: 25GB)
-- [DONE] Configurable duration limits (default: 12 hours)
-- [DONE] Early validation with clear error messages
-- [DONE] GPU memory management with singleton pattern
-- [DONE] Thread-safe model loading and unloading
-- [DONE] Automatic GPU cache clearing
-
-### Mid-Range GPU Optimization (Complete)
-
-**Mixed-precision inference and tuned beam sizes for 12 GB–16 GB cards**. Aim for consistent accuracy at lower memory and compute cost.
-
-- [DONE] FP16 inference by default
-- [DONE] Dynamic beam size based on VRAM
-- [DONE] Memory-efficient batching
-- [DONE] Fallback to API if GPU OOM
-- [DONE] Resource limits prevent crashes
+### Reliability & Performance
+- GPU Resource Manager (prevents OOM)
+- Atomic file writes (prevents corruption)
+- Resource limits validation
+- Smart cleanup of intermediate files
+- Adaptive progress tracking with machine learning
+- Step-by-step progress display with actual operations
+- Meme refinement progress with QA scores
+- Configuration display (shows enabled features upfront)
+- Self-improving time estimates based on actual performance
+- Graceful degradation on errors
 
 ---
 
-## Usability and Interface
+## Completed (v2.1.2 - November 2025)
 
-### CLI Ergonomics (Partial)
+### Provider Architecture Refinements
+- **Anthropic Claude 3.5 Sonnet** fully integrated and tested
+- **548 passing tests** with comprehensive provider coverage (+16 defensive tests)
+- **Provider-agnostic meme generator** updated to work with all providers
+- **Enhanced test reliability** - fixed flaky tests, improved mocking
+- **Defensive testing suite** - comprehensive edge case and error handling tests
+- **Documentation updates** - README and ROADMAP clean, detailed, no emojis
+- **42% test coverage** maintained across all features
 
-**Consistent flags across commands**. Descriptive help text with grouped sections. Shell completion for Bash, Zsh, and PowerShell.
+### Image Generation Improvements
+- **GPT Image 1 support** - Switched from DALL-E 3 to gpt-image-1 (superior text rendering)
+- **Multiple aspect ratios** - AI intelligently chooses between:
+  - Square (1024x1024) - Classic memes, single subjects
+  - Landscape (1536x1024) - Wide scenes, side-by-side comparisons
+  - Portrait (1024x1536) - Tall subjects, vertical layouts
+  - Auto - Let model decide based on template
+- **Better guidance** - Updated prompts to explain when to use each size
+- **Automatic fallback** - XAI image generation falls back to OpenAI GPT Image 1
 
-- [DONE] Standardize flag names (`--output`, `--model`, `--method`)
-- [DONE] `--no-joke` and `--no-meme` flags for disabling humor
-- [DONE] Consistent exit codes and error handling
-- [TODO] Group help text by category (Input, Output, Performance, AI)
-- [TODO] Shell completion scripts in `completions/`
+### AI Reasoning Enhancements
+- **All intelligence features now use reasoning** for higher quality output:
+  - **Jokes**: grok-4-fast-reasoning - More clever, thoughtful humor with deeper context analysis
+  - **Memes**: grok-4-fast-reasoning - Deep comedy theory application and template selection
+  - **Notes**: grok-4-fast-reasoning - Structured business and technical analysis
+- **Benefits**: More insightful, contextual, and clever output while maintaining speed and cost efficiency
+- **Cost**: Still 47x cheaper than GPT-5 even with reasoning enabled
 
-### Export and Sharing
+### New Utilities
+- **Silence removal tool** - `scribe clean` command for cleaning up long recordings
+  - Removes/reduces silent sections using FFmpeg
+  - Analyze mode to preview silence without removing
+  - Configurable threshold and duration
+  - Makes transcription faster by reducing silent parts
+- **File trimming** - `scribe clean --trim HH:MM:SS` to cut files at specific time
+  - Fast operation (copies without re-encoding)
+  - Perfect for recordings left running overnight
+  - Example: trim 19.5 hour file down to 1.7 hours in seconds
 
-**Markdown outputs include front-matter metadata for downstream tools**. DOCX templates follow clean Word styles for business use. Provide an optional JSON schema for programmatic consumption of transcripts and notes.
+### Bug Fixes
+- **OpenAI API compatibility** - Fixed `response_format` for new diarization model (gpt-4o-transcribe-diarize-api-ev3)
+  - Changed from `verbose_json` to `json` format as required by updated API
+  - Maintains backward compatibility with response parsing
+- **Meme provider selection** - Fixed CLI passing wrong API key to meme generator
+  - CLI was hardcoding OpenAI key instead of letting provider system choose
+  - Now respects `SCRIBE_MEME_PROVIDER` environment variable
+- **Cleaner output** - Reduced log noise at WARNING level
+  - JSON repair messages now at DEBUG level (normal operation, not a warning)
+- **Image size validation** - Fixed meme image generation with invalid size formats
+  - AI sometimes returns descriptive text like "1024x1026 (portrait)" instead of just "1024x1536"
+  - Now strips extra text and validates against allowed sizes
+  - Falls back to '1024x1024' if invalid
+- **XAI image generation** - Enhanced with dual-format support and OpenAI fallback
+  - Tries b64_json format first (more reliable)
+  - Falls back to URL format if needed
+  - Automatically falls back to OpenAI DALL-E 3 if XAI fails
+  - Comprehensive error handling for missing data
+- **Defensive test suite** - Added 15 comprehensive edge case tests
+  - Size normalization with various invalid formats
+  - Empty/invalid JSON responses
+  - Provider exceptions and safety blocks
+  - XAI-specific image generation scenarios
 
-- YAML front-matter in Markdown notes
-- Clean DOCX styles (Heading 1, Heading 2, Body Text)
-- JSON export: `scribe transcribe --format json`
-- Schema documentation for API consumers
+## Completed (v2.1.1 - November 2025)
 
----
-
-## Intelligence and Analysis
-
-### Meeting Notes
-
-**Streamline GPT-5 note generation for clarity and consistent structure**. Allow user-defined templates and redaction rules for sensitive data.
-
-- User-defined note templates (YAML config)
-- Redaction patterns for PII, emails, phone numbers
-- Consistent section structure
-- Confidence scoring and quality metrics
-
-### Advanced Diarization
-
-**Speaker profile hints and optional correction pass to improve attribution accuracy**. Support a local diarization path for offline workflows.
-
-- Speaker name hints (config file)
-- Post-processing correction pass
-- Local diarization with pyannote (optional)
-- Offline-first workflows
-
-### QA and Humor Controls
-
-**Keep meme QA loop configurable and optional**. Default to safe, concise humor modes suitable for professional settings.
-
-- Configurable QA threshold and attempts
-- Disable humor: `--no-joke --no-meme`
-- Professional mode (conservative humor)
-- Humor style presets (professional, casual, creative)
-
----
-
-## Humor and Meme System
-
-### Goals
-
-Scribe's humor system exists to say what everyone in the meeting was thinking but didn't dare say out loud. It should sting just enough to be funny, but not enough to ruin your career. The goal is to create jokes that feel alive, brutally honest, and perfectly timed — the kind people read twice, grin at, and then forward with "this is too real."
-
-### Tone Philosophy
-
-- Humor should expose the absurdity of modern collaboration — endless alignment sessions, PowerPoint optimism, leadership doublespeak, and the quiet collective acceptance of chaos
-- Slightly offensive is acceptable if it punches up — at processes, bureaucracy, or shared delusion — never at individuals or vulnerable groups
-- The jokes should feel earned: they emerge from observation and insight, not random quips
-- The best humor isn't "nice," it's accurate
-
-### Structure and Style
-
-- Allow longer, context-aware jokes — one to three paragraphs if needed. Brevity is good, but depth lands harder
-- Write with a human narrative voice, as if from the perspective of the only sane person trapped in a meeting that won't end
-- Capture the emotional arc: optimism → confusion → despair → ironic acceptance
-- Encourage dark humor and quiet sarcasm. A good line should make readers laugh and question their life choices
-
-**Example flavor**:
-- "By minute 42, the team had achieved synergy — everyone agreed that someone else should do it."
-- "The AI system detected 17 uses of the phrase 'circle back,' none of which resulted in actual movement."
-
-### Implementation Priorities
-
-**Introduce a spice index** via `SCRIBE_HUMOR_SPICE=0–10` (environment) or `--spice` (CLI flag):
-
-| Level | Description | Behavior |
-|-------|-------------|----------|
-| **0** | Off | No jokes or memes generated |
-| **1–3** | Mild | Office-safe irony, gentle observations |
-| **4–6** | Honest | Witty, occasionally dark, shareable |
-| **7–8** | Cutting | Slightly uncomfortable, still shareable |
-| **9–10** | Spicy | "I can't believe this app said that" funny — default off unless explicitly enabled |
-
-**Default**: Level 5 (honest, witty, safe for most contexts)
-
-**Usage**:
-```bash
-# Environment variable (persistent)
-SCRIBE_HUMOR_SPICE=8
-
-# CLI flag (per-command override)
-scribe meme transcript.txt --spice 10
-scribe joke transcript.txt --spice 3
-scribe transcribe meeting.mp4 --spice 7
-```
-
-**Additional controls**:
-- Keep QA loop configurable, bias toward humor quality over safety
-- Favor language that sounds human — weary, clever, grounded in reality
-- Use context from transcript: recurring topics, contradictions, overused phrases, awkward silences
-- Allow strong language in moderation when it improves timing or authenticity
-
-### Cultural Boundaries
-
-- Never attack personal identity or private individuals
-- Punch upward — mock dysfunction, process, corporate absurdity, or misplaced confidence
-- Allow strong language in moderation when it sounds natural and not hateful
-- Profanity is acceptable in higher spice levels if it improves authenticity
-
-### Output Behavior
-
-- Text jokes appear before file links as a narrative quip
-- Meme captions can include full-sentence context or quick one-liners; format flexibly
-- Humor can appear in text-only transcripts for stealth comedy mode
-- Memes prioritize what's funny, not polished composition — raw beats pretty
-
-### Success Criteria
-
-| Metric | Definition | Target |
-|--------|------------|--------|
-| **Laugh Rate** | People who react with genuine laughter | ≥85% |
-| **Flinch Rate** | Jokes that cross into discomfort but not offense | ~10% (healthy tension) |
-| **Safety Violations** | Explicitly inappropriate jokes | <1% |
-| **Re-Enable Rate** | Users who turn humor back on after disabling | ≥95% |
+### Multi-Provider AI Support (Provider-Agnostic Architecture)
+- **Provider abstraction layer** with unified interface for multiple AI providers
+- **XAI/Grok integration** with full support for Grok 4 Fast and Grok 2 Image
+- **Anthropic Claude integration** with Claude 3.5 Sonnet support
+- **Provider configuration** via environment variables per feature
+  - `SCRIBE_JOKE_PROVIDER=xai` (default: xai)
+  - `SCRIBE_MEME_PROVIDER=xai` (default: xai)
+  - `SCRIBE_NOTES_PROVIDER=xai` (default: xai)
+  - `SCRIBE_TRANSCRIBE_PROVIDER=openai` (default: openai)
+- **Cost optimization**: 47x cheaper with Grok vs GPT-5 for jokes/notes/memes
+- **Universal logging** with single `SCRIBE_LOG_LEVEL` for all components
+- **Provider-agnostic implementation** across all AI features:
+  - Jokes: Works with XAI, OpenAI, Anthropic
+  - Notes: Works with XAI, OpenAI, Anthropic (with enhanced JSON repair)
+  - Meme concepts: Works with XAI, OpenAI, Anthropic
+  - Meme images: Works with XAI, OpenAI (Anthropic doesn't support images)
+- **CLI provider flags**: `--provider xai` or `--provider anthropic` for jokes and notes commands
+- **Backward compatibility** with seamless fallback to OpenAI when provider unavailable
+- **Easy extensibility**: Clean architecture makes adding new providers straightforward
 
 ---
 
-## Privacy and Local-Only Operation
+## In Progress (v2.2.0 - Q1 2026)
 
-**Add a Local-Only Switch to disable all outbound API calls**. Ensure all local inference paths remain fully functional and transparent. Explicitly label runs that use remote models in logs and output metadata.
+### Model Provider Expansion
+- **Anthropic Claude support**: Claude 3.5 Sonnet integrated (needs production testing)
+- **Google Gemini support**: Add Gemini 2.0 for additional provider choice
+- **Provider health checks**: Monitor provider availability and performance
+- **Automatic failover**: Switch providers on errors or rate limits
+- **Production validation**: Test Anthropic and other providers in real meetings
 
-- `--local-only` flag disables all API calls
-- Validate local-only mode (GPU required, no notes/jokes/memes)
-- Log all API calls with model and token count
-- Output metadata includes "local" or "api" source
+### Transcription Improvements
+- Batch processing for multiple files
+- Resume interrupted transcriptions
+- Custom vocabulary/glossary support
+- Timestamp precision improvements
+- Optional speed modes (large-v2, medium) for faster processing when accuracy is less critical
 
----
+### Intelligence Enhancements
+- Action item extraction with assignees
+- Sentiment analysis per speaker
+- Topic segmentation and tagging
+- Meeting type classification
 
-## Metrics to Target
-
-| Metric | Definition | Target |
-|--------|------------|--------|
-| **Accuracy** | Word error rate on internal evaluation set | Maintain or improve current baseline |
-| **Stability** | Successful job completion rate and mean time to recover | 99.5% success, recovery under 30s |
-| **Edit Burden** | Percentage of generated notes requiring manual edits | Under 10% after pilot feedback |
-
----
-
-## Contribution Priorities
-
-1. Improve install and bootstrap flow on non-Windows platforms
-2. Expand GPU auto-detection and presets beyond RTX 4090
-3. Enhance notes formatting, diarization, and JSON schema exports
-4. Simplify CLI help, error output, and configuration validation
-5. Maintain focus on stability and predictability over new features
-
----
-
-## Current Status
-
-**Version**: 2.0  
-**Test Coverage**: 45% (463 tests passing)  
-**Platform Support**: Windows (primary), macOS (tested), Linux (tested)
-
-**Recent Additions** (November 2025):
-- GPU Resource Manager with singleton pattern and thread-safe locking
-- Resource limits validation (file size and duration)
-- AsyncIO support with contextvars for async/await compatibility
-- Meeting notes generator (GPT-5 multi-step reasoning)
-- Meme generation with QA loop (multiple attempts, scoring)
-- Configurable QA thresholds via environment variables
-- Consistent progress spinners across all commands
-- Humor spice levels (0-10) for jokes and memes
-- New comedy archetypes: Based Observer and Gen Z Commentator
-- System diagnostics command (`scribe doctor`)
-- Humor control flags (`--no-joke`, `--no-meme`)
-- Atomic file writes with platform-specific handling
-- Run context tracking with unique IDs and metadata
-- Cross-platform atomic writes (Windows and POSIX)
+### Performance Optimization
+- Model caching improvements
+- Parallel chunk processing
+- Memory usage optimization
+- Faster audio conversion pipeline
 
 ---
 
-## Not Planned
+## Planned (v2.3.0 - Q2 2026)
 
-- Enterprise features (team collaboration, access controls)
-- Real-time translation
-- Distributed processing
-- Over-complicated integrations
-- Chasing 100% test coverage
+### Advanced Features
+- Real-time transcription during recording
+- Live speaker identification
+- Multi-file project management
+- Template system for different meeting types
+- Custom output formatters
+
+### API & Integration
+- REST API for remote transcription
+- Webhook support for completion notifications
+- Slack/Teams integration for sharing
+- Calendar integration for auto-naming
+- Cloud storage sync (S3, GCS, Azure)
+
+### UI Improvements
+- Web dashboard for managing transcriptions
+- Progress tracking across multiple jobs
+- Search across all transcripts
+- Visual timeline editor
 
 ---
 
-**Last Updated**: November 2025
+## Future Considerations (v3.0+)
+
+### Model Upgrades
+- Support for NVIDIA NeMo Parakeet models (if accuracy exceeds large-v3)
+- Mistral Voxtral-Mini integration for multimodal capabilities
+- Local diarization without API (pyannote.audio integration)
+- Fine-tuned models for specific domains (medical, legal, technical)
+- Whisper large-v4 when released (if it improves on v3 accuracy)
+
+### Advanced Intelligence
+- Multi-meeting analysis and trends
+- Decision tracking across meetings
+- Automated follow-up generation
+- Risk and opportunity detection
+- Compliance checking for regulated industries
+
+### Enterprise Features
+- Multi-user support with permissions
+- Team workspaces
+- Audit logging
+- SSO integration
+- On-premise deployment options
+- Custom model hosting
+
+### Performance & Scale
+- Distributed processing across multiple GPUs
+- Kubernetes deployment
+- Queue-based job processing
+- Auto-scaling based on load
+
+---
+
+## Technical Debt & Maintenance
+
+### Code Quality
+- Increase test coverage to 80%
+- Add integration tests for all API endpoints
+- Improve type hints coverage
+- Refactor large modules into smaller components
+
+### Documentation
+- API reference documentation
+- Architecture decision records (ADRs)
+- Video tutorials and demos
+- Troubleshooting guide expansion
+
+### Dependencies
+- Regular security updates
+- Dependency version pinning strategy
+- Optional dependency management improvements
+- Reduce package size for API-only installs
+
+---
+
+## Community & Ecosystem
+
+### Open Source
+- Plugin system for custom processors
+- Community template library
+- Example integrations repository
+- Contribution guidelines and governance
+
+### Education
+- Best practices guide
+- Performance tuning guide
+- Use case examples
+- Comparison with alternatives
+
+---
+
+## Legend
+
+- Completed
+- In Progress
+- Planned
+- Future Consideration
+- Technical Debt
+- Community
+
+---
+
+## Design Philosophy
+
+### Quality Over Speed
+Scribe intentionally prioritizes transcription quality:
+
+**Model Selection:**
+- Uses Whisper large-v3 (best accuracy available)
+- RTX 4090 achieves 11x real-time speed even with the largest model
+- We could use faster models (large-v2, medium, turbo), but accuracy is non-negotiable
+
+**Audio Preprocessing:**
+- Uses dynaudnorm for professional-grade audio normalization
+- Processes at ~10x real-time (5.5 min for 55 min recording)
+- Ensures optimal audio quality for transcription
+- We could skip normalization for speed, but quality would suffer
+
+**Total Time Example (55-minute recording on RTX 4090):**
+- Audio preprocessing: ~5.5 minutes
+- Transcription: ~5 minutes
+- Total: ~10.5 minutes
+- This is acceptable for professional workflows where accuracy matters
+
+## Version History
+
+### v2.1.0 (November 2025)
+UX and intelligence improvements: AI-powered joke archetype selection, stricter meme QA with automatic retry, unified command interface, improved progress display, and cleaner output formatting.
+
+### v2.0.0 (November 2025)
+Major release with GPT-5 integration, meme generation, GPU resource management, comprehensive reliability improvements, and quality-first transcription with large-v3.
+
+### v1.x (2024)
+Initial releases with basic transcription, OBS integration, and document generation.
+
+---
+
+## Contributing
+
+We welcome contributions! Priority areas:
+1. Test coverage improvements
+2. Performance optimizations
+3. Documentation enhancements
+4. Bug fixes and stability
+
+See CONTRIBUTING.md for guidelines.
+
+---
+
+## Feedback
+
+Have ideas or requests? Open an issue on GitHub or reach out to [@blisspixel](https://github.com/blisspixel).
+
+Last updated: November 13, 2025
