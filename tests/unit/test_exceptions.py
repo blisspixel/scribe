@@ -331,3 +331,5 @@ class TestExceptionFormatting:
         """Test error repr includes class name."""
         error = ValidationError("Test error")
         assert "ValidationError" in repr(error)
+
+

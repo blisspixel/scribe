@@ -21,14 +21,17 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True), override=False)
 
 logger = logging.getLogger("meme_generator")
-# Only show ERROR level messages by default (not INFO/DEBUG)
-# Users can set MEME_LOG_LEVEL=DEBUG for verbose output
-logger.setLevel(getattr(logging, os.getenv("MEME_LOG_LEVEL", "ERROR").upper(), logging.ERROR))
+# Use universal SCRIBE_LOG_LEVEL, fall back to MEME_LOG_LEVEL for backward compat
+log_level = os.getenv("SCRIBE_LOG_LEVEL") or os.getenv("MEME_LOG_LEVEL", "ERROR")
+level = getattr(logging, log_level.upper(), logging.ERROR)
+logger.setLevel(level)
 if not logger.handlers:
     handler = logging.StreamHandler()
+    handler.setLevel(level)  # Set handler level too
     fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(fmt)
     logger.addHandler(handler)
+logger.propagate = False  # Don't propagate to root logger
 
 
 @dataclass
@@ -99,7 +102,7 @@ class MemeConfig:
 
 
 def _analyze_transcript_for_meme(
-    client: OpenAI,
+    provider,  # Provider interface (OpenAI or XAI)
     transcript: str,
     config: MemeConfig,
     show_reasoning: bool = False,
@@ -209,6 +212,12 @@ YOUR THEORETICAL TOOLKIT (use these as lenses, not rules):
    - Decontextualize quotes for absurdity
    - Layout = timing: Top (setup) → Image (pause) → Bottom (punchline)
 
+5. IMAGE ORIENTATION: Choose the right aspect ratio for your template
+   - Square (1024x1024): Classic meme templates, single subjects, balanced compositions
+   - Landscape (1536x1024): Wide scenes, side-by-side comparisons, panoramic views
+   - Portrait (1024x1536): Tall subjects, vertical scrolling memes, stacked text
+   - Auto: Let the model decide based on the prompt
+
 YOUR PROCESS (be adaptive, not rigid):
 
 1. Read the ENTIRE transcript and understand what happened
@@ -233,7 +242,7 @@ RESPOND IN JSON:
     "template": "Template name (or describe new concept)",
     "template_myth": "What cultural meaning this template brings",
     "match_type": "Synergy or Ironic Juxtaposition (or something else if you're being creative)",
-    "optimal_size": "Best image size for this template: '1024x1024' (square), '1536x1024' (landscape), '1024x1536' (portrait), or 'auto' (let model decide)",
+    "optimal_size": "Choose the best size for this template: '1024x1024' (square - classic memes), '1536x1024' (landscape - wide scenes, multiple panels), '1024x1536' (portrait - tall subjects, vertical text), or 'auto' (let model decide). Consider the template's natural orientation.",
     "top_text": "MAX 8 WORDS",
     "bottom_text": "MAX 8 WORDS",
     "image_prompt": "Detailed visual description with Impact font styling. Be specific about composition and framing to avoid cropping issues.",
@@ -245,11 +254,11 @@ Think deeply. Be creative. Make it HILARIOUS.
 """
 
     try:
-        # Use Responses API for GPT-5 with medium reasoning (high can take 5+ minutes)
-        response = client.responses.create(
-            model=config.model,
-            input=[
-                {"role": "developer", "content": """You are an expert in memetic theory, comedy, and semiotics.
+        # Check if we're using a provider or OpenAI client
+        if hasattr(provider, 'chat_completion'):
+            # Using provider system
+            messages = [
+                {"role": "system", "content": """You are an expert in memetic theory, comedy, and semiotics.
 
 You understand:
 - Benign Violation Theory
@@ -263,13 +272,37 @@ Think deeply. Use your full reasoning capacity. Find the perfect moment ANYWHERE
 
 Respond with valid JSON only."""},
                 {"role": "user", "content": analysis_prompt}
-            ],
-            reasoning={"effort": "medium"}  # Medium is faster than high (30s vs 5+ min)
-        )
-        
-        # Extract text from response
-        result = response.output_text
-        meme_concept = json.loads(result)  # Parse JSON response
+            ]
+            
+            response = provider.chat_completion(messages=messages, max_tokens=4000)
+            result = response["content"]
+            meme_concept = json.loads(result)
+        else:
+            # Using OpenAI Responses API
+            response = provider.responses.create(
+                model=config.model,
+                input=[
+                    {"role": "developer", "content": """You are an expert in memetic theory, comedy, and semiotics.
+
+You understand:
+- Benign Violation Theory
+- Grice's Maxims
+- Semiotic matching (templates as cultural "myths")
+- The Rule of Comedic Economy
+
+Your memes are HILARIOUS, SPECIFIC, and CLEVER.
+
+Think deeply. Use your full reasoning capacity. Find the perfect moment ANYWHERE in the transcript.
+
+Respond with valid JSON only."""},
+                    {"role": "user", "content": analysis_prompt}
+                ],
+                reasoning={"effort": "medium"}  # Medium is faster than high (30s vs 5+ min)
+            )
+            
+            # Extract text from response
+            result = response.output_text
+            meme_concept = json.loads(result)  # Parse JSON response
         
         # Add metadata for transparency
         meme_concept["transcript_length"] = transcript_length
@@ -372,17 +405,17 @@ Respond with valid JSON only."""},
 
 
 def _refine_prompt_from_feedback(
-    client: OpenAI,
+    provider,  # Provider interface (OpenAI or XAI)
     meme_concept: Dict[str, Any],
     qa_feedback: Dict[str, Any],
     attempt: int,
     config: MemeConfig
 ) -> Dict[str, Any]:
     """
-    Use GPT-5 to analyze QA feedback and refine the image prompt.
+    Use AI to analyze QA feedback and refine the image prompt.
     
     Args:
-        client: OpenAI client
+        provider: AI provider
         meme_concept: Original meme concept
         qa_feedback: QA grading results
         attempt: Current attempt number
@@ -426,13 +459,22 @@ Be surgical and specific. We need a 9+/10 meme.
 """
     
     try:
-        response = client.responses.create(
-            model=config.model,
-            input=refinement_prompt,
-            reasoning={"effort": "medium"}
-        )
+        # Check if using provider or OpenAI client
+        if hasattr(provider, 'chat_completion'):
+            # Using provider system
+            messages = [{"role": "user", "content": refinement_prompt}]
+            response = provider.chat_completion(messages=messages, max_tokens=2000)
+            result = response["content"]
+        else:
+            # Using OpenAI Responses API
+            response = provider.responses.create(
+                model=config.model,
+                input=refinement_prompt,
+                reasoning={"effort": "medium"}
+            )
+            result = response.output_text
         
-        result = response.output_text
+        
         refinement = json.loads(result)
         
         logger.info(f"Refinement analysis: {refinement.get('analysis', 'N/A')[:100]}...")
@@ -452,16 +494,16 @@ Be surgical and specific. We need a 9+/10 meme.
 
 
 def _qa_grade_meme(
-    client: OpenAI,
+    provider,  # Provider interface (OpenAI or XAI)
     meme_path: Path,
     meme_concept: Dict[str, Any],
     config: MemeConfig
 ) -> tuple[float, Dict[str, Any]]:
     """
-    Use GPT-4o vision to grade the generated meme.
+    Use AI vision to grade the generated meme.
     
     Args:
-        client: OpenAI client
+        provider: AI provider
         meme_path: Path to generated meme image
         meme_concept: Original meme concept
         config: Meme generation config
@@ -478,7 +520,7 @@ def _qa_grade_meme(
         image_b64 = base64.b64encode(image_bytes).decode('utf-8')
         
         # Create QA prompt
-        qa_prompt = f"""You are a meme quality expert. Grade this meme on a scale of 1-10.
+        qa_prompt = f"""You are a strict meme quality expert. Grade this meme on a scale of 1-10.
 
 ORIGINAL CONCEPT:
 - Template: {meme_concept.get('template', 'N/A')}
@@ -486,62 +528,82 @@ ORIGINAL CONCEPT:
 - Bottom Text: {meme_concept.get('bottom_text', 'N/A')}
 - Why It's Funny: {meme_concept.get('concept', 'N/A')}
 
-GRADING CRITERIA (Be fair and balanced):
+GRADING CRITERIA (Be strict about text quality):
 
-1. Visual Quality (3 points):
-   - Composition: Is the image reasonably well-framed? Minor cropping is acceptable.
-   - Contrast: Is text mostly readable? Perfect contrast not required.
-   - Overall: Does it look like a meme people would share?
-   - Give 2.5+ if text is readable and image looks decent
+1. Text Completeness & Readability (4 points) - CRITICAL:
+   - ALL text must be FULLY VISIBLE - no cut-off words or letters
+   - Text must make COMPLETE SENSE - no gibberish, garbled, or nonsensical text
+   - Text must match the intended concept - verify against the original text above
+   - Text must be READABLE - good contrast, not too small, not obscured
+   - AUTOMATIC FAIL (<7.0) if ANY text is cut off, garbled, or nonsensical
+   - Give 3.5+ ONLY if all text is perfect and complete
 
-2. Template Accuracy (3 points):
-   - Recognition: Does it capture the spirit of the template concept?
-   - Elements: Are the key visual elements present enough to convey the idea?
-   - Composition: Does it feel like the right template style?
-   - Give 2.5+ if the concept is recognizable, even if not pixel-perfect
+2. Visual Quality (2 points):
+   - Composition: Is the image reasonably well-framed?
+   - Contrast: Is there good visual contrast?
+   - Overall: Does it look professional?
+   - Give 1.5+ if image looks decent
 
-3. Text Integration (2 points):
-   - Placement: Is text positioned reasonably well?
-   - Styling: Is text readable with decent contrast?
-   - Readability: Can you understand it without squinting?
-   - Give 1.5+ if text is legible and placed appropriately
+3. Template Accuracy (2 points):
+   - Recognition: Does it capture the template concept?
+   - Elements: Are key visual elements present?
+   - Composition: Does it feel like the right template?
+   - Give 1.5+ if concept is recognizable
 
 4. Humor & Relevance (2 points):
    - Topical: Does it relate to the meeting content?
-   - Funny: Would this get at least a chuckle or knowing nod?
-   - Spice: Does it match the requested humor intensity?
+   - Funny: Would this get at least a chuckle?
+   - Appropriate: Does it match the humor level?
    - Give 1.5+ if it's relevant and amusing
 
 RESPOND IN JSON:
 {{
     "score": 8.5,
-    "visual_quality_score": 2.5,
-    "visual_quality": "Brief feedback",
-    "template_accuracy_score": 2.8,
-    "template_accuracy": "Brief feedback",
-    "text_integration_score": 1.7,
-    "text_integration": "Brief feedback",
+    "text_quality_score": 3.8,
+    "text_quality": "Detailed feedback on text completeness and readability",
+    "visual_quality_score": 1.7,
+    "visual_quality": "Brief feedback on visuals",
+    "template_accuracy_score": 1.8,
+    "template_accuracy": "Brief feedback on template",
     "hilarity_score": 1.5,
-    "hilarity": "Brief feedback",
+    "hilarity": "Brief feedback on humor",
     "overall": "Overall assessment",
-    "issues": ["Issue 1 if any", "Issue 2 if any"],
+    "text_issues": ["List ANY cut-off, garbled, or nonsensical text"],
+    "issues": ["Other issues if any"],
     "strengths": ["What's working well"],
-    "critical_fixes": ["Fix 1 if needed", "Fix 2 if needed"]
+    "critical_fixes": ["MUST fix cut-off or garbled text", "Other fixes if needed"]
 }}
 
 SCORING GUIDE:
-- 8.5-10.0 = EXCELLENT - Ship it immediately
-- 8.0-8.4 = GOOD - Acceptable, ship it
-- 7.0-7.9 = OKAY - Could be better but usable
-- <7.0 = NEEDS WORK - Try again
+- 8.5-10.0 = EXCELLENT - All text perfect, ship it immediately
+- 8.0-8.4 = GOOD - Text complete and readable, ship it
+- 7.0-7.9 = OKAY - Minor text issues, could be better
+- <7.0 = FAIL - Cut-off, garbled, or nonsensical text - MUST RETRY
 
-Be fair. We want good memes that are funny and relevant, not perfect pixel art.
+BE STRICT: If ANY text is cut off, garbled, or doesn't make sense, score MUST be below 7.0.
+
+VERIFICATION CHECKLIST:
+1. Compare visible text to intended text above - does it match?
+2. Is every word COMPLETE with no cut-off letters?
+3. Does the text make LOGICAL SENSE when read?
+4. Can you read ALL the text without guessing?
+
+If you answer NO to any of these, score MUST be below 7.0 and list the text issues.
 """
         
-        # Use GPT-5 vision to grade
-        response = client.chat.completions.create(
-            model="gpt-4o",  # Use vision model
-            messages=[
+        # Use AI vision to grade
+        # Check if provider has analyze_image method
+        if hasattr(provider, 'analyze_image'):
+            # Use provider's vision capability
+            with open(meme_path, "rb") as f:
+                image_data = f.read()
+            
+            result = provider.analyze_image(image_data, qa_prompt)
+        elif hasattr(provider, 'chat') and hasattr(provider.chat, 'completions'):
+            # Using OpenAI client directly
+            response = provider.chat.completions.create(
+                model="gpt-4o",  # Use vision model
+                messages=[
                 {
                     "role": "user",
                     "content": [
@@ -556,14 +618,16 @@ Be fair. We want good memes that are funny and relevant, not perfect pixel art.
                 }
             ],
             max_tokens=1000
-        )
-        
-        # Parse response
-        result_text = response.choices[0].message.content
+            )
+            
+            # Parse response
+            result = response.choices[0].message.content
+        else:
+            raise ValueError("Provider does not support vision capabilities")
         
         # Try to extract JSON
         import re
-        json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+        json_match = re.search(r'\{.*\}', result, re.DOTALL)
         if json_match:
             result = json.loads(json_match.group())
             score = float(result.get("score", 0))
@@ -582,16 +646,16 @@ Be fair. We want good memes that are funny and relevant, not perfect pixel art.
 
 
 def _generate_meme_image(
-    client: OpenAI,
+    image_provider,
     meme_concept: Dict[str, str],
     config: MemeConfig,
     output_path: Path
 ) -> Optional[Path]:
     """
-    Generate meme image using OpenAI image generation API.
+    Generate meme image using AI provider (provider-agnostic).
     
     Args:
-        client: OpenAI client
+        image_provider: AI provider instance for image generation
         meme_concept: Meme concept from analysis
         config: Meme generation config
         output_path: Where to save the meme
@@ -603,6 +667,20 @@ def _generate_meme_image(
     
     # Use optimal size from concept if available
     size = meme_concept.get("optimal_size", config.size)
+    
+    # Normalize size - extract just the dimensions, remove any descriptive text
+    # Valid formats: '1024x1024', '1024x1536', '1536x1024', 'auto'
+    if size and isinstance(size, str):
+        # Remove any text in parentheses or after the dimensions
+        size = size.split('(')[0].strip()
+        size = size.split()[0].strip()
+        
+        # Validate against allowed sizes
+        valid_sizes = ['1024x1024', '1024x1536', '1536x1024', 'auto']
+        if size not in valid_sizes:
+            logger.warning(f"Invalid size '{size}', defaulting to '1024x1024'")
+            size = '1024x1024'
+    
     logger.info(f"Using image size: {size}")
     
     # Build comprehensive image prompt
@@ -627,19 +705,13 @@ def _generate_meme_image(
     logger.debug(f"Final image prompt: {image_prompt}")
     
     try:
-        # Generate image using OpenAI API
-        # Note: gpt-image-1 always returns base64, no need for response_format
-        response = client.images.generate(
-            model=config.image_model,
+        # Generate image using provider (provider-agnostic)
+        image_bytes = image_provider.generate_image(
             prompt=image_prompt,
-            n=1,
             size=size,
+            model=config.image_model,
             quality=config.quality
         )
-        
-        # Extract base64 image data
-        image_b64 = response.data[0].b64_json
-        image_bytes = base64.b64decode(image_b64)
         
         # Save to file
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -657,6 +729,37 @@ def _generate_meme_image(
             logger.warning(f"Image generation blocked by safety filter: {e}")
             # Return special error code so caller can try a different concept
             return "SAFETY_BLOCKED"
+        # Check if it's an XAI-specific error (Invalid URL 'None')
+        elif "Invalid URL 'None'" in error_str or "XAI" in error_str:
+            logger.warning(f"XAI image generation failed: {e}, falling back to OpenAI")
+            try:
+                # Fall back to OpenAI for image generation
+                from scribe.providers import get_provider
+                openai_provider = get_provider(
+                    feature="meme_image",
+                    api_key=None,
+                    model=None,
+                    provider_name="openai"
+                )
+                logger.info("Retrying image generation with OpenAI GPT Image 1")
+                # Use gpt-image-1 (best text rendering) - provider handles quality conversion
+                image_bytes = openai_provider.generate_image(
+                    prompt=image_prompt,
+                    size=size,
+                    model="gpt-image-1",
+                    quality=config.quality
+                )
+                
+                # Save to file
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, "wb") as f:
+                    f.write(image_bytes)
+                
+                logger.info(f"Meme saved to: {output_path} (using OpenAI fallback)")
+                return output_path
+            except Exception as fallback_error:
+                logger.error(f"OpenAI fallback also failed: {fallback_error}")
+                return None
         else:
             logger.error(f"Failed to generate meme image: {e}")
             return None
@@ -667,7 +770,9 @@ def generate_meeting_meme(
     output_dir: Optional[Path] = None,
     api_key: Optional[str] = None,
     config: Optional[MemeConfig] = None,
-    show_reasoning: bool = False
+    show_reasoning: bool = False,
+    progress_callback: Optional[callable] = None,
+    provider_name: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Generate a meme from a meeting transcript.
@@ -675,9 +780,11 @@ def generate_meeting_meme(
     Args:
         transcript_path: Path to transcript file
         output_dir: Directory to save meme (defaults to same dir as transcript)
-        api_key: OpenAI API key (or uses OPENAI_API_KEY env var)
+        api_key: API key (or uses provider-specific env var)
         config: Meme generation config
         show_reasoning: If True, displays GPT-5's reasoning process (for trust/validation)
+        progress_callback: Optional callback function(attempt, max_attempts, score) for progress updates
+        provider_name: AI provider to use (openai, xai) - defaults to SCRIBE_MEME_PROVIDER env var
         
     Returns:
         Dictionary with:
@@ -687,15 +794,68 @@ def generate_meeting_meme(
     """
     # Setup - use environment config if not provided
     config = config or MemeConfig.from_env()
-    api_key = api_key or os.getenv("OPENAI_API_KEY")
     
-    if not api_key:
-        logger.error("No OpenAI API key provided")
-        return None
+    # Try to use provider system for concept generation
+    provider = None
+    image_provider = None
+    use_provider = False
     
-    # Create client with timeout to prevent hanging (default: 120 seconds)
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key, timeout=config.timeout)
+    try:
+        from scribe.providers import get_provider
+        
+        # Get provider for meme concept generation
+        try:
+            provider = get_provider(
+                feature="meme",
+                api_key=api_key,
+                model=config.model if config.model != "gpt-5" else None,
+                provider_name=provider_name,
+            )
+            
+            # Get provider for image generation (may be different provider)
+            image_provider = get_provider(
+                feature="meme_image",
+                api_key=None,  # Let factory get the right key
+                model=config.image_model if config.image_model not in ["gpt-image-1", "dall-e-3"] else None,
+                provider_name=provider_name,  # Use same provider as concept
+            )
+            
+            use_provider = True
+            logger.info(f"Using provider for meme concept: {provider.config.provider_name} | model: {provider.config.model}")
+            logger.info(f"Using provider for meme image: {image_provider.config.provider_name} | model: {image_provider.config.model}")
+            api_key = provider.config.api_key
+        except Exception as provider_error:
+            # If provider fails (e.g., invalid API key), fall back to OpenAI
+            logger.warning(f"Primary provider failed ({provider_name}), falling back to OpenAI: {provider_error}")
+            provider_name = "openai"
+            provider = get_provider(
+                feature="meme",
+                api_key=None,  # Let it get from env
+                model=None,
+                provider_name="openai",
+            )
+            image_provider = get_provider(
+                feature="meme_image",
+                api_key=None,
+                model=None,
+                provider_name="openai",
+            )
+            use_provider = True
+            logger.info(f"Fallback to OpenAI provider successful")
+            api_key = provider.config.api_key
+    except Exception as e:
+        logger.debug(f"Provider system not available, falling back to OpenAI client: {e}")
+        api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.error("No API key provided")
+            return None
+        
+        # Create OpenAI client as fallback
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key, timeout=config.timeout)
+        # Use client as both provider and image_provider for backward compat
+        provider = client
+        image_provider = client
     
     # Read transcript
     try:
@@ -718,7 +878,7 @@ def generate_meeting_meme(
     output_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
     
     # Step 1: Analyze transcript and create meme concept
-    meme_concept = _analyze_transcript_for_meme(client, transcript, config, show_reasoning)
+    meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
     if not meme_concept:
         logger.error("Failed to create meme concept")
         return None
@@ -743,24 +903,28 @@ def generate_meeting_meme(
     for attempt in range(1, max_attempts + 1):
         logger.info(f"Meme generation attempt {attempt}/{max_attempts}")
         
+        # Notify progress callback
+        if progress_callback:
+            progress_callback(attempt, max_attempts, None)
+        
         # Save each attempt with numbered suffix
         attempt_path = output_dir / f"{transcript_path.stem}_meme_attempt{attempt}.{config.output_format}"
         
-        meme_path = _generate_meme_image(client, meme_concept, config, attempt_path)
+        meme_path = _generate_meme_image(image_provider, meme_concept, config, attempt_path)
         
         # Handle safety filter blocks by generating a completely new concept
         if meme_path == "SAFETY_BLOCKED":
             logger.warning(f"Meme concept blocked by safety filter on attempt {attempt}, generating new concept...")
             # Generate a completely new meme concept (safer, more professional)
             meme_concept = _analyze_transcript_for_meme(
-                client, 
-                transcript_text, 
+                provider, 
+                transcript, 
                 config,
                 previous_attempt=meme_concept,  # Pass previous to avoid similar concepts
                 make_safer=True  # Request a safer concept
             )
             # Try again with new concept
-            meme_path = _generate_meme_image(client, meme_concept, config, attempt_path)
+            meme_path = _generate_meme_image(image_provider, meme_concept, config, attempt_path)
         
         if not meme_path or meme_path == "SAFETY_BLOCKED":
             logger.error(f"Failed to generate meme image on attempt {attempt}")
@@ -771,7 +935,7 @@ def generate_meeting_meme(
         qa_feedback = None
         
         if config.qa_enabled:
-            score, qa_feedback = _qa_grade_meme(client, meme_path, meme_concept, config)
+            score, qa_feedback = _qa_grade_meme(provider, meme_path, meme_concept, config)
             
             # Track this attempt
             all_attempts.append({
@@ -780,11 +944,23 @@ def generate_meeting_meme(
                 "score": score
             })
             
-            # Log QA result (don't print to console - spinner handles it)
+            # Notify progress callback with score
+            if progress_callback:
+                progress_callback(attempt, max_attempts, score)
+            
+            # Log QA result with details
             if score >= config.qa_threshold:
                 logger.info(f"Meme passed QA (score: {score:.1f}/10)")
             else:
-                logger.info(f"Score: {score:.1f}/10 (threshold: {config.qa_threshold}) - refining...")
+                logger.warning(f"Score: {score:.1f}/10 (threshold: {config.qa_threshold})")
+                if qa_feedback:
+                    # Log the main issues
+                    text_issues = qa_feedback.get('text_issues', [])
+                    if text_issues:
+                        logger.warning(f"Text issues: {', '.join(text_issues[:2])}")
+                    critical_fixes = qa_feedback.get('critical_fixes', [])
+                    if critical_fixes:
+                        logger.debug(f"Critical fixes needed: {', '.join(critical_fixes[:2])}")
             
             if show_reasoning:
                 print(f"\n[QA CHECK - Attempt {attempt}]")
@@ -823,7 +999,7 @@ def generate_meeting_meme(
                 logger.warning(f"Meme scored {score}/10 (threshold: {config.qa_threshold}), regenerating...")
                 if attempt < max_attempts:
                     # Use agentic refinement to improve the prompt
-                    meme_concept = _refine_prompt_from_feedback(client, meme_concept, qa_feedback, attempt, config)
+                    meme_concept = _refine_prompt_from_feedback(provider, meme_concept, qa_feedback, attempt, config)
         else:
             # QA disabled, accept first generation
             all_attempts.append({

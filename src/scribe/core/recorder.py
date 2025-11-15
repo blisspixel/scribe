@@ -363,7 +363,7 @@ class OBSRecorder:
             time.sleep(0.2)
             status = client.get_record_status()
             if getattr(status, "output_active", False):
-                console.print("[green]Recording started successfully[/green]")
+                console.print("Recording started")
                 logger.info("Recording started successfully")
                 return
         
@@ -415,7 +415,7 @@ class OBSRecorder:
                 # Clear the status line before printing stopped message
                 sys.stdout.write("\r" + " " * 40 + "\r")
                 sys.stdout.flush()
-                console.print("[green]Recording stopped[/green]")
+                console.print("Recording stopped")
                 logger.info("Recording stopped")
                 return
             
@@ -596,7 +596,7 @@ class OBSRecorder:
                 )
                 if self._remux_mkv_to_mp4(media_path, str(tmp_mp4)):
                     src_path = str(tmp_mp4)
-                    console.print("[green]Conversion complete[/green]")
+                    logger.info("MKV to MP4 conversion complete")
                 else:
                     target_ext = ".mkv"
                     console.print("[yellow]Conversion failed, keeping MKV format[/yellow]")

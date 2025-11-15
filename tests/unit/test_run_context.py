@@ -44,7 +44,7 @@ class TestRunIDGeneration:
     def test_generate_run_id_sortable(self):
         """Test that run IDs are sortable by time."""
         id1 = _generate_run_id()
-        time.sleep(0.01)
+        time.sleep(1.1)  # Sleep long enough to ensure different timestamps
         id2 = _generate_run_id()
         
         # Later ID should sort after earlier ID
@@ -78,10 +78,10 @@ class TestRunContext:
         ctx = RunContext.create("test")
         
         ctx.add_metadata("file", "test.mp4")
-        ctx.add_metadata("model", "large-v3")
+        ctx.add_metadata("model", "large-v3-turbo")
         
         assert ctx.metadata["file"] == "test.mp4"
-        assert ctx.metadata["model"] == "large-v3"
+        assert ctx.metadata["model"] == "large-v3-turbo"
     
     def test_mark_success(self):
         """Test marking run as successful."""
@@ -413,7 +413,7 @@ class TestIntegration:
                 convert_ctx.mark_success()
             
             with nested_operation("process") as process_ctx:
-                add_run_metadata("model", "large-v3")
+                add_run_metadata("model", "large-v3-turbo")
                 process_ctx.mark_success()
             
             ctx.mark_success()
@@ -425,3 +425,4 @@ class TestIntegration:
         
         # History should have the runs
         assert len(history.runs) >= initial_count + 3
+

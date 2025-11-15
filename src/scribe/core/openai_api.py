@@ -89,14 +89,31 @@ class OpenAITranscriber:
                 params = {
                     "model": self.model,
                     "file": audio_file,
-                    "response_format": "text",  # gpt-4o-transcribe supports text or json
                 }
                 
-                # Add prompt if provided (not supported for diarize models)
-                if prompt and "diarize" not in self.model:
-                    params["prompt"] = prompt
+                # Configure response format based on model
+                if "diarize" in self.model:
+                    # New diarization models only support 'json' format, not 'verbose_json'
+                    params["response_format"] = "json"
+                    params["timestamp_granularities"] = ["word"]
+                    # chunking_strategy is required for diarize models with long audio
+                    params["chunking_strategy"] = "auto"
+                else:
+                    params["response_format"] = "text"
+                    # Add prompt if provided (not supported for diarize models)
+                    if prompt:
+                        params["prompt"] = prompt
                 
-                transcript_response = self.client.audio.transcriptions.create(**params)
+                try:
+                    transcript_response = self.client.audio.transcriptions.create(**params)
+                except Exception as api_error:
+                    # If chunking_strategy fails, retry without it
+                    if "chunking_strategy" in str(api_error) and "chunking_strategy" in params:
+                        logger.warning("chunking_strategy not supported, retrying without it...")
+                        del params["chunking_strategy"]
+                        transcript_response = self.client.audio.transcriptions.create(**params)
+                    else:
+                        raise
                 
             # Extract text and format with speaker labels if available
             logger.info("Processing transcription response...")
@@ -174,28 +191,47 @@ class OpenAITranscriber:
             ""
         ]
         
-        # Handle different response formats
+        # Handle different response formats defensively
         if isinstance(response, str):
             # response_format="text" returns a plain string
             lines.append(response.strip())
         elif hasattr(response, 'segments') and response.segments:
-            # response_format="json" with segments (diarization)
-            for segment in response.segments:
-                timestamp = self._format_timestamp(segment.get('start', 0))
-                text = segment.get('text', '').strip()
-                
-                # Check for speaker label (diarization)
-                speaker = segment.get('speaker')
-                if speaker:
-                    lines.append(f"{speaker}: {text}")
-                else:
-                    lines.append(text)
-                lines.append("")
+            # response_format="verbose_json" with segments (diarization)
+            try:
+                for segment in response.segments:
+                    # Safely extract segment data
+                    if isinstance(segment, dict):
+                        start = segment.get('start', 0)
+                        text = segment.get('text', '').strip()
+                        speaker = segment.get('speaker')
+                    else:
+                        start = getattr(segment, 'start', 0)
+                        text = getattr(segment, 'text', '').strip()
+                        speaker = getattr(segment, 'speaker', None)
+                    
+                    # Skip empty segments
+                    if not text:
+                        continue
+                    
+                    timestamp = self._format_timestamp(start)
+                    
+                    # Format with speaker label if available
+                    if speaker:
+                        lines.append(f"[{timestamp}] {speaker}: {text}")
+                    else:
+                        lines.append(f"[{timestamp}] {text}")
+                    lines.append("")
+            except Exception as e:
+                logger.warning(f"Error processing segments: {e}, falling back to text extraction")
+                # Fallback to text attribute if segment processing fails
+                if hasattr(response, 'text'):
+                    lines.append(response.text.strip())
         elif hasattr(response, 'text'):
-            # response_format="json" with simple text
+            # response_format="json" or "verbose_json" with simple text
             lines.append(response.text.strip())
         else:
             # Fallback - convert to string
+            logger.warning(f"Unexpected response format: {type(response)}")
             lines.append(str(response).strip())
         
         return "\n".join(lines)

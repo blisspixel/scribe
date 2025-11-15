@@ -102,7 +102,7 @@ class GPUConfig:
         gpu_name_upper = self.gpu_name.upper()
         vram = self.gpu_memory_gb
         
-        # RTX 4090 - Maximum performance
+        # RTX 4090 - Maximum quality
         if "RTX 4090" in gpu_name_upper or vram >= 22:
             self.model_size = "large-v3"
             self.beam_size = 10
@@ -223,7 +223,7 @@ class GPUConfig:
         if not self.has_gpu or self.recommendation == "openai":
             return "1-2x real-time (API)"
         
-        if self.model_size == "large-v3":
+        if self.model_size in ("large-v3", "large-v3-turbo"):
             if self.beam_size >= 10:
                 return "8-12x real-time"
             elif self.beam_size >= 8:

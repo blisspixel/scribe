@@ -34,7 +34,6 @@ class TestGPUTranscriptionWorkflow:
         # Run transcription
         result = transcriber.transcribe(
             sample_audio,
-            "test_meeting",
             method="local",
             session=session
         )
@@ -61,7 +60,7 @@ class TestGPUTranscriptionWorkflow:
         
         # Transcribe
         transcriber = Transcriber(temp_config)
-        result = transcriber.transcribe(audio_path, "video_meeting", method="local")
+        result = transcriber.transcribe(audio_path, method="local")
         
         assert result is not None
         assert result.exists()
@@ -76,10 +75,7 @@ class TestOpenAIWorkflow:
         
         session = TranscriptionSession.create("api_meeting")
         
-        result = transcriber.transcribe(
-            sample_audio,
-            "api_meeting",
-            method="openai",
+        result = transcriber.transcribe(sample_audio, method="openai",
             session=session
         )
         
@@ -100,7 +96,7 @@ class TestOpenAIWorkflow:
         ]
         
         transcriber = Transcriber(temp_config)
-        result = transcriber.transcribe(long_audio, "long_meeting", method="openai")
+        result = transcriber.transcribe(long_audio, method="openai")
         
         assert result is not None
         
@@ -121,7 +117,7 @@ class TestAutoMethodSelection:
         with patch.object(transcriber, '_transcribe_local') as mock_local:
             mock_local.return_value = temp_config.output_folder / "result.txt"
             
-            transcriber.transcribe(sample_audio, "meeting", method="auto")
+            transcriber.transcribe(sample_audio, method="auto")
             
             # Should use local GPU
             mock_local.assert_called_once()
@@ -130,7 +126,7 @@ class TestAutoMethodSelection:
         """Test auto method selects OpenAI when no GPU."""
         transcriber = Transcriber(temp_config)
         
-        result = transcriber.transcribe(sample_audio, "meeting", method="auto")
+        result = transcriber.transcribe(sample_audio, method="auto")
         
         assert result is not None
         # Should have used OpenAI
@@ -151,10 +147,7 @@ class TestFallbackScenarios:
             mock_local_class.return_value = mock_local
             
             # Should fallback to OpenAI
-            result = transcriber.transcribe(
-                sample_audio,
-                "meeting",
-                method="auto",
+            result = transcriber.transcribe(sample_audio, method="auto",
                 enable_fallback=True
             )
             
@@ -172,10 +165,7 @@ class TestFallbackScenarios:
             
             # Should raise error without fallback
             with pytest.raises(TranscriptionError):
-                transcriber.transcribe(
-                    sample_audio,
-                    "meeting",
-                    method="local",
+                transcriber.transcribe(sample_audio, method="local",
                     enable_fallback=False
                 )
 
@@ -188,7 +178,7 @@ class TestCleanupBehavior:
         temp_config.keep_intermediate_files = False
         
         transcriber = Transcriber(temp_config)
-        result = transcriber.transcribe(sample_audio, "meeting", method="openai")
+        result = transcriber.transcribe(sample_audio, method="openai")
         
         assert result.exists()
         
@@ -201,7 +191,7 @@ class TestCleanupBehavior:
         temp_config.keep_intermediate_files = True
         
         transcriber = Transcriber(temp_config)
-        transcriber.transcribe(sample_audio, "meeting", method="openai")
+        transcriber.transcribe(sample_audio, method="openai")
         
         # Intermediate files may exist (depending on implementation)
         # Just verify no error occurs
@@ -218,7 +208,7 @@ class TestCleanupBehavior:
             mock_api_class.return_value = mock_api
             
             try:
-                transcriber.transcribe(sample_audio, "meeting", method="openai")
+                transcriber.transcribe(sample_audio, method="openai")
             except TranscriptionError:
                 pass
             
@@ -240,7 +230,7 @@ class TestInterruptHandling:
             mock_local_class.return_value = mock_local
             
             with pytest.raises(KeyboardInterrupt):
-                transcriber.transcribe(sample_audio, "meeting", method="local")
+                transcriber.transcribe(sample_audio, method="local")
             
             # Should cleanup before re-raising
             # (Implementation detail - verify no temp files left)
@@ -256,10 +246,7 @@ class TestInterruptHandling:
             mock_local_class.return_value = mock_local
             
             try:
-                transcriber.transcribe(
-                    sample_audio,
-                    "meeting",
-                    method="local",
+                transcriber.transcribe(sample_audio, method="local",
                     session=session
                 )
             except KeyboardInterrupt:
@@ -280,10 +267,7 @@ class TestProgressReporting:
         def progress_callback(percent: float, message: str):
             progress_updates.append((percent, message))
         
-        transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            method="openai",
+        transcriber.transcribe(sample_audio, method="openai",
             progress_callback=progress_callback
         )
         
@@ -300,10 +284,7 @@ class TestProgressReporting:
         def progress_callback(percent: float, message: str):
             messages.append(message)
         
-        transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            method="openai",
+        transcriber.transcribe(sample_audio, method="openai",
             progress_callback=progress_callback
         )
         
@@ -321,10 +302,7 @@ class TestSessionManagement:
         
         start_time = time.time()
         
-        transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            method="openai",
+        transcriber.transcribe(sample_audio, method="openai",
             session=session
         )
         
@@ -340,10 +318,7 @@ class TestSessionManagement:
         transcriber = Transcriber(temp_config)
         session = TranscriptionSession.create("meeting")
         
-        transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            method="openai",
+        transcriber.transcribe(sample_audio, method="openai",
             session=session
         )
         
@@ -354,10 +329,7 @@ class TestSessionManagement:
         transcriber = Transcriber(temp_config)
         session = TranscriptionSession.create("meeting")
         
-        result = transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            method="openai",
+        result = transcriber.transcribe(sample_audio, method="openai",
             session=session
         )
         
@@ -378,7 +350,7 @@ class TestCompleteWorkflowIntegration:
         
         # Step 2: Transcribe audio
         transcriber = Transcriber(temp_config)
-        transcript_path = transcriber.transcribe(audio_path, "meeting", method="openai")
+        transcript_path = transcriber.transcribe(audio_path, method="openai")
         
         assert transcript_path.exists()
         
@@ -398,10 +370,7 @@ class TestCompleteWorkflowIntegration:
         def progress_callback(percent: float, message: str):
             progress_updates.append((percent, message))
         
-        result = transcriber.transcribe(
-            sample_audio,
-            "full_featured_meeting",
-            method="openai",
+        result = transcriber.transcribe(sample_audio, method="openai",
             session=session,
             progress_callback=progress_callback,
             language="en"
@@ -414,3 +383,5 @@ class TestCompleteWorkflowIntegration:
         
         content = result.read_text(encoding="utf-8")
         assert "Meeting: full_featured_meeting" in content
+
+

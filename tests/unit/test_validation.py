@@ -177,7 +177,7 @@ class TestValidateModelName:
     
     def test_validate_valid_whisper_models(self):
         """Test validation of valid Whisper model names."""
-        valid_models = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
+        valid_models = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"]
         
         for model in valid_models:
             result = validate_model_name(model, valid_models)

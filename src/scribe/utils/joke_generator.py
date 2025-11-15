@@ -35,13 +35,17 @@ from openai import OpenAI
 load_dotenv(find_dotenv(usecwd=True), override=False)
 
 logger = logging.getLogger("agentic_humor")
+# Use universal SCRIBE_LOG_LEVEL, fall back to HUMOR_LOG_LEVEL for backward compat
+log_level = os.getenv("SCRIBE_LOG_LEVEL") or os.getenv("HUMOR_LOG_LEVEL", "WARNING")
+level = getattr(logging, log_level.upper(), logging.WARNING)
+logger.setLevel(level)
 if not logger.handlers:
     handler = logging.StreamHandler()
+    handler.setLevel(level)  # Set handler level too
     fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(fmt)
     logger.addHandler(handler)
-# Default to WARNING to keep output clean (set HUMOR_LOG_LEVEL=INFO/DEBUG to increase)
-logger.setLevel(getattr(logging, os.getenv("HUMOR_LOG_LEVEL", "WARNING").upper(), logging.WARNING))
+logger.propagate = False  # Don't propagate to root logger
 
 # -----------------------------------------------------------------------------
 # Archetypes
@@ -248,7 +252,109 @@ def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> List[str]:
     filtered = [e for e in filtered if e not in speakers]
     return filtered[:top_k]
 
-def _select_archetype(metadata: dict, seed: Optional[int]) -> str:
+def _select_archetype_ai_provider(provider, transcript_excerpt: str) -> str:
+    """Use AI provider to intelligently select the best comedy archetype for this meeting."""
+    
+    # Build archetype descriptions for AI
+    archetype_options = []
+    for key, display_name in ARCHETYPE_DISPLAY_NAMES.items():
+        prompt = COMEDY_STYLES[key]
+        # Extract the essence of each archetype
+        archetype_options.append(f"- **{key}** ({display_name}): {prompt[:200]}...")
+    
+    selection_prompt = f"""You are a comedy expert. Read this meeting transcript excerpt and choose the BEST comedy archetype for a joke about this meeting.
+
+MEETING EXCERPT (first ~2000 chars):
+{transcript_excerpt[:2000]}
+
+AVAILABLE ARCHETYPES:
+{chr(10).join(archetype_options)}
+
+Choose the archetype that would create the MOST RELEVANT and FUNNIEST joke for THIS SPECIFIC meeting.
+
+Consider:
+- What actually happened in the meeting?
+- What's the dominant theme or issue?
+- What would resonate with the participants?
+- What's genuinely funny about THIS meeting (not just "it was long")?
+
+Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scholar", etc.)
+"""
+    
+    try:
+        response = provider.chat_completion(
+            messages=[{"role": "user", "content": selection_prompt}],
+            max_tokens=50
+        )
+        
+        selected = response["content"].strip().lower()
+        
+        # Validate the selection
+        if selected in COMEDY_STYLES:
+            logger.info(f"AI selected archetype: {selected}")
+            return selected
+        else:
+            logger.warning(f"AI returned invalid archetype '{selected}', falling back to heuristic")
+            return _select_archetype_heuristic({}, None)
+            
+    except Exception as e:
+        logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
+        return _select_archetype_heuristic({}, None)
+
+
+def _select_archetype_ai(client, transcript_excerpt: str) -> str:
+    """Use GPT-5 to intelligently select the best comedy archetype for this meeting."""
+    
+    # Build archetype descriptions for AI
+    archetype_options = []
+    for key, display_name in ARCHETYPE_DISPLAY_NAMES.items():
+        prompt = COMEDY_STYLES[key]
+        # Extract the essence of each archetype
+        archetype_options.append(f"- **{key}** ({display_name}): {prompt[:200]}...")
+    
+    selection_prompt = f"""You are a comedy expert. Read this meeting transcript excerpt and choose the BEST comedy archetype for a joke about this meeting.
+
+MEETING EXCERPT (first ~2000 chars):
+{transcript_excerpt[:2000]}
+
+AVAILABLE ARCHETYPES:
+{chr(10).join(archetype_options)}
+
+Choose the archetype that would create the MOST RELEVANT and FUNNIEST joke for THIS SPECIFIC meeting.
+
+Consider:
+- What actually happened in the meeting?
+- What's the dominant theme or issue?
+- What would resonate with the participants?
+- What's genuinely funny about THIS meeting (not just "it was long")?
+
+Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scholar", etc.)
+"""
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-5",
+            messages=[{"role": "user", "content": selection_prompt}],
+            max_completion_tokens=50
+        )
+        
+        selected = response.choices[0].message.content.strip().lower()
+        
+        # Validate the selection
+        if selected in COMEDY_STYLES:
+            logger.info(f"AI selected archetype: {selected}")
+            return selected
+        else:
+            logger.warning(f"AI returned invalid archetype '{selected}', falling back to heuristic")
+            return _select_archetype_heuristic({}, None)
+            
+    except Exception as e:
+        logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
+        return _select_archetype_heuristic({}, None)
+
+
+def _select_archetype_heuristic(metadata: dict, seed: Optional[int]) -> str:
+    """Fallback heuristic-based archetype selection."""
     if seed is not None:
         random.seed(seed)
 
@@ -266,14 +372,10 @@ def _select_archetype(metadata: dict, seed: Optional[int]) -> str:
         weights["existential"] *= 2.0
     if metadata.get("circular_discussion"):
         weights["fool_scholar"] *= 3.0
-        weights["time_alchemist"] *= 2.5
+        weights["trickster"] *= 2.0
     if metadata.get("high_jargon_low_decision"):
         weights["translator"] *= 4.0
         weights["trickster"] *= 2.0
-    if metadata.get("is_long"):
-        weights["empathic"] *= 2.5
-        weights["time_alchemist"] *= 3.5
-        weights["existential"] *= 2.0
     if metadata.get("is_short"):
         weights["trickster"] *= 2.0
         weights["digital_specter"] *= 1.5
@@ -281,7 +383,6 @@ def _select_archetype(metadata: dict, seed: Optional[int]) -> str:
     tone = metadata.get("dominant_tone", "neutral")
     if tone == "exhaustion":
         weights["empathic"] *= 3.0
-        weights["time_alchemist"] *= 2.0
     if tone == "enthusiasm":
         weights["enthusiast"] *= 2.5
         weights["trickster"] *= 1.5
@@ -402,6 +503,7 @@ def _resp_to_dict_trunc(resp, n: int = 1200) -> str:
 def generate_transcript_joke(
     transcript_path: Union[str, Path],
     api_key_or_cfg: Union[str, HumorConfig, None] = None,
+    provider_name: Optional[str] = None,
 ) -> Optional[Tuple[str, str]]:
     logger.info("Starting joke generation")
 
@@ -415,9 +517,25 @@ def generate_transcript_joke(
     else:
         raise TypeError("api_key_or_cfg must be a str (API key), HumorConfig, or None")
 
-    logger.info(f"Using model: {cfg.model} | archetype override: {cfg.archetype or 'None'}")
-
+    # Get provider (supports multi-provider) - currently only for archetype selection
+    # Full provider integration for joke generation coming in v2.2.0
+    try:
+        from scribe.providers import get_provider
+        provider = get_provider(
+            feature="joke",
+            api_key=None,  # Let factory get the right key for the provider
+            model=cfg.model if cfg.model != "gpt-5" else None,  # Let provider choose default
+            provider_name=provider_name,
+        )
+        logger.info(f"Using provider for archetype selection: {provider.config.provider_name} | model: {provider.config.model}")
+        use_provider = True
+    except Exception as e:
+        logger.debug(f"Provider system not available for archetype selection: {e}")
+        use_provider = False
+    
+    # Always use OpenAI client for joke generation (for now)
     client = _build_client(cfg.api_key)
+    logger.info(f"Using model: {cfg.model} | archetype override: {cfg.archetype or 'None'}")
 
     # Read transcript with size limit (prevent loading gigabytes)
     MAX_TRANSCRIPT_SIZE = 500_000  # 500KB max
@@ -468,13 +586,19 @@ def generate_transcript_joke(
         except ValueError:
             logger.warning(f"Ignoring invalid HUMOR_MAX_CONTEXT_CHARS='{max_ctx_env}'")
 
-    # Archetype
+    # Archetype selection
     if cfg.archetype:
         if cfg.archetype not in COMEDY_STYLES:
             raise ValueError(f"Unknown archetype '{cfg.archetype}'. Valid keys: {list(COMEDY_STYLES)}")
         archetype_key = cfg.archetype
+        logger.info(f"Using forced archetype: {archetype_key}")
     else:
-        archetype_key = _select_archetype(metadata, seed=cfg.seed)
+        # Use AI to intelligently select archetype based on meeting content
+        if use_provider:
+            archetype_key = _select_archetype_ai_provider(provider, transcript_text)
+        else:
+            archetype_key = _select_archetype_ai(client, transcript_text)
+    
     system_prompt = COMEDY_STYLES[archetype_key]
     display_name = ARCHETYPE_DISPLAY_NAMES.get(archetype_key, archetype_key)
     logger.info(f"Selected archetype: {archetype_key} ({display_name})")

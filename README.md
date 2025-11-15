@@ -12,6 +12,25 @@ For lighter moments, Scribe can analyze tone and intent to produce context-aware
 
 Scribe integrates Whisper for speech recognition, GPT-4o and GPT-5 for analysis, PyTorch for GPU inference, and OBS Studio for capture. The result is a tool that merges speed, comprehension, and polish. It helps convert hours of recordings into useful insight within minutes.
 
+## What's New in 2.1
+
+**November 2025 Release - UX & Intelligence Update**
+
+### New in 2.1.0
+- **AI-Powered Joke Selection**: GPT-5 now intelligently selects comedy archetypes based on actual meeting content
+- **Stricter Meme QA**: Enhanced quality checks catch cut-off or nonsensical text, automatically retry until quality threshold met
+- **Unified Command UX**: Consistent, clean interface across all commands (transcribe, joke, meme, notes)
+- **Improved Progress Display**: Clear headers showing version, file, duration, and what's being generated
+- **Better Output Formatting**: Simplified joke display ("Joke:" instead of archetype names)
+
+### Implemented in 2.1.1
+- **Multi-Provider AI Support**: Fully implemented across all features
+  - Use XAI/Grok 4 Fast for jokes, memes, and notes (47x cheaper, lightning fast)
+  - Mix providers based on cost/performance needs
+  - Configure via environment: `SCRIBE_JOKE_PROVIDER=xai`
+  - Provider-agnostic architecture: jokes, notes, meme concepts, and meme images
+  - Universal logging with `SCRIBE_LOG_LEVEL` for clean output
+
 ## What's New in 2.0
 
 **November 2025 Release**
@@ -42,12 +61,76 @@ Scribe integrates Whisper for speech recognition, GPT-4o and GPT-5 for analysis,
 - Test suite at 463 tests with 45% coverage
 - Comprehensive error handling with context preservation
 
+## Multi-Provider AI Support
+
+Scribe features a **provider-agnostic architecture** that lets you mix and match AI providers based on cost, performance, and feature needs. All intelligence features (jokes, notes, memes) work seamlessly across providers.
+
+### Supported Providers
+- **OpenAI**: GPT-5, GPT-4, GPT-Image-1, DALL-E, Whisper (transcription)
+- **XAI/Grok**: Grok 4 Fast (reasoning & non-reasoning), Grok 2 Image
+- **Anthropic**: Claude 3.5 Sonnet (text generation, no images)
+
+### Configuration
+Set providers per-feature via environment variables:
+
+```bash
+# Use Grok for jokes, memes, and notes (47x cheaper!)
+export SCRIBE_JOKE_PROVIDER=xai
+export SCRIBE_MEME_PROVIDER=xai
+export SCRIBE_NOTES_PROVIDER=xai
+export XAI_API_KEY=your_xai_key
+
+# Or use Claude for notes
+export SCRIBE_NOTES_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=your_anthropic_key
+
+# Use OpenAI for transcription
+export SCRIBE_TRANSCRIBE_PROVIDER=openai
+export OPENAI_API_KEY=your_openai_key
+
+# Universal logging level
+export SCRIBE_LOG_LEVEL=WARNING  # DEBUG, INFO, WARNING, ERROR
+```
+
+Or use CLI flags:
+```bash
+scribe joke transcript.txt --provider xai
+scribe notes transcript.txt --provider anthropic
+```
+
+### Cost Comparison (per 1M tokens)
+- **Grok 4 Fast**: $0.20 input / $0.50 output (47x cheaper than GPT-5)
+- **Claude 3.5 Sonnet**: $3.00 input / $15.00 output
+- **GPT-5**: $3.00 input / $15.00 output
+
+**Images:**
+- **Grok 2 Image**: $0.10 per image (4x cheaper than DALL-E)
+- **GPT-Image-1**: $0.40 per image
+
+### Provider Architecture
+The provider system uses a unified interface that abstracts away provider-specific details. This means:
+- Switch providers without changing your workflow
+- Automatic failover support (coming soon)
+- Easy to add new providers (Gemini, Mistral, etc.)
+- **Savings**: Up to 47x cheaper for text, 4x cheaper for images
+
+### Feature Support by Provider
+
+| Feature | OpenAI | XAI/Grok | Anthropic | Default |
+|---------|--------|----------|-----------|---------|
+| Jokes | GPT-5 (reasoning) | Grok 4 Fast (reasoning) | Claude 3.5 Sonnet | XAI |
+| Notes | GPT-5 (reasoning) | Grok 4 Fast (reasoning) | Claude 3.5 Sonnet | XAI |
+| Meme Concepts | GPT-5 (reasoning) | Grok 4 Fast (reasoning) | Claude 3.5 Sonnet | XAI |
+| Meme Images | GPT-Image-1 | Fallback to OpenAI | Not supported | OpenAI |
+| Transcription | Whisper | Not supported | Not supported | OpenAI |
+
 ## Feature Summary
 
 ### Transcription
-- GPU-accelerated Whisper transcription (up to 12.6x real-time on RTX 4090)
+- GPU-accelerated Whisper transcription (up to 11x real-time on RTX 4090)
 - Automatic fallback to OpenAI API when GPU unavailable
-- High-accuracy models: Whisper large-v3 and gpt-4o-transcribe-diarize
+- Maximum quality models: Whisper large-v3 (local, best accuracy) and gpt-4o-transcribe-diarize (API)
+- Professional audio preprocessing with dynaudnorm (~10x real-time, ensures optimal quality)
 - Speaker diarization with OpenAI API for multi-speaker meetings
 - Server-side chunking for files over 25MB with automatic compression
 - Resource limits validation prevents OOM and runaway processes
@@ -67,11 +150,35 @@ Scribe integrates Whisper for speech recognition, GPT-4o and GPT-5 for analysis,
 - AsyncIO support with contextvars for modern async patterns
 - Smart cleanup of intermediate files with configurable retention
 
+### Utilities
+- **Silence removal** - Clean up recordings left running overnight
+  - `scribe clean` removes/reduces silent sections
+  - Analyze mode to preview silence without removing
+  - Configurable threshold and duration settings
+- **File trimming** - Cut files at specific timestamps
+  - `scribe clean --trim HH:MM:SS` for precise cuts
+  - Fast operation (copies without re-encoding)
+  - Perfect for fixing recordings left running too long
+
 ### Output
 - TXT, DOCX, Markdown notes, PNG memes
+- **Adaptive progress tracking** - learns your machine's performance over time
 - Live progress bars with speed and ETA calculations
 - Structured metadata and session summaries
 - Clean formatting with meeting metadata
+
+### Adaptive Progress System
+Scribe learns your machine's actual performance and refines progress estimates over time:
+- **Step-by-step visibility**: Shows actual operations (Preparing audio, Transcribing, Generating notes, Generating joke, Generating meme, Cleaning up)
+- **Meme refinement tracking**: Displays attempt number and QA scores during meme generation loops
+- **Configuration display**: Shows enabled features upfront (+ notes, joke, meme)
+- **First run**: Uses realistic defaults based on actual hardware measurements
+- **Subsequent runs**: Adjusts percentages based on your hardware's actual speed
+- **Machine-specific**: Each machine gets its own performance profile
+- **Continuous improvement**: Weighted averaging (30% new data) gradually refines estimates
+- **Persistent storage**: Metrics saved to `~/.scribe/performance_{machine_id}.json`
+
+The more you use Scribe, the more accurate your progress estimates become!
 
 ### Integration
 - OBS Studio integration for direct recording
@@ -138,6 +245,19 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+### Optional: Additional AI Providers
+
+```bash
+# For XAI/Grok support (recommended for cost savings)
+pip install openai  # XAI uses OpenAI-compatible API
+
+# For Anthropic Claude support
+pip install anthropic
+
+# For Google Gemini support (coming soon)
+# pip install google-generativeai
+```
+
 ### Configure Environment
 
 ```bash
@@ -147,8 +267,14 @@ cp .env.example .env
 Then edit `.env`:
 
 ```env
-# Required for API transcription and humor
+# Required for API transcription
 OPENAI_API_KEY=sk-proj-...
+
+# Optional: XAI/Grok (47x cheaper for jokes/notes/memes)
+XAI_API_KEY=xai-...
+
+# Optional: Anthropic Claude
+ANTHROPIC_API_KEY=sk-ant-...
 
 # Output directory for artifacts
 SCRIBE_OUTPUT_FOLDER=/path/to/scribe/output
@@ -201,9 +327,26 @@ scribe transcribe interview.mp3 --method openai
 # Spanish transcription
 scribe transcribe podcast.wav --language es
 
+# Generate just a joke or meme from existing transcript
+scribe joke transcript.txt
+scribe meme transcript.txt
+
+# Clean up recordings left running overnight (remove silence)
+scribe clean long_recording.mp4
+scribe clean recording.mp4 --analyze  # Just analyze, don't remove
+
 # System status and GPU check
 scribe info
 ```
+
+### Progress & UX
+
+Scribe provides clean, informative progress for all operations:
+
+- **Full workflows** (`transcribe`, `record`): Unified progress bar shows overall completion across all phases (preparing, transcribing, finishing)
+- **Individual operations** (`joke`, `meme`, `notes`): Clean spinners with status updates
+- **Adaptive estimates**: Progress percentages improve over time as Scribe learns your machine's performance
+- **No clutter**: Single progress indicator, no flickering or emoji spam
 
 ## End-to-End Workflow
 
@@ -211,10 +354,10 @@ scribe info
 Optional OBS integration records to MP4. You can trigger and stop recording from the CLI. Files are placed in the configured output folder.
 
 ### Conversion
-Input media is converted to 16 kHz mono WAV for Whisper. In API mode, the original file is used or converted to compressed MP3 if over 25 MB.
+Input media is converted to 16 kHz mono WAV with professional dynamic audio normalization (dynaudnorm). This preprocessing step takes approximately 10% of the audio duration (e.g., 5.5 minutes for a 55-minute recording) but ensures maximum transcription accuracy. In API mode, the original file is used or converted to compressed MP3 if over 25 MB.
 
 ### Transcription
-Local GPU uses Whisper large-v3. API mode uses gpt-4o-transcribe with automatic diarization. The method is selected automatically unless overridden.
+Local GPU uses Whisper large-v3 for maximum accuracy. This is the highest quality Whisper model available, optimized for RTX 4090 with 11x real-time speed. Audio is preprocessed with professional-grade dynamic normalization (dynaudnorm) which takes ~10x real-time but ensures optimal transcription quality. API mode uses gpt-4o-transcribe-diarize with automatic speaker separation and server-side chunking for long audio. The method is selected automatically unless overridden.
 
 ### Document Generation
 Scribe produces a clean TXT transcript and a formatted DOCX. Meeting metadata such as date and duration is included.
@@ -261,7 +404,7 @@ scribe transcribe <file> [OPTIONS]
 
 **Options**:
 - `--method, -m [auto|local|openai]` - Select method. Default is auto.
-- `--model MODEL` - Whisper model for local GPU (for example large-v3, large-v2).
+- `--model MODEL` - Whisper model for local GPU (large-v3 = best quality, large-v2 = faster, medium = fastest).
 - `--language, -l LANG` - ISO language code, default en.
 - `--output, -o PATH` - Output directory. Defaults to SCRIBE_OUTPUT_FOLDER.
 - `--no-joke` - Skip joke generation.
@@ -276,8 +419,11 @@ scribe transcribe <file> [OPTIONS]
 # Auto method selection
 scribe meeting.mp4
 
-# Force local GPU and model
+# Force local GPU with best quality model (default)
 scribe transcribe audio.wav --method local --model large-v3
+
+# Use faster model if speed is more important than accuracy
+scribe transcribe audio.wav --method local --model large-v2
 
 # Force OpenAI API and Spanish
 scribe transcribe podcast.mp3 --method openai --language es
@@ -478,9 +624,12 @@ scribe version
 ## Performance and Tuning
 
 ### Local GPU:
-- Prefer large-v3 on 24 GB VRAM
-- On 12–16 GB, use large-v3 with reduced beam size or switch to large-v2
+- RTX 4090 (24GB): Uses large-v3 with beam size 10 for maximum accuracy (~11x real-time)
+- RTX 4080 (16GB): Uses large-v3 with beam size 8 for balanced performance (~8x real-time)
+- RTX 3090 (24GB): Uses large-v3 with beam size 5 for stability (~6x real-time)
 - Beam size settings affect quality and speed. Higher beam sizes improve accuracy but slow inference
+- Audio preprocessing adds ~10% of recording duration (e.g., 5.5 min for 55 min recording)
+- We prioritize transcription quality over speed - large-v3 + dynaudnorm provides best accuracy
 
 ### API mode:
 - gpt-4o-transcribe handles long files with server-side chunking
@@ -519,14 +668,28 @@ sudo apt install ffmpeg
 ```
 
 ### Poor transcription quality:
-- Use `--model large-v3`
-- Ensure clean audio and correct sample rate
-- Reduce background noise and microphone distance
+- Scribe uses `large-v3` by default for maximum accuracy
+- Ensure clean audio input with minimal background noise
+- Check that audio is properly normalized (automatic with Scribe)
+- Verify microphone placement and recording quality
 
 ### API errors:
-- Verify OPENAI_API_KEY with `scribe info`
+- Verify OPENAI_API_KEY or XAI_API_KEY with `scribe info`
 - Check API quota and billing
 - Ensure a stable network connection
+
+### Garbled text output (Windows):
+If joke or meme text shows weird characters (ô instead of quotes), set UTF-8 encoding:
+
+```powershell
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+```
+
+Or add to your PowerShell profile for permanent fix:
+```powershell
+notepad $PROFILE
+# Add: [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+```
 
 ### Exit codes:
 - 0: success
@@ -680,3 +843,4 @@ MIT License. See LICENSE.
 **Nick Seal**
 
 GitHub: [@blisspixel](https://github.com/blisspixel)
+

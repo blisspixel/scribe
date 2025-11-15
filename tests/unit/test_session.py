@@ -257,7 +257,7 @@ class TestSessionSummary:
         """Test saved summary contains correct data."""
         session = TranscriptionSession.create("Meeting")
         session.transcription_method = "openai"
-        session.model_used = "gpt-4o-transcribe"
+        session.model_used = "gpt-4o-transcribe-diarize"
         session.complete(success=True)
         
         summary_path = session.save_summary(tmp_path)
@@ -267,7 +267,7 @@ class TestSessionSummary:
         
         assert data["meeting_name"] == "Meeting"
         assert data["transcription_method"] == "openai"
-        assert data["model_used"] == "gpt-4o-transcribe"
+        assert data["model_used"] == "gpt-4o-transcribe-diarize"
         assert data["success"] is True
     
     def test_get_summary_text(self):
@@ -449,3 +449,4 @@ class TestSessionIntegration:
         summary = session.get_summary_text()
         assert "Failed" in summary
         assert "API error" in summary
+

@@ -96,6 +96,9 @@ class TestTranscribeCommand:
         
         assert result.exit_code != 0
     
+    @patch('scribe.utils.audio.get_audio_duration')
+    @patch('scribe.utils.unified_progress.UnifiedProgress')
+    @patch('scribe.cli.main.txt_to_docx')
     @patch('scribe.cli.main.ScribeConfig')
     @patch('scribe.cli.main.Transcriber')
     @patch('scribe.cli.main.validate_file_path')
@@ -103,7 +106,7 @@ class TestTranscribeCommand:
     @patch('scribe.cli.main.setup_logging')
     def test_transcribe_basic_flow(
         self, mock_logging, mock_session, mock_validate, 
-        mock_transcriber_class, mock_config_class, cli_runner, tmp_path
+        mock_transcriber_class, mock_config_class, mock_docx, mock_progress, mock_duration, cli_runner, tmp_path
     ):
         """Test basic transcribe command flow."""
         # Setup mocks
@@ -126,6 +129,8 @@ class TestTranscribeCommand:
         mock_session_inst.save_summary = Mock(return_value=None)
         mock_session_inst.docx_file = None
         mock_session_inst.meme_file = None
+        mock_session_inst.joke_data = None
+        mock_session_inst.__getitem__ = Mock(side_effect=KeyError)  # Make it not subscriptable
         mock_session.create.return_value = mock_session_inst
         
         transcript_path = tmp_path / "transcript.txt"
@@ -137,10 +142,24 @@ class TestTranscribeCommand:
         mock_transcriber.cleanup_intermediate_files.return_value = []
         mock_transcriber_class.return_value = mock_transcriber
         
+        mock_duration.return_value = 600.0  # 10 minutes
+        
+        docx_path = tmp_path / "transcript.docx"
+        mock_docx.return_value = docx_path
+        
+        # Mock unified progress
+        mock_progress_inst = Mock()
+        mock_progress.return_value = mock_progress_inst
+        
         # Run command with flags to disable optional features
-        result = cli_runner.invoke(app, ["transcribe", str(test_file), "--no-joke", "--no-notes"])
+        result = cli_runner.invoke(app, ["transcribe", str(test_file), "--no-joke", "--no-notes", "--no-meme"])
         
         # Verify
+        if result.exit_code != 0:
+            print(f"STDOUT: {result.stdout}")
+            print(f"STDERR: {result.stderr}")
+            if result.exception:
+                print(f"EXCEPTION: {result.exception}")
         assert result.exit_code == 0
         mock_transcriber.transcribe.assert_called_once()
     
@@ -291,7 +310,7 @@ class TestJokeCommand:
         
         assert result.exit_code == 0
         assert "Test joke" in result.stdout
-        assert "Trickster" in result.stdout
+        assert "Joke:" in result.stdout
     
     @patch('scribe.cli.main.ScribeConfig')
     def test_joke_no_api_key(self, mock_config_class, cli_runner, tmp_path):
@@ -574,3 +593,5 @@ class TestIntegrationScenarios:
             result = cli_runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"Help failed for {cmd}"
             assert len(result.stdout) > 20, f"Help too short for {cmd}"
+
+
