@@ -4,18 +4,18 @@
 
 Scribe transforms spoken content into structured understanding. It combines GPU-accelerated speech recognition with large language models to deliver accurate transcription, intelligent summaries, and creative humor automatically.
 
-## Latest: v2.3.1
+## Latest: v2.4.1
 
 **What's New:**
-- **Gemini 3 Pro support**: Advanced reasoning with 1M token context
-- **Joke bake-off**: All providers compete, best joke wins (enabled by default)
-- **Clean UX**: Competition runs in background, you just get the best result
-- **Improved formatting**: No emojis or em-dashes in generated jokes
+- **OBS Recording Improvements**: Enhanced WebSocket connection handling with graceful hostname validation error suppression
+- **Comprehensive Test Coverage**: 642 tests (up from 595) with 46 new OBS recorder tests covering all error paths and edge cases
+- **Better Error Handling**: Hostname validation errors from WebSocket library now properly caught and logged at debug level
+- **Improved Reliability**: IPv4 prioritization, better host fallback strategies, enhanced connection retry logic
 
-**Previous (v2.3.0): Production-Grade Music Transcription**
-- Segment-based architecture that filters hallucinations
-- Complete lyric extraction in 99 languages
-- 45s processing for 3-minute songs
+**Previous (v2.4.0): User Experience Polish + Code Quality**
+- Cleaner recording UI with professional formatting
+- Zero-diagnostic codebase maintained across all modules
+- Performance tracker outlier detection for better time estimates
 
 See [Music Mode Architecture](docs/MUSIC_MODE_ARCHITECTURE.md) and [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md) for technical details.
 
@@ -560,7 +560,7 @@ pytest tests/unit/ --tb=no -q
 ```
 
 **Test Status:**
-- 595 tests passing (100% pass rate)
+- 642 tests passing (100% pass rate)
 - Zero test failures
 - Comprehensive defensive test coverage
 - Exception handling fully tested
@@ -750,9 +750,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.0  
-**Build Status:** PASSING (595/595 tests)  
+**Current Version:** 2.4.1  
+**Build Status:** PASSING (642/642 tests)  
 **Code Quality:** 100% clean (54/54 files, zero diagnostics)  
-**Test Coverage:** Core transcription fully tested, OBS integration requires manual testing  
+**Test Coverage:** Core transcription and OBS recording fully tested  
 **Focus:** Excellence over features - see [ROADMAP](ROADMAP.md)  
 **Last Updated:** 2025-11-20
