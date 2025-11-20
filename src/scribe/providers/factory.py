@@ -3,6 +3,7 @@ Provider factory for creating AI provider instances.
 """
 
 import os
+import logging
 from typing import Optional
 
 from scribe.providers.base import AIProvider, ProviderConfig
@@ -15,12 +16,21 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
+try:
+    from scribe.providers.gemini_provider import GeminiProvider
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
 
 def get_provider(
     feature: str,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     provider_name: Optional[str] = None,
+    enable_health_check: bool = False,
 ) -> AIProvider:
     """
     Get an AI provider for a specific feature.
@@ -30,6 +40,7 @@ def get_provider(
         api_key: API key (optional, will check env vars)
         model: Model name (optional, will use defaults)
         provider_name: Provider name (optional, will check env vars)
+        enable_health_check: Check provider health before returning (default: False)
         
     Returns:
         AIProvider instance
@@ -39,17 +50,34 @@ def get_provider(
         SCRIBE_MEME_PROVIDER: Provider for memes (default: openai)
         SCRIBE_NOTES_PROVIDER: Provider for notes (default: openai)
         SCRIBE_TRANSCRIBE_PROVIDER: Provider for transcription (default: openai)
+        SCRIBE_ENABLE_HEALTH_CHECKS: Enable automatic health checks (default: false)
         
         XAI_API_KEY: XAI API key
         OPENAI_API_KEY: OpenAI API key
+        ANTHROPIC_API_KEY: Anthropic API key
+        GEMINI_API_KEY: Google Gemini API key
     """
+    
+    # Check if health checks are enabled globally
+    if not enable_health_check:
+        enable_health_check = os.getenv("SCRIBE_ENABLE_HEALTH_CHECKS", "false").lower() == "true"
     
     # Determine provider with feature-specific defaults
     if provider_name is None:
-        env_var = f"SCRIBE_{feature.upper()}_PROVIDER"
-        # Default to XAI for jokes (cheaper and faster), OpenAI for everything else
-        default_provider = "xai" if feature == "joke" else "openai"
-        provider_name = os.getenv(env_var, default_provider).lower()
+        # Special handling for meme_image - check dedicated env var first
+        if feature == "meme_image":
+            provider_name = os.getenv("SCRIBE_MEME_IMAGE_PROVIDER")
+            if not provider_name:
+                # Fall back to SCRIBE_MEME_PROVIDER
+                provider_name = os.getenv("SCRIBE_MEME_PROVIDER", "xai")
+        else:
+            env_var = f"SCRIBE_{feature.upper()}_PROVIDER"
+            # Default to XAI for jokes and memes (cheaper, faster, less restrictive)
+            # OpenAI for everything else
+            default_provider = "xai" if feature in ["joke", "meme"] else "openai"
+            provider_name = os.getenv(env_var, default_provider)
+        
+        provider_name = provider_name.lower()
     
     # Get API key
     if api_key is None:
@@ -59,11 +87,32 @@ def get_provider(
             api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
         elif provider_name == "anthropic":
             api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
+        elif provider_name == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
     
     if not api_key:
         raise ValueError(f"No API key found for provider: {provider_name}")
+    
+    # Health check if enabled
+    if enable_health_check:
+        from scribe.providers.health import get_health_monitor
+        
+        monitor = get_health_monitor()
+        status = monitor.check_provider_health(provider_name, api_key)
+        
+        if not status.is_healthy:
+            logger.warning(
+                f"Provider {provider_name} failed health check: {status.error_message}"
+            )
+            # Try to get a fallback provider
+            fallback = _get_fallback_provider(feature, provider_name, api_key)
+            if fallback:
+                logger.info(f"Using fallback provider: {fallback}")
+                return get_provider(feature, provider_name=fallback, enable_health_check=False)
+            else:
+                logger.warning(f"No fallback available, proceeding with {provider_name}")
     
     # Determine model
     if model is None:
@@ -86,6 +135,10 @@ def get_provider(
         if not ANTHROPIC_AVAILABLE:
             raise ImportError("anthropic package not installed. Install with: pip install anthropic")
         return AnthropicProvider(api_key=api_key, model=model)
+    elif provider_name == "gemini":
+        if not GEMINI_AVAILABLE:
+            raise ImportError("google-genai package not installed. Install with: pip install google-genai")
+        return GeminiProvider(config)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
 
@@ -102,9 +155,9 @@ def _get_default_model(provider_name: str, feature: str) -> str:
             "transcribe": "whisper-1",
         },
         "xai": {
-            "joke": "grok-4-fast-reasoning",
-            "meme": "grok-4-fast-reasoning",
-            "meme_image": "grok-2-image",
+            "joke": "grok-4-fast-non-reasoning",
+            "meme": "grok-4-fast-non-reasoning",
+            "meme_image": "grok-2-image-1212",  # Note: XAI image gen struggles with text, consider using OpenAI for images
             "notes": "grok-4-fast-reasoning",
             "transcribe": None,  # XAI doesn't support transcription yet
         },
@@ -114,6 +167,13 @@ def _get_default_model(provider_name: str, feature: str) -> str:
             "meme_image": None,  # Anthropic doesn't support image generation
             "notes": "claude-3-5-sonnet-20241022",
             "transcribe": None,  # Anthropic doesn't support transcription yet
+        },
+        "gemini": {
+            "joke": "gemini-3-pro-preview",  # Gemini 3 for advanced reasoning
+            "meme": "gemini-3-pro-preview",  # Gemini 3 for complex multimodal tasks
+            "meme_image": "imagen-4.0-generate-001",
+            "notes": "gemini-3-pro-preview",  # Gemini 3 for structured analysis
+            "transcribe": None,  # Gemini doesn't support dedicated transcription yet
         },
     }
     
@@ -125,3 +185,52 @@ def _get_default_model(provider_name: str, feature: str) -> str:
         )
     
     return model
+
+
+def _get_fallback_provider(
+    feature: str,
+    failed_provider: str,
+    original_api_key: str
+) -> Optional[str]:
+    """
+    Get a fallback provider when the primary fails.
+    
+    Args:
+        feature: Feature name
+        failed_provider: Provider that failed
+        original_api_key: API key of failed provider
+        
+    Returns:
+        Fallback provider name or None
+    """
+    # Define fallback chains
+    fallbacks = {
+        "joke": ["xai", "gemini", "openai", "anthropic"],
+        "meme": ["xai", "gemini", "openai", "anthropic"],
+        "meme_image": ["openai", "gemini", "xai"],
+        "notes": ["gemini", "xai", "openai", "anthropic"],
+        "transcribe": ["openai"],  # Only OpenAI supports transcription
+    }
+    
+    chain = fallbacks.get(feature, [])
+    
+    # Remove the failed provider from the chain
+    if failed_provider in chain:
+        chain = [p for p in chain if p != failed_provider]
+    
+    # Try to find a provider with an API key
+    for provider in chain:
+        api_key = None
+        if provider == "xai":
+            api_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
+        elif provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
+        elif provider == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
+        elif provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
+        
+        if api_key:
+            return provider
+    
+    return None

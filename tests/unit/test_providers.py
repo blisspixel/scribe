@@ -46,8 +46,8 @@ class TestProviderFactory:
         """Test getting default XAI models."""
         assert _get_default_model("xai", "joke") == "grok-4-fast-non-reasoning"
         assert _get_default_model("xai", "notes") == "grok-4-fast-reasoning"
-        assert _get_default_model("xai", "meme") == "grok-4-fast-reasoning"
-        assert _get_default_model("xai", "meme_image") == "grok-2-image"
+        assert _get_default_model("xai", "meme") == "grok-4-fast-non-reasoning"
+        assert _get_default_model("xai", "meme_image") == "grok-2-image-1212"
     
     def test_get_default_model_unsupported_feature(self):
         """Test error for unsupported feature."""

@@ -1,0 +1,21 @@
++--------------------------------------------+
+| Scribe v2.4.0                              |
+| adam_2025-11-19_10-47-21_transcription.txt |
+| Generating: meme                           |
++--------------------------------------------+
+
+Warning: there are non-text parts in the response: ['thought_signature'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+Non-Imagen model 'gpt-image-1' specified, using imagen-4.0-generate-001
+Non-Imagen model 'gpt-image-1' specified, using imagen-4.0-generate-001
+Non-Imagen model 'gpt-image-1' specified, using imagen-4.0-generate-001
+
+
+Warning: Failed to generate meme
+Check your OpenAI API key and try again
+
+Unexpected error: 1
+Unexpected error in meme command
+Traceback (most recent call last):
+  File "C:\Users\nicks\OneDrive\scribe\src\scribe\cli\main.py", line 1867, in meme
+    raise typer.Exit(1)
+click.exceptions.Exit: 1

@@ -78,9 +78,9 @@ class SpinnerProgress:
         elapsed_str = f"{int(elapsed // 60):01d}:{int(elapsed % 60):02d}"
         
         if extra:
-            console.print(f"[{self.COLORS['success']}]✓[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({extra}, {elapsed_str})[/{self.COLORS['dim']}]")
+            console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({extra}, {elapsed_str})[/{self.COLORS['dim']}]")
         else:
-            console.print(f"[{self.COLORS['success']}]✓[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]")
+            console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]")
     
     def error(self, message: str):
         """Display error message and stop spinner.
@@ -91,7 +91,7 @@ class SpinnerProgress:
         if self.progress:
             self.progress.stop()
         
-        console.print(f"[{self.COLORS['error']}]✗[/{self.COLORS['error']}] {message}")
+        console.print(f"[{self.COLORS['error']}]ERROR[/{self.COLORS['error']}] {message}")
     
     def warning(self, message: str):
         """Display warning message.
@@ -99,7 +99,7 @@ class SpinnerProgress:
         Args:
             message: Warning message
         """
-        console.print(f"[{self.COLORS['warning']}]⚠[/{self.COLORS['warning']}] {message}")
+        console.print(f"[{self.COLORS['warning']}]WARNING[/{self.COLORS['warning']}] {message}")
 
 
 def show_spinner(message: str) -> SpinnerProgress:

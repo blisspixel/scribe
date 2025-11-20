@@ -456,7 +456,8 @@ class OpenAITranscriber:
         audio_path: Path,
         output_path: Optional[Path] = None,
         prompt: Optional[str] = None,
-        cleanup_temp: bool = True
+        cleanup_temp: bool = True,
+        initial_prompt: Optional[str] = None
     ) -> Path:
         """
         Transcribe audio file with chunking.
@@ -466,8 +467,9 @@ class OpenAITranscriber:
         Args:
             audio_path: Path to audio file
             output_path: Optional output path
-            prompt: Optional glossary/prompt
+            prompt: Optional glossary/prompt (deprecated, use initial_prompt)
             cleanup_temp: Whether to clean up temporary files
+            initial_prompt: Optional prompt to guide transcription (for custom vocabulary)
             
         Returns:
             Path to transcript file
@@ -495,10 +497,13 @@ class OpenAITranscriber:
             logger.info(f"Audio is {duration/60:.1f} minutes, using client-side chunking")
             self.use_server_chunking = False
         
+        # Use initial_prompt if provided, otherwise fall back to prompt
+        effective_prompt = initial_prompt or prompt
+        
         # Use server-side chunking if enabled and file is short enough
         if self.use_server_chunking:
             logger.info("Using server-side chunking (single API call)")
-            return self.transcribe_with_server_chunking(audio_path, output_path, prompt)
+            return self.transcribe_with_server_chunking(audio_path, output_path, effective_prompt)
         
         # Legacy client-side chunking (fallback)
         logger.info("Using client-side chunking (legacy mode)")

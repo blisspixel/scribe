@@ -14,6 +14,13 @@ httpx>=0.24.0
 # Audio Processing
 pydub>=0.25.1
 
+# Music Source Separation (for lyrics extraction)
+demucs>=4.0.0  # Hybrid Transformer Demucs for vocal isolation
+
+# Voice Activity Detection
+# silero-vad>=4.0.0  # Neural VAD for vocal segment detection
+# Note: Silero VAD is installed via torch.hub, no pip package needed
+
 # CLI and UI
 rich>=13.0.0
 typer>=0.9.0
@@ -33,3 +40,11 @@ obsws-python>=1.5.0
 
 # Utilities
 tenacity>=8.2.0
+
+# Optional: Music Analysis (for instrumental validation)
+# librosa>=0.10.0  # Audio analysis for music detection
+
+# Optional AI Providers (install as needed)
+# anthropic>=0.18.0  # For Claude support
+# google-genai>=0.2.0  # For Gemini and Imagen support
+# Pillow>=10.0.0  # Required for Gemini image handling

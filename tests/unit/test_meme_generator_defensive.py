@@ -14,48 +14,58 @@ class TestMemeGeneratorDefensive:
     def test_size_normalization_with_description(self):
         """Test that size with description text is normalized."""
         from scribe.utils.meme_generator import _generate_meme_image
+        import os
         
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b"fake_image_data"
-        
-        config = MemeConfig()
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt",
-            "optimal_size": "1024x1536 (portrait)"  # Invalid format with description
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        # Should normalize to valid size
-        with patch("scribe.utils.meme_generator.Path.write_bytes"):
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        # Check that generate_image was called with normalized size
-        call_args = mock_provider.generate_image.call_args
-        # Size should be normalized to '1024x1536' without the description
-        assert result == output_path
+        # Ensure we're using AI text mode (not local Pillow mode)
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b"fake_image_data"
+            mock_provider.config = Mock(provider_name="openai")  # Add config attribute
+            
+            config = MemeConfig()
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt",
+                "optimal_size": "1024x1536 (portrait)"  # Invalid format with description
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            # Should normalize to valid size
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            # Check that generate_image was called with normalized size
+            call_args = mock_provider.generate_image.call_args
+            # Size should be normalized to '1024x1536' without the description
+            assert result == output_path
 
     def test_size_normalization_invalid_format(self):
         """Test that completely invalid size defaults to 1024x1024."""
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b"fake_image_data"
+        import os
         
-        config = MemeConfig()
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt",
-            "optimal_size": "invalid_size_format"
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        with patch("scribe.utils.meme_generator.Path.write_bytes"):
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        assert result == output_path
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b"fake_image_data"
+            mock_provider.config = Mock(provider_name="openai")
+            
+            config = MemeConfig()
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt",
+                "optimal_size": "invalid_size_format"
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            assert result == output_path
 
     def test_analyze_transcript_empty_response(self):
         """Test handling of empty response from AI."""
@@ -135,64 +145,79 @@ class TestMemeGeneratorDefensive:
 
     def test_generate_image_empty_response(self):
         """Test handling of empty image data from provider."""
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b""
+        import os
         
-        config = MemeConfig()
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt",
-            "optimal_size": "1024x1024"
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        with patch("scribe.utils.meme_generator.Path.write_bytes") as mock_write:
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        # Should still write the file even if empty (let caller handle)
-        assert result == output_path
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b""
+            mock_provider.config = Mock(provider_name="openai")
+            
+            config = MemeConfig()
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt",
+                "optimal_size": "1024x1024"
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            # Should still write the file even if empty (let caller handle)
+            assert result == output_path
 
     def test_size_normalization_with_spaces(self):
         """Test size normalization with extra spaces."""
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b"fake_image_data"
+        import os
         
-        config = MemeConfig()
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt",
-            "optimal_size": "  1024x1536  "  # Extra spaces
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        with patch("scribe.utils.meme_generator.Path.write_bytes"):
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        assert result == output_path
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b"fake_image_data"
+            mock_provider.config = Mock(provider_name="openai")
+            
+            config = MemeConfig()
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt",
+                "optimal_size": "  1024x1536  "  # Extra spaces
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            assert result == output_path
 
     def test_size_normalization_auto(self):
         """Test that 'auto' size is preserved."""
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b"fake_image_data"
+        import os
         
-        config = MemeConfig()
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt",
-            "optimal_size": "auto"
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        with patch("scribe.utils.meme_generator.Path.write_bytes"):
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        assert result == output_path
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b"fake_image_data"
+            mock_provider.config = Mock(provider_name="openai")
+            
+            config = MemeConfig()
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt",
+                "optimal_size": "auto"
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            assert result == output_path
 
     def test_analyze_transcript_with_reasoning_output(self):
         """Test that reasoning output is handled correctly."""
@@ -236,23 +261,28 @@ class TestMemeGeneratorDefensive:
 
     def test_missing_optimal_size_uses_default(self):
         """Test that missing optimal_size uses config default."""
-        mock_provider = Mock()
-        mock_provider.generate_image.return_value = b"fake_image_data"
+        import os
         
-        config = MemeConfig(size="1536x1024")
-        meme_concept = {
-            "top_text": "TEST",
-            "bottom_text": "MEME",
-            "image_prompt": "test prompt"
-            # No optimal_size specified
-        }
-        
-        output_path = Path("test_meme.png")
-        
-        with patch("scribe.utils.meme_generator.Path.write_bytes"):
-            result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
-        
-        assert result == output_path
+        with patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "ai"}):
+            mock_provider = Mock()
+            mock_provider.generate_image.return_value = b"fake_image_data"
+            mock_provider.config = Mock(provider_name="openai")
+            
+            config = MemeConfig(size="1536x1024")
+            meme_concept = {
+                "top_text": "TEST",
+                "bottom_text": "MEME",
+                "image_prompt": "test prompt"
+                # No optimal_size specified
+            }
+            
+            output_path = Path("test_meme.png")
+            
+            with patch("builtins.open", create=True) as mock_open:
+                with patch("scribe.utils.meme_generator.Path.mkdir"):
+                    result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
+            
+            assert result == output_path
 
 
 class TestXAIImageProviderDefensive:

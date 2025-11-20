@@ -9,7 +9,7 @@ Author: blissplixel
 License: MIT
 """
 
-__version__ = "2.1.2"
+__version__ = "2.4.1"
 __author__ = "blissplixel"
 __license__ = "MIT"
 
