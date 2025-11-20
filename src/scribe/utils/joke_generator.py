@@ -255,6 +255,12 @@ def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> List[str]:
 def _select_archetype_ai_provider(provider, transcript_excerpt: str) -> str:
     """Use AI provider to intelligently select the best comedy archetype for this meeting."""
     
+    # Gemini 3 with high thinking uses too many tokens for simple selection
+    # Fall back to heuristic for Gemini 3 until thinking_level is properly supported
+    if hasattr(provider, 'config') and 'gemini-3' in provider.config.model.lower():
+        logger.info("Using heuristic archetype selection for Gemini 3 (thinking overhead too high)")
+        return _select_archetype_heuristic({}, None)
+    
     # Build archetype descriptions for AI
     archetype_options = []
     for key, display_name in ARCHETYPE_DISPLAY_NAMES.items():
@@ -284,17 +290,26 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
     try:
         response = provider.chat_completion(
             messages=[{"role": "user", "content": selection_prompt}],
-            max_tokens=50
+            max_tokens=100  # Should be enough for other models
         )
         
-        selected = response["content"].strip().lower()
+        # Defensive: handle None or missing content
+        content = response.get("content") if isinstance(response, dict) else None
+        if not content:
+            provider_name = getattr(provider, 'config', None)
+            provider_name = provider_name.provider_name if provider_name else "unknown"
+            logger.debug(f"AI archetype selection returned empty content from {provider_name}, using heuristic")
+            return _select_archetype_heuristic({}, None)
         
-        # Validate the selection
-        if selected in COMEDY_STYLES:
+        selected = content.strip().lower()
+        
+        # Validate the selection - must be non-empty and in COMEDY_STYLES
+        if selected and selected in COMEDY_STYLES:
             logger.info(f"AI selected archetype: {selected}")
             return selected
         else:
-            logger.warning(f"AI returned invalid archetype '{selected}', falling back to heuristic")
+            # Log at debug level - archetype selection is optional, heuristic works fine
+            logger.debug(f"AI returned invalid archetype '{selected}', using heuristic")
             return _select_archetype_heuristic({}, None)
             
     except Exception as e:
@@ -437,7 +452,7 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
     return (
         "You will receive a meeting transcript as plain text. "
         f"Produce exactly one original joke. Target {cfg.min_words}-{cfg.max_words} words. "
-        f"One line, no quotes. SPICE LEVEL: {cfg.spice_level}/10 - {spice_desc}. {tone} "
+        f"One line, no quotes, no emojis, no em-dashes (use regular dashes). SPICE LEVEL: {cfg.spice_level}/10 - {spice_desc}. {tone} "
         "Prefer targeting concepts, processes, jargon, or shared struggles; "
         f"avoid individuals or protected groups.{profanity_rule}" + hint
     )

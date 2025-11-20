@@ -26,10 +26,8 @@ log_level = os.getenv("SCRIBE_LOG_LEVEL") or os.getenv("MEME_LOG_LEVEL", "ERROR"
 level = getattr(logging, log_level.upper(), logging.ERROR)
 logger.setLevel(level)
 if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setLevel(level)  # Set handler level too
-    fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    handler.setFormatter(fmt)
+    # Only log to file, not console (reduces noise)
+    handler = logging.NullHandler()
     logger.addHandler(handler)
 logger.propagate = False  # Don't propagate to root logger
 
@@ -131,33 +129,36 @@ def _analyze_transcript_for_meme(
         config.spice_level = max(1, config.spice_level - 2)  # Reduce by 2 levels
     
     # Spice level descriptions
+    # 0-5: Work-safe, shareable
+    # 6-8: Edgy but still professional
+    # 9-10: NSFW, potentially offensive, no filter
     spice_descriptions = {
         0: "DISABLED - No meme should be generated",
         1: "MILD - Office-safe, gentle irony, no edge",
         2: "MILD - Polite observations, very safe",
         3: "MILD - Light humor, suitable for all audiences",
         4: "HONEST - Witty, slightly pointed, still professional",
-        5: "HONEST - Default level - accurate, clever, shareable",
-        6: "HONEST - Occasionally dark, but still appropriate",
+        5: "HONEST - Default level - hilarious but still shareable at work",
+        6: "HONEST - Occasionally dark, pushing boundaries but still appropriate",
         7: "CUTTING - Slightly uncomfortable, punches up at processes",
-        8: "CUTTING - Dark humor, exposes absurdity, still shareable",
-        9: "SPICY - Brutally honest, may make people flinch (but laugh)",
-        10: "SPICY - 'I can't believe this app said that' funny - no filter"
+        8: "CUTTING - Dark humor, exposes absurdity, edgy but shareable",
+        9: "SPICY - Brutally honest, potentially offensive, NSFW territory",
+        10: "SPICY - NO FILTER - Offensive, sexual innuendo OK, definitely NSFW"
     }
     
     spice_desc = spice_descriptions.get(config.spice_level, "HONEST - Default level")
     
     # Detailed spice guidance
     if config.spice_level <= 3:
-        spice_guidance = "Be extremely cautious and gentle. Avoid any edge or discomfort. Keep it extremely safe."
-    elif config.spice_level <= 6:
-        spice_guidance = "Be witty and honest. Punch up at processes, not people. Keep it shareable."
+        spice_guidance = "Be extremely cautious and gentle. Avoid any edge or discomfort. Keep it extremely safe and work-appropriate."
+    elif config.spice_level <= 5:
+        spice_guidance = "Be witty and honest. Punch up at processes, not people. Keep it hilarious but still shareable at work. This is the sweet spot: funny enough to make people laugh out loud, safe enough to share in Slack."
     elif config.spice_level <= 8:
-        spice_guidance = "Be cutting and expose absurdity. Make them laugh and think. Balance humor with professionalism."
+        spice_guidance = "Be cutting and expose absurdity. Make them laugh and think. Push boundaries but stay professional. Edgy humor that makes people go 'ooh that's a bit much' but still laugh and share it."
     elif config.spice_level == 9:
-        spice_guidance = "Be brutally honest. Expose the dysfunction, the waste, the quiet despair. Make them laugh uncomfortably but still want to share it."
+        spice_guidance = "NSFW TERRITORY. Be brutally honest and potentially offensive. Expose the dysfunction, the waste, the quiet despair. Sexual innuendo is acceptable if it fits. Make them laugh uncomfortably and think twice before sharing it at work. This is 'send it in a private DM' humor."
     else:  # Level 10
-        spice_guidance = "NO FILTER. Say what everyone was thinking but would never say out loud. Expose the absurdity, the dysfunction, the collective delusion. Be savage but accurate. This is 'I can't believe this app said that' territory. Make it so honest it stings."
+        spice_guidance = "ABSOLUTELY NO FILTER. NSFW. Potentially offensive. Sexual innuendo and crude humor are ENCOURAGED if they land the joke. Say what everyone was thinking but would NEVER say out loud. Expose the absurdity, the dysfunction, the collective delusion with zero corporate politeness. Be SAVAGE, CRUDE, OFFENSIVE if it's funny. This is 'I can't believe this app said that' territory. Make it so honest and raw it stings. This is NOT for work - this is for sharing with your closest work friends who have the same dark sense of humor."
     
     # Add guidance to avoid previous concept if it was blocked
     safety_guidance = ""
@@ -186,6 +187,12 @@ YOUR MISSION:
 Create a meme that makes people laugh and say "OH MY GOD, YES, EXACTLY!"
 
 SPICE LEVEL: {config.spice_level}/10 - {spice_desc}
+
+SPICE LEVEL GUIDE:
+- Levels 0-5: Work-safe, shareable, hilarious but appropriate
+- Levels 6-8: Edgy, pushing boundaries, but still professional
+- Levels 9-10: NSFW, potentially offensive, sexual innuendo OK, no filter
+
 {spice_guidance}
 
 {safety_guidance}
@@ -212,43 +219,55 @@ YOUR THEORETICAL TOOLKIT (use these as lenses, not rules):
    - Decontextualize quotes for absurdity
    - Layout = timing: Top (setup) → Image (pause) → Bottom (punchline)
 
-5. IMAGE ORIENTATION: Choose the right aspect ratio for your template
+5. IMAGE ORIENTATION: Choose the right aspect ratio for your template (VARY THIS!)
    - Square (1024x1024): Classic meme templates, single subjects, balanced compositions
-   - Landscape (1536x1024): Wide scenes, side-by-side comparisons, panoramic views
+   - Landscape (1536x1024): Wide scenes, side-by-side comparisons, panoramic views (USE THIS MORE!)
    - Portrait (1024x1536): Tall subjects, vertical scrolling memes, stacked text
-   - Auto: Let the model decide based on the prompt
+   - IMPORTANT: Don't always default to square! Match the orientation to your visual concept.
+     Example: Side-by-side comparison? Use landscape. Tall person/building? Use portrait.
 
-YOUR PROCESS (be adaptive, not rigid):
+YOUR PROCESS (be CREATIVE and AGENTIC):
 
 1. Read the ENTIRE transcript and understand what happened
 2. Hunt for the funniest moments—violations, contradictions, absurdities, specific details
 3. Consider multiple meme ideas (don't just pick the first one)
-4. For each idea, think about which template's "myth" would perfectly reframe it
-5. Score your ideas on: Cleverness (non-obvious), Relevance (specific details), Safety (punches concepts not people)
+4. Think about the VISUAL: What image would make this funnier?
+   - Classic meme template? (Distracted Boyfriend, Drake, etc.)
+   - Original scene? (Create something unique and specific)
+   - Abstract concept? (Visual metaphor)
+   - Realistic photo? (Specific to the meeting context)
+5. Score your ideas on: Cleverness (non-obvious), Relevance (specific details), Visual Impact (memorable)
 6. Pick the BEST one and compress it ruthlessly
 7. Verify it's a true Benign Violation: clear violation + clearly benign + simultaneously perceived
 
-BE AGENTIC:
-- If you find something funnier than what the theories predict, GO WITH IT
-- Invent new template concepts if they're better than existing ones
+BE AGENTIC AND CREATIVE:
+- You DON'T have to use a classic meme template
+- You CAN create original, specific visuals that match the meeting
+- You CAN be abstract, surreal, or metaphorical if it's funnier
+- You CAN combine elements in unexpected ways
 - Trust your judgment on what's hilarious
 - The theories are tools, not constraints
+- ORIGINALITY > TEMPLATES when it makes the joke better
 
-RESPOND IN JSON:
+SPICE LEVEL {config.spice_level} SPECIFIC GUIDANCE:
+{f"At level {config.spice_level}, you are ENCOURAGED to use profanity, sexual innuendo, crude humor, and potentially offensive content if it makes the meme funnier. Don't hold back. This is NSFW territory - embrace it." if config.spice_level >= 9 else f"At level {config.spice_level}, keep it {'work-safe and shareable' if config.spice_level <= 5 else 'edgy but professional'}."}
+
+RESPOND IN JSON (keep it concise):
 {{
-    "summary": "Brief meeting summary with emotional tone",
-    "opportunities": ["List 3-5 potential meme ideas with quotes and why they're funny"],
-    "selected_idea": "Which idea you chose and why (include your Cleverness/Relevance/Safety assessment)",
-    "template": "Template name (or describe new concept)",
-    "template_myth": "What cultural meaning this template brings",
-    "match_type": "Synergy or Ironic Juxtaposition (or something else if you're being creative)",
-    "optimal_size": "Choose the best size for this template: '1024x1024' (square - classic memes), '1536x1024' (landscape - wide scenes, multiple panels), '1024x1536' (portrait - tall subjects, vertical text), or 'auto' (let model decide). Consider the template's natural orientation.",
+    "summary": "Brief meeting summary",
+    "opportunities": ["3-5 meme ideas with quotes"],
+    "selected_idea": "Which idea and why",
+    "template": "Template name (or 'Original' if creating something new)",
+    "visual_approach": "Classic template / Original scene / Abstract concept / Realistic photo",
+    "optimal_size": "1024x1024 or 1536x1024 or 1024x1536",
     "top_text": "MAX 8 WORDS",
     "bottom_text": "MAX 8 WORDS",
-    "image_prompt": "Detailed visual description with Impact font styling. Be specific about composition and framing to avoid cropping issues.",
-    "concept": "One sentence: Why this is hilarious",
-    "judgment": "Why this meme is perfect for this meeting"
+    "image_prompt": "DETAILED visual description (be specific and creative). If using a template, describe it. If original, describe the scene, mood, style, composition.",
+    "concept": "Why it's hilarious",
+    "judgment": "Why perfect for meeting"
 }}
+
+IMPORTANT: Your image_prompt is the KEY to creativity. Be specific, vivid, and original. Don't just say "Distracted Boyfriend meme" - describe the actual scene, the expressions, the context. Or create something entirely new that captures the meeting's absurdity.
 
 Think deeply. Be creative. Make it HILARIOUS.
 """
@@ -274,9 +293,38 @@ Respond with valid JSON only."""},
                 {"role": "user", "content": analysis_prompt}
             ]
             
-            response = provider.chat_completion(messages=messages, max_tokens=4000)
+            # Gemini needs higher max_tokens for complex JSON responses
+            max_tokens = 8000 if hasattr(provider.config, 'provider_name') and provider.config.provider_name == 'gemini' else 4000
+            
+            response = provider.chat_completion(messages=messages, max_tokens=max_tokens)
             result = response["content"]
-            meme_concept = json.loads(result)
+            
+            logger.debug(f"Raw provider response: {result[:500]}...")
+            
+            # Try to extract JSON from response (handles markdown code blocks)
+            import re
+            json_match = re.search(r'\{.*\}', result, re.DOTALL)
+            if json_match:
+                result = json_match.group()
+            else:
+                logger.error(f"No JSON found in response. Full response: {result}")
+                raise ValueError("No JSON found in provider response")
+            
+            # Try to parse JSON, with repair if needed
+            try:
+                meme_concept = json.loads(result)
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse error: {e}, attempting repair")
+                # Try basic repairs
+                result = result.replace('\n', ' ').replace('\r', '')
+                result = re.sub(r',\s*}', '}', result)  # Remove trailing commas
+                result = re.sub(r',\s*]', ']', result)  # Remove trailing commas in arrays
+                try:
+                    meme_concept = json.loads(result)
+                    logger.info("JSON repair successful")
+                except:
+                    logger.error(f"JSON repair failed. Malformed JSON: {result[:500]}")
+                    raise
         else:
             # Using OpenAI Responses API
             response = provider.responses.create(
@@ -528,67 +576,61 @@ ORIGINAL CONCEPT:
 - Bottom Text: {meme_concept.get('bottom_text', 'N/A')}
 - Why It's Funny: {meme_concept.get('concept', 'N/A')}
 
-GRADING CRITERIA (Be strict about text quality):
+GRADING CRITERIA (Focus on image quality - text is overlaid separately):
 
-1. Text Completeness & Readability (4 points) - CRITICAL:
-   - ALL text must be FULLY VISIBLE - no cut-off words or letters
-   - Text must make COMPLETE SENSE - no gibberish, garbled, or nonsensical text
-   - Text must match the intended concept - verify against the original text above
-   - Text must be READABLE - good contrast, not too small, not obscured
-   - AUTOMATIC FAIL (<7.0) if ANY text is cut off, garbled, or nonsensical
-   - Give 3.5+ ONLY if all text is perfect and complete
-
-2. Visual Quality (2 points):
-   - Composition: Is the image reasonably well-framed?
+1. Visual Quality & Composition (4 points) - CRITICAL:
+   - Composition: Is the image well-framed and balanced?
+   - Clarity: Is the image clear and not blurry?
    - Contrast: Is there good visual contrast?
-   - Overall: Does it look professional?
-   - Give 1.5+ if image looks decent
+   - Space for text: Is there clear space at top/bottom for text overlay?
+   - Professional: Does it look like a real meme template?
+   - Give 3.5+ if image is high quality with good text space
 
-3. Template Accuracy (2 points):
+2. Template Accuracy (3 points):
    - Recognition: Does it capture the template concept?
    - Elements: Are key visual elements present?
    - Composition: Does it feel like the right template?
-   - Give 1.5+ if concept is recognizable
+   - Authenticity: Does it look like the actual meme template?
+   - Give 2.5+ if concept is clearly recognizable
 
-4. Humor & Relevance (2 points):
+3. Humor & Relevance (3 points):
    - Topical: Does it relate to the meeting content?
    - Funny: Would this get at least a chuckle?
    - Appropriate: Does it match the humor level?
-   - Give 1.5+ if it's relevant and amusing
+   - Clever: Is it a clever observation?
+   - Give 2.5+ if it's relevant and amusing
+
+NOTE: Text is overlaid separately with Pillow, so don't grade text quality.
+Focus on whether the BASE IMAGE is good quality and suitable for text overlay.
 
 RESPOND IN JSON:
 {{
     "score": 8.5,
-    "text_quality_score": 3.8,
-    "text_quality": "Detailed feedback on text completeness and readability",
-    "visual_quality_score": 1.7,
-    "visual_quality": "Brief feedback on visuals",
-    "template_accuracy_score": 1.8,
-    "template_accuracy": "Brief feedback on template",
-    "hilarity_score": 1.5,
-    "hilarity": "Brief feedback on humor",
+    "visual_quality_score": 3.8,
+    "visual_quality": "Detailed feedback on image quality and composition",
+    "template_accuracy_score": 2.7,
+    "template_accuracy": "Brief feedback on template recognition",
+    "hilarity_score": 2.5,
+    "hilarity": "Brief feedback on humor and relevance",
     "overall": "Overall assessment",
-    "text_issues": ["List ANY cut-off, garbled, or nonsensical text"],
-    "issues": ["Other issues if any"],
+    "issues": ["Any issues with the base image"],
     "strengths": ["What's working well"],
-    "critical_fixes": ["MUST fix cut-off or garbled text", "Other fixes if needed"]
+    "critical_fixes": ["What needs to be fixed in the image"]
 }}
 
 SCORING GUIDE:
-- 8.5-10.0 = EXCELLENT - All text perfect, ship it immediately
-- 8.0-8.4 = GOOD - Text complete and readable, ship it
-- 7.0-7.9 = OKAY - Minor text issues, could be better
-- <7.0 = FAIL - Cut-off, garbled, or nonsensical text - MUST RETRY
-
-BE STRICT: If ANY text is cut off, garbled, or doesn't make sense, score MUST be below 7.0.
+- 8.5-10.0 = EXCELLENT - High quality image, perfect for meme, ship it
+- 8.0-8.4 = GOOD - Good quality image, ship it
+- 7.0-7.9 = OKAY - Decent image but could be better
+- <7.0 = FAIL - Poor quality, wrong template, or major issues - MUST RETRY
 
 VERIFICATION CHECKLIST:
-1. Compare visible text to intended text above - does it match?
-2. Is every word COMPLETE with no cut-off letters?
-3. Does the text make LOGICAL SENSE when read?
-4. Can you read ALL the text without guessing?
+1. Is the image clear and high quality?
+2. Does it match the intended template concept?
+3. Is there good space for text overlay at top/bottom?
+4. Does it look like a professional meme template?
 
-If you answer NO to any of these, score MUST be below 7.0 and list the text issues.
+If you answer NO to any of these, score MUST be below 7.0.
 """
         
         # Use AI vision to grade
@@ -683,29 +725,61 @@ def _generate_meme_image(
     
     logger.info(f"Using image size: {size}")
     
-    # Build comprehensive image prompt
+    # Build image prompt
     image_prompt = meme_concept.get("image_prompt", "")
     
-    # Add text overlay instructions if we have top/bottom text
+    # Store text
     top_text = meme_concept.get("top_text", "")
     bottom_text = meme_concept.get("bottom_text", "")
     
-    if top_text or bottom_text:
-        text_instructions = "\n\nText overlay requirements:\n"
-        if top_text:
-            text_instructions += f"- Top text (white, bold, impact font style): \"{top_text}\"\n"
-        if bottom_text:
-            text_instructions += f"- Bottom text (white, bold, impact font style): \"{bottom_text}\"\n"
-        text_instructions += "- Text should have black outline for readability\n"
-        text_instructions += "- Text should be large and clearly visible\n"
-        text_instructions += "- Ensure full composition is visible, nothing cut off\n"
-        
-        image_prompt += text_instructions
+    # Check text rendering method
+    # DEFAULT TO LOCAL: AI-generated text often looks bad (gibberish, cut-off, wrong font)
+    # Local text overlay with Pillow produces clean, readable text
+    import os
+    text_method = os.getenv("SCRIBE_MEME_TEXT_METHOD", "local").lower()  # Changed default from "ai" to "local"
+    use_local_text = text_method == "local"
     
-    logger.debug(f"Final image prompt: {image_prompt}")
+    # Check if we're using XAI (has 1024 char limit)
+    is_xai = hasattr(image_provider, 'config') and image_provider.config.provider_name == 'xai'
+    
+    if use_local_text:
+        # LOCAL TEXT MODE: Generate clean base image, overlay text with Pillow (DEFAULT)
+        # This produces much better results than AI-generated text which is often gibberish
+        image_prompt += "\n\nIMPORTANT: Generate the scene/template WITHOUT any text overlays. Text will be added separately."
+        logger.info("Using LOCAL text overlay mode (Pillow) - produces clean, readable text")
+    else:
+        # AI TEXT MODE: Let AI generate text in the image (NOT RECOMMENDED - often looks bad)
+        # Only use this if you explicitly set SCRIBE_MEME_TEXT_METHOD=ai
+        if top_text or bottom_text:
+            if is_xai:
+                # Concise version for XAI (1024 char limit)
+                text_instructions = f"\n\nMeme text: TOP: \"{top_text}\" BOTTOM: \"{bottom_text}\" (white Impact font, black outline)"
+            else:
+                # Detailed version for OpenAI/Gemini
+                text_instructions = "\n\nText overlay requirements:\n"
+                if top_text:
+                    text_instructions += f"- Top text (white, bold, impact font style): \"{top_text}\"\n"
+                if bottom_text:
+                    text_instructions += f"- Bottom text (white, bold, impact font style): \"{bottom_text}\"\n"
+                text_instructions += "- Text should have black outline for readability\n"
+                text_instructions += "- Text should be large and clearly visible\n"
+                text_instructions += "- Ensure full composition is visible, nothing cut off\n"
+            
+            image_prompt += text_instructions
+        logger.warning("Using AI text generation mode - text quality may be poor (gibberish, cut-off)")
+    
+    # Validate prompt length for XAI (1024 char limit)
+    if is_xai and len(image_prompt) > 1000:
+        logger.error(f"Image prompt too long ({len(image_prompt)} chars) for XAI (max 1000). The AI should have generated a shorter prompt.")
+        # This shouldn't happen if the AI follows the MAX 300 chars instruction
+        # But if it does, we need to fail gracefully
+        logger.warning("Falling back to OpenAI for this image generation")
+        is_xai = False  # Force fallback
+    
+    logger.debug(f"Final image prompt ({len(image_prompt)} chars): {image_prompt[:200]}...")
     
     try:
-        # Generate image using provider (provider-agnostic)
+        # Generate image using provider
         image_bytes = image_provider.generate_image(
             prompt=image_prompt,
             size=size,
@@ -713,10 +787,27 @@ def _generate_meme_image(
             quality=config.quality
         )
         
-        # Save to file
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "wb") as f:
-            f.write(image_bytes)
+        # Handle text overlay if using local mode
+        if use_local_text and (top_text or bottom_text):
+            # Load image
+            from PIL import Image
+            import io
+            base_image = Image.open(io.BytesIO(image_bytes))
+            
+            # Overlay text locally using Pillow
+            from scribe.utils.meme_compositor import MemeCompositor
+            compositor = MemeCompositor()
+            final_image = compositor.overlay_text(base_image, top_text, bottom_text)
+            logger.info(f"Overlaid text locally: '{top_text}' / '{bottom_text}'")
+            
+            # Save final image
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            final_image.save(output_path, quality=95)
+        else:
+            # Save image bytes directly (AI generated text)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(image_bytes)
         
         logger.info(f"Meme saved to: {output_path}")
         return output_path
@@ -763,6 +854,7 @@ def _generate_meme_image(
         else:
             logger.error(f"Failed to generate meme image: {e}")
             return None
+            return None
 
 
 def generate_meeting_meme(
@@ -772,7 +864,8 @@ def generate_meeting_meme(
     config: Optional[MemeConfig] = None,
     show_reasoning: bool = False,
     progress_callback: Optional[callable] = None,
-    provider_name: Optional[str] = None
+    provider_name: Optional[str] = None,
+    enable_bakeoff: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Generate a meme from a meeting transcript.
@@ -784,12 +877,14 @@ def generate_meeting_meme(
         config: Meme generation config
         show_reasoning: If True, displays GPT-5's reasoning process (for trust/validation)
         progress_callback: Optional callback function(attempt, max_attempts, score) for progress updates
-        provider_name: AI provider to use (openai, xai) - defaults to SCRIBE_MEME_PROVIDER env var
+        provider_name: AI provider to use (openai, xai, gemini) - defaults to SCRIBE_MEME_PROVIDER env var
+        enable_bakeoff: If True, gets concepts from all providers and picks the funniest
         
     Returns:
         Dictionary with:
         - final_path: Path to best meme
         - attempts: List of all attempts with paths and scores
+        - bakeoff_winner: (if bakeoff enabled) Which provider won
         Or None if completely failed
     """
     # Setup - use environment config if not provided
@@ -812,12 +907,16 @@ def generate_meeting_meme(
                 provider_name=provider_name,
             )
             
-            # Get provider for image generation (may be different provider)
+            # Get provider for image generation (may be different from concept provider)
+            # Check for dedicated image provider env var
+            import os
+            image_provider_name = os.getenv("SCRIBE_MEME_IMAGE_PROVIDER", provider_name)
+            
             image_provider = get_provider(
                 feature="meme_image",
                 api_key=None,  # Let factory get the right key
                 model=config.image_model if config.image_model not in ["gpt-image-1", "dall-e-3"] else None,
-                provider_name=provider_name,  # Use same provider as concept
+                provider_name=image_provider_name,
             )
             
             use_provider = True
@@ -878,7 +977,32 @@ def generate_meeting_meme(
     output_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
     
     # Step 1: Analyze transcript and create meme concept
-    meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
+    bakeoff_result = None
+    
+    if enable_bakeoff:
+        # Run bake-off: get concepts from all providers and pick the best
+        logger.info("🎭 Running meme concept bake-off...")
+        from scribe.utils.meme_bakeoff import run_meme_bakeoff
+        
+        try:
+            bakeoff_result = run_meme_bakeoff(transcript, config)
+            meme_concept = bakeoff_result['concept']
+            provider_name = bakeoff_result['winner']
+            
+            # Update provider and image_provider to use the winner
+            provider = get_provider(feature='meme', provider_name=provider_name)
+            image_provider = get_provider(feature='meme_image', provider_name=provider_name)
+            
+            logger.info(f"🏆 Bake-off winner: {provider_name.upper()}")
+            logger.info(f"   Reasoning: {bakeoff_result['reasoning']}")
+        except Exception as e:
+            logger.warning(f"Bake-off failed: {e}, falling back to single provider")
+            enable_bakeoff = False
+    
+    if not enable_bakeoff:
+        # Standard single-provider approach
+        meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
+    
     if not meme_concept:
         logger.error("Failed to create meme concept")
         return None

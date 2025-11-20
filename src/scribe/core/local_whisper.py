@@ -38,7 +38,7 @@ class LocalWhisperTranscriber:
     def __init__(
         self,
         model_size: str = "large-v3",
-        language: str = "en",
+        language: Optional[str] = "en",
         gpu_config: Optional[GPUConfig] = None
     ):
         """
@@ -46,7 +46,7 @@ class LocalWhisperTranscriber:
         
         Args:
             model_size: Whisper model size
-            language: ISO language code
+            language: ISO language code (None for auto-detection)
             gpu_config: Optional GPU configuration (auto-detected if None)
         """
         self.model_size = model_size
@@ -69,7 +69,7 @@ class LocalWhisperTranscriber:
         # Log configuration
         logger.info(f"Initializing local transcription:")
         logger.info(f"  Model: {model_size}")
-        logger.info(f"  Language: {language}")
+        logger.info(f"  Language: {language if language else 'auto-detect'}")
         if gpu_config.has_gpu:
             logger.info(f"  GPU: {gpu_config.gpu_name}")
             logger.info(f"  VRAM: {gpu_config.gpu_memory_gb:.1f}GB")
@@ -78,6 +78,76 @@ class LocalWhisperTranscriber:
         
         self.model = None
     
+    def detect_language(self, audio_path: Path, sample_duration: int = 30) -> tuple[Optional[str], float, bool]:
+        """
+        Detect the language of audio file with confidence scoring.
+        
+        Uses a quick scan of the audio to detect language and determine if speech is present.
+        This is more efficient than full transcription for language detection.
+        
+        Args:
+            audio_path: Path to audio file
+            sample_duration: Seconds of audio to sample for detection (default: 30)
+            
+        Returns:
+            Tuple of (language_code, confidence, has_speech):
+                - language_code: ISO 639-1 code if detected, None otherwise
+                - confidence: Probability score (0.0-1.0)
+                - has_speech: True if speech detected, False if instrumental/silent
+        """
+        self._load_model()
+        
+        try:
+            logger.info(f"Detecting language (sampling {sample_duration}s)...")
+            
+            # Quick transcription for language detection only
+            segments_iter, info = self.model.transcribe(
+                str(audio_path),
+                language=None,  # Auto-detect
+                beam_size=5,  # Faster for detection
+                best_of=5,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 400},
+                condition_on_previous_text=False,
+                temperature=0.0
+            )
+            
+            # Consume segments to check if any speech was detected
+            segment_count = 0
+            total_text_length = 0
+            for segment in segments_iter:
+                segment_count += 1
+                total_text_length += len(segment.text.strip())
+                # Only sample first portion for speed
+                if segment.end > sample_duration:
+                    break
+            
+            # Get detected language from info
+            detected_lang = info.language
+            detected_prob = info.language_probability
+            
+            # Determine if speech is present
+            has_speech = segment_count > 0 and total_text_length > 10
+            
+            if has_speech:
+                logger.info(f"Detected: {detected_lang} (confidence: {detected_prob:.1%}, {segment_count} segments)")
+            else:
+                logger.info(f"No speech detected (instrumental or silent)")
+                return None, 0.0, False
+            
+            # Return language if confidence is reasonable
+            # Lower threshold (0.3) because even uncertain detection is better than none
+            if detected_prob >= 0.3:
+                return detected_lang, detected_prob, True
+            else:
+                logger.info(f"Low confidence ({detected_prob:.1%}), will use auto-detect during transcription")
+                return None, detected_prob, True
+                
+        except Exception as e:
+            logger.warning(f"Language detection failed: {e}")
+            # Assume speech present, let transcription handle it
+            return None, 0.0, True
+    
     def _load_model(self) -> None:
         """Load faster-whisper model with GPU optimization and resource management."""
         if self.model is not None:
@@ -85,6 +155,10 @@ class LocalWhisperTranscriber:
         
         try:
             from faster_whisper import WhisperModel
+            import os
+            
+            # Suppress download progress bars
+            os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
             
             logger.info(f"Loading {self.model_size} model...")
             
@@ -144,7 +218,9 @@ class LocalWhisperTranscriber:
         self,
         audio_path: Path,
         output_path: Optional[Path] = None,
-        detect_silence: bool = True
+        detect_silence: bool = True,
+        initial_prompt: Optional[str] = None,
+        music_mode: bool = False
     ) -> Path:
         """
         Transcribe audio file with GPU acceleration.
@@ -153,6 +229,8 @@ class LocalWhisperTranscriber:
             audio_path: Path to audio file
             output_path: Optional output path
             detect_silence: Whether to detect silence periods
+            initial_prompt: Optional prompt to guide transcription (for custom vocabulary)
+  
             
         Returns:
             Path to transcript file
@@ -229,7 +307,14 @@ class LocalWhisperTranscriber:
         
         try:
             # Configure transcription parameters
-            initial_prompt = "Meeting recording. High-quality transcription with proper punctuation and capitalization."
+            if not initial_prompt:
+                initial_prompt = "Meeting recording. High-quality transcription with proper punctuation and capitalization."
+            elif initial_prompt == "Song lyrics.":
+                # Music mode - use as-is, don't add meeting context
+                pass
+            else:
+                # Custom vocabulary - combine with meeting context
+                initial_prompt = f"Meeting recording. High-quality transcription with proper punctuation and capitalization. Key terms: {initial_prompt}"
             
             # Estimate total time based on GPU
             # RTX 4090: ~11-12x, RTX 4080: ~8x, RTX 4070: ~6x, fallback: ~4x
@@ -399,7 +484,7 @@ class LocalWhisperTranscriber:
 def transcribe_with_local_whisper(
     audio_path: Path,
     model_size: str = "large-v3",
-    language: str = "en",
+    language: Optional[str] = "en",
     **kwargs
 ) -> Path:
     """
@@ -408,7 +493,7 @@ def transcribe_with_local_whisper(
     Args:
         audio_path: Path to audio file
         model_size: Whisper model size
-        language: ISO language code
+        language: ISO language code (None for auto-detection)
         **kwargs: Additional arguments for LocalWhisperTranscriber.transcribe()
         
     Returns:

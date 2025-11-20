@@ -84,12 +84,15 @@ class XAIProvider(AIProvider):
         import logging
         logger = logging.getLogger(__name__)
         
-        # XAI uses grok-2-image model
+        # XAI uses grok-2-image-1212 model
+        # Default to grok-2-image-1212, ignore any other model passed in kwargs
+        model = "grok-2-image-1212"
+        
         # Try b64_json format first (more reliable than URL)
         try:
-            logger.debug(f"Attempting XAI image generation with b64_json format")
+            logger.debug(f"Attempting XAI image generation with b64_json format using {model}")
             response = self.client.images.generate(
-                model=kwargs.get("model", "grok-2-image"),
+                model=model,
                 prompt=prompt,
                 n=1,
                 response_format="b64_json"
@@ -115,9 +118,9 @@ class XAIProvider(AIProvider):
             
             # Fallback to URL format
             try:
-                logger.debug(f"Attempting XAI image generation with URL format")
+                logger.debug(f"Attempting XAI image generation with URL format using {model}")
                 response = self.client.images.generate(
-                    model=kwargs.get("model", "grok-2-image"),
+                    model=model,
                     prompt=prompt,
                     n=1,
                     response_format="url"

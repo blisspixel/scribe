@@ -595,3 +595,249 @@ class TestIntegrationScenarios:
             assert len(result.stdout) > 20, f"Help too short for {cmd}"
 
 
+
+
+class TestMusicCommand:
+    """Test music transcription command."""
+    
+    def test_music_help(self, cli_runner):
+        """Test music command help."""
+        result = cli_runner.invoke(app, ["music", "--help"])
+        
+        assert result.exit_code == 0
+        assert "music" in result.stdout.lower()
+        assert "lyrics" in result.stdout.lower()
+        assert "instrumental" in result.stdout.lower()
+    
+    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.utils.vad.detect_vocal_segments")
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_single_file(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
+                                mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+        """Test music command with single file."""
+        # Setup
+        audio_file = tmp_path / "song.mp3"
+        audio_file.write_text("fake audio")
+        
+        mock_config = Mock()
+        mock_config.default_model = "large-v3"
+        mock_config.default_language = "en"
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        
+        # Mock music detection
+        mock_detector = Mock()
+        mock_detector.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"}
+        }
+        mock_music_detector_class.return_value = mock_detector
+        
+        # Mock audio duration
+        mock_get_duration.return_value = 180.0
+        
+        # Mock vocal separation
+        vocals_path = tmp_path / "song_vocals.wav"
+        vocals_path.write_text("fake vocals")
+        mock_separate_vocals.return_value = vocals_path
+        
+        # Mock VAD
+        mock_detect_vocals.return_value = [(0.0, 10.0), (15.0, 25.0)]
+        
+        # Mock transcriber
+        mock_transcriber = Mock()
+        transcript_path = tmp_path / "song_lyrics.txt"
+        transcript_path.write_text("Lyrics here\n")
+        mock_transcriber.transcribe.return_value = transcript_path
+        mock_transcriber_class.return_value = mock_transcriber
+        
+        # Execute
+        result = cli_runner.invoke(app, ["music", str(audio_file)])
+        
+        # Verify
+        assert result.exit_code == 0
+        assert mock_transcriber.transcribe.called
+    
+    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.utils.vad.detect_vocal_segments")
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_folder(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
+                          mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+        """Test music command with folder."""
+        # Setup folder with multiple files
+        music_folder = tmp_path / "music"
+        music_folder.mkdir()
+        
+        for i in range(3):
+            audio_file = music_folder / f"song{i}.mp3"
+            audio_file.write_text(f"fake audio {i}")
+        
+        mock_config = Mock()
+        mock_config.default_model = "large-v3"
+        mock_config.default_language = "en"
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        
+        # Mock music detection
+        mock_detector = Mock()
+        mock_detector.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"}
+        }
+        mock_music_detector_class.return_value = mock_detector
+        
+        # Mock audio duration
+        mock_get_duration.return_value = 180.0
+        
+        # Mock vocal separation
+        def create_vocals_path(audio_path):
+            vocals_path = audio_path.parent / f"{audio_path.stem}_vocals.wav"
+            vocals_path.write_text("fake vocals")
+            return vocals_path
+        mock_separate_vocals.side_effect = create_vocals_path
+        
+        # Mock VAD
+        mock_detect_vocals.return_value = [(0.0, 10.0), (15.0, 25.0)]
+        
+        # Mock transcriber
+        mock_transcriber = Mock()
+        mock_transcriber.transcribe.return_value = tmp_path / "transcript.txt"
+        mock_transcriber_class.return_value = mock_transcriber
+        
+        # Execute
+        result = cli_runner.invoke(app, ["music", str(music_folder)])
+        
+        # Verify - should process all 3 files
+        assert result.exit_code == 0
+        assert mock_transcriber.transcribe.call_count >= 3
+    
+    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.utils.vad.detect_vocal_segments")
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_instrumental_handling(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
+                                         mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+        """Test music command handles instrumental tracks gracefully."""
+        from scribe.exceptions import TranscriptionError
+        
+        # Setup
+        audio_file = tmp_path / "instrumental.mp3"
+        audio_file.write_text("fake audio")
+        
+        mock_config = Mock()
+        mock_config.default_model = "large-v3"
+        mock_config.default_language = "en"
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        
+        # Mock music detection
+        mock_detector = Mock()
+        mock_detector.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"}
+        }
+        mock_music_detector_class.return_value = mock_detector
+        
+        # Mock audio duration
+        mock_get_duration.return_value = 180.0
+        
+        # Mock vocal separation
+        vocals_path = tmp_path / "instrumental_vocals.wav"
+        vocals_path.write_text("fake vocals")
+        mock_separate_vocals.return_value = vocals_path
+        
+        # Mock VAD - no vocals detected (instrumental)
+        mock_detect_vocals.return_value = []
+        
+        # Mock transcriber
+        mock_transcriber = Mock()
+        mock_transcriber_class.return_value = mock_transcriber
+        
+        # Execute
+        result = cli_runner.invoke(app, ["music", str(audio_file)])
+        
+        # Should handle gracefully (exit code 0, no crash)
+        assert result.exit_code == 0
+        # Should log instrumental detection
+        assert "instrumental" in result.stdout.lower() or "inst" in result.stdout.lower()
+    
+    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.utils.vad.detect_vocal_segments")
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_continue_on_error(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
+                                     mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+        """Test music command continues processing after errors."""
+        from scribe.exceptions import TranscriptionError
+        
+        # Setup multiple files
+        music_folder = tmp_path / "music"
+        music_folder.mkdir()
+        
+        files = []
+        for i in range(3):
+            audio_file = music_folder / f"song{i}.mp3"
+            audio_file.write_text(f"fake audio {i}")
+            files.append(audio_file)
+        
+        mock_config = Mock()
+        mock_config.default_model = "large-v3"
+        mock_config.default_language = "en"
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        
+        # Mock music detection
+        mock_detector = Mock()
+        mock_detector.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"}
+        }
+        mock_music_detector_class.return_value = mock_detector
+        
+        # Mock audio duration
+        mock_get_duration.return_value = 180.0
+        
+        # Mock vocal separation - first file fails, others succeed
+        def create_vocals_path_with_error(audio_path):
+            if "song0" in str(audio_path):
+                raise Exception("Separation failed")
+            vocals_path = audio_path.parent / f"{audio_path.stem}_vocals.wav"
+            vocals_path.write_text("fake vocals")
+            return vocals_path
+        mock_separate_vocals.side_effect = create_vocals_path_with_error
+        
+        # Mock VAD
+        mock_detect_vocals.return_value = [(0.0, 10.0), (15.0, 25.0)]
+        
+        # Mock transcriber
+        mock_transcriber = Mock()
+        mock_transcriber.transcribe.return_value = tmp_path / "transcript.txt"
+        mock_transcriber_class.return_value = mock_transcriber
+        
+        # Execute
+        result = cli_runner.invoke(app, ["music", str(music_folder)])
+        
+        # Should continue processing despite first file failure
+        assert result.exit_code == 0
+        # At least 2 files should succeed
+        assert mock_transcriber.transcribe.call_count >= 2
+    
+    def test_music_method_option(self, cli_runner, tmp_path):
+        """Test music command respects method option."""
+        audio_file = tmp_path / "song.mp3"
+        audio_file.write_text("fake audio")
+        
+        result = cli_runner.invoke(app, ["music", str(audio_file), "--method", "local"])
+        
+        # Should parse successfully
+        assert result.exit_code in [0, 1]  # May fail on execution

@@ -140,6 +140,24 @@ archive/
 input/
 !input/.gitkeep
 
+# Custom vocabulary files (user-specific)
+# Keep example files but ignore custom ones
+vocabulary.txt
+vocabulary.json
+vocab.txt
+vocab.json
+custom-*.txt
+custom-*.json
+my-*.txt
+my-*.json
+*-vocabulary.txt
+*-vocabulary.json
+*-vocab.txt
+*-vocab.json
+# But keep the examples
+!examples/vocabulary.txt
+!examples/vocabulary.json
+
 # ----------------------------------------------------------------------------
 # Scribe-Specific: Temporary Files
 # ----------------------------------------------------------------------------
@@ -197,6 +215,7 @@ session_*.json.tmp
 # Keep example/template files
 !examples/**/*.txt
 !examples/**/*.docx
+!examples/**/*.json
 
 # ----------------------------------------------------------------------------
 # OS-Specific

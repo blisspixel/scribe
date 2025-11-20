@@ -1,8 +1,94 @@
 """
 Custom exception hierarchy for Scribe transcription system.
 
-This module defines a comprehensive exception hierarchy that provides
-clear, actionable error messages with context for debugging and user feedback.
+═══════════════════════════════════════════════════════════════════════════════
+ARCHITECTURAL PATTERN: Structured Exception Hierarchy
+═══════════════════════════════════════════════════════════════════════════════
+
+This module implements a defensive programming pattern where every failure mode
+is explicitly modeled as a distinct exception type. This design choice enables:
+
+1. PRECISE ERROR HANDLING: Callers can catch specific exceptions and respond
+   appropriately (e.g., retry on APIError, fallback on GPUError)
+
+2. CONTEXTUAL DEBUGGING: Each exception carries structured context (dict) that
+   captures the system state at failure time, enabling root cause analysis
+
+3. USER-FRIENDLY MESSAGES: Exceptions provide human-readable messages that
+   explain what went wrong and often suggest remediation steps
+
+4. DEFENSIVE BOUNDARIES: The exception hierarchy creates clear boundaries
+   between different failure domains (validation, processing, I/O, external)
+
+DESIGN RATIONALE:
+─────────────────
+Traditional exception handling often relies on catching generic Exception types
+and parsing error messages. This approach is fragile and makes it difficult to
+implement intelligent error recovery. By creating a typed exception hierarchy,
+we enable:
+
+- Static analysis of error handling paths
+- Exhaustive error handling verification
+- Automatic retry logic based on exception type
+- Structured logging with consistent error context
+- Circuit breaker patterns for external service failures
+
+EXCEPTION TAXONOMY:
+───────────────────
+ScribeError (base)
+├── ValidationError      → Configuration/environment issues (fail fast)
+├── ProcessError         → External process failures (ffmpeg, OBS)
+├── TranscriptionError   → Core transcription failures (GPU, API, model)
+├── FileOperationError   → I/O failures (permissions, disk space, corruption)
+├── CircuitBreakerOpen   → Protective circuit breaker state (prevent cascading)
+├── ConversionError      → Audio/video format conversion failures
+├── AudioFormatError     → Invalid or unsupported audio formats
+├── GPUError            → GPU-specific failures (CUDA, memory, driver)
+└── APIError            → External API failures (rate limits, auth, network)
+
+Each exception type maps to a specific recovery strategy:
+- ValidationError → Fail fast with clear configuration guidance
+- GPUError → Fallback to API transcription
+- APIError → Retry with exponential backoff or circuit breaker
+- FileOperationError → Atomic writes, cleanup, user notification
+
+USAGE PATTERNS:
+───────────────
+1. Fail Fast Validation:
+   if not config.openai_api_key:
+       raise ValidationError(
+           "OpenAI API key required",
+           context={"env_var": "OPENAI_API_KEY"}
+       )
+
+2. Contextual Failures:
+   raise TranscriptionError(
+       "GPU out of memory",
+       context={
+           "vram_used_gb": 22.5,
+           "vram_total_gb": 24.0,
+           "model": "large-v3",
+           "audio_duration_min": 120
+       }
+   )
+
+3. Recovery Decisions:
+   try:
+       result = transcribe_local(audio)
+   except GPUError as e:
+       logger.warning(f"GPU failed: {e}, falling back to API")
+       result = transcribe_api(audio)
+
+RESEARCH REFERENCES:
+────────────────────
+- "Exception Handling: Issues and a Proposed Notation" (Goodenough, 1975)
+- "A Fault Tolerance Approach to Survivability" (Lyu, 1995)
+- "Release It! Design and Deploy Production-Ready Software" (Nygard, 2018)
+  → Circuit breaker pattern for external service failures
+
+This exception hierarchy is a cornerstone of Scribe's defensive architecture,
+enabling graceful degradation and intelligent error recovery throughout the
+transcription pipeline.
 """
 
 from typing import Optional

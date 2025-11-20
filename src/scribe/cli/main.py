@@ -6,8 +6,12 @@ transcription, recording, and system information.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import time
+import warnings
+
+# Suppress TorchAudio MP3 warnings
+warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
 
 import typer
 from rich.console import Console
@@ -27,12 +31,56 @@ from scribe.utils.logging import setup_logging, console, get_logger
 from scribe.utils.joke_generator import generate_transcript_joke, ARCHETYPE_DISPLAY_NAMES
 
 logger = get_logger(__name__)
-from scribe.exceptions import ScribeError, ProcessError
+from scribe.exceptions import ScribeError, ProcessError, TranscriptionError
 
-# Create Typer app
+# Create Typer app with enhanced help
+HELP_TEXT = """
+[bold cyan]Scribe v{version}[/bold cyan] - [white]Professional GPU-Accelerated Speech Intelligence[/white]
+
+[bold yellow]Core Capabilities:[/bold yellow]
+  [green]-[/green] [white]GPU-accelerated local transcription[/white] [dim](11x real-time on RTX 4090)[/dim]
+  [green]-[/green] [white]Cloud transcription via OpenAI API[/white] [dim]with automatic fallback[/dim]
+  [green]-[/green] [white]Multi-provider AI support[/white] [dim](OpenAI, XAI/Grok, Anthropic, Gemini)[/dim]
+  [green]-[/green] [white]Batch processing[/white] [dim]for multiple files[/dim]
+  [green]-[/green] [white]Custom vocabulary[/white] [dim]for domain-specific accuracy[/dim]
+  [green]-[/green] [white]Intelligent meeting notes[/white] [dim]with structured analysis[/dim]
+  [green]-[/green] [white]Context-aware humor[/white] [dim](jokes and memes)[/dim]
+
+[bold yellow]Quick Start:[/bold yellow]
+  [cyan]scribe transcribe[/cyan] meeting.mp4              [dim]# Transcribe single file[/dim]
+  [cyan]scribe batch[/cyan] *.mp4                         [dim]# Process multiple files[/dim]
+  [cyan]scribe music[/cyan] song.mp3                      [dim]# Transcribe music/lyrics[/dim]
+  [cyan]scribe rec[/cyan] "Team Meeting"                  [dim]# Record and transcribe[/dim]
+  [cyan]scribe doctor[/cyan]                              [dim]# System diagnostics[/dim]
+
+[bold yellow]Common Workflows:[/bold yellow]
+  [dim]# Technical meeting with custom terms[/dim]
+  [cyan]scribe transcribe[/cyan] meeting.mp4 [green]--vocabulary[/green] tech-terms.txt
+  
+  [dim]# Batch process with specific provider[/dim]
+  [cyan]scribe batch[/cyan] *.wav [green]--method[/green] local [green]--no-meme[/green]
+  
+  [dim]# Generate notes from existing transcript[/dim]
+  [cyan]scribe notes[/cyan] transcript.txt [green]--provider[/green] xai
+
+[bold yellow]Configuration:[/bold yellow]
+  [dim]Set environment variables in .env file:[/dim]
+  [green]-[/green] [yellow]OPENAI_API_KEY[/yellow]       [dim]Required for API features[/dim]
+  [green]-[/green] [yellow]XAI_API_KEY[/yellow]          [dim]Optional, 47x cheaper for AI features[/dim]
+  [green]-[/green] [yellow]SCRIBE_OUTPUT_FOLDER[/yellow] [dim]Output directory[/dim]
+
+[bold yellow]System Requirements:[/bold yellow]
+  [green]-[/green] [white]Python 3.10+[/white]
+  [green]-[/green] [white]FFmpeg[/white] [dim](for audio/video processing)[/dim]
+  [green]-[/green] [white]NVIDIA GPU with CUDA[/white] [dim](optional, for local transcription)[/dim]
+  [green]-[/green] [white]8+ GB RAM[/white] [dim]recommended[/dim]
+
+[dim]Run '[/dim][cyan]scribe doctor[/cyan][dim]' for detailed system diagnostics[/dim]
+""".format(version=__version__)
+
 app = typer.Typer(
     name="scribe",
-    help="Professional GPU-accelerated speech-to-text transcription system",
+    help=HELP_TEXT,
     add_completion=True,
     rich_markup_mode="rich",
     no_args_is_help=True
@@ -90,6 +138,11 @@ def transcribe_command(
         False,
         "--no-meme",
         help="Skip meme generation"
+    ),
+    vocabulary: Optional[Path] = typer.Option(
+        None,
+        "--vocabulary", "--vocab",
+        help="Custom vocabulary file (.txt or .json) for improved accuracy"
     )
 ):
     """
@@ -104,8 +157,12 @@ def transcribe_command(
       scribe transcribe podcast.mp3 --method openai --language es
       
       scribe transcribe meeting.mp4 --no-joke --no-meme
+      
+      scribe transcribe technical.mp4 --vocabulary terms.txt
     """
     try:
+        from scribe.utils.vocabulary import CustomVocabulary
+        
         # Load configuration
         config = ScribeConfig()
         
@@ -124,6 +181,17 @@ def transcribe_command(
                 raise typer.Exit(1)
         if keep_all:
             config.keep_intermediate_files = True
+        
+        # Load custom vocabulary if provided
+        custom_vocab = None
+        if vocabulary:
+            try:
+                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
+                console.print()
+            except Exception as e:
+                console.print(f"[red]Failed to load vocabulary: {e}[/red]")
+                raise typer.Exit(1)
         
         # Validate audio file first
         audio_path = validate_file_path(str(audio_file))
@@ -270,7 +338,8 @@ def transcribe_command(
             transcript_path = transcriber.transcribe(
                 audio_file,
                 method=chosen_method,
-                session=session
+                session=session,
+                custom_vocabulary=custom_vocab
             )
         finally:
             transcription_done.set()
@@ -368,27 +437,59 @@ def transcribe_command(
             console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
             console.print()
         
-        # Display output files - simple names with clickable links
-        console.print("[bold cyan]Output:[/bold cyan]")
+        # Display output files with enhanced formatting
+        console.print()
+        console.print("[bold green]Transcription Complete![/bold green]")
+        console.print()
+        console.print("[bold cyan]Output Files:[/bold cyan]")
         console.print()
         
-        # Show just filenames, but make them clickable
+        # Helper function to create clickable file links that work on Windows, macOS, and Linux
+        def make_clickable_path(file_path: Path) -> str:
+            """Create a clickable file:// URL that works across platforms"""
+            import platform
+            import urllib.parse
+            
+            # Get absolute path
+            abs_path = file_path.resolve()
+            
+            # Convert to string and handle platform differences
+            path_str = str(abs_path)
+            
+            if platform.system() == "Windows":
+                # Windows: file:///C:/Users/... (forward slashes, three slashes)
+                # Convert backslashes to forward slashes
+                path_str = path_str.replace("\\", "/")
+                # Ensure it starts with drive letter
+                if len(path_str) > 1 and path_str[1] == ":":
+                    url = f"file:///{path_str}"
+                else:
+                    url = f"file:///{path_str}"
+            else:
+                # macOS/Linux: file:///home/... (already has leading slash)
+                url = f"file://{urllib.parse.quote(path_str)}"
+            
+            return url
+        
+        # Show files with clickable links (works in Windows Terminal, iTerm2, VS Code terminal, etc.)
         if transcript_path:
-            url_path = str(transcript_path).replace("\\", "/")
-            console.print(f"  [link=file:///{url_path}]{transcript_path.name}[/link]")
+            url = make_clickable_path(transcript_path)
+            console.print(f"  [green]-[/green] [white]Transcript:[/white] [link={url}]{transcript_path}[/link]")
         
         if not no_docx and session.docx_file:
-            url_path = str(session.docx_file).replace("\\", "/")
-            console.print(f"  [link=file:///{url_path}]{session.docx_file.name}[/link]")
+            url = make_clickable_path(session.docx_file)
+            console.print(f"  [green]-[/green] [white]Document:[/white]   [link={url}]{session.docx_file}[/link]")
         
         if notes_path:
-            url_path = str(notes_path).replace("\\", "/")
-            console.print(f"  [link=file:///{url_path}]{notes_path.name}[/link]")
+            url = make_clickable_path(notes_path)
+            console.print(f"  [green]-[/green] [white]Notes:[/white]      [link={url}]{notes_path}[/link]")
         
         if session.meme_file:
-            url_path = str(session.meme_file).replace("\\", "/")
-            console.print(f"  [link=file:///{url_path}]{session.meme_file.name}[/link]")
+            url = make_clickable_path(session.meme_file)
+            console.print(f"  [green]-[/green] [white]Meme:[/white]       [link={url}]{session.meme_file}[/link]")
         
+        console.print()
+        console.print("[dim]Tip: Ctrl+Click (or Cmd+Click on macOS) to open files[/dim]")
         console.print()
         
     except ScribeError as e:
@@ -723,6 +824,762 @@ def record(
         raise typer.Exit(1)
 
 
+@app.command(name="batch")
+def batch_transcribe(
+    input_files: List[Path] = typer.Argument(
+        ...,
+        help="Audio/video files to transcribe"
+    ),
+    method: TranscriptionMethod = typer.Option(
+        "auto",
+        "--method", "-m",
+        help="Transcription method: auto, local, openai"
+    ),
+    model: Optional[ModelSize] = typer.Option(
+        None,
+        "--model",
+        help="Whisper model size"
+    ),
+    language: Optional[str] = typer.Option(
+        None,
+        "--language", "-l",
+        help="Language code (ISO 639-1)"
+    ),
+    no_docx: bool = typer.Option(
+        False,
+        "--no-docx",
+        help="Skip DOCX generation"
+    ),
+    no_notes: bool = typer.Option(
+        False,
+        "--no-notes",
+        help="Skip meeting notes"
+    ),
+    no_joke: bool = typer.Option(
+        False,
+        "--no-joke",
+        help="Skip joke generation"
+    ),
+    no_meme: bool = typer.Option(
+        False,
+        "--no-meme",
+        help="Skip meme generation"
+    ),
+    vocabulary: Optional[Path] = typer.Option(
+        None,
+        "--vocabulary", "--vocab",
+        help="Custom vocabulary file (.txt or .json)"
+    ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--stop-on-error",
+        help="Continue processing remaining files if one fails"
+    )
+):
+    """
+    Batch transcribe multiple audio/video files.
+    
+    Process multiple recordings in one command. Each file is transcribed
+    independently with its own output files.
+    
+    Examples:
+    
+      scribe batch meeting1.mp4 meeting2.mp4 meeting3.mp4
+      
+      scribe batch *.mp4 --method local
+      
+      scribe batch file1.wav file2.wav --vocabulary terms.txt
+      
+      scribe batch *.mp3 --no-joke --no-meme
+    """
+    try:
+        from scribe.utils.vocabulary import CustomVocabulary
+        
+        # Load configuration
+        config = ScribeConfig()
+        
+        # Override config with CLI options
+        if model:
+            config.default_model = model
+        if language:
+            from scribe.utils.validation import validate_language_code
+            try:
+                validated_lang = validate_language_code(language)
+                config.default_language = validated_lang
+            except Exception as e:
+                console.print(f"[red]Invalid language code: {language}[/red]")
+                raise typer.Exit(1)
+        
+        # Load custom vocabulary if provided
+        custom_vocab = None
+        if vocabulary:
+            try:
+                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
+            except Exception as e:
+                console.print(f"[red]Failed to load vocabulary: {e}[/red]")
+                raise typer.Exit(1)
+        
+        # Validate all files exist
+        valid_files = []
+        for audio_file in input_files:
+            if not audio_file.exists():
+                console.print(f"[yellow]Warning: File not found: {audio_file}[/yellow]")
+                if not continue_on_error:
+                    raise typer.Exit(1)
+            else:
+                valid_files.append(audio_file)
+        
+        if not valid_files:
+            console.print("[red]No valid files to process[/red]")
+            raise typer.Exit(1)
+        
+        # Display batch header
+        console.print()
+        console.print(Panel.fit(
+            f"[bold cyan]Scribe Batch Transcription v{__version__}[/bold cyan]\n"
+            f"[white]Processing {len(valid_files)} file(s)[/white]",
+            border_style="cyan",
+            padding=(0, 1)
+        ))
+        console.print()
+        
+        # Process each file
+        results = []
+        for idx, audio_file in enumerate(valid_files, 1):
+            console.print(f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {audio_file.name}")
+            console.print()
+            
+            try:
+                # Validate audio file
+                audio_path = validate_file_path(str(audio_file))
+                
+                # Setup logging
+                meeting_name = audio_file.stem
+                logger = setup_logging(meeting_name, config.log_folder)
+                
+                # Create session
+                session = TranscriptionSession.create(meeting_name)
+                session.add_file(audio_path, "source")
+                
+                # Transcribe
+                transcriber = Transcriber(config)
+                chosen_method = transcriber.choose_method(method)
+                
+                # Convert audio if needed
+                if chosen_method == "local":
+                    from scribe.core.converter import Converter
+                    converter = Converter()
+                    audio_file_converted = converter.convert_to_wav(audio_path, show_progress=True)
+                else:
+                    # Check file size for OpenAI API
+                    file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+                    if file_size_mb > 24:
+                        console.print(f"[yellow]File is {file_size_mb:.0f}MB, compressing...[/yellow]")
+                        from scribe.core.converter import Converter
+                        converter = Converter()
+                        audio_file_converted = converter.convert_to_mp3(audio_path, bitrate=48)
+                    else:
+                        audio_file_converted = audio_path
+                
+                # Transcribe with custom vocabulary
+                transcript_path = transcriber.transcribe(
+                    audio_file_converted,
+                    method=chosen_method,
+                    session=session,
+                    custom_vocabulary=custom_vocab
+                )
+                
+                # Generate DOCX
+                if not no_docx:
+                    try:
+                        docx_path = txt_to_docx(transcript_path)
+                        session.add_file(docx_path, "docx")
+                    except Exception as e:
+                        logger.error(f"DOCX generation failed: {e}")
+                
+                # Generate notes
+                if not no_notes and config.enable_notes and config.openai_api_key:
+                    try:
+                        from scribe.utils.notes_generator import NotesGenerator
+                        notes_generator = NotesGenerator(api_key=None, model=config.notes_model)
+                        notes_path = notes_generator.generate_notes(transcript_path)
+                        session.add_file(notes_path, "notes")
+                    except Exception as e:
+                        logger.error(f"Notes generation failed: {e}")
+                
+                # Generate joke
+                if not no_joke and config.openai_api_key:
+                    try:
+                        result = generate_transcript_joke(transcript_path, config.openai_api_key)
+                        if result:
+                            joke_text, comedy_style = result
+                            session.joke_data = {"text": joke_text, "style": comedy_style}
+                    except Exception as e:
+                        logger.error(f"Joke generation failed: {e}")
+                
+                # Generate meme
+                if not no_meme and config.openai_api_key:
+                    try:
+                        from scribe.utils.meme_generator import generate_meeting_meme
+                        meme_result = generate_meeting_meme(
+                            transcript_path,
+                            output_dir=config.output_folder,
+                            api_key=None
+                        )
+                        if meme_result:
+                            meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
+                            session.add_file(meme_path, "meme")
+                    except Exception as e:
+                        logger.error(f"Meme generation failed: {e}")
+                
+                # Cleanup
+                transcriber.cleanup_intermediate_files(audio_path.parent)
+                
+                # Complete session
+                session.complete(success=True)
+                session.save_summary(config.output_folder)
+                
+                results.append({
+                    "file": audio_file.name,
+                    "status": "success",
+                    "transcript": transcript_path
+                })
+                
+                console.print(f"[green]✓ Completed: {audio_file.name}[/green]")
+                console.print()
+                
+            except Exception as e:
+                logger.error(f"Failed to process {audio_file}: {e}")
+                results.append({
+                    "file": audio_file.name,
+                    "status": "failed",
+                    "error": str(e)
+                })
+                console.print(f"[red]✗ Failed: {audio_file.name}[/red]")
+                console.print(f"[dim]Error: {e}[/dim]")
+                console.print()
+                
+                if not continue_on_error:
+                    raise typer.Exit(1)
+        
+        # Summary
+        console.print("─" * 60)
+        console.print()
+        console.print("[bold cyan]Batch Summary:[/bold cyan]")
+        
+        success_count = sum(1 for r in results if r["status"] == "success")
+        failed_count = sum(1 for r in results if r["status"] == "failed")
+        
+        console.print(f"  [green]✓ Successful:[/green] {success_count}")
+        console.print(f"  [red]✗ Failed:[/red] {failed_count}")
+        console.print()
+        
+        if failed_count > 0:
+            console.print("[yellow]Failed files:[/yellow]")
+            for result in results:
+                if result["status"] == "failed":
+                    console.print(f"  - {result['file']}: {result.get('error', 'Unknown error')}")
+            console.print()
+        
+    except ScribeError as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command(name="music")
+def music_transcribe(
+    audio_files: List[Path] = typer.Argument(
+        ...,
+        help="Path to music/audio file(s) or folder to transcribe"
+    ),
+    method: TranscriptionMethod = typer.Option(
+        "auto",
+        "--method", "-m",
+        help="Transcription method: auto, local, openai"
+    ),
+    model: Optional[ModelSize] = typer.Option(
+        None,
+        "--model",
+        help="Whisper model size"
+    ),
+    language: Optional[str] = typer.Option(
+        None,
+        "--language", "-l",
+        help="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')"
+    ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--stop-on-error",
+        help="Continue processing remaining files if one fails"
+    )
+):
+    """
+    Transcribe music/lyrics with clean formatting.
+    
+    Supports single files, multiple files, wildcards, or folders.
+    
+    Optimized for music transcription with:
+    - Clean lyrics-only output (no timestamps)
+    - Graceful handling of instrumental tracks
+    - No jokes, memes, or meeting notes by default
+    - Simple TXT output format
+    - Lyrics files saved next to original MP3s
+    
+    Examples:
+    
+      scribe music song.mp3
+      
+      scribe music album/*.flac --method local
+      
+      scribe music folder/
+      
+      scribe music track1.mp3 track2.mp3 track3.mp3
+    """
+    try:
+        # Load configuration
+        config = ScribeConfig()
+        
+        # Override config with CLI options
+        if model:
+            config.default_model = model
+        if language:
+            from scribe.utils.validation import validate_language_code
+            try:
+                validated_lang = validate_language_code(language)
+                config.default_language = validated_lang
+            except Exception as e:
+                console.print(f"[red]Invalid language code: {language}[/red]")
+                raise typer.Exit(1)
+        else:
+            # For music mode, enable auto-detection by default
+            # Language will be detected per-segment after vocal separation
+            config.default_language = None
+        
+        # Music mode uses separation-first architecture
+        use_separation = True  # Always use for music mode
+        
+        # Collect all audio files to process
+        files_to_process = []
+        for path in audio_files:
+            if not path.exists():
+                console.print(f"[yellow]Warning: Path not found: {path}[/yellow]")
+                if not continue_on_error:
+                    raise typer.Exit(1)
+                continue
+            
+            if path.is_dir():
+                # Process all audio files in directory
+                audio_extensions = {'.mp3', '.flac', '.wav', '.m4a', '.ogg', '.opus'}
+                dir_files = [
+                    f for f in path.iterdir() 
+                    if f.suffix.lower() in audio_extensions
+                    and not f.stem.endswith('_vocals')  # Skip intermediate vocals files
+                    and not f.stem.endswith('_16k_mono')  # Skip converted WAV files
+                ]
+                files_to_process.extend(dir_files)
+            else:
+                # Skip intermediate files
+                if not path.stem.endswith('_vocals') and not path.stem.endswith('_16k_mono'):
+                    files_to_process.append(path)
+        
+        if not files_to_process:
+            console.print("[red]No audio files to process[/red]")
+            raise typer.Exit(1)
+        
+        # Show summary
+        console.print()
+        console.print(f"[bold cyan]Processing {len(files_to_process)} audio file(s)[/bold cyan]")
+        console.print()
+        
+        # Create transcriber once for all files
+        transcriber = Transcriber(config)
+        
+        # Process each file
+        results = []
+        for idx, audio_path in enumerate(files_to_process, 1):
+            track_name = audio_path.stem
+            vocals_path = None  # Initialize for cleanup in exception handler
+            
+            try:
+                # Setup logging for this track
+                logger = setup_logging(track_name, config.log_folder)
+                
+                # Display header
+                from scribe.utils.audio import get_audio_duration, format_duration
+                duration = get_audio_duration(audio_path)
+                duration_str = format_duration(duration) if duration else "Unknown"
+                
+                console.print(f"[bold]File {idx}/{len(files_to_process)}:[/bold] {audio_path.name} [dim]({duration_str})[/dim]")
+                
+                # Step 1: Analyze music content and extract metadata
+                console.print("  [dim]Analyzing music...[/dim]", end="")
+                music_metadata = {}
+                try:
+                    from scribe.utils.music_detection import MusicDetector
+                    detector = MusicDetector()
+                    music_analysis = detector.analyze_music(audio_path)
+                    music_metadata = music_analysis.get("metadata", {})
+                    
+                    if not music_analysis["is_music"]:
+                        # Not music - skip processing
+                        console.print(f" [red]not music[/red]")
+                        console.print(f"  [dim]{music_analysis['reason']}[/dim]")
+                        console.print()
+                        results.append({"file": audio_path.name, "status": "failed", "error": "Not music"})
+                        continue
+                    
+                    tempo = music_metadata.get("tempo", 0)
+                    key = music_metadata.get("key", "?")
+                    
+                    # Only show measurable values
+                    info_parts = []
+                    if tempo > 0:
+                        info_parts.append(f"[green]{tempo:.0f} BPM[/green]")
+                    if key and key != "Unknown":
+                        info_parts.append(f"[dim]{key}[/dim]")
+                    
+                    if info_parts:
+                        console.print(f" {' '.join(info_parts)}")
+                    else:
+                        console.print(" [green]ok[/green]")
+                except Exception as e:
+                    logger.debug(f"Music analysis failed: {e}")
+                    console.print(" [yellow]skipped[/yellow]")
+                
+                # Step 2: Separate vocals from instruments
+                console.print("  [dim]Separating vocals...[/dim]", end="")
+                try:
+                    from scribe.utils.source_separation import separate_vocals
+                    vocals_path = separate_vocals(audio_path)
+                    console.print(" [green]done[/green]")
+                except Exception as e:
+                    console.print(" [yellow]skipped[/yellow]")
+                    logger.warning(f"Vocal separation failed, using original audio: {e}")
+                    vocals_path = audio_path
+                
+                # Step 3: Detect vocal segments using VAD
+                console.print("  [dim]Detecting vocals...[/dim]", end="")
+                try:
+                    from scribe.utils.vad import detect_vocal_segments
+                    vocal_segments = detect_vocal_segments(vocals_path)
+                    
+                    if not vocal_segments:
+                        # No vocals detected - it's instrumental music
+                        console.print(" [yellow]none found[/yellow]")
+                        raise TranscriptionError("No speech detected in audio (instrumental track)")
+                    
+                    console.print(f" [green]found {len(vocal_segments)}[/green]")
+                except Exception as e:
+                    if "No speech detected" in str(e) or not vocal_segments:
+                        raise TranscriptionError("No speech detected in audio (instrumental track)")
+                    logger.warning(f"VAD failed, will transcribe full audio: {e}")
+                    vocal_segments = None
+                
+                # Step 4: Slice audio by vocal segments
+                console.print("  [dim]Slicing audio...[/dim]", end="")
+                try:
+                    from scribe.utils.audio_slicer import slice_audio_by_segments
+                    import tempfile
+                    
+                    # Create temp directory for slices
+                    slice_dir = Path(tempfile.mkdtemp(prefix="vocal_slices_"))
+                    sliced_paths = slice_audio_by_segments(vocals_path, vocal_segments, slice_dir)
+                    console.print(f" [green]{len(sliced_paths)} slices[/green]")
+                except Exception as e:
+                    logger.warning(f"Audio slicing failed, will transcribe full audio: {e}")
+                    sliced_paths = None
+                    slice_dir = None
+                
+                # Step 5: Transcribe segments
+                console.print("  [dim]Transcribing...[/dim]", end="")
+                try:
+                    all_lyrics = []
+                    
+                    if sliced_paths:
+                        # Transcribe each segment separately
+                        for i, slice_path in enumerate(sliced_paths):
+                            try:
+                                segment_transcript = transcriber.transcribe(
+                                    slice_path,
+                                    method=method,
+                                    music_mode=True
+                                )
+                                
+                                # Read segment transcript
+                                with open(segment_transcript, "r", encoding="utf-8") as f:
+                                    segment_text = f.read()
+                                
+                                # Extract just the text (remove metadata)
+                                if "─" in segment_text:
+                                    parts = segment_text.split("─" * 80, 1)
+                                    if len(parts) > 1:
+                                        segment_text = parts[1].strip()
+                                    else:
+                                        segment_text = segment_text.strip()
+                                else:
+                                    segment_text = segment_text.strip()
+                                
+                                # Filter out hallucinations from segment
+                                if segment_text:
+                                    segment_lower = segment_text.lower().strip()
+                                    
+                                    # Known hallucination patterns
+                                    hallucination_phrases = [
+                                        "suscríbete", "gracias por ver", "thanks for watching",
+                                        "please subscribe", "amara.org", "subtitle", "caption"
+                                    ]
+                                    
+                                    # Skip if it's a known hallucination
+                                    is_hallucination = any(phrase in segment_lower for phrase in hallucination_phrases)
+                                    
+                                    if not is_hallucination:
+                                        all_lyrics.append(segment_text)
+                                
+                                # Clean up segment transcript
+                                segment_transcript.unlink()
+                                
+                            except Exception as e:
+                                logger.debug(f"Segment {i+1} transcription failed: {e}")
+                                continue
+                        
+                        # Combine all segments
+                        lyrics = "\n\n".join(all_lyrics)
+                        
+                        # Clean up sliced audio files
+                        if slice_dir and slice_dir.exists():
+                            import shutil
+                            shutil.rmtree(slice_dir, ignore_errors=True)
+                    else:
+                        # Fallback: transcribe full audio
+                        transcript_path = transcriber.transcribe(
+                            vocals_path,
+                            method=method,
+                            music_mode=True
+                        )
+                        
+                        with open(transcript_path, "r", encoding="utf-8") as f:
+                            transcript_content = f.read()
+                        
+                        # Extract just the lyrics part
+                        if "─" in transcript_content:
+                            parts = transcript_content.split("─" * 80, 1)
+                            if len(parts) > 1:
+                                lyrics = parts[1].strip()
+                            else:
+                                lyrics = transcript_content.strip()
+                        else:
+                            lyrics = transcript_content.strip()
+                        
+                        # Clean up transcript
+                        if transcript_path.exists():
+                            transcript_path.unlink()
+                    
+                    console.print(" [green]done[/green]")
+                    
+                    # Clean up intermediate files immediately after transcription
+                    # 1. Converted WAV file (created by converter)
+                    wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
+                    if wav_file.exists() and wav_file != audio_path:
+                        wav_file.unlink()
+                        logger.debug(f"Cleaned up converted WAV: {wav_file.name}")
+                    
+                    # 2. Separated vocals file (created by demucs)
+                    vocals_file = audio_path.parent / f"{track_name}_vocals.wav"
+                    if vocals_file.exists() and vocals_file != audio_path:
+                        vocals_file.unlink()
+                        logger.debug(f"Cleaned up separated vocals: {vocals_file.name}")
+                    
+                    # Create clean lyrics file
+                    lyrics_path = audio_path.parent / f"{track_name}_lyrics.txt"
+                    lyrics_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Smart hallucination detection for instrumental music
+                    # Whisper sometimes generates common phrases when there's no actual speech
+                    
+                    # Known Whisper hallucination patterns
+                    hallucination_patterns = {
+                        # YouTube/video watermarks (English)
+                        "thank you for watching", "thanks for watching",
+                        "please subscribe", "like and subscribe",
+                        "don't forget to subscribe",
+                        # YouTube/video watermarks (Spanish)
+                        "suscríbete al canal", "suscríbete", "dale like",
+                        "gracias por ver", "no olvides suscribirte",
+                        # YouTube/video watermarks (Portuguese)
+                        "inscreva-se no canal", "inscreva-se", "deixe seu like",
+                        # Transcription service watermarks
+                        "transcription by castingwords",
+                        "high-quality transcription",
+                        "transcribed by",
+                        "subtítulos realizados por", "subtitles by",
+                        "amara.org",
+                        # Generic filler
+                        "we'll be right back",
+                        "thank you", "thanks",
+                        # Music-specific hallucinations
+                        "music playing", "music",
+                    }
+                    
+                    lyrics_lower = lyrics.lower().strip()
+                    word_count = len(lyrics.split())
+                    line_count = len([line for line in lyrics.split('\n') if line.strip()])
+                    
+                    # Check if entire transcript matches a hallucination pattern
+                    is_exact_hallucination = lyrics_lower in hallucination_patterns
+                    
+                    # Check if transcript contains hallucination phrases
+                    has_hallucination_phrase = any(phrase in lyrics_lower for phrase in hallucination_patterns)
+                    
+                    # Hallucination detection logic:
+                    # 1. Exact match to known hallucination → instrumental
+                    # 2. Very short (< 3 words) → likely hallucination
+                    # 3. Short (< 10 words) + contains hallucination phrase → instrumental
+                    # 4. Single line + hallucination phrase → instrumental
+                    # 5. Otherwise → keep it (could be valid sparse lyrics)
+                    
+                    is_hallucination = (
+                        is_exact_hallucination or
+                        word_count < 3 or
+                        (word_count < 10 and has_hallucination_phrase) or
+                        (line_count == 1 and has_hallucination_phrase)
+                    )
+                    
+                    if is_hallucination:
+                        logger.debug(f"Detected hallucination: '{lyrics[:50]}...' ({word_count} words)")
+                        lyrics = "[Instrumental - No Speech Detected]"
+                    
+                    # Reuse metadata from initial analysis (no need to analyze again)
+                    metadata = music_metadata
+                    
+                    # Write clean lyrics file with metadata header
+                    with open(lyrics_path, "w", encoding="utf-8") as f:
+                        # Write metadata header (only measurable facts)
+                        f.write(f"Track: {audio_path.stem}\n")
+                        if metadata:
+                            if metadata.get("duration_formatted"):
+                                f.write(f"Duration: {metadata['duration_formatted']}\n")
+                            if metadata.get("tempo") and metadata.get("tempo") > 0:
+                                f.write(f"Tempo: {metadata['tempo']:.0f} BPM\n")
+                            if metadata.get("key") and metadata.get("key") != "Unknown":
+                                f.write(f"Key: {metadata['key']}\n")
+                        f.write("\n")
+                        
+                        # Write lyrics
+                        f.write(lyrics + "\n")
+                    
+                    # Report status based on content
+                    if lyrics == "[Instrumental - No Speech Detected]":
+                        console.print(f"  [yellow]INST[/yellow] Instrumental: {lyrics_path.name}")
+                        results.append({"file": audio_path.name, "status": "instrumental", "lyrics": lyrics_path})
+                    else:
+                        console.print(f"  [green]OK[/green] Lyrics: {lyrics_path.name}")
+                        results.append({"file": audio_path.name, "status": "success", "lyrics": lyrics_path})
+                    
+                    console.print()
+                    
+                except TranscriptionError as e:
+                    # Check if it's instrumental (no speech detected)
+                    if "No speech detected" in str(e) or "instrumental" in str(e).lower():
+                        console.print(f"  [dim]Cleaning up...[/dim]", end="")
+                        
+                        # Clean up intermediate files
+                        # 1. Converted WAV file
+                        wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
+                        if wav_file.exists() and wav_file != audio_path:
+                            wav_file.unlink()
+                            logger.debug(f"Cleaned up converted WAV: {wav_file.name}")
+                        
+                        # 2. Separated vocals file (use vocals_path directly)
+                        if vocals_path and vocals_path.exists() and vocals_path != audio_path:
+                            vocals_path.unlink()
+                            logger.debug(f"Cleaned up separated vocals: {vocals_path.name}")
+                        
+                        console.print(" [green]done[/green]")
+                        
+                        # Reuse music metadata from initial analysis
+                        metadata = music_metadata
+                        
+                        # Create instrumental marker file with metadata
+                        lyrics_path = audio_path.parent / f"{track_name}_lyrics.txt"
+                        lyrics_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(lyrics_path, "w", encoding="utf-8") as f:
+                            # Write metadata header
+                            f.write(f"Track: {audio_path.stem}\n")
+                            if metadata:
+                                if metadata.get("duration_formatted"):
+                                    f.write(f"Duration: {metadata['duration_formatted']}\n")
+                                if metadata.get("tempo"):
+                                    f.write(f"Tempo: {metadata['tempo']:.0f} BPM\n")
+                                if metadata.get("key"):
+                                    f.write(f"Key: {metadata['key']}\n")
+                                if metadata.get("genre_hints"):
+                                    f.write(f"Style: {', '.join(metadata['genre_hints'])}\n")
+                            f.write("\n")
+                            f.write("[Instrumental - No Speech Detected]\n")
+                        
+                        console.print(f"  [yellow]INST[/yellow] Instrumental: {lyrics_path.name}")
+                        console.print()
+                        
+                        results.append({"file": audio_path.name, "status": "instrumental", "lyrics": lyrics_path})
+                    else:
+                        raise
+                
+            except Exception as e:
+                # Check if it's instrumental (expected, not an error)
+                if "No speech detected" in str(e) or "instrumental" in str(e).lower():
+                    # Clean up intermediate files
+                    wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
+                    if wav_file.exists() and wav_file != audio_path:
+                        wav_file.unlink()
+                    
+                    if vocals_path and vocals_path.exists() and vocals_path != audio_path:
+                        vocals_path.unlink()
+                    
+                    console.print(f"  [yellow]INST[/yellow] Instrumental (no vocals detected)")
+                    console.print()
+                    results.append({"file": audio_path.name, "status": "instrumental"})
+                else:
+                    # Actual failure
+                    logger.error(f"Failed to process {audio_path.name}: {e}")
+                    console.print(f"  [red]FAIL[/red] Failed: {e}")
+                    console.print()
+                    results.append({"file": audio_path.name, "status": "failed", "error": str(e)})
+                
+                if not continue_on_error:
+                    raise typer.Exit(1)
+        
+        # Print summary
+        console.print()
+        console.print("[bold]Summary:[/bold]")
+        success_count = sum(1 for r in results if r["status"] == "success")
+        instrumental_count = sum(1 for r in results if r["status"] == "instrumental")
+        failed_count = sum(1 for r in results if r["status"] == "failed")
+        
+        console.print(f"  [green]With Lyrics:[/green] {success_count}")
+        console.print(f"  [yellow]Instrumental:[/yellow] {instrumental_count}")
+        console.print(f"  [red]Failed:[/red] {failed_count}")
+        console.print()
+        
+        if failed_count > 0:
+            console.print("[yellow]Failed files:[/yellow]")
+            for result in results:
+                if result["status"] == "failed":
+                    console.print(f"  - {result['file']}: {result.get('error', 'Unknown error')}")
+            console.print()
+    
+    except ScribeError as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
+        logger.exception("Unexpected error in music transcription")
+        raise typer.Exit(1)
+
+
 @app.command(name="rec")
 def rec_shortcut(
     name: Optional[str] = typer.Argument(None, help="Meeting name (optional)")
@@ -768,7 +1625,12 @@ def joke(
     provider: Optional[str] = typer.Option(
         None,
         "--provider",
-        help="AI provider to use (openai, xai)"
+        help="AI provider to use (openai, xai, gemini, anthropic)"
+    ),
+    bakeoff: bool = typer.Option(
+        None,
+        "--bakeoff/--no-bakeoff",
+        help="Run joke bake-off across all providers (default: from env SCRIBE_ENABLE_JOKE_BAKEOFF)"
     )
 ):
     """
@@ -819,6 +1681,10 @@ def joke(
         if archetype is not None:
             humor_config.archetype = archetype
         
+        # Determine if bakeoff is enabled
+        import os
+        enable_bakeoff = bakeoff if bakeoff is not None else os.getenv("SCRIBE_ENABLE_JOKE_BAKEOFF", "false").lower() == "true"
+        
         # Generate joke with progress
         from rich.progress import Progress, SpinnerColumn, TextColumn
         with Progress(
@@ -828,18 +1694,41 @@ def joke(
             transient=True
         ) as progress:
             task = progress.add_task("Generating joke...", total=None)
-            result = generate_transcript_joke(transcript_file, humor_config, provider_name=provider)
-        
-        console.print()
-        
-        if result:
-            joke_text, comedy_style = result
-            console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
-            console.print()
-        else:
-            console.print("[bold yellow]Warning:[/bold yellow] Failed to generate joke")
-            console.print("[dim]Check your OpenAI API key and try again[/dim]")
-            raise typer.Exit(1)
+            
+            if enable_bakeoff:
+                # Run bake-off
+                from scribe.utils.joke_bakeoff import run_joke_bakeoff
+                
+                # Read transcript
+                transcript = transcript_file.read_text(encoding='utf-8')
+                
+                try:
+                    bakeoff_result = run_joke_bakeoff(transcript, humor_config)
+                    joke_text = bakeoff_result['joke']
+                    
+                    console.print()
+                    console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
+                    console.print()
+                    return
+                    
+                except Exception as e:
+                    console.print(f"[yellow]Bake-off failed: {e}, falling back to single provider[/yellow]")
+                    enable_bakeoff = False
+            
+            if not enable_bakeoff:
+                # Standard single-provider approach
+                result = generate_transcript_joke(transcript_file, humor_config, provider_name=provider)
+                
+                console.print()
+                
+                if result:
+                    joke_text, comedy_style = result
+                    console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
+                    console.print()
+                else:
+                    console.print("[bold yellow]Warning:[/bold yellow] Failed to generate joke")
+                    console.print("[dim]Check your API key and try again[/dim]")
+                    raise typer.Exit(1)
             
     except ScribeError as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
@@ -873,6 +1762,11 @@ def meme(
         False,
         "--show-reasoning", "-r",
         help="Display GPT-5's reasoning process (Glass Box Transparency)"
+    ),
+    bakeoff: bool = typer.Option(
+        None,
+        "--bakeoff/--no-bakeoff",
+        help="Run concept bake-off across all providers (default: from env SCRIBE_ENABLE_MEME_BAKEOFF)"
     )
 ):
     """
@@ -929,6 +1823,11 @@ def meme(
             transient=True
         ) as progress:
             task = progress.add_task("Generating meme...", total=None)
+            
+            # Determine if bakeoff is enabled
+            import os
+            enable_bakeoff = bakeoff if bakeoff is not None else os.getenv("SCRIBE_ENABLE_MEME_BAKEOFF", "false").lower() == "true"
+            
             if output:
                 # Use specified output path
                 meme_result = generate_meeting_meme(
@@ -936,7 +1835,8 @@ def meme(
                     output_dir=output.parent if output.parent != Path('.') else None,
                     api_key=None,  # Let provider system choose the right key
                     config=meme_config,
-                    show_reasoning=show_reasoning
+                    show_reasoning=show_reasoning,
+                    enable_bakeoff=enable_bakeoff
                 )
                 if meme_result:
                     meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
@@ -953,7 +1853,8 @@ def meme(
                     transcript_file,
                     api_key=None,  # Let provider system choose the right key
                     config=meme_config,
-                    show_reasoning=show_reasoning
+                    show_reasoning=show_reasoning,
+                    enable_bakeoff=enable_bakeoff
                 )
                 meme_path = meme_result["final_path"] if (meme_result and isinstance(meme_result, dict)) else meme_result
             
@@ -1175,8 +2076,9 @@ def doctor():
     
     console.print()
     console.print(Panel.fit(
-        "[bold cyan]Scribe System Diagnostics[/bold cyan]",
-        border_style="cyan"
+        f"[bold cyan]Scribe System Diagnostics[/bold cyan] [dim]v{__version__}[/dim]",
+        border_style="cyan",
+        padding=(0, 2)
     ))
     console.print()
     
@@ -1184,27 +2086,32 @@ def doctor():
     diagnostics = SystemDiagnostics()
     results = diagnostics.run_all_checks()
     
-    # Display results
+    # Display results with enhanced formatting
     for result in results:
         # Status icon and color
         if result.status == "pass":
-            icon = "✓"
-            color = "green"
+            status_mark = "[bold green]PASS[/bold green]"
+            name_color = "white"
+            msg_color = "green"
         elif result.status == "warn":
-            icon = "⚠"
-            color = "yellow"
+            status_mark = "[bold yellow]WARN[/bold yellow]"
+            name_color = "white"
+            msg_color = "yellow"
         else:
-            icon = "✗"
-            color = "red"
+            status_mark = "[bold red]FAIL[/bold red]"
+            name_color = "white"
+            msg_color = "red"
         
-        # Print result
-        console.print(f"[{color}]{icon}[/{color}] [bold]{result.name}:[/bold] {result.message}")
+        # Print result with color coding
+        console.print(f"{status_mark} [bold {name_color}]{result.name}:[/bold {name_color}] [{msg_color}]{result.message}[/{msg_color}]")
         
         if result.details:
-            console.print(f"  [dim]{result.details}[/dim]")
+            # Multi-line details with proper indentation
+            for line in result.details.split('\n'):
+                console.print(f"  [dim]{line}[/dim]")
         
         if result.fix_suggestion:
-            console.print(f"  [cyan]→[/cyan] {result.fix_suggestion}")
+            console.print(f"  [bold cyan]Fix:[/bold cyan] [white]{result.fix_suggestion}[/white]")
         
         console.print()
     
@@ -1212,25 +2119,181 @@ def doctor():
     pass_count, warn_count, fail_count = diagnostics.get_summary()
     total = len(results)
     
-    console.print("─" * 60)
+    # Summary section with visual separator
+    console.print()
+    console.print("[dim]" + "=" * 60 + "[/dim]")
     console.print()
     
     if fail_count == 0 and warn_count == 0:
-        console.print("[bold green]✓ All checks passed![/bold green]")
+        console.print("[bold green]SUCCESS:[/bold green] [white]All checks passed![/white]")
         console.print("[dim]Your system is ready to use Scribe.[/dim]")
     elif fail_count == 0:
-        console.print(f"[bold yellow]⚠ {warn_count} warning(s)[/bold yellow]")
+        console.print(f"[bold yellow]WARNING:[/bold yellow] [white]{warn_count} warning(s) detected[/white]")
         console.print("[dim]Scribe will work, but some features may be limited.[/dim]")
     else:
-        console.print(f"[bold red]✗ {fail_count} critical issue(s)[/bold red]")
+        console.print(f"[bold red]CRITICAL:[/bold red] [white]{fail_count} critical issue(s) found[/white]")
         console.print("[dim]Please fix the issues above before using Scribe.[/dim]")
     
     console.print()
-    console.print(f"[dim]Summary: {pass_count} passed, {warn_count} warnings, {fail_count} failed[/dim]")
+    
+    # Summary stats with color coding
+    summary_parts = []
+    if pass_count > 0:
+        summary_parts.append(f"[green]{pass_count} passed[/green]")
+    if warn_count > 0:
+        summary_parts.append(f"[yellow]{warn_count} warnings[/yellow]")
+    if fail_count > 0:
+        summary_parts.append(f"[red]{fail_count} failed[/red]")
+    
+    console.print(f"[dim]Summary:[/dim] {', '.join(summary_parts)}")
     console.print()
+    
+    # Show prioritized recommendations with better formatting
+    recommendations = diagnostics.get_recommendations()
+    if recommendations:
+        console.print("[bold cyan]Recommended Actions:[/bold cyan]")
+        for i, rec in enumerate(recommendations[:5], 1):  # Show top 5
+            if "CRITICAL" in rec:
+                console.print(f"  [red]{i}.[/red] [white]{rec}[/white]")
+            else:
+                console.print(f"  [yellow]{i}.[/yellow] [white]{rec}[/white]")
+        console.print()
     
     # Exit with error code if there are failures
     if fail_count > 0:
+        raise typer.Exit(1)
+
+
+@app.command(name="health")
+def health_check(
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider", "-p",
+        help="Check specific provider (openai, xai, anthropic, gemini)"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force", "-f",
+        help="Force fresh health check (ignore cache)"
+    )
+):
+    """
+    Check health status of AI providers.
+    
+    Validates API connectivity and response times for configured providers.
+    Useful for troubleshooting provider issues.
+    """
+    import os
+    from scribe.providers.health import get_health_monitor
+    
+    console.print()
+    console.print(Panel.fit(
+        "[bold cyan]Provider Health Check[/bold cyan]",
+        border_style="cyan"
+    ))
+    console.print()
+    
+    # Get health monitor
+    monitor = get_health_monitor()
+    
+    # Collect API keys
+    api_keys = {}
+    if os.getenv("OPENAI_API_KEY"):
+        api_keys["openai"] = os.getenv("OPENAI_API_KEY")
+    if os.getenv("XAI_API_KEY"):
+        api_keys["xai"] = os.getenv("XAI_API_KEY")
+    if os.getenv("ANTHROPIC_API_KEY"):
+        api_keys["anthropic"] = os.getenv("ANTHROPIC_API_KEY")
+    if os.getenv("GEMINI_API_KEY"):
+        api_keys["gemini"] = os.getenv("GEMINI_API_KEY")
+    
+    if not api_keys:
+        console.print("[yellow]No API keys configured. Set environment variables:[/yellow]")
+        console.print("  - OPENAI_API_KEY")
+        console.print("  - XAI_API_KEY")
+        console.print("  - ANTHROPIC_API_KEY")
+        console.print("  - GEMINI_API_KEY")
+        console.print()
+        raise typer.Exit(1)
+    
+    # Check specific provider or all
+    providers_to_check = [provider] if provider else list(api_keys.keys())
+    
+    # Create results table
+    table = Table(title="Provider Health Status")
+    table.add_column("Provider", style="cyan", no_wrap=True)
+    table.add_column("Status", style="white")
+    table.add_column("Response Time", style="white")
+    table.add_column("Details", style="dim")
+    
+    all_healthy = True
+    
+    for provider_name in providers_to_check:
+        if provider_name not in api_keys:
+            console.print(f"[yellow]Skipping {provider_name}: No API key configured[/yellow]")
+            continue
+        
+        console.print(f"Checking {provider_name}...", end=" ")
+        
+        try:
+            status = monitor.check_provider_health(
+                provider_name,
+                api_keys[provider_name],
+                force=force
+            )
+            
+            if status.is_healthy:
+                status_text = "[green]✓ Healthy[/green]"
+                response_time = f"{status.response_time_ms:.0f}ms" if status.response_time_ms else "N/A"
+                details = "API responding normally"
+                console.print("[green]✓[/green]")
+            else:
+                status_text = "[red]✗ Unhealthy[/red]"
+                response_time = "N/A"
+                details = status.error_message or "Unknown error"
+                all_healthy = False
+                console.print("[red]✗[/red]")
+            
+            table.add_row(
+                provider_name.upper(),
+                status_text,
+                response_time,
+                details
+            )
+            
+        except Exception as e:
+            console.print(f"[red]✗[/red]")
+            table.add_row(
+                provider_name.upper(),
+                "[red]✗ Error[/red]",
+                "N/A",
+                str(e)
+            )
+            all_healthy = False
+    
+    console.print()
+    console.print(table)
+    console.print()
+    
+    # Summary
+    if all_healthy:
+        console.print("[bold green]✓ All providers are healthy[/bold green]")
+    else:
+        console.print("[bold yellow]⚠ Some providers have issues[/bold yellow]")
+        console.print("[dim]Check API keys and network connectivity[/dim]")
+    
+    console.print()
+    
+    # Feature support info
+    console.print("[dim]Feature support by provider:[/dim]")
+    console.print("  [cyan]Jokes:[/cyan] OpenAI, XAI, Anthropic, Gemini")
+    console.print("  [cyan]Notes:[/cyan] OpenAI, XAI, Anthropic, Gemini")
+    console.print("  [cyan]Memes (text):[/cyan] OpenAI, XAI, Anthropic, Gemini")
+    console.print("  [cyan]Memes (image):[/cyan] OpenAI, XAI, Gemini")
+    console.print("  [cyan]Transcription:[/cyan] OpenAI only")
+    console.print()
+    
+    if not all_healthy:
         raise typer.Exit(1)
 
 
