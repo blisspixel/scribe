@@ -41,6 +41,233 @@ class Converter:
         
         logger.debug(f"Using ffmpeg: {self.ffmpeg_path}")
     
+    def _analyze_audio_loudness(
+        self,
+        input_file: Path,
+        duration: Optional[float],
+        show_progress: bool,
+        progress_callback: Optional[callable]
+    ) -> dict:
+        """
+        Analyze audio for optimal loudness normalization parameters.
+        
+        Returns dict with measured_i, measured_tp, measured_lra, measured_thresh.
+        """
+        logger.info("Analyzing audio for optimal normalization...")
+        
+        analyze_command = [
+            str(self.ffmpeg_path),
+            "-hide_banner",
+            "-loglevel", "info",
+            "-i", str(input_file),
+            "-vn",
+            "-map", "0:a:0?",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+            "-f", "null",
+            "-"
+        ]
+        
+        if show_progress:
+            progress_ctx = Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]Analyzing audio for optimal normalization..."),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False
+            )
+            progress_ctx.__enter__()
+            task = progress_ctx.add_task("Analyzing", total=None)
+        else:
+            progress_ctx = None
+        
+        defaults = {
+            "measured_i": "-16",
+            "measured_tp": "-1.5",
+            "measured_lra": "11",
+            "measured_thresh": "-27"
+        }
+        
+        try:
+            if progress_callback:
+                progress_callback(0.05)
+            
+            result = subprocess.run(
+                analyze_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(60, duration * 2) if duration else 300
+            )
+            
+            if progress_callback:
+                progress_callback(0.50)
+            
+            # Extract loudnorm measurements from stderr
+            import json
+            import re
+            
+            json_match = re.search(
+                r'\{[^}]*"input_i"[^}]*"input_tp"[^}]*"input_lra"[^}]*"input_thresh"[^}]*\}',
+                result.stderr,
+                re.DOTALL
+            )
+            
+            if json_match:
+                try:
+                    loudnorm_data = json.loads(json_match.group())
+                    measured = {
+                        "measured_i": loudnorm_data.get("input_i", "-16"),
+                        "measured_tp": loudnorm_data.get("input_tp", "-1.5"),
+                        "measured_lra": loudnorm_data.get("input_lra", "11"),
+                        "measured_thresh": loudnorm_data.get("input_thresh", "-27")
+                    }
+                    logger.info(f"Audio analysis complete: I={measured['measured_i']}, TP={measured['measured_tp']}")
+                    if show_progress and progress_ctx:
+                        progress_ctx.update(task, description="Analysis complete")
+                    return measured
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse loudnorm JSON: {e}")
+            else:
+                logger.warning("Could not find loudnorm JSON in output")
+            
+            if show_progress and progress_ctx:
+                progress_ctx.update(task, description="[yellow]⚠ Using default settings")
+            return defaults
+            
+        except Exception as e:
+            logger.warning(f"Audio analysis failed, using defaults: {e}")
+            if show_progress and progress_ctx:
+                progress_ctx.update(task, description="[yellow]⚠ Analysis failed, using defaults")
+            return defaults
+        finally:
+            if show_progress and progress_ctx:
+                progress_ctx.__exit__(None, None, None)
+    
+    def _build_conversion_command(
+        self,
+        input_file: Path,
+        output_file: Path,
+        sample_rate: int,
+        channels: int,
+        loudness_params: dict
+    ) -> list:
+        """Build ffmpeg command for audio conversion with normalization."""
+        return [
+            str(self.ffmpeg_path),
+            "-hide_banner",
+            "-loglevel", "error",
+            "-threads", "0",
+            "-y",
+            "-i", str(input_file),
+            "-vn",
+            "-map", "0:a:0?",
+            "-af", (
+                f"loudnorm=I=-16:TP=-1.5:LRA=11:"
+                f"measured_I={loudness_params['measured_i']}:"
+                f"measured_TP={loudness_params['measured_tp']}:"
+                f"measured_LRA={loudness_params['measured_lra']}:"
+                f"measured_thresh={loudness_params['measured_thresh']}:"
+                f"linear=true,acompressor=threshold=-18dB:ratio=4:attack=5:release=50,"
+                f"alimiter=limit=0.95"
+            ),
+            "-ac", str(channels),
+            "-ar", str(sample_rate),
+            "-c:a", "pcm_s16le",
+            str(output_file)
+        ]
+    
+    def _execute_conversion_with_progress(
+        self,
+        command: list,
+        input_file: Path,
+        duration: Optional[float],
+        show_progress: bool,
+        progress_callback: Optional[callable]
+    ) -> None:
+        """Execute ffmpeg conversion with progress monitoring."""
+        start_time = time.time()
+        timeout_seconds = max(300, (duration * 2) if duration else 600)
+        expected_total_time = max(15, (duration / 25)) if duration else 30
+        
+        if show_progress:
+            progress_ctx = Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False
+            )
+            progress_ctx.__enter__()
+            task = progress_ctx.add_task("Converting to WAV (with audio normalization)", total=100)
+        else:
+            progress_ctx = None
+            task = None
+        
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                stdin=subprocess.DEVNULL
+            )
+            
+            last_update = time.time()
+            
+            while process.poll() is None:
+                current_time = time.time()
+                elapsed = current_time - start_time
+                
+                if elapsed > timeout_seconds:
+                    process.kill()
+                    raise ProcessError(
+                        f"Conversion timed out after {timeout_seconds}s",
+                        context={"timeout": timeout_seconds, "input_file": str(input_file)}
+                    )
+                
+                if current_time - last_update > 1.0:
+                    if duration and duration > 0:
+                        conversion_progress = min(1.0, elapsed / expected_total_time)
+                        progress_ratio = 0.50 + (conversion_progress * 0.50)
+                        overall_progress = progress_ratio * 100
+                        
+                        if show_progress and progress_ctx:
+                            progress_ctx.update(task, completed=overall_progress)
+                        if progress_callback:
+                            progress_callback(progress_ratio)
+                    else:
+                        if progress_callback:
+                            progress_callback(0.75)
+                    
+                    last_update = current_time
+                
+                time.sleep(0.5)
+            
+            try:
+                stdout, stderr = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                raise ProcessError("Process hung during final communication")
+            
+            if show_progress and progress_ctx:
+                progress_ctx.update(task, description="Converted to WAV", completed=100)
+                progress_ctx.__exit__(None, None, None)
+            
+            if process.returncode != 0:
+                raise ProcessError(
+                    f"ffmpeg conversion failed with return code {process.returncode}",
+                    context={"return_code": process.returncode, "stderr": stderr[-500:] if stderr else None}
+                )
+                
+        except ProcessError:
+            raise
+        except Exception as e:
+            raise ProcessError(f"Conversion failed: {e}")
+    
     def convert_to_wav(
         self,
         input_file: Path,
@@ -53,13 +280,16 @@ class Converter:
         """
         Convert audio/video to optimized WAV for transcription.
         
-        This creates a 16kHz mono PCM WAV file optimized for Whisper models.
+        Creates a 16kHz mono PCM WAV file optimized for Whisper models with
+        two-pass loudness normalization for maximum quality.
         
         Args:
             input_file: Path to input file (MP4, MP3, etc.)
             output_file: Optional output path (auto-generated if None)
             sample_rate: Target sample rate (default: 16000 Hz)
             channels: Number of channels (default: 1 for mono)
+            show_progress: Show progress indicators
+            progress_callback: Optional callback for progress updates
             
         Returns:
             Path to converted WAV file
@@ -77,11 +307,9 @@ class Converter:
         
         # Generate output filename if not provided
         if output_file is None:
-            output_file = input_file.with_name(
-                f"{input_file.stem}_16k_mono.wav"
-            )
+            output_file = input_file.with_name(f"{input_file.stem}_16k_mono.wav")
         
-        # Delete any existing cached file to ensure fresh conversion
+        # Delete any existing cached file
         if output_file.exists():
             logger.info(f"Removing cached WAV: {output_file.name}")
             output_file.unlink()
@@ -93,236 +321,26 @@ class Converter:
         if duration:
             logger.debug(f"Input duration: {duration:.1f}s ({duration/3600:.2f}h)")
         
-        # Two-pass loudnorm for maximum quality
-        # Pass 1: Analyze audio to get optimal normalization parameters
-        logger.info("Analyzing audio for optimal normalization...")
-        
-        analyze_command = [
-            str(self.ffmpeg_path),
-            "-hide_banner",
-            "-loglevel", "info",
-            "-i", str(input_file),
-            "-vn",
-            "-map", "0:a:0?",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
-            "-f", "null",
-            "-"
-        ]
-        
-        # Show analysis progress (if enabled)
-        if show_progress:
-            progress_ctx = Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]Analyzing audio for optimal normalization..."),
-                TimeElapsedColumn(),
-                console=console,
-                transient=False
-            )
-            progress_ctx.__enter__()
-            task = progress_ctx.add_task("Analyzing", total=None)
-        else:
-            progress_ctx = None
-            task = None
-        
-        try:
-            # Call progress callback at start of analysis
-            # Analysis takes ~60s for 60 min audio (half of preparing phase)
-            # Show 5% immediately so user knows something is happening
-            if progress_callback:
-                progress_callback(0.05)
-            
-            result = subprocess.run(
-                analyze_command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=max(60, duration * 2) if duration else 300
-            )
-            
-            # Call progress callback after analysis (halfway through preparing = 50% of 18% = 9%)
-            if progress_callback:
-                progress_callback(0.50)
-            
-            # Extract loudnorm measurements from stderr
-            import json
-            import re
-            
-            # Find JSON block in stderr (multi-line friendly)
-            json_match = re.search(
-                r'\{[^}]*"input_i"[^}]*"input_tp"[^}]*"input_lra"[^}]*"input_thresh"[^}]*\}',
-                result.stderr,
-                re.DOTALL
-            )
-            
-            if json_match:
-                try:
-                    loudnorm_data = json.loads(json_match.group())
-                    measured_i = loudnorm_data.get("input_i", "-16")
-                    measured_tp = loudnorm_data.get("input_tp", "-1.5")
-                    measured_lra = loudnorm_data.get("input_lra", "11")
-                    measured_thresh = loudnorm_data.get("input_thresh", "-27")
-                    logger.info(f"Audio analysis complete: I={measured_i}, TP={measured_tp}, LRA={measured_lra}")
-                    if show_progress and progress_ctx:
-                        progress_ctx.update(task, description="Analysis complete")
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse loudnorm JSON: {e}")
-                    logger.debug(f"stderr output: {result.stderr[-500:]}")
-                    measured_i = "-16"
-                    measured_tp = "-1.5"
-                    measured_lra = "11"
-                    measured_thresh = "-27"
-                    if show_progress and progress_ctx:
-                        progress_ctx.update(task, description="[yellow]⚠ Using default settings")
-            else:
-                # Fallback to defaults if analysis fails
-                logger.warning("Could not find loudnorm JSON in output")
-                logger.debug(f"stderr output: {result.stderr[-500:]}")
-                measured_i = "-16"
-                measured_tp = "-1.5"
-                measured_lra = "11"
-                measured_thresh = "-27"
-                if show_progress and progress_ctx:
-                    progress_ctx.update(task, description="[yellow]⚠ Using default settings")
-        except Exception as e:
-            logger.warning(f"Audio analysis failed, using single-pass: {e}")
-            measured_i = "-16"
-            measured_tp = "-1.5"
-            measured_lra = "11"
-            measured_thresh = "-27"
-            if show_progress and progress_ctx:
-                progress_ctx.update(task, description="[yellow]⚠ Analysis failed, using defaults")
-        
-        # Close progress context if it was opened
-        if show_progress and progress_ctx:
-            progress_ctx.__exit__(None, None, None)
-        
-        # Pass 2: Apply normalization with measured parameters + compressor + limiter
-        logger.info("Applying normalization and processing...")
-        if show_progress:
-            console.print()
-        command = [
-            str(self.ffmpeg_path),
-            "-hide_banner",
-            "-loglevel", "error",
-            "-threads", "0",
-            "-y",
-            "-i", str(input_file),
-            "-vn",
-            "-map", "0:a:0?",
-            "-af", f"loudnorm=I=-16:TP=-1.5:LRA=11:measured_I={measured_i}:measured_TP={measured_tp}:measured_LRA={measured_lra}:measured_thresh={measured_thresh}:linear=true,acompressor=threshold=-18dB:ratio=4:attack=5:release=50,alimiter=limit=0.95",
-            "-ac", str(channels),
-            "-ar", str(sample_rate),
-            "-c:a", "pcm_s16le",
-            str(output_file)
-        ]
-        
-        # Execute conversion with progress
         start_time = time.time()
         
         try:
-            if show_progress:
-                progress_ctx = Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]{task.description}"),
-                    BarColumn(),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    TimeElapsedColumn(),
-                    console=console,
-                    transient=False
-                )
-                progress_ctx.__enter__()
-                task = progress_ctx.add_task("Converting to WAV (with audio normalization)", total=100)
-            else:
-                progress_ctx = None
-                task = None
-            
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                stdin=subprocess.DEVNULL  # Prevent hanging on input prompts
+            # Pass 1: Analyze audio for optimal normalization
+            loudness_params = self._analyze_audio_loudness(
+                input_file, duration, show_progress, progress_callback
             )
             
-            # Monitor progress with timeout
-            last_update = time.time()
-            timeout_seconds = max(300, (duration * 2) if duration else 600)  # At least 5 min, or 2x duration
+            # Pass 2: Apply normalization and convert
+            if show_progress:
+                console.print()
+            logger.info("Applying normalization and processing...")
             
-            # Two-pass operation: analyze + normalize + convert to WAV
-            # Estimate total time: two-pass loudnorm+compressor+limiter processes at ~25x real-time
-            # For a 60 min file, expect ~2.4 minutes total processing
-            expected_total_time = max(15, (duration / 25)) if duration else 30
+            command = self._build_conversion_command(
+                input_file, output_file, sample_rate, channels, loudness_params
+            )
             
-            while process.poll() is None:
-                current_time = time.time()
-                elapsed = current_time - start_time
-                
-                # Check for timeout
-                if elapsed > timeout_seconds:
-                    process.kill()
-                    raise ProcessError(
-                        f"Conversion timed out after {timeout_seconds}s",
-                        context={
-                            "timeout": timeout_seconds,
-                            "input_file": str(input_file),
-                            "duration": duration
-                        }
-                    )
-                
-                # Update progress bar based on elapsed time (throttled to 1 update per second)
-                if current_time - last_update > 1.0:
-                    # Calculate progress ratio
-                    if duration and duration > 0:
-                        # Smooth progress from 50-100% based on expected time
-                        # (0-50% was used for analysis phase)
-                        conversion_progress = min(1.0, elapsed / expected_total_time)
-                        progress_ratio = 0.50 + (conversion_progress * 0.50)  # 50% to 100%
-                        overall_progress = progress_ratio * 100
-                        
-                        # Update internal progress display if enabled
-                        if show_progress and progress_ctx:
-                            progress_ctx.update(task, completed=overall_progress)
-                        
-                        # Call external progress callback if provided
-                        if progress_callback:
-                            progress_callback(progress_ratio)
-                    else:
-                        # No duration info - just show that we're working (75%)
-                        if progress_callback:
-                            progress_callback(0.75)
-                    
-                    last_update = current_time
-                
-                time.sleep(0.5)
-            
-            # Get final output
-            try:
-                stdout, stderr = process.communicate(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                stdout, stderr = process.communicate()
-                raise ProcessError(
-                    "Process hung during final communication",
-                    context={"input_file": str(input_file)}
-                )
-            
-            # Complete progress
-            if show_progress and progress_ctx:
-                progress_ctx.update(task, description="Converted to WAV", completed=100)
-                progress_ctx.__exit__(None, None, None)
-            
-            if process.returncode != 0:
-                raise ProcessError(
-                    f"ffmpeg conversion failed with return code {process.returncode}",
-                    context={
-                        "command": " ".join(command),
-                        "return_code": process.returncode,
-                        "stderr": stderr[-500:] if stderr else None
-                    }
-                )
-            
-            elapsed = time.time() - start_time
+            self._execute_conversion_with_progress(
+                command, input_file, duration, show_progress, progress_callback
+            )
             
             # Verify output
             if not output_file.exists():
@@ -333,6 +351,7 @@ class Converter:
             
             verify_file_content(output_file, min_size=1024)
             
+            elapsed = time.time() - start_time
             output_size_mb = output_file.stat().st_size / (1024 * 1024)
             logger.info(
                 f"Conversion complete: {output_file.name} "
@@ -349,6 +368,67 @@ class Converter:
                 context={"input": str(input_file), "error": str(e)}
             )
     
+    def _execute_simple_conversion(
+        self,
+        command: list,
+        input_file: Path,
+        output_file: Path,
+        duration: Optional[float],
+        format_name: str
+    ) -> None:
+        """Execute simple ffmpeg conversion with spinner progress."""
+        start_time = time.time()
+        timeout_seconds = max(300, (duration * 2) if duration else 600)
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn(f"[bold blue]Converting to {format_name}..."),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False
+        ) as progress:
+            task = progress.add_task("Converting", total=None)
+            
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                stdin=subprocess.DEVNULL
+            )
+            
+            while process.poll() is None:
+                elapsed = time.time() - start_time
+                
+                if elapsed > timeout_seconds:
+                    process.kill()
+                    raise ProcessError(
+                        f"{format_name} conversion timed out after {timeout_seconds}s",
+                        context={"timeout": timeout_seconds, "input_file": str(input_file)}
+                    )
+                
+                time.sleep(0.1)
+                progress.update(task)
+            
+            try:
+                stdout, stderr = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                raise ProcessError(
+                    f"{format_name} process hung during final communication",
+                    context={"input_file": str(input_file)}
+                )
+            
+            if process.returncode != 0:
+                raise ProcessError(
+                    f"{format_name} conversion failed with return code {process.returncode}",
+                    context={
+                        "return_code": process.returncode,
+                        "stderr": stderr[-500:] if stderr else None
+                    }
+                )
+    
     def convert_to_mp3(
         self,
         input_file: Path,
@@ -358,7 +438,7 @@ class Converter:
         """
         Convert audio to optimized MP3 for OpenAI API.
         
-        This creates a mono 16kHz MP3 at specified bitrate, optimized
+        Creates a mono 16kHz MP3 at specified bitrate, optimized
         for API upload size limits.
         
         Args:
@@ -372,14 +452,12 @@ class Converter:
         Raises:
             ProcessError: If conversion fails
         """
-        # Validate input
         if not input_file.exists():
             raise AudioFormatError(
                 f"Input file does not exist: {input_file}",
                 context={"path": str(input_file)}
             )
         
-        # Generate output filename if not provided
         if output_file is None:
             output_file = input_file.with_suffix(".mp3")
         
@@ -391,8 +469,6 @@ class Converter:
         
         logger.info(f"Converting {input_file.name} to MP3 ({bitrate}kbps)...")
         
-        # Build ffmpeg command with loudnorm for consistent volume
-        # Apply same normalization as WAV for consistent perceived loudness
         command = [
             str(self.ffmpeg_path),
             "-hide_banner",
@@ -401,84 +477,21 @@ class Converter:
             "-y",
             "-i", str(input_file),
             "-vn",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",  # Single-pass for speed
-            "-ac", "1",  # Mono
-            "-ar", "16000",  # 16kHz
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ac", "1",
+            "-ar", "16000",
             "-codec:a", "libmp3lame",
             "-b:a", f"{bitrate}k",
             str(output_file)
         ]
         
-        # Get duration for better progress tracking
         duration = get_audio_duration(input_file)
-        
-        # Execute conversion
         start_time = time.time()
         
         try:
-            # Use spinner with live elapsed time
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]Converting to MP3..."),
-                TimeElapsedColumn(),
-                console=console,
-                transient=False
-            ) as progress:
-                task = progress.add_task("Converting", total=None)
-                
-                process = subprocess.Popen(
-                    command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    stdin=subprocess.DEVNULL  # Prevent hanging on input prompts
-                )
-                
-                # Poll process with timeout
-                timeout_seconds = max(300, (duration * 2) if duration else 600)
-                
-                while process.poll() is None:
-                    elapsed = time.time() - start_time
-                    
-                    # Check for timeout
-                    if elapsed > timeout_seconds:
-                        process.kill()
-                        raise ProcessError(
-                            f"MP3 conversion timed out after {timeout_seconds}s",
-                            context={
-                                "timeout": timeout_seconds,
-                                "input_file": str(input_file)
-                            }
-                        )
-                    
-                    time.sleep(0.1)
-                    # This keeps the progress display refreshing
-                    progress.update(task)
-                
-                # Get final output
-                try:
-                    stdout, stderr = process.communicate(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    stdout, stderr = process.communicate()
-                    raise ProcessError(
-                        "MP3 process hung during final communication",
-                        context={"input_file": str(input_file)}
-                    )
-                
-                if process.returncode != 0:
-                    raise ProcessError(
-                        f"MP3 conversion failed with return code {process.returncode}",
-                        context={
-                            "command": " ".join(command),
-                            "return_code": process.returncode,
-                            "stderr": stderr[-500:] if stderr else None
-                        }
-                    )
+            self._execute_simple_conversion(command, input_file, output_file, duration, "MP3")
             
             elapsed = time.time() - start_time
-            
-            # Verify output
             verify_file_content(output_file, min_size=1024)
             
             output_size_mb = output_file.stat().st_size / (1024 * 1024)

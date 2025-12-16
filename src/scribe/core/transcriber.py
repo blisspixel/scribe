@@ -305,6 +305,93 @@ class Transcriber:
                     logger.info("No OpenAI API key, falling back to local transcription")
                     return "local"
     
+    def _prepare_audio_for_method(
+        self,
+        audio_path: Path,
+        method: TranscriptionMethod
+    ) -> Path:
+        """Prepare audio file in optimal format for chosen transcription method."""
+        if method == "local":
+            if audio_path.suffix.lower() == '.wav':
+                logger.info("Using existing WAV file for local transcription")
+                return audio_path
+            logger.info("Converting to 16kHz mono WAV for local transcription...")
+            return self.converter.convert_to_wav(audio_path)
+        else:
+            # OpenAI API - check file size
+            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 24:
+                from scribe.utils.logging import console
+                console.print(f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]")
+                console.print(f"[cyan]Converting to compressed MP3...[/cyan]")
+                logger.info(f"File is {file_size_mb:.1f}MB, converting to compressed MP3...")
+                return self.converter.convert_to_mp3(audio_path, bitrate=48)
+            else:
+                logger.info(f"Using original file for OpenAI API ({file_size_mb:.1f}MB)")
+                return audio_path
+    
+    def _detect_language_for_music(self, audio_file: Path) -> Optional[str]:
+        """Detect language for music mode transcription."""
+        from scribe.core.local_whisper import LocalWhisperTranscriber
+        from scribe.utils.logging import console
+        
+        console.print("  [dim]Detecting language...[/dim]", end="")
+        
+        detector = LocalWhisperTranscriber(
+            model_size=self.config.default_model,
+            language=None,
+            gpu_config=self.gpu_config
+        )
+        detected_lang, confidence, has_speech = detector.detect_language(audio_file)
+        
+        if not has_speech:
+            console.print(" [yellow]no speech[/yellow]")
+            raise TranscriptionError("No speech detected in audio (file may be silent or contain only noise)")
+        
+        if detected_lang:
+            logger.info(f"Using detected language: {detected_lang} ({confidence:.1%} confidence)")
+            console.print(f" [green]{detected_lang.upper()}[/green] [dim]({confidence:.0%})[/dim]")
+            return detected_lang
+        else:
+            logger.info(f"Speech detected but uncertain language, using auto-detect")
+            console.print(f" [green]auto-detect[/green]")
+            return None
+    
+    def _attempt_fallback_transcription(
+        self,
+        audio_path: Path,
+        chosen_method: TranscriptionMethod,
+        session: Optional[TranscriptionSession],
+        custom_vocabulary: Optional["CustomVocabulary"],
+        music_mode: bool,
+        primary_error: Exception
+    ) -> Path:
+        """Attempt fallback transcription with alternate method."""
+        fallback_method = "openai" if chosen_method == "local" else "local"
+        logger.info(f"Attempting fallback to {fallback_method}...")
+        
+        # Convert to appropriate format for fallback
+        if fallback_method == "local":
+            audio_file = self.converter.convert_to_wav(audio_path)
+            transcript_path = self._transcribe_local(audio_file, session, custom_vocabulary, music_mode)
+        else:
+            if not self.config.openai_api_key:
+                raise TranscriptionError("OpenAI API key not configured for fallback")
+            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 24:
+                audio_file = self.converter.convert_to_mp3(audio_path, bitrate=48)
+            else:
+                audio_file = audio_path
+            transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
+        
+        logger.info(f"Fallback transcription successful with {fallback_method}")
+        
+        if session:
+            session.add_file(transcript_path, "transcript")
+            session.transcription_method = fallback_method
+        
+        return transcript_path
+    
     def transcribe(
         self,
         audio_path: Path,
@@ -327,16 +414,10 @@ class Transcriber:
             Path to transcript file
             
         Raises:
-            TranscriptionError: If all methods fail (unless music_mode handles it)
+            TranscriptionError: If all methods fail
             ValidationError: If file exceeds resource limits
-        
-        Notes:
-            Music mode provides:
-            - Clean lyrics-only output (no timestamps)
-            - Graceful handling of instrumental tracks
-            - Simplified error messages
         """
-        # Validate resource limits (prevent OOM)
+        # Validate resource limits
         logger.info("Validating audio file resource limits...")
         validate_audio_file(
             audio_path,
@@ -344,65 +425,18 @@ class Transcriber:
             max_duration_hours=self.config.max_audio_duration_hours
         )
         
-        # Choose method
+        # Choose method and prepare audio
         chosen_method = self.choose_method(method)
-        
-        # Convert audio to optimal format
-        if chosen_method == "local":
-            # Check if already a WAV file
-            if audio_path.suffix.lower() == '.wav':
-                logger.info("Using existing WAV file for local transcription")
-                audio_file = audio_path
-            else:
-                # Convert to 16kHz mono WAV for local transcription
-                logger.info("Converting to 16kHz mono WAV for local transcription...")
-                audio_file = self.converter.convert_to_wav(audio_path)
-        else:
-            # OpenAI supports mp3, mp4, mpeg, mpga, m4a, wav, webm directly
-            # No conversion needed unless file is too large (>25MB)
-            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-            if file_size_mb > 24:  # Leave 1MB buffer
-                from scribe.utils.logging import console
-                console.print(f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]")
-                console.print(f"[cyan]Converting to compressed MP3... (this may take a few minutes)[/cyan]")
-                logger.info(f"File is {file_size_mb:.1f}MB, converting to compressed MP3...")
-                audio_file = self.converter.convert_to_mp3(audio_path, bitrate=48)
-            else:
-                logger.info(f"Using original file for OpenAI API ({file_size_mb:.1f}MB)")
-                audio_file = audio_path
+        audio_file = self._prepare_audio_for_method(audio_path, chosen_method)
         
         if session:
             session.add_file(audio_file, "audio")
         
-        # For music mode with local transcription, detect language first
+        # Detect language for music mode if needed
         if music_mode and chosen_method == "local" and self.config.default_language is None:
-            from scribe.core.local_whisper import LocalWhisperTranscriber
-            from scribe.utils.logging import console
-            
-            console.print("  [dim]Detecting language...[/dim]", end="")
-            
-            detector = LocalWhisperTranscriber(
-                model_size=self.config.default_model,
-                language=None,  # Auto-detect
-                gpu_config=self.gpu_config
-            )
-            detected_lang, confidence, has_speech = detector.detect_language(audio_file)
-            
-            if not has_speech:
-                # No speech detected during language detection - definitely instrumental
-                console.print(" [yellow]no speech[/yellow]")
-                raise TranscriptionError("No speech detected in audio (file may be silent or contain only noise)")
-            
+            detected_lang = self._detect_language_for_music(audio_file)
             if detected_lang:
-                # Use detected language for better accuracy
-                logger.info(f"Using detected language: {detected_lang} ({confidence:.1%} confidence)")
-                console.print(f" [green]{detected_lang.upper()}[/green] [dim]({confidence:.0%})[/dim]")
                 self.config.default_language = detected_lang
-            else:
-                # Speech detected but uncertain language - let Whisper auto-detect during transcription
-                logger.info(f"Speech detected but uncertain language, using auto-detect")
-                console.print(f" [green]auto-detect[/green]")
-                # Keep language as None for auto-detection
         
         # Try primary method
         try:
@@ -417,47 +451,27 @@ class Transcriber:
             return transcript_path
             
         except TranscriptionError as e:
-            # In music mode, instrumental detection is expected, not an error
+            # In music mode, instrumental detection is expected
             if music_mode and "No speech detected" in str(e):
                 logger.debug(f"No speech detected in music file (likely instrumental)")
                 raise
             
             logger.error(f"Primary transcription method ({chosen_method}) failed: {e}")
             
-            # In music mode, don't fallback - let the error propagate for graceful handling
+            # In music mode, don't fallback
             if music_mode:
                 raise
             
-            # Try fallback
-            fallback_method = "openai" if chosen_method == "local" else "local"
-            logger.info(f"Attempting fallback to {fallback_method}...")
-            
+            # Attempt fallback
             try:
-                # Convert to appropriate format for fallback
-                if fallback_method == "local":
-                    audio_file = self.converter.convert_to_wav(audio_path)
-                    transcript_path = self._transcribe_local(audio_file, session, custom_vocabulary, music_mode)
-                else:
-                    if not self.config.openai_api_key:
-                        raise TranscriptionError("OpenAI API key not configured for fallback")
-                    # Check file size for OpenAI
-                    file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-                    if file_size_mb > 24:
-                        audio_file = self.converter.convert_to_mp3(audio_path, bitrate=48)
-                    else:
-                        audio_file = audio_path
-                    transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
-                
-                logger.info(f"Fallback transcription successful with {fallback_method}")
-                
-                if session:
-                    session.add_file(transcript_path, "transcript")
-                    session.transcription_method = fallback_method
-                
+                transcript_path = self._attempt_fallback_transcription(
+                    audio_path, chosen_method, session, custom_vocabulary, music_mode, e
+                )
                 return transcript_path
                 
             except Exception as fallback_error:
                 logger.error(f"Fallback transcription also failed: {fallback_error}")
+                fallback_method = "openai" if chosen_method == "local" else "local"
                 raise TranscriptionError(
                     "All transcription methods failed",
                     context={

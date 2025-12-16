@@ -4,99 +4,140 @@
 
 Scribe transforms spoken content into structured understanding. It combines GPU-accelerated speech recognition with large language models to deliver accurate transcription, intelligent summaries, and creative humor automatically.
 
-## Latest: v2.4.1
-
-**What's New:**
-- **OBS Recording Improvements**: Enhanced WebSocket connection handling with graceful hostname validation error suppression
-- **Comprehensive Test Coverage**: 642 tests (up from 595) with 46 new OBS recorder tests covering all error paths and edge cases
-- **Better Error Handling**: Hostname validation errors from WebSocket library now properly caught and logged at debug level
-- **Improved Reliability**: IPv4 prioritization, better host fallback strategies, enhanced connection retry logic
-
-**Previous (v2.4.0): User Experience Polish + Code Quality**
-- Cleaner recording UI with professional formatting
-- Zero-diagnostic codebase maintained across all modules
-- Performance tracker outlier detection for better time estimates
-
-See [Music Mode Architecture](docs/MUSIC_MODE_ARCHITECTURE.md) and [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md) for technical details.
-
-## What Scribe Is
-
-Scribe is a complete transcription and analysis pipeline optimized for NVIDIA RTX hardware (up to 12x real-time on RTX 4090). When GPU resources aren't available, it automatically falls back to OpenAI API. Every part of the workflow—from recording to final document generation—is automated and customizable.
-
-**Core Value:**
-- Record or import audio/video
-- Get accurate transcripts with speaker identification (speech and music)
-- Receive structured meeting notes with decisions and action items
-- Optional context-aware humor (jokes and memes with QA loop)
-- Output in TXT, DOCX, Markdown, and PNG formats
-
-**Quality Focus:** Clean code, thoughtful architecture, comprehensive testing. See [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md) for technical details and [Excellence Plan](docs/CODE_EXCELLENCE_PLAN.md) for our approach.
-
-## Key Capabilities
-
-### Transcription
-- GPU-accelerated local processing (11x real-time on RTX 4090 with Whisper large-v3)
-- Automatic fallback to OpenAI API when GPU unavailable
-- Batch processing for multiple files
-- **Production-grade music transcription** with separation-first architecture
-  - Hybrid Transformer Demucs vocal isolation
-  - Silero VAD vocal segment detection
-  - Hallucination filtering on instrumental tracks
-  - True multi-language lyric extraction (99 languages)
-- Custom vocabulary for domain-specific terms
-- Speaker diarization via OpenAI API
-- Multi-language support (ISO 639-1 codes)
-- Professional audio normalization
-
-### Intelligence & Analysis
-- GPT-5 structured meeting notes with business and technical insights
-- Context-aware joke generation (10 comedy archetypes)
-- Joke bake-off: All providers compete, best joke wins
-- Meme generation with QA loop and quality scoring
-- Meme bake-off: All providers compete, funniest concept wins
-- Multi-provider support (OpenAI, XAI/Grok, Anthropic Claude, Google Gemini 3)
-- Configurable humor intensity (0-10 spice levels)
-
-### Recording & Integration
-- OBS Studio integration via WebSocket v5
-- Direct recording from CLI with defensive verification
-- Detects if recording actually started (warns if not)
-- Real-time feedback on recording status
-- Auto-transcription after recording
-- Clickable file paths in output (Ctrl+Click to open)
-- Cross-platform (Windows, macOS, Linux)
-
-### Reliability
-- GPU resource management (prevents OOM crashes)
-- Atomic file writes (prevents corruption)
-- Adaptive progress tracking (learns your machine's performance)
-- Comprehensive error handling with automatic fallback
-- System diagnostics and health checks
+---
 
 ## Quickstart
 
 ```bash
-# Transcribe a single file
+# Install
+git clone https://github.com/blisspixel/scribe.git
+cd scribe
+pip install -r requirements.txt
+pip install -e .
+
+# Configure
+cp .env.example .env
+# Add your OPENAI_API_KEY to .env
+
+# Use
+scribe meeting.mp4                    # Transcribe single file
+scribe batch *.mp4                    # Process multiple files
+scribe music song.mp3                 # Extract lyrics
+scribe rec "Team Meeting"             # Record and transcribe
+scribe doctor                         # System diagnostics
+```
+
+---
+
+## What's New in v2.4.2
+
+- **Smart .env Loading**: Works from any directory - finds .env in current, home, or package directory
+- **Cleaner Output**: Removed unnecessary tip messages for better UX
+- **Test Suite Excellence**: 678 tests (641 unit + 17 integration + 20 e2e), 100% pass rate
+- **Documentation Cleanup**: Organized docs folder, archived historical documents
+- **Zero Diagnostics**: Maintained 100% clean codebase across all modules
+
+See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
+
+---
+
+## What Scribe Does
+
+**Core Value:**
+- Record or import audio/video files
+- Get accurate transcripts with speaker identification
+- Receive structured meeting notes with decisions and action items
+- Optional context-aware humor (jokes and memes)
+- Output in TXT, DOCX, Markdown, and PNG formats
+
+**Key Features:**
+- GPU-accelerated local processing (11x real-time on RTX 4090)
+- Automatic fallback to OpenAI API when GPU unavailable
+- Production-grade music transcription with vocal separation
+- Batch processing for multiple files
+- Custom vocabulary for domain-specific terms
+- Multi-provider AI support (OpenAI, XAI/Grok, Anthropic, Gemini)
+- OBS Studio integration for recording
+
+**Quality Focus:** Clean code, thoughtful architecture, comprehensive testing. Every release focuses on making existing functionality more reliable and polished.
+
+---
+
+## CLI Cheatsheet
+
+### Transcription
+```bash
+# Single file
 scribe meeting.mp4
+scribe transcribe meeting.mp4
 
-# Batch process multiple files
+# Batch processing
 scribe batch *.mp4
+scribe batch file1.wav file2.wav file3.wav
 
-# Transcribe music/lyrics (handles instrumental tracks)
+# Transcript only (no docx, notes, jokes, memes)
+scribe batch *.mp4 --no-docx --no-notes --no-joke --no-meme
+
+# Music/lyrics
 scribe music song.mp3
+scribe music album/*.flac --method local
 
-# With custom vocabulary for technical terms
-scribe transcribe meeting.mp4 --vocabulary tech-terms.txt
+# With options
+scribe transcribe meeting.mp4 --vocabulary tech-terms.txt --language es
+```
 
-# Record with OBS and auto-transcribe
+### Recording
+```bash
+# Record and auto-transcribe
 scribe rec "Team Meeting"
+scribe record --name "Board Meeting"
 
-# Generate notes from existing transcript
+# Record only (no transcription)
+scribe record --no-auto-transcribe
+```
+
+### Intelligence
+```bash
+# Generate notes from transcript
 scribe notes transcript.txt
 
+# Generate joke
+scribe joke transcript.txt --spice 5
+
+# Generate meme
+scribe meme transcript.txt --qa-threshold 8.5
+```
+
+### Utilities
+```bash
 # System diagnostics
 scribe doctor
+
+# Provider health check
+scribe health
+scribe health --provider gemini
+
+# System info
+scribe info
+
+# Version
+scribe version
 ```
+
+### Common Options
+- `--method auto|local|openai` - Transcription method
+- `--model large-v3|large-v2|medium` - Whisper model
+- `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
+- `--vocabulary FILE` - Custom vocabulary
+- `--provider openai|xai|anthropic|gemini` - AI provider
+- `--no-docx` - Skip DOCX generation (just .txt transcript)
+- `--no-notes` - Skip meeting notes
+- `--no-joke` - Skip joke generation
+- `--no-meme` - Skip meme generation
+
+**Tip:** For transcript-only batch processing, use all four `--no-*` flags together
+
+---
 
 ## Installation
 
@@ -106,7 +147,6 @@ scribe doctor
 - NVIDIA GPU with CUDA support (RTX 4090 optimized)
 - 8GB VRAM minimum, 24GB recommended
 - CUDA 12.4 or newer
-- FFmpeg
 
 **For API Transcription (Automatic Fallback):**
 - OpenAI API key
@@ -181,7 +221,9 @@ SCRIBE_OBS_PORT=4455
 SCRIBE_OBS_PASSWORD=your_password
 ```
 
-## Core Concepts
+---
+
+## Key Features
 
 ### Transcription Pipeline
 
@@ -201,6 +243,39 @@ SCRIBE_OBS_PASSWORD=your_password
 - Formatted DOCX document
 - Structured session summaries
 
+### Music Transcription
+
+Production-grade music transcription using separation-first architecture for complete, accurate lyrics.
+
+**Key Features:**
+- Segment-based transcription with VAD timestamps
+- Complete lyrics capture (no missing verses)
+- Hallucination filtering (removes "Thanks for watching", "Subscribe", etc.)
+- Multi-language support (99 languages)
+- Intelligent instrumental detection
+- Batch processing for entire music libraries
+
+**How It Works:**
+1. Music Analysis (~1s): Validates track, extracts BPM/key if detectable
+2. Vocal Separation (~25s): Hybrid Transformer Demucs isolates vocals
+3. Vocal Activity Detection (~1s): Silero VAD finds 16-25 vocal segments
+4. Audio Slicing (~1s): Cuts vocals into segments
+5. Segment Transcription (~15s): Faster-Whisper transcribes each segment
+6. Hallucination Filtering: Removes false positives per-segment
+7. Reassembly: Combines segments into complete lyrics
+
+**Total Processing Time**: ~45 seconds for a 3-minute song
+
+**Usage:**
+```bash
+scribe music song.mp3                    # Single file
+scribe music album/*.flac                # Multiple files
+scribe music /path/to/music/folder       # Entire folder
+scribe music song.mp3 --language es      # Force language
+```
+
+See [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) for technical details.
+
 ### Meeting Notes
 
 GPT-5 analyzes transcripts and generates structured notes:
@@ -216,24 +291,24 @@ GPT-5 analyzes transcripts and generates structured notes:
 - GPT-5 analyzes tone, rhythm, and intent
 - Selects from 10 comedy archetypes
 - Generates context-aware observations
+- Optional bake-off mode (all providers compete)
 
 **Memes:**
 - AI proposes template and caption
-- Generates base image without text (cleaner results)
-- Overlays text locally with Pillow (readable, professional)
-- QA loop evaluates image quality and template accuracy
-- Iterates until quality threshold met (default 8.0/10)
-- Note: Grok images may include watermark
+- Generates base image without text
+- Overlays text locally with Pillow (clean, readable)
+- QA loop evaluates quality (default 8.0/10 threshold)
+- Optional bake-off mode (all providers compete)
 
-### Multi-Provider Architecture
+### Multi-Provider Support
 
-Scribe uses a provider-agnostic architecture. Mix and match AI providers based on cost, performance, and features.
+Mix and match AI providers based on cost, performance, and features.
 
 **Supported Providers:**
 - **OpenAI:** GPT-5, GPT-4, GPT-Image-1, DALL-E, Whisper
 - **XAI/Grok:** Grok 4 Fast (reasoning), Grok 2 Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
-- **Google Gemini:** Gemini 3 Pro (advanced reasoning), Gemini 2.5 Flash/Pro (text), Imagen 4 (images)
+- **Google Gemini:** Gemini 3 Pro (reasoning), Gemini 2.5 Flash/Pro (text), Imagen 4 (images)
 
 **Configuration:**
 ```bash
@@ -241,18 +316,10 @@ Scribe uses a provider-agnostic architecture. Mix and match AI providers based o
 export SCRIBE_JOKE_PROVIDER=xai
 export SCRIBE_MEME_PROVIDER=xai
 export SCRIBE_NOTES_PROVIDER=xai
-export XAI_API_KEY=your_key
 
-# Or use Gemini
-export SCRIBE_JOKE_PROVIDER=gemini
-export GEMINI_API_KEY=your_key
-
-# Enable bake-off mode (all providers compete for best joke/meme)
+# Enable bake-off mode (all providers compete)
 export SCRIBE_ENABLE_JOKE_BAKEOFF=true
 export SCRIBE_ENABLE_MEME_BAKEOFF=true
-
-# Meme text rendering (default: local for clean text)
-export SCRIBE_MEME_TEXT_METHOD=local  # or "ai" (not recommended - often gibberish)
 ```
 
 **Cost Comparison (per 1M tokens):**
@@ -290,161 +357,51 @@ scribe transcribe meeting.mp4 --vocabulary tech-terms.txt
 scribe batch *.mp4 --vocabulary company-names.json
 ```
 
-### Music Mode
+### OBS Recording Integration
 
-Production-grade music transcription using separation-first architecture for complete, accurate lyrics with aggressive hallucination filtering.
+**Features:**
+- WebSocket v5 integration (preferred)
+- CLI fallback if WebSocket unavailable
+- Monitors for new recording files
+- Real-time feedback every 5 seconds
+- Verifies recording actually started
+- Auto-transcription after recording
 
-**Key Features:**
-- **Segment-based transcription**: Slices vocals by VAD timestamps, transcribes each segment independently
-- **Complete lyrics capture**: Gets full song lyrics from start to finish (no missing verses)
-- **Hallucination filtering**: Per-segment filtering removes "Thanks for watching", "Subscribe", etc.
-- **Multi-language support**: Auto-detects 99 languages (Spanish, Portuguese, Japanese, etc.)
-- **Intelligent instrumental detection**: Gracefully identifies tracks with no vocals
-- **Measurable metadata only**: Duration, BPM (if detected), Key (if detected) - no genre guessing
-- **Batch processing**: Process entire folders or multiple files at once
-- **Automatic cleanup**: Removes intermediate files after processing
+**Output:**
+- Clickable file paths (Windows Terminal, iTerm2, VS Code)
+- Full paths for easy copy/paste
+- Cross-platform support
 
-**How It Works (Separation-First Architecture):**
-1. **Music Analysis** (~1s): Validates track is music, extracts BPM/key if detectable
-2. **Vocal Separation** (~25s): Hybrid Transformer Demucs isolates vocals from instruments
-3. **Vocal Activity Detection** (~1s): Silero VAD finds 16-25 vocal segments per song
-4. **Audio Slicing** (~1s): Cuts vocals.wav into segments based on VAD timestamps
-5. **Segment Transcription** (~15s): Faster-Whisper transcribes each segment independently
-6. **Hallucination Filtering**: Removes false positives per-segment (multilingual patterns)
-7. **Reassembly**: Combines segments into complete, clean lyrics
+---
 
-**Total Processing Time**: ~45 seconds for a 3-minute song
+## Performance
 
-**Output Files:**
-- `song_lyrics.txt` - Complete lyrics with metadata header (Duration, BPM, Key)
-- `instrumental_lyrics.txt` - "[Instrumental - No Speech Detected]" for instrumental tracks
+### Local GPU Performance
 
-**Usage:**
-```bash
-# Single file (auto-detects language)
-scribe music song.mp3
+| GPU | VRAM | Model | Beam Size | Speed |
+|-----|------|-------|-----------|-------|
+| RTX 4090 | 24GB | large-v3 | 10 | 11x real-time |
+| RTX 4080 | 16GB | large-v3 | 8 | 8x real-time |
+| RTX 3090 | 24GB | large-v3 | 5 | 6x real-time |
 
-# Multiple files with wildcards
-scribe music album/*.flac
+**Note:** Audio preprocessing adds ~10% of recording duration. We prioritize quality over speed.
 
-# Entire folder (processes all audio files)
-scribe music /path/to/music/folder
+### API Mode
 
-# Force specific language (skips detection)
-scribe music song.mp3 --language es
+- gpt-4o-transcribe handles long files with server-side chunking
+- Typical cost: ~$0.006 per minute
+- Files over 25MB compressed automatically
 
-# Force local processing
-scribe music song.mp3 --method local
-```
+### Audio Recommendations
 
-**Supported Languages:**
-English, Spanish, French, German, Italian, Portuguese, Dutch, Russian, Chinese, Japanese, Korean, Arabic, Hindi, and 86 more.
+- 16kHz mono WAV input for best local results
+- Normalize to -16 LUFS integrated loudness
+- Minimize background noise
+- Use quality microphones
 
-**Behavior:**
-- Instrumental tracks detected early (no wasted transcription time)
-- Multi-language lyrics transcribed accurately in original language
-- Hallucinations filtered (e.g., "Thank you for watching", "Transcription by CastingWords")
-- Sparse lyrics preserved (techno/EDM with few words)
-- Original audio files never modified
-- Converted WAV files automatically cleaned up
+---
 
-## CLI Cheatsheet
-
-### Transcription
-```bash
-# Single file
-scribe transcribe meeting.mp4
-scribe meeting.mp4  # Shortcut
-
-# Batch processing
-scribe batch *.mp4
-scribe batch file1.wav file2.wav file3.wav
-
-# Music/lyrics transcription (handles instrumental tracks gracefully)
-scribe music song.mp3                    # Single file
-scribe music album/*.flac --method local # Multiple files
-scribe music /path/to/music/folder       # Entire folder
-
-# Force specific method
-scribe transcribe audio.wav --method local
-scribe transcribe audio.wav --method openai
-
-# With options
-scribe transcribe meeting.mp4 \
-  --vocabulary tech-terms.txt \
-  --language es \
-  --no-joke \
-  --no-meme
-```
-
-### Recording
-```bash
-# Record and auto-transcribe
-scribe rec "Team Meeting"
-scribe record --name "Board Meeting"
-
-# Record only (no transcription)
-scribe record --no-auto-transcribe
-```
-
-**Recording Behavior:**
-- Connects to OBS via WebSocket (preferred method)
-- Falls back to CLI control if WebSocket unavailable
-- Monitors for new recording files in multiple locations
-- Provides real-time feedback every 5 seconds while waiting
-- Shows clear error with troubleshooting steps if recording doesn't start
-- Verifies recording actually started before proceeding
-
-**Output Display:**
-- All file paths are clickable (Ctrl+Click or Cmd+Click to open)
-- Works in Windows Terminal, iTerm2, VS Code terminal, and most modern terminals
-- Shows full paths for easy copy/paste
-- Cross-platform support (Windows, macOS, Linux)
-
-### Intelligence
-```bash
-# Generate notes from transcript
-scribe notes transcript.txt
-
-# Generate joke
-scribe joke transcript.txt --spice 5
-
-# Generate meme
-scribe meme transcript.txt --qa-threshold 8.5
-```
-
-### Utilities
-```bash
-# System diagnostics
-scribe doctor
-
-# Provider health check
-scribe health
-scribe health --provider gemini
-
-# System info
-scribe info
-
-# Version
-scribe version
-
-# Clean up recordings (remove silence)
-scribe clean long_recording.mp4
-scribe clean recording.mp4 --analyze  # Preview only
-```
-
-### Key Options
-- `--method auto|local|openai` - Transcription method
-- `--model large-v3|large-v2|medium` - Whisper model
-- `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
-- `--vocabulary FILE` - Custom vocabulary
-- `--provider openai|xai|anthropic|gemini` - AI provider
-- `--no-joke` - Skip joke generation
-- `--no-meme` - Skip meme generation
-- `--no-notes` - Skip meeting notes
-- `--no-docx` - Skip DOCX generation
-
-## Architecture Overview
+## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
@@ -492,6 +449,25 @@ scribe clean recording.mp4 --analyze  # Preview only
 └──────────┘   └──────────┘
 ```
 
+### Project Structure
+```
+scribe/
+├── src/scribe/
+│   ├── cli/              # Command-line interface
+│   ├── core/             # Core transcription logic
+│   ├── models/           # Configuration and data models
+│   ├── providers/        # AI provider integrations
+│   ├── utils/            # Utilities and helpers
+│   └── exceptions.py     # Exception hierarchy
+├── tests/
+│   ├── unit/             # Unit tests
+│   ├── integration/      # Integration tests
+│   └── conftest.py       # Test configuration
+├── docs/                 # Documentation
+├── examples/             # Example files
+└── output/               # Default output directory
+```
+
 ### Key Components
 
 **Core:**
@@ -522,26 +498,11 @@ scribe clean recording.mp4 --analyze  # Preview only
 - `diagnostics.py` - System health checks
 - `vocabulary.py` - Custom vocabulary handling
 
-## Development
+See [Architecture Guide](docs/ARCHITECTURE.md) for detailed technical discussion.
 
-### Project Structure
-```
-scribe/
-├── src/scribe/
-│   ├── cli/              # Command-line interface
-│   ├── core/             # Core transcription logic
-│   ├── models/           # Configuration and data models
-│   ├── providers/        # AI provider integrations
-│   ├── utils/            # Utilities and helpers
-│   └── exceptions.py     # Exception hierarchy
-├── tests/
-│   ├── unit/             # Unit tests
-│   ├── integration/      # Integration tests
-│   └── conftest.py       # Test configuration
-├── docs/                 # Documentation
-├── examples/             # Example files
-└── output/               # Default output directory
-```
+---
+
+## Development
 
 ### Running Tests
 
@@ -560,9 +521,9 @@ pytest tests/unit/ --tb=no -q
 ```
 
 **Test Status:**
-- 642 tests passing (100% pass rate)
+- 678 tests passing (100% pass rate)
 - Zero test failures
-- Comprehensive defensive test coverage
+- Comprehensive unit, integration, and end-to-end coverage
 - Exception handling fully tested
 
 ### Code Quality
@@ -588,32 +549,9 @@ Priority areas:
 3. Documentation enhancements
 4. Bug fixes and stability
 
-See `docs/CODE_QUALITY_STANDARDS.md` for detailed guidelines.
+See [Development Guide](docs/DEVELOPMENT.md) for detailed guidelines.
 
-## Performance and Tuning
-
-### Local GPU Performance
-
-| GPU | VRAM | Model | Beam Size | Speed |
-|-----|------|-------|-----------|-------|
-| RTX 4090 | 24GB | large-v3 | 10 | 11x real-time |
-| RTX 4080 | 16GB | large-v3 | 8 | 8x real-time |
-| RTX 3090 | 24GB | large-v3 | 5 | 6x real-time |
-
-**Note:** Audio preprocessing adds ~10% of recording duration (e.g., 5.5 min for 55 min recording). We prioritize quality over speed.
-
-### API Mode
-
-- gpt-4o-transcribe handles long files with server-side chunking
-- Typical cost: ~$0.006 per minute
-- Files over 25MB compressed automatically
-
-### Audio Recommendations
-
-- 16kHz mono WAV input for best local results
-- Normalize to -16 LUFS integrated loudness
-- Minimize background noise
-- Use quality microphones
+---
 
 ## Troubleshooting
 
@@ -653,54 +591,30 @@ sudo apt install ffmpeg
 ### Meme Generation Issues
 
 **Text looks bad or gibberish:**
-
-Scribe now defaults to LOCAL text overlay (clean, readable) instead of AI-generated text:
-- Base image is generated WITHOUT text
-- Text is overlaid using Pillow with Impact font
-- Results in professional, readable memes
-
-If you see gibberish text, you may have `SCRIBE_MEME_TEXT_METHOD=ai` set. Change to `local`:
-```bash
-export SCRIBE_MEME_TEXT_METHOD=local
-```
+- Scribe defaults to LOCAL text overlay (clean, readable)
+- If you see gibberish, change: `export SCRIBE_MEME_TEXT_METHOD=local`
 
 **Grok watermark on images:**
-
-Grok's image generation API adds a watermark to images. This is a limitation of the Grok service:
-- Watermark appears in corner of Grok-generated images
-- To avoid: Use OpenAI for meme images: `export SCRIBE_MEME_IMAGE_PROVIDER=openai`
-- OpenAI's gpt-image-1 produces clean images without watermarks
+- Grok adds watermarks to images
+- To avoid: `export SCRIBE_MEME_IMAGE_PROVIDER=openai`
 
 **Meme quality too low:**
-
-Adjust the QA threshold (default 8.0/10):
-```bash
-export SCRIBE_MEME_QA_THRESHOLD=7.5  # More lenient
-export SCRIBE_MEME_QA_THRESHOLD=9.0  # More strict
-```
+- Adjust threshold: `export SCRIBE_MEME_QA_THRESHOLD=7.5` (more lenient)
 
 ### OBS Recording Issues
 
 **"No recording file detected" error:**
 
-Scribe monitors for new recording files and provides clear feedback if recording doesn't start:
-
-1. **Check OBS is actually recording**: Look at OBS window - is the red recording indicator showing?
-2. **Check recording folder**: OBS might be recording to a different folder than expected
-3. **WebSocket connection**: If WebSocket fails, Scribe falls back to CLI mode with limited control
-4. **Manual start**: If automatic start fails, manually click "Start Recording" in OBS
-
-**What Scribe does to help:**
-- Shows which folders it's monitoring for recording files
-- Provides progress updates every 5 seconds while waiting
-- Lists possible causes and fixes if recording doesn't start
-- Verifies recording actually started before proceeding
+1. Check OBS is actually recording (red indicator showing?)
+2. Check recording folder (OBS might use different folder)
+3. WebSocket connection (falls back to CLI if unavailable)
+4. Manual start (click "Start Recording" in OBS if automatic fails)
 
 **To fix permanently:**
-1. Open OBS Studio manually
+1. Open OBS Studio
 2. Go to Tools > WebSocket Server Settings
 3. Enable WebSocket server on port 4455
-4. Disable authentication or set password in `.env`
+4. Set password in `.env`
 
 ### Exit Codes
 - 0: Success
@@ -708,6 +622,10 @@ Scribe monitors for new recording files and provides clear feedback if recording
 - 2: Invalid arguments
 - 3: External tool failure (FFmpeg, OBS, CUDA)
 - 4: API error
+
+See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
+
+---
 
 ## Documentation
 
@@ -719,11 +637,15 @@ Scribe monitors for new recording files and provides clear feedback if recording
 - [Performance Tuning](docs/PERFORMANCE_TUNING.md) - Optimization and benchmarking
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment strategies
 
+### Feature Documentation
+- [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) - Music transcription technical details
+
 ### Additional Resources
 - [ROADMAP](ROADMAP.md) - Feature roadmap and version history
-- [Code Quality Standards](docs/CODE_QUALITY_STANDARDS.md) - Development standards
-- [Build Status](docs/BUILD_STATUS.md) - Current build and test status
 - [Documentation Index](docs/README.md) - Complete documentation index
+- [Documentation Structure](docs/STRUCTURE.md) - How docs are organized
+
+---
 
 ## Security and Privacy
 
@@ -732,9 +654,13 @@ Scribe monitors for new recording files and provides clear feedback if recording
 - Logs avoid storing raw transcript text
 - For sensitive material, use local GPU mode and disable humor features
 
+---
+
 ## License
 
 MIT License. See LICENSE file.
+
+---
 
 ## Acknowledgments
 
@@ -743,6 +669,8 @@ MIT License. See LICENSE file.
 - [Rich](https://github.com/Textualize/rich) - Terminal output
 - [Typer](https://github.com/tiangolo/typer) - CLI framework
 
+---
+
 ## Author
 
 **Nick Seal**  
@@ -750,9 +678,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.1  
-**Build Status:** PASSING (642/642 tests)  
+**Current Version:** 2.4.2  
+**Build Status:** PASSING (678/678 tests)  
 **Code Quality:** 100% clean (54/54 files, zero diagnostics)  
-**Test Coverage:** Core transcription and OBS recording fully tested  
+**Test Coverage:** Comprehensive unit, integration, and end-to-end testing  
 **Focus:** Excellence over features - see [ROADMAP](ROADMAP.md)  
-**Last Updated:** 2025-11-20
+**Last Updated:** 2025-11-24

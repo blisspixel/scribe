@@ -19,6 +19,38 @@ TranscriptionMethod = Literal["auto", "local", "openai"]
 ModelSize = Literal["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"]
 
 
+def _find_env_file() -> Optional[str]:
+    """
+    Find .env file in multiple locations.
+    
+    Search order:
+    1. Current working directory
+    2. User's home directory
+    3. Package installation directory (where this file is)
+    
+    Returns:
+        Path to .env file if found, None otherwise
+    """
+    # Try current working directory first
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.exists():
+        return str(cwd_env)
+    
+    # Try user's home directory
+    home_env = Path.home() / ".env"
+    if home_env.exists():
+        return str(home_env)
+    
+    # Try package directory (where scribe is installed)
+    package_dir = Path(__file__).parent.parent.parent
+    package_env = package_dir / ".env"
+    if package_env.exists():
+        return str(package_env)
+    
+    # Return None to use default behavior (environment variables only)
+    return None
+
+
 class ScribeConfig(BaseSettings):
     """
     System configuration with validation and environment variable loading.
@@ -43,7 +75,7 @@ class ScribeConfig(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_prefix="SCRIBE_",
-        env_file=".env",
+        env_file=_find_env_file(),  # Find .env in multiple locations
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

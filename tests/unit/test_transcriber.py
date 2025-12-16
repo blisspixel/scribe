@@ -1,0 +1,385 @@
+"""
+Unit tests for Transcriber orchestration logic.
+
+Tests the core transcription orchestrator including method selection,
+fallback logic, audio preparation, and session management.
+"""
+
+import pytest
+from pathlib import Path
+from unittest.mock import Mock, MagicMock, patch, call
+from scribe.core.transcriber import Transcriber
+from scribe.models.config import ScribeConfig
+from scribe.models.session import TranscriptionSession
+from scribe.models.gpu import GPUConfig
+from scribe.exceptions import TranscriptionError, ValidationError
+
+
+class TestTranscriberInitialization:
+    """Test Transcriber initialization and setup."""
+    
+    def test_init_with_config(self, temp_config: ScribeConfig):
+        """Test transcriber initializes with config."""
+        transcriber = Transcriber(temp_config)
+        
+        assert transcriber.config == temp_config
+        assert transcriber.gpu_config is not None
+        assert transcriber.converter is not None
+    
+    def test_init_detects_gpu(self, temp_config: ScribeConfig, mock_gpu):
+        """Test transcriber detects GPU on initialization."""
+        transcriber = Transcriber(temp_config)
+        
+        assert transcriber.gpu_config.has_gpu is True
+        assert transcriber.gpu_config.gpu_name == "NVIDIA GeForce RTX 4090"
+    
+    def test_init_without_gpu(self, temp_config: ScribeConfig, mock_no_gpu):
+        """Test transcriber handles no GPU gracefully."""
+        transcriber = Transcriber(temp_config)
+        
+        assert transcriber.gpu_config.has_gpu is False
+        assert transcriber.gpu_config.gpu_name is None
+
+
+class TestMethodSelection:
+    """Test intelligent method selection logic."""
+    
+    def test_choose_method_auto_with_gpu(self, temp_config: ScribeConfig, mock_gpu):
+        """Test auto method selects local when GPU available."""
+        transcriber = Transcriber(temp_config)
+        
+        method = transcriber.choose_method("auto")
+        
+        assert method == "local"
+    
+    def test_choose_method_auto_without_gpu(self, temp_config: ScribeConfig, mock_no_gpu):
+        """Test auto method selects openai when no GPU."""
+        transcriber = Transcriber(temp_config)
+        
+        method = transcriber.choose_method("auto")
+        
+        assert method == "openai"
+    
+    def test_choose_method_explicit_local(self, temp_config: ScribeConfig):
+        """Test explicit local method selection."""
+        transcriber = Transcriber(temp_config)
+        
+        method = transcriber.choose_method("local")
+        
+        assert method == "local"
+    
+    def test_choose_method_explicit_openai(self, temp_config: ScribeConfig):
+        """Test explicit openai method selection."""
+        transcriber = Transcriber(temp_config)
+        
+        method = transcriber.choose_method("openai")
+        
+        assert method == "openai"
+    
+    def test_choose_method_auto_prefers_gpu_with_high_vram(self, temp_config: ScribeConfig, mock_gpu):
+        """Test auto method prefers GPU when VRAM is sufficient."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock GPU with high VRAM
+        transcriber.gpu_config.gpu_memory_gb = 24.0
+        
+        method = transcriber.choose_method("auto")
+        
+        assert method == "local"
+    
+    def test_choose_method_auto_considers_api_key(self, temp_config: ScribeConfig, mock_no_gpu):
+        """Test auto method considers API key availability."""
+        transcriber = Transcriber(temp_config)
+        
+        # With API key and no GPU, should choose openai
+        assert temp_config.openai_api_key is not None
+        method = transcriber.choose_method("auto")
+        
+        assert method == "openai"
+
+
+class TestAudioPreparation:
+    """Test audio format preparation for different methods."""
+    
+    def test_prepare_audio_for_local_converts_to_wav(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test audio is converted to WAV for local method."""
+        transcriber = Transcriber(temp_config)
+        
+        with patch.object(transcriber.converter, 'convert_to_wav') as mock_convert:
+            mock_convert.return_value = sample_audio.parent / "converted.wav"
+            
+            result = transcriber._prepare_audio_for_method(sample_audio, "local")
+            
+            mock_convert.assert_called_once_with(sample_audio)
+            assert result == sample_audio.parent / "converted.wav"
+    
+    def test_prepare_audio_for_openai_keeps_small_files(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test small files are kept as-is for OpenAI."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock small file size
+        with patch.object(Path, 'stat') as mock_stat:
+            mock_stat.return_value.st_size = 10 * 1024 * 1024  # 10 MB
+            
+            result = transcriber._prepare_audio_for_method(sample_audio, "openai")
+            
+            assert result == sample_audio
+    
+    def test_prepare_audio_for_openai_compresses_large_files(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test large files are compressed to MP3 for OpenAI."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock large file size
+        with patch.object(Path, 'stat') as mock_stat:
+            mock_stat.return_value.st_size = 30 * 1024 * 1024  # 30 MB
+            
+            with patch.object(transcriber.converter, 'convert_to_mp3') as mock_convert:
+                mock_convert.return_value = sample_audio.parent / "compressed.mp3"
+                
+                result = transcriber._prepare_audio_for_method(sample_audio, "openai")
+                
+                mock_convert.assert_called_once()
+                assert result == sample_audio.parent / "compressed.mp3"
+
+
+class TestTranscriptionMethods:
+    """Test actual transcription execution."""
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    def test_transcribe_local_success(self, mock_local_class, temp_config: ScribeConfig, sample_audio: Path):
+        """Test successful local transcription."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock local transcriber
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local_class.return_value = mock_local
+        
+        result = transcriber._transcribe_local(sample_audio, None, None, False)
+        
+        assert result == sample_audio.parent / "transcript.txt"
+        mock_local.transcribe.assert_called_once()
+    
+    @patch('scribe.core.transcriber.OpenAITranscriber')
+    def test_transcribe_openai_success(self, mock_api_class, temp_config: ScribeConfig, sample_audio: Path):
+        """Test successful OpenAI transcription."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock OpenAI transcriber
+        mock_api = Mock()
+        mock_api.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_api_class.return_value = mock_api
+        
+        result = transcriber._transcribe_openai(sample_audio, None, None)
+        
+        assert result == sample_audio.parent / "transcript.txt"
+        mock_api.transcribe.assert_called_once()
+
+
+class TestFallbackLogic:
+    """Test fallback behavior when primary method fails."""
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    @patch('scribe.core.transcriber.OpenAITranscriber')
+    def test_fallback_local_to_openai(self, mock_api_class, mock_local_class, 
+                                      temp_config: ScribeConfig, sample_audio: Path, mock_openai):
+        """Test fallback from local to OpenAI when local fails."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock local to fail
+        mock_local = Mock()
+        mock_local.transcribe.side_effect = RuntimeError("CUDA out of memory")
+        mock_local_class.return_value = mock_local
+        
+        # Mock OpenAI to succeed
+        mock_api = Mock()
+        mock_api.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_api_class.return_value = mock_api
+        
+        # Should fallback to OpenAI
+        result = transcriber.transcribe(sample_audio, method="auto")
+        
+        assert result is not None
+        assert result.exists()
+    
+    @patch('scribe.core.transcriber.OpenAITranscriber')
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    def test_fallback_openai_to_local(self, mock_local_class, mock_api_class,
+                                      temp_config: ScribeConfig, sample_audio: Path, mock_gpu):
+        """Test fallback from OpenAI to local when API fails."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock OpenAI to fail
+        mock_api = Mock()
+        mock_api.transcribe.side_effect = Exception("API Error")
+        mock_api_class.return_value = mock_api
+        
+        # Mock local to succeed
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local_class.return_value = mock_local
+        
+        # Should fallback to local
+        result = transcriber.transcribe(sample_audio, method="openai")
+        
+        assert result is not None
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    @patch('scribe.core.transcriber.OpenAITranscriber')
+    def test_no_fallback_in_music_mode(self, mock_api_class, mock_local_class,
+                                       temp_config: ScribeConfig, sample_audio: Path):
+        """Test no fallback attempted in music mode."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock local to fail
+        mock_local = Mock()
+        mock_local.transcribe.side_effect = TranscriptionError("No speech detected")
+        mock_local_class.return_value = mock_local
+        
+        # Should raise error without fallback
+        with pytest.raises(TranscriptionError, match="No speech detected"):
+            transcriber.transcribe(sample_audio, method="local", music_mode=True)
+
+
+class TestSessionManagement:
+    """Test session tracking and metadata."""
+    
+    def test_transcribe_updates_session(self, temp_config: ScribeConfig, sample_audio: Path, mock_openai):
+        """Test transcription updates session metadata."""
+        transcriber = Transcriber(temp_config)
+        session = TranscriptionSession.create("test_meeting")
+        
+        result = transcriber.transcribe(sample_audio, method="openai", session=session)
+        
+        assert session.transcript_file == result
+        assert session.start_time is not None
+        assert session.transcription_method == "openai"
+    
+    def test_transcribe_tracks_audio_file(self, temp_config: ScribeConfig, sample_audio: Path, mock_openai):
+        """Test transcription tracks audio file in session."""
+        transcriber = Transcriber(temp_config)
+        session = TranscriptionSession.create("test_meeting")
+        
+        transcriber.transcribe(sample_audio, method="openai", session=session)
+        
+        # Session should track the audio file
+        assert len(session.files_created) > 0
+
+
+class TestResourceValidation:
+    """Test resource limit validation."""
+    
+    def test_validates_file_size_limit(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test file size validation."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock huge file
+        with patch('scribe.utils.validation.validate_audio_file') as mock_validate:
+            mock_validate.side_effect = ValidationError("File too large")
+            
+            with pytest.raises(ValidationError, match="File too large"):
+                transcriber.transcribe(sample_audio, method="auto")
+    
+    def test_validates_duration_limit(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test duration validation."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock very long audio
+        with patch('scribe.utils.validation.validate_audio_file') as mock_validate:
+            mock_validate.side_effect = ValidationError("Audio too long")
+            
+            with pytest.raises(ValidationError, match="Audio too long"):
+                transcriber.transcribe(sample_audio, method="auto")
+
+
+class TestCleanup:
+    """Test intermediate file cleanup."""
+    
+    def test_cleanup_intermediate_files(self, temp_config: ScribeConfig, temp_dir: Path):
+        """Test cleanup removes intermediate files."""
+        transcriber = Transcriber(temp_config)
+        
+        # Create fake intermediate files
+        temp_file1 = temp_dir / "audio_16k_mono.wav"
+        temp_file2 = temp_dir / "audio_standardized.wav"
+        temp_file1.write_text("fake")
+        temp_file2.write_text("fake")
+        
+        transcriber.cleanup_intermediate_files(temp_dir / "audio.mp4")
+        
+        # Intermediate files should be deleted
+        assert not temp_file1.exists()
+        assert not temp_file2.exists()
+
+
+class TestErrorHandling:
+    """Test error handling and recovery."""
+    
+    def test_handles_missing_file(self, temp_config: ScribeConfig):
+        """Test error when file doesn't exist."""
+        transcriber = Transcriber(temp_config)
+        fake_file = Path("/nonexistent/file.wav")
+        
+        with pytest.raises((TranscriptionError, ValidationError)):
+            transcriber.transcribe(fake_file, method="auto")
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    @patch('scribe.core.transcriber.OpenAITranscriber')
+    def test_handles_all_methods_failing(self, mock_api_class, mock_local_class,
+                                         temp_config: ScribeConfig, sample_audio: Path):
+        """Test error when all methods fail."""
+        transcriber = Transcriber(temp_config)
+        
+        # Mock both methods to fail
+        mock_local = Mock()
+        mock_local.transcribe.side_effect = RuntimeError("GPU Error")
+        mock_local_class.return_value = mock_local
+        
+        mock_api = Mock()
+        mock_api.transcribe.side_effect = Exception("API Error")
+        mock_api_class.return_value = mock_api
+        
+        with pytest.raises(TranscriptionError, match="All transcription methods failed"):
+            transcriber.transcribe(sample_audio, method="auto")
+
+
+class TestCustomVocabulary:
+    """Test custom vocabulary support."""
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    def test_passes_vocabulary_to_local(self, mock_local_class, temp_config: ScribeConfig, sample_audio: Path):
+        """Test custom vocabulary is passed to local transcriber."""
+        transcriber = Transcriber(temp_config)
+        
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local_class.return_value = mock_local
+        
+        # Create mock vocabulary
+        from scribe.utils.vocabulary import CustomVocabulary
+        vocab = CustomVocabulary(["test", "words"])
+        
+        transcriber.transcribe(sample_audio, method="local", custom_vocabulary=vocab)
+        
+        # Vocabulary should be passed to transcriber
+        call_args = mock_local.transcribe.call_args
+        assert call_args is not None
+
+
+class TestMusicMode:
+    """Test music mode transcription."""
+    
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    def test_music_mode_enabled(self, mock_local_class, temp_config: ScribeConfig, sample_audio: Path):
+        """Test music mode is passed to transcriber."""
+        transcriber = Transcriber(temp_config)
+        
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local_class.return_value = mock_local
+        
+        transcriber.transcribe(sample_audio, method="local", music_mode=True)
+        
+        # Music mode should be passed
+        call_args = mock_local.transcribe.call_args
+        assert call_args is not None

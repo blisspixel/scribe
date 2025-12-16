@@ -214,6 +214,127 @@ class LocalWhisperTranscriber:
                 context={"model": self.model_size, "error": str(e)}
             )
     
+    def _generate_output_path(self, audio_path: Path, output_path: Optional[Path]) -> Path:
+        """Generate clean output path removing intermediate suffixes."""
+        if output_path is not None:
+            return output_path
+        
+        clean_stem = audio_path.stem
+        for suffix in ['_16k_mono', '_standardized', '_converted']:
+            clean_stem = clean_stem.replace(suffix, '')
+        return audio_path.parent / f"{clean_stem}_transcription.txt"
+    
+    def _validate_and_correct_duration(self, audio_path: Path, duration: Optional[float]) -> Optional[float]:
+        """Validate duration and correct if WAV header is incorrect."""
+        if not duration:
+            logger.warning("Could not determine audio duration")
+            return None
+        
+        duration_mins = duration / 60
+        logger.info(f"Audio duration: {duration:.1f}s ({duration_mins:.1f} minutes)")
+        
+        # Sanity check - WAV files with wrong headers can report incorrect duration
+        if duration > 7200:  # More than 2 hours seems suspicious
+            logger.debug(f"WAV duration seems incorrect: {duration_mins:.1f} minutes, checking original file")
+            
+            # Try to find original file
+            for ext in ['.mp4', '.mp3']:
+                original_path = audio_path.parent / audio_path.name.replace("_16k_mono.wav", ext)
+                if original_path.exists() and original_path != audio_path:
+                    original_duration = get_audio_duration(original_path)
+                    if original_duration and original_duration < duration:
+                        logger.debug(f"Using original file duration: {original_duration:.1f}s instead of {duration:.1f}s")
+                        return original_duration
+        
+        return duration
+    
+    def _detect_silence_if_needed(
+        self,
+        audio_path: Path,
+        duration: Optional[float],
+        detect_silence: bool
+    ) -> List[Tuple[float, float]]:
+        """Detect silence periods if enabled and audio is long enough."""
+        if not detect_silence or not duration or duration <= 300:
+            return []
+        
+        logger.info("Analyzing audio for silence periods...")
+        try:
+            silence_periods = detect_silence_periods(
+                audio_path,
+                silence_threshold=-45.0,
+                min_silence_duration=60.0
+            )
+            if silence_periods:
+                logger.info(f"Found {len(silence_periods)} silence periods")
+                for i, (start, end) in enumerate(silence_periods, 1):
+                    duration_mins = (end - start) / 60
+                    logger.debug(
+                        f"  Silence {i}: {format_timestamp(start)} - "
+                        f"{format_timestamp(end)} ({duration_mins:.1f}min)"
+                    )
+            return silence_periods
+        except Exception as e:
+            logger.warning(f"Silence detection failed: {e}")
+            return []
+    
+    def _prepare_initial_prompt(self, initial_prompt: Optional[str], music_mode: bool) -> str:
+        """Prepare initial prompt for transcription."""
+        if not initial_prompt:
+            return "Meeting recording. High-quality transcription with proper punctuation and capitalization."
+        elif initial_prompt == "Song lyrics.":
+            return initial_prompt  # Music mode - use as-is
+        else:
+            # Custom vocabulary - combine with meeting context
+            return f"Meeting recording. High-quality transcription with proper punctuation and capitalization. Key terms: {initial_prompt}"
+    
+    def _estimate_transcription_time(self, duration: Optional[float]) -> tuple:
+        """Estimate transcription time based on GPU."""
+        if "4090" in self.gpu_config.gpu_name:
+            expected_speed = 11.5
+        elif "4080" in self.gpu_config.gpu_name:
+            expected_speed = 8.0
+        elif "4070" in self.gpu_config.gpu_name:
+            expected_speed = 6.0
+        else:
+            expected_speed = 4.0
+        
+        estimated_time = (duration / expected_speed) if duration else 60
+        return expected_speed, estimated_time
+    
+    def _execute_transcription(
+        self,
+        audio_path: Path,
+        duration: Optional[float],
+        initial_prompt: str
+    ) -> List[dict]:
+        """Execute the actual transcription and return segments."""
+        if duration:
+            duration_mins = int(duration / 60)
+            logger.info(f"Transcribing {duration_mins} min audio with Whisper {self.model_size}...")
+        
+        segments_iter, info = self.model.transcribe(
+            str(audio_path),
+            language=self.language,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 400},
+            beam_size=self.gpu_config.beam_size,
+            best_of=self.gpu_config.beam_size,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            initial_prompt=initial_prompt
+        )
+        
+        segments = []
+        for segment in segments_iter:
+            segments.append({
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text
+            })
+        
+        return segments
+    
     def transcribe(
         self,
         audio_path: Path,
@@ -229,8 +350,8 @@ class LocalWhisperTranscriber:
             audio_path: Path to audio file
             output_path: Optional output path
             detect_silence: Whether to detect silence periods
-            initial_prompt: Optional prompt to guide transcription (for custom vocabulary)
-  
+            initial_prompt: Optional prompt to guide transcription
+            music_mode: If True, optimized for music/lyrics
             
         Returns:
             Path to transcript file
@@ -240,128 +361,27 @@ class LocalWhisperTranscriber:
         """
         logger.info(f"Starting local transcription: {audio_path.name}")
         
-        # Generate output path - use original filename without intermediate suffixes
-        if output_path is None:
-            # Remove intermediate suffixes like _16k_mono, _standardized, etc.
-            clean_stem = audio_path.stem
-            for suffix in ['_16k_mono', '_standardized', '_converted']:
-                clean_stem = clean_stem.replace(suffix, '')
-            output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
-        
-        # Get audio duration with validation
+        # Prepare paths and validate duration
+        output_path = self._generate_output_path(audio_path, output_path)
         duration = get_audio_duration(audio_path)
-        if duration:
-            duration_mins = duration / 60
-            
-            # Sanity check - WAV files with wrong headers can report incorrect duration
-            # If duration seems impossibly long, silently use the original file's duration
-            if duration > 7200:  # More than 2 hours seems suspicious
-                logger.debug(f"WAV duration seems incorrect: {duration_mins:.1f} minutes, checking original file")
-                
-                # Try to find original file (before _16k_mono suffix)
-                original_path = audio_path.parent / audio_path.name.replace("_16k_mono.wav", ".mp4")
-                if not original_path.exists():
-                    original_path = audio_path.parent / audio_path.name.replace("_16k_mono.wav", ".mp3")
-                
-                if original_path.exists() and original_path != audio_path:
-                    original_duration = get_audio_duration(original_path)
-                    if original_duration and original_duration < duration:
-                        logger.debug(f"Using original file duration: {original_duration:.1f}s instead of {duration:.1f}s")
-                        duration = original_duration
-                        duration_mins = duration / 60
-            
-            logger.info(f"Audio duration: {duration:.1f}s ({duration_mins:.1f} minutes)")
-        else:
-            logger.warning("Could not determine audio duration")
-            duration = None
+        duration = self._validate_and_correct_duration(audio_path, duration)
         
-        # Detect silence periods
-        silence_periods: List[Tuple[float, float]] = []
-        if detect_silence and duration and duration > 300:  # > 5 minutes
-            logger.info("Analyzing audio for silence periods...")
-            try:
-                silence_periods = detect_silence_periods(
-                    audio_path,
-                    silence_threshold=-45.0,
-                    min_silence_duration=60.0
-                )
-                if silence_periods:
-                    logger.info(f"Found {len(silence_periods)} silence periods")
-                    for i, (start, end) in enumerate(silence_periods, 1):
-                        duration_mins = (end - start) / 60
-                        logger.debug(
-                            f"  Silence {i}: {format_timestamp(start)} - "
-                            f"{format_timestamp(end)} ({duration_mins:.1f}min)"
-                        )
-            except Exception as e:
-                logger.warning(f"Silence detection failed: {e}")
+        # Detect silence periods if needed
+        silence_periods = self._detect_silence_if_needed(audio_path, duration, detect_silence)
         
-        # Load model
+        # Load model and prepare prompt
         self._load_model()
+        prompt = self._prepare_initial_prompt(initial_prompt, music_mode)
         
-        # Transcribe with progress
+        # Execute transcription
         logger.info("Starting GPU-accelerated transcription...")
-        
         start_time = time.time()
-        segments = []
         
         try:
-            # Configure transcription parameters
-            if not initial_prompt:
-                initial_prompt = "Meeting recording. High-quality transcription with proper punctuation and capitalization."
-            elif initial_prompt == "Song lyrics.":
-                # Music mode - use as-is, don't add meeting context
-                pass
-            else:
-                # Custom vocabulary - combine with meeting context
-                initial_prompt = f"Meeting recording. High-quality transcription with proper punctuation and capitalization. Key terms: {initial_prompt}"
-            
-            # Estimate total time based on GPU
-            # RTX 4090: ~11-12x, RTX 4080: ~8x, RTX 4070: ~6x, fallback: ~4x
-            if "4090" in self.gpu_config.gpu_name:
-                expected_speed = 11.5
-            elif "4080" in self.gpu_config.gpu_name:
-                expected_speed = 8.0
-            elif "4070" in self.gpu_config.gpu_name:
-                expected_speed = 6.0
-            else:
-                expected_speed = 4.0
-            
-            estimated_time = (duration / expected_speed) if duration else 60
-            estimated_mins = int(estimated_time / 60)
-            estimated_secs = int(estimated_time % 60)
-            
-            # Note: Progress is handled by unified progress bar in CLI
-            # Show simple status message without progress bar
-            if duration:
-                duration_mins = int(duration / 60)
-                logger.info(f"Transcribing {duration_mins} min audio with Whisper {self.model_size}...")
-            
-            # Execute transcription
-            segments_iter, info = self.model.transcribe(
-                str(audio_path),
-                language=self.language,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 400},
-                beam_size=self.gpu_config.beam_size,
-                best_of=self.gpu_config.beam_size,
-                temperature=0.0,
-                condition_on_previous_text=False,
-                initial_prompt=initial_prompt
-            )
-            
-            # Process segments (progress handled by unified progress bar)
-            for segment in segments_iter:
-                segments.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text
-                })
-            
+            segments = self._execute_transcription(audio_path, duration, prompt)
             elapsed = time.time() - start_time
             
             if not segments:
-                # Check if audio was too short or silent
                 if duration and duration < 1.0:
                     raise TranscriptionError(
                         "Audio file is too short (less than 1 second)",
@@ -373,12 +393,12 @@ class LocalWhisperTranscriber:
                         context={"audio_path": str(audio_path), "duration": duration}
                     )
             
-            # Calculate speed ratio
+            # Log performance
             if duration and elapsed > 0:
                 speed_ratio = duration / elapsed
                 logger.info(f"Transcription completed in {elapsed:.1f}s ({speed_ratio:.1f}x realtime)")
             
-            # Write clean transcript
+            # Write transcript
             self._write_clean_transcript(
                 segments=segments,
                 output_path=output_path,
@@ -398,7 +418,6 @@ class LocalWhisperTranscriber:
                 context={"audio_path": str(audio_path), "error": str(e)}
             )
         finally:
-            # Clear GPU cache
             if self.gpu_config.has_gpu:
                 clear_gpu_cache()
     
