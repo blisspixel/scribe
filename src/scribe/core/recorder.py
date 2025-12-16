@@ -250,43 +250,17 @@ class OBSRecorder:
         
         return self._finalize_recording(found_path, ext, meeting_name, start_ts)
     
-    @contextmanager
-    def _connect_obs(self, max_wait_seconds: int = 15):
+    def _try_connect_to_running_obs(self, hosts: list, ports: list) -> Optional[object]:
         """
-        Connect to OBS WebSocket with retry.
+        Attempt to connect to already-running OBS instance.
         
-        Attempts connection to OBS WebSocket server with multiple fallback strategies:
-        1. Try configured host/port if OBS already running
-        2. Launch OBS if not running
-        3. Retry with exponential backoff during OBS startup
-        
-        The WebSocket library (obsws_python) can raise ValueError for invalid hostnames,
-        particularly with IPv6 addresses. We catch and suppress these specific errors
-        while preserving other connection failures for debugging.
+        Returns client if successful, None otherwise.
         """
-        from scribe.utils.logging import console
-        
-        # Prioritize IPv4 addresses - WebSocket libraries have better IPv4 support
-        # IPv6 (::1) often triggers hostname validation errors in websocket-client
-        hosts = [self.obs_host, "127.0.0.1"]
-        if self.obs_host not in ["localhost", "127.0.0.1", "::1"]:
-            # Only add IPv6 if user explicitly configured a different host
-            hosts.append("::1")
-        
-        ports = [self.obs_port]
-        if self.obs_port != 4455:
-            ports.append(4455)  # Fallback to default port
-        
-        console.print(f"[cyan]Connecting to OBS (checking {hosts[0]}:{ports[0]})...[/cyan]")
-        
-        # Quick check if already running - only try connection if port is listening
-        obs_already_running = False
         for h in hosts:
             for p in ports:
                 is_listening = self._port_listening(h, p, timeout=0.3)
                 logger.debug(f"Port check {h}:{p} = {is_listening}")
                 if is_listening:
-                    obs_already_running = True
                     try:
                         client = obs_reqs.ReqClient(
                             host=h,
@@ -294,98 +268,127 @@ class OBSRecorder:
                             password=self.obs_password,
                             timeout=3.0
                         )
-                        # Verify connection is actually working
                         client.get_record_status()
-                        console.print(f"[green]Connected to OBS at ws://{h}:{p}[/green]")
                         logger.info(f"Connected to OBS at ws://{h}:{p}")
-                        try:
-                            yield client
-                        finally:
-                            try:
-                                client.close()
-                            except Exception:
-                                pass
-                        return
+                        return client
                     except ValueError as e:
-                        # WebSocket library hostname validation failure
-                        # Common with IPv6 addresses or non-standard hostnames
                         if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
                             logger.debug(f"Hostname validation failed for {h}:{p} - {e}")
                         else:
                             logger.debug(f"ValueError during connection to {h}:{p}: {e}")
                     except Exception as e:
                         logger.debug(f"Connection attempt to {h}:{p} failed: {e}")
+        return None
+    
+    def _wait_for_obs_startup(self, hosts: list, ports: list, max_wait_seconds: int) -> Optional[object]:
+        """
+        Wait for OBS to start and attempt connection with retry.
         
-        # Try launching OBS only if not already running
-        if not obs_already_running:
-            obs_exe = get_obs_executable_path()
-        else:
-            obs_exe = None
+        Returns client if successful, None otherwise.
+        """
+        for attempt in range(int(max_wait_seconds * 2)):
+            for h in hosts:
+                for p in ports:
+                    if self._port_listening(h, p, timeout=0.2):
+                        try:
+                            client = obs_reqs.ReqClient(
+                                host=h,
+                                port=p,
+                                password=self.obs_password,
+                                timeout=3.0
+                            )
+                            # Give OBS a moment to fully initialize
+                            if attempt < 4:
+                                time.sleep(0.5)
+                                continue
+                            
+                            try:
+                                client.get_record_status()
+                            except obs_error.OBSSDKRequestError as e:
+                                if "not ready" in str(e).lower():
+                                    time.sleep(0.5)
+                                    continue
+                                raise
+                            
+                            logger.info(f"Connected to OBS at ws://{h}:{p}")
+                            return client
+                            
+                        except ValueError as e:
+                            if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
+                                logger.debug(f"Hostname validation failed for {h}:{p} - {e}")
+                            else:
+                                logger.debug(f"ValueError during connection to {h}:{p}: {e}")
+                        except Exception as e:
+                            if "not ready" not in str(e).lower():
+                                logger.debug(f"Connection attempt to {h}:{p} failed: {e}")
+            time.sleep(0.5)
+        return None
+    
+    @contextmanager
+    def _connect_obs(self, max_wait_seconds: int = 15):
+        """
+        Connect to OBS WebSocket with retry.
         
+        Attempts connection with multiple fallback strategies:
+        1. Try configured host/port if OBS already running
+        2. Launch OBS if not running
+        3. Retry with backoff during OBS startup
+        """
+        from scribe.utils.logging import console
+        
+        # Prioritize IPv4 - WebSocket libraries have better IPv4 support
+        hosts = [self.obs_host, "127.0.0.1"]
+        if self.obs_host not in ["localhost", "127.0.0.1", "::1"]:
+            hosts.append("::1")
+        
+        ports = [self.obs_port]
+        if self.obs_port != 4455:
+            ports.append(4455)
+        
+        console.print(f"[cyan]Connecting to OBS (checking {hosts[0]}:{ports[0]})...[/cyan]")
+        
+        # Try connecting to already-running OBS
+        client = self._try_connect_to_running_obs(hosts, ports)
+        if client:
+            console.print(f"[green]Connected to OBS[/green]")
+            try:
+                yield client
+            finally:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            return
+        
+        # Try launching OBS
+        obs_exe = get_obs_executable_path()
         if obs_exe:
             console.print("[cyan]Starting OBS Studio...[/cyan]")
             logger.info("Starting OBS...")
             try:
-                obs_dir = obs_exe.parent
                 subprocess.Popen(
                     [str(obs_exe), "--minimize-to-tray"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    cwd=str(obs_dir)
+                    cwd=str(obs_exe.parent)
                 )
             except Exception as e:
                 logger.warning(f"Could not launch OBS: {e}")
             
-            # Wait for OBS to start with retry logic
+            # Wait for OBS to start
             console.print("[cyan]Waiting for OBS to start...[/cyan]")
-            for attempt in range(int(max_wait_seconds * 2)):
-                for h in hosts:
-                    for p in ports:
-                        if self._port_listening(h, p, timeout=0.2):
-                            try:
-                                client = obs_reqs.ReqClient(
-                                    host=h,
-                                    port=p,
-                                    password=self.obs_password,
-                                    timeout=3.0
-                                )
-                                # Give OBS a moment to fully initialize WebSocket server
-                                # Early attempts may succeed at TCP level but fail at protocol level
-                                if attempt < 4:
-                                    time.sleep(0.5)
-                                    continue
-                                
-                                try:
-                                    client.get_record_status()
-                                except obs_error.OBSSDKRequestError as e:
-                                    if "not ready" in str(e).lower():
-                                        time.sleep(0.5)
-                                        continue
-                                    raise
-                                
-                                console.print(f"[green]Connected to OBS at ws://{h}:{p}[/green]")
-                                logger.info(f"Connected to OBS at ws://{h}:{p}")
-                                try:
-                                    yield client
-                                finally:
-                                    try:
-                                        client.close()
-                                    except Exception:
-                                        pass
-                                return
-                            except ValueError as e:
-                                # WebSocket library hostname validation failure
-                                if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
-                                    logger.debug(f"Hostname validation failed for {h}:{p} - {e}")
-                                else:
-                                    logger.debug(f"ValueError during connection to {h}:{p}: {e}")
-                            except Exception as e:
-                                # Log other connection failures for debugging
-                                if "not ready" not in str(e).lower():
-                                    logger.debug(f"Connection attempt to {h}:{p} failed: {e}")
-                time.sleep(0.5)
+            client = self._wait_for_obs_startup(hosts, ports, max_wait_seconds)
+            if client:
+                console.print(f"[green]Connected to OBS[/green]")
+                try:
+                    yield client
+                finally:
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+                return
         
-        # Connection failed
         raise ConnectionError("Could not connect to OBS WebSocket")
     
     def _set_record_dir_if_possible(self, client, out_dir: str) -> bool:

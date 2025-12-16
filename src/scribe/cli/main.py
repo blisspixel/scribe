@@ -489,8 +489,6 @@ def transcribe_command(
             console.print(f"  [green]-[/green] [white]Meme:[/white]       [link={url}]{session.meme_file}[/link]")
         
         console.print()
-        console.print("[dim]Tip: Ctrl+Click (or Cmd+Click on macOS) to open files[/dim]")
-        console.print()
         
     except ScribeError as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
