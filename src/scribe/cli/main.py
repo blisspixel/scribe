@@ -14,7 +14,6 @@ import warnings
 warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
 
 import typer
-from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
@@ -25,7 +24,6 @@ from scribe.models.gpu import GPUConfig
 from scribe.core.transcriber import Transcriber
 from scribe.core.recorder import OBSRecorder
 from scribe.utils.validation import validate_file_path, sanitize_meeting_name
-from scribe.utils.files import extract_date_from_filename
 from scribe.utils.docx_converter import txt_to_docx
 from scribe.utils.logging import setup_logging, console, get_logger
 from scribe.utils.joke_generator import generate_transcript_joke, ARCHETYPE_DISPLAY_NAMES
@@ -33,57 +31,55 @@ from scribe.utils.joke_generator import generate_transcript_joke, ARCHETYPE_DISP
 logger = get_logger(__name__)
 from scribe.exceptions import ScribeError, ProcessError, TranscriptionError
 
-# Create Typer app with enhanced help
-HELP_TEXT = """
-[bold cyan]Scribe v{version}[/bold cyan] - [white]Professional GPU-Accelerated Speech Intelligence[/white]
+# Create Typer app with custom help
+# Using ScribeTheme colors for a modern, cohesive look
+from scribe.utils.theme import ScribeTheme
+import click
 
-[bold yellow]Core Capabilities:[/bold yellow]
-  [green]-[/green] [white]GPU-accelerated local transcription[/white] [dim](11x real-time on RTX 4090)[/dim]
-  [green]-[/green] [white]Cloud transcription via OpenAI API[/white] [dim]with automatic fallback[/dim]
-  [green]-[/green] [white]Multi-provider AI support[/white] [dim](OpenAI, XAI/Grok, Anthropic, Gemini)[/dim]
-  [green]-[/green] [white]Batch processing[/white] [dim]for multiple files[/dim]
-  [green]-[/green] [white]Custom vocabulary[/white] [dim]for domain-specific accuracy[/dim]
-  [green]-[/green] [white]Intelligent meeting notes[/white] [dim]with structured analysis[/dim]
-  [green]-[/green] [white]Context-aware humor[/white] [dim](jokes and memes)[/dim]
+# Custom help formatter that's minimal and clean
+class CleanGroup(typer.core.TyperGroup):
+    """Custom group with minimal, elite-tier help formatting."""
+    
+    def format_help(self, ctx, formatter):
+        """Override to provide clean, minimal help."""
+        from rich.console import Console
+        
+        console = Console()
+        
+        # Header - tight, no fluff
+        console.print()
+        console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
+        
+        # Commands - simple aligned list  
+        cmds = [
+            ("transcribe FILE  ", "transcribe audio/video"),
+            ("batch FILES      ", "process multiple files"),
+            ("rec NAME         ", "record via OBS"),
+            ("music FILE       ", "extract lyrics"),
+            ("notes TXT        ", "meeting notes"),
+            ("joke TXT         ", "generate joke"),
+            ("meme TXT         ", "generate meme"),
+            ("doctor           ", "diagnostics"),
+            ("info             ", "configuration"),
+            ("help             ", "show this help"),
+        ]
+        
+        for cmd, desc in cmds:
+            console.print(f"  [{ScribeTheme.PRIMARY}]{cmd}[/{ScribeTheme.PRIMARY}][{ScribeTheme.TEXT_MUTED}]{desc}[/{ScribeTheme.TEXT_MUTED}]")
+        
+        console.print()
+        console.print(f"[{ScribeTheme.TEXT_MUTED}]scribe <cmd> -h for options[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
 
-[bold yellow]Quick Start:[/bold yellow]
-  [cyan]scribe transcribe[/cyan] meeting.mp4              [dim]# Transcribe single file[/dim]
-  [cyan]scribe batch[/cyan] *.mp4                         [dim]# Process multiple files[/dim]
-  [cyan]scribe music[/cyan] song.mp3                      [dim]# Transcribe music/lyrics[/dim]
-  [cyan]scribe rec[/cyan] "Team Meeting"                  [dim]# Record and transcribe[/dim]
-  [cyan]scribe doctor[/cyan]                              [dim]# System diagnostics[/dim]
-
-[bold yellow]Common Workflows:[/bold yellow]
-  [dim]# Technical meeting with custom terms[/dim]
-  [cyan]scribe transcribe[/cyan] meeting.mp4 [green]--vocabulary[/green] tech-terms.txt
-  
-  [dim]# Batch process with specific provider[/dim]
-  [cyan]scribe batch[/cyan] *.wav [green]--method[/green] local [green]--no-meme[/green]
-  
-  [dim]# Generate notes from existing transcript[/dim]
-  [cyan]scribe notes[/cyan] transcript.txt [green]--provider[/green] xai
-
-[bold yellow]Configuration:[/bold yellow]
-  [dim]Set environment variables in .env file:[/dim]
-  [green]-[/green] [yellow]OPENAI_API_KEY[/yellow]       [dim]Required for API features[/dim]
-  [green]-[/green] [yellow]XAI_API_KEY[/yellow]          [dim]Optional, 47x cheaper for AI features[/dim]
-  [green]-[/green] [yellow]SCRIBE_OUTPUT_FOLDER[/yellow] [dim]Output directory[/dim]
-
-[bold yellow]System Requirements:[/bold yellow]
-  [green]-[/green] [white]Python 3.10+[/white]
-  [green]-[/green] [white]FFmpeg[/white] [dim](for audio/video processing)[/dim]
-  [green]-[/green] [white]NVIDIA GPU with CUDA[/white] [dim](optional, for local transcription)[/dim]
-  [green]-[/green] [white]8+ GB RAM[/white] [dim]recommended[/dim]
-
-[dim]Run '[/dim][cyan]scribe doctor[/cyan][dim]' for detailed system diagnostics[/dim]
-""".format(version=__version__)
 
 app = typer.Typer(
     name="scribe",
-    help=HELP_TEXT,
-    add_completion=True,
+    cls=CleanGroup,
+    add_completion=False,  # Remove shell completion clutter
     rich_markup_mode="rich",
-    no_args_is_help=True
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 
@@ -107,7 +103,7 @@ def transcribe_command(
     language: Optional[str] = typer.Option(
         None,
         "--language", "-l",
-        help="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')"
+        help="Language (english, spanish, french, german, japanese, chinese, or ISO code)"
     ),
     output: Optional[Path] = typer.Option(
         None,
@@ -154,7 +150,7 @@ def transcribe_command(
       
       scribe transcribe interview.wav --method local --model large-v3
       
-      scribe transcribe podcast.mp3 --method openai --language es
+      scribe transcribe podcast.mp3 --method openai --language spanish
       
       scribe transcribe meeting.mp4 --no-joke --no-meme
       
@@ -172,12 +168,13 @@ def transcribe_command(
         if language:
             # Validate language code
             from scribe.utils.validation import validate_language_code
+            from scribe.exceptions import ValidationError
             try:
                 validated_lang = validate_language_code(language)
                 config.default_language = validated_lang
-            except ValidationError as e:
+            except ValidationError:
                 console.print(f"[red]Invalid language code: {language}[/red]")
-                console.print(f"[dim]Use 2-letter ISO 639-1 codes (e.g., 'en', 'es', 'fr', 'de', 'zh', 'ja')[/dim]")
+                console.print("[dim]Use 2-letter ISO 639-1 codes (e.g., 'en', 'es', 'fr', 'de', 'zh', 'ja')[/dim]")
                 raise typer.Exit(1)
         if keep_all:
             config.keep_intermediate_files = True
@@ -198,8 +195,7 @@ def transcribe_command(
         
         # Setup logging
         meeting_name = audio_file.stem
-        logger = setup_logging(meeting_name, config.log_folder)
-        workflow_start_time = time.time()
+        setup_logging(meeting_name, config.log_folder)
         
         # Get audio duration for progress estimation
         from scribe.utils.audio import get_audio_duration
@@ -223,17 +219,17 @@ def transcribe_command(
             outputs.append("meme")
         
         # Build panel content
-        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
-        panel_lines.append(f"[white]{audio_file.name}[/white]")
+        panel_lines = [f"[bold {ScribeTheme.PRIMARY_BRIGHT}]Scribe v{__version__}[/bold {ScribeTheme.PRIMARY_BRIGHT}]"]
+        panel_lines.append(f"[{ScribeTheme.TEXT_PRIMARY}]{audio_file.name}[/{ScribeTheme.TEXT_PRIMARY}]")
         
         if duration_mins:
-            panel_lines.append(f"[dim]Duration: {duration_mins} minutes[/dim]")
+            panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]Duration: {duration_mins} minutes[/{ScribeTheme.TEXT_MUTED}]")
         
-        panel_lines.append(f"[dim]Generating: {', '.join(outputs)}[/dim]")
+        panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]Generating: {', '.join(outputs)}[/{ScribeTheme.TEXT_MUTED}]")
         
         console.print(Panel.fit(
             "\n".join(panel_lines),
-            border_style="cyan",
+            border_style=ScribeTheme.PRIMARY_DIM,
             padding=(0, 1)
         ))
         console.print()
@@ -283,7 +279,7 @@ def transcribe_command(
             # OpenAI API accepts multiple formats but has 25MB limit
             try:
                 file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-            except (FileNotFoundError, OSError) as e:
+            except (FileNotFoundError, OSError):
                 console.print(f"[bold red]Error:[/bold red] Cannot access file: {audio_path}")
                 raise typer.Exit(1)
             
@@ -420,7 +416,7 @@ def transcribe_command(
         # Cleanup
         if not keep_all:
             unified_progress.update_phase("finishing", 0.95, "Cleaning up")
-            deleted = transcriber.cleanup_intermediate_files(audio_path.parent)
+            transcriber.cleanup_intermediate_files(audio_path.parent)
         
         # Complete unified progress
         unified_progress.update_phase("finishing", 1.0)
@@ -428,7 +424,7 @@ def transcribe_command(
         
         # Complete session
         session.complete(success=True)
-        summary_path = session.save_summary(config.output_folder)
+        session.save_summary(config.output_folder)
         console.print()
         
         # Display joke if generated
@@ -557,14 +553,14 @@ def record(
         
         # Display header first
         console.print(Panel.fit(
-            f"[bold cyan]Scribe Recording System v{__version__}[/bold cyan]",
-            border_style="cyan"
+            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]Scribe Recording System v{__version__}[/bold {ScribeTheme.PRIMARY_BRIGHT}]",
+            border_style=ScribeTheme.PRIMARY_DIM
         ))
         
         # Show configuration settings
         settings_table = Table(title="Recording Settings", show_header=False, box=None)
-        settings_table.add_column("Setting", style="cyan", no_wrap=True)
-        settings_table.add_column("Value", style="white")
+        settings_table.add_column("Setting", style=ScribeTheme.PRIMARY, no_wrap=True)
+        settings_table.add_column("Value", style=ScribeTheme.TEXT_PRIMARY)
         
         settings_table.add_row("Output Folder", str(config.output_folder))
         settings_table.add_row("Transcription", "Enabled (auto)" if auto_transcribe else "Disabled")
@@ -594,7 +590,7 @@ def record(
         recorder = OBSRecorder(config)
         recording_path = recorder.record(name)
         
-        console.print(f"\n[bold green]Recording Complete![/bold green]")
+        console.print("\n[bold green]Recording Complete![/bold green]")
         console.print(f"File: {recording_path}\n")
         
         # Auto-transcribe if requested
@@ -634,7 +630,7 @@ def record(
                 # OpenAI API accepts multiple formats but has 25MB limit
                 try:
                     file_size_mb = recording_path.stat().st_size / (1024 * 1024)
-                except (FileNotFoundError, OSError) as e:
+                except (FileNotFoundError, OSError):
                     console.print(f"[bold red]Error:[/bold red] Cannot access recording file: {recording_path}")
                     raise typer.Exit(1)
                 
@@ -776,7 +772,7 @@ def record(
                                 api_key=None  # Let provider system choose the right key
                             )
                             if meme_result and meme_result.get("final_path"):
-                                spinner.success("Meme generated")
+                                spinner.complete()
                             else:
                                 spinner.error("Meme generation failed")
                         if meme_result and meme_result.get("final_path"):
@@ -841,7 +837,7 @@ def batch_transcribe(
     language: Optional[str] = typer.Option(
         None,
         "--language", "-l",
-        help="Language code (ISO 639-1)"
+        help="Language (english, spanish, etc. or ISO code)"
     ),
     no_docx: bool = typer.Option(
         False,
@@ -904,7 +900,7 @@ def batch_transcribe(
             try:
                 validated_lang = validate_language_code(language)
                 config.default_language = validated_lang
-            except Exception as e:
+            except Exception:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 raise typer.Exit(1)
         
@@ -1107,7 +1103,7 @@ def music_transcribe(
     language: Optional[str] = typer.Option(
         None,
         "--language", "-l",
-        help="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')"
+        help="Language (english, spanish, etc. or ISO code)"
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -1149,16 +1145,13 @@ def music_transcribe(
             try:
                 validated_lang = validate_language_code(language)
                 config.default_language = validated_lang
-            except Exception as e:
+            except Exception:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 raise typer.Exit(1)
         else:
             # For music mode, enable auto-detection by default
             # Language will be detected per-segment after vocal separation
             config.default_language = None
-        
-        # Music mode uses separation-first architecture
-        use_separation = True  # Always use for music mode
         
         # Collect all audio files to process
         files_to_process = []
@@ -1224,7 +1217,7 @@ def music_transcribe(
                     
                     if not music_analysis["is_music"]:
                         # Not music - skip processing
-                        console.print(f" [red]not music[/red]")
+                        console.print(" [red]not music[/red]")
                         console.print(f"  [dim]{music_analysis['reason']}[/dim]")
                         console.print()
                         results.append({"file": audio_path.name, "status": "failed", "error": "Not music"})
@@ -1482,7 +1475,7 @@ def music_transcribe(
                 except TranscriptionError as e:
                     # Check if it's instrumental (no speech detected)
                     if "No speech detected" in str(e) or "instrumental" in str(e).lower():
-                        console.print(f"  [dim]Cleaning up...[/dim]", end="")
+                        console.print("  [dim]Cleaning up...[/dim]", end="")
                         
                         # Clean up intermediate files
                         # 1. Converted WAV file
@@ -1537,7 +1530,7 @@ def music_transcribe(
                     if vocals_path and vocals_path.exists() and vocals_path != audio_path:
                         vocals_path.unlink()
                     
-                    console.print(f"  [yellow]INST[/yellow] Instrumental (no vocals detected)")
+                    console.print("  [yellow]INST[/yellow] Instrumental (no vocals detected)")
                     console.print()
                     results.append({"file": audio_path.name, "status": "instrumental"})
                 else:
@@ -1650,13 +1643,13 @@ def joke(
         
         # Validate file is a text file
         if not transcript_file.suffix.lower() in ['.txt', '.md']:
-            console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
         # Display header
         panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append(f"[dim]Generating: joke[/dim]")
+        panel_lines.append("[dim]Generating: joke[/dim]")
         
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -1691,7 +1684,7 @@ def joke(
             console=console,
             transient=True
         ) as progress:
-            task = progress.add_task("Generating joke...", total=None)
+            progress.add_task("Generating joke...", total=None)
             
             if enable_bakeoff:
                 # Run bake-off
@@ -1787,13 +1780,13 @@ def meme(
         
         # Validate file is a text file
         if not transcript_file.suffix.lower() in ['.txt', '.md']:
-            console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
         # Display header
         panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append(f"[dim]Generating: meme[/dim]")
+        panel_lines.append("[dim]Generating: meme[/dim]")
         
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -1820,7 +1813,7 @@ def meme(
             console=console,
             transient=True
         ) as progress:
-            task = progress.add_task("Generating meme...", total=None)
+            progress.add_task("Generating meme...", total=None)
             
             # Determine if bakeoff is enabled
             import os
@@ -1866,16 +1859,15 @@ def meme(
         
         # Extract attempts info
         attempts = meme_result.get("attempts", []) if isinstance(meme_result, dict) else []
-        best_score = meme_result.get("best_score") if isinstance(meme_result, dict) else None
         
         # Display results
         console.print()
-        url_path = str(meme_path).replace("\\", "/")
-        console.print(f"[bold cyan]Meme:[/bold cyan] [link=file:///{url_path}]{meme_path}[/link]")
+        from scribe.utils.theme import file_link
+        console.print(file_link("Meme:", str(meme_path)))
         
         # Show all attempts if multiple were generated
         if len(attempts) > 1:
-            console.print(f"\n[bold cyan]All Attempts:[/bold cyan]")
+            console.print(f"\n[{ScribeTheme.ACCENT}]All Attempts:[/{ScribeTheme.ACCENT}]")
             for attempt in attempts:
                 score_str = f"{attempt['score']:.1f}/10" if attempt['score'] is not None else "N/A"
                 attempt_path = attempt['path']
@@ -1940,13 +1932,13 @@ def notes(
         
         # Validate file is a text file
         if not transcript_file.suffix.lower() in ['.txt', '.md']:
-            console.print(f"[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
         
         # Display header
         panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append(f"[dim]Generating: notes[/dim]")
+        panel_lines.append("[dim]Generating: notes[/dim]")
         
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -1972,7 +1964,7 @@ def notes(
             console=console,
             transient=True
         ) as progress:
-            task = progress.add_task("Generating notes...", total=None)
+            progress.add_task("Generating notes...", total=None)
             notes_path = notes_generator.generate_notes(transcript_file, output)
         
         console.print()
@@ -2002,63 +1994,61 @@ def info():
     Displays GPU detection results, recommended transcription method,
     and system configuration.
     """
+    from scribe.utils.theme import ScribeTheme
+    
     try:
         config = ScribeConfig()
         gpu_config = GPUConfig.detect()
         
-        console.print(Panel.fit(
-            f"[bold cyan]Scribe System Information v{__version__}[/bold cyan]",
-            border_style="cyan"
-        ))
+        console.print()
+        console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe info[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
         
-        # GPU Information
-        gpu_table = Table(title="GPU Information", show_header=False)
-        gpu_table.add_column("Property", style="cyan")
-        gpu_table.add_column("Value", style="white")
-        
+        # GPU section
+        console.print(f"[bold {ScribeTheme.SECONDARY}]gpu[/bold {ScribeTheme.SECONDARY}]")
         if gpu_config.has_gpu:
-            gpu_table.add_row("GPU Detected", "[green]Yes[/green]")
-            gpu_table.add_row("GPU Name", gpu_config.gpu_name or "Unknown")
-            gpu_table.add_row("VRAM", f"{gpu_config.gpu_memory_gb:.1f} GB")
-            gpu_table.add_row("CUDA Available", "[green]Yes[/green]" if gpu_config.cuda_available else "[red]No[/red]")
-            if gpu_config.cuda_version:
-                gpu_table.add_row("CUDA Version", gpu_config.cuda_version)
-            gpu_table.add_row("Recommended Model", gpu_config.model_size)
-            gpu_table.add_row("Beam Size", str(gpu_config.beam_size))
-            gpu_table.add_row("FP16 Precision", "[green]Enabled[/green]" if gpu_config.use_fp16 else "[yellow]Disabled[/yellow]")
-            gpu_table.add_row("Expected Speed", gpu_config.get_expected_speed())
+            console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{gpu_config.gpu_name}[/{ScribeTheme.TEXT_PRIMARY}] [{ScribeTheme.TEXT_MUTED}]{gpu_config.gpu_memory_gb:.0f}GB VRAM[/{ScribeTheme.TEXT_MUTED}]")
+            console.print(f"  [{ScribeTheme.TEXT_MUTED}]CUDA {gpu_config.cuda_version} · {gpu_config.model_size} · beam={gpu_config.beam_size} · {gpu_config.get_expected_speed()}[/{ScribeTheme.TEXT_MUTED}]")
         else:
-            gpu_table.add_row("GPU Detected", "[red]No[/red]")
-            gpu_table.add_row("Reason", gpu_config.reason)
+            console.print(f"  [{ScribeTheme.WARNING}]not detected[/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_MUTED}]{gpu_config.reason}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
         
-        console.print(gpu_table)
+        # Config section
+        console.print(f"[bold {ScribeTheme.SECONDARY}]config[/bold {ScribeTheme.SECONDARY}]")
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]output[/{ScribeTheme.TEXT_PRIMARY}]    [{ScribeTheme.TEXT_MUTED}]{config.output_folder}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]model[/{ScribeTheme.TEXT_PRIMARY}]     [{ScribeTheme.TEXT_MUTED}]{config.default_model}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  [{ScribeTheme.TEXT_MUTED}]{config.default_language}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
+        
+        # API keys section
+        console.print(f"[bold {ScribeTheme.SECONDARY}]api keys[/bold {ScribeTheme.SECONDARY}]")
+        openai_status = f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]" if config.openai_api_key else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]openai[/{ScribeTheme.TEXT_PRIMARY}]    {openai_status}")
+        
+        # Check for other API keys
+        import os
+        xai_key = os.getenv("XAI_API_KEY")
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        
+        xai_status = f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]" if xai_key else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
+        gemini_status = f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]" if gemini_key else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
+        anthropic_status = f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]" if anthropic_key else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
+        
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]xai[/{ScribeTheme.TEXT_PRIMARY}]       {xai_status}")
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]gemini[/{ScribeTheme.TEXT_PRIMARY}]    {gemini_status}")
+        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]anthropic[/{ScribeTheme.TEXT_PRIMARY}] {anthropic_status}")
         console.print()
         
         # Recommendation
         if gpu_config.recommendation == "local":
-            console.print(f"[bold green]Recommendation:[/bold green] Use local GPU transcription")
-            console.print(f"[dim]{gpu_config.reason}[/dim]")
+            console.print(f"[{ScribeTheme.SUCCESS}]recommended: local GPU[/{ScribeTheme.SUCCESS}]")
         else:
-            console.print(f"[bold yellow]Recommendation:[/bold yellow] Use OpenAI API transcription")
-            console.print(f"[dim]{gpu_config.reason}[/dim]")
-        
+            console.print(f"[{ScribeTheme.PRIMARY}]recommended: OpenAI API[/{ScribeTheme.PRIMARY}]")
         console.print()
         
-        # Configuration
-        config_table = Table(title="Configuration", show_header=False)
-        config_table.add_column("Setting", style="cyan")
-        config_table.add_column("Value", style="white")
-        
-        config_table.add_row("Output Folder", str(config.output_folder))
-        config_table.add_row("Default Model", config.default_model)
-        config_table.add_row("Default Language", config.default_language)
-        config_table.add_row("OpenAI API Key", "[green]Configured[/green]" if config.openai_api_key else "[yellow]Not Set[/yellow]")
-        config_table.add_row("HF Token", "[green]Configured[/green]" if config.hf_token else "[yellow]Not Set[/yellow]")
-        
-        console.print(config_table)
-        
     except Exception as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        console.print(f"\n[bold {ScribeTheme.ERROR}]error:[/bold {ScribeTheme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -2071,91 +2061,73 @@ def doctor():
     Provides actionable suggestions for fixing issues.
     """
     from scribe.utils.diagnostics import SystemDiagnostics
+    from scribe.utils.theme import ScribeTheme
+    from rich.table import Table
     
     console.print()
-    console.print(Panel.fit(
-        f"[bold cyan]Scribe System Diagnostics[/bold cyan] [dim]v{__version__}[/dim]",
-        border_style="cyan",
-        padding=(0, 2)
-    ))
+    console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe doctor[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
     console.print()
     
     # Run diagnostics
     diagnostics = SystemDiagnostics()
     results = diagnostics.run_all_checks()
     
-    # Display results with enhanced formatting
-    for result in results:
-        # Status icon and color
-        if result.status == "pass":
-            status_mark = "[bold green]PASS[/bold green]"
-            name_color = "white"
-            msg_color = "green"
-        elif result.status == "warn":
-            status_mark = "[bold yellow]WARN[/bold yellow]"
-            name_color = "white"
-            msg_color = "yellow"
-        else:
-            status_mark = "[bold red]FAIL[/bold red]"
-            name_color = "white"
-            msg_color = "red"
-        
-        # Print result with color coding
-        console.print(f"{status_mark} [bold {name_color}]{result.name}:[/bold {name_color}] [{msg_color}]{result.message}[/{msg_color}]")
-        
-        if result.details:
-            # Multi-line details with proper indentation
-            for line in result.details.split('\n'):
-                console.print(f"  [dim]{line}[/dim]")
-        
-        if result.fix_suggestion:
-            console.print(f"  [bold cyan]Fix:[/bold cyan] [white]{result.fix_suggestion}[/white]")
-        
+    # Group results by status for cleaner display
+    passed = [r for r in results if r.status == "pass"]
+    warnings = [r for r in results if r.status == "warn"]
+    failures = [r for r in results if r.status == "fail"]
+    
+    # Display failures first (if any)
+    if failures:
+        console.print(f"[bold {ScribeTheme.ERROR}]FAILED[/bold {ScribeTheme.ERROR}]")
+        for result in failures:
+            console.print(f"  [{ScribeTheme.ERROR}]×[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_PRIMARY}]{result.name}[/{ScribeTheme.TEXT_PRIMARY}]")
+            console.print(f"    [{ScribeTheme.TEXT_MUTED}]{result.message}[/{ScribeTheme.TEXT_MUTED}]")
+            if result.fix_suggestion:
+                console.print(f"    [{ScribeTheme.PRIMARY}]→ {result.fix_suggestion}[/{ScribeTheme.PRIMARY}]")
         console.print()
     
-    # Summary
-    pass_count, warn_count, fail_count = diagnostics.get_summary()
-    total = len(results)
+    # Display warnings (if any)
+    if warnings:
+        console.print(f"[bold {ScribeTheme.WARNING}]WARNINGS[/bold {ScribeTheme.WARNING}]")
+        for result in warnings:
+            console.print(f"  [{ScribeTheme.WARNING}]![/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_PRIMARY}]{result.name}[/{ScribeTheme.TEXT_PRIMARY}]")
+            console.print(f"    [{ScribeTheme.TEXT_MUTED}]{result.message}[/{ScribeTheme.TEXT_MUTED}]")
+            if result.fix_suggestion:
+                console.print(f"    [{ScribeTheme.PRIMARY}]→ {result.fix_suggestion}[/{ScribeTheme.PRIMARY}]")
+        console.print()
     
-    # Summary section with visual separator
-    console.print()
-    console.print("[dim]" + "=" * 60 + "[/dim]")
-    console.print()
+    # Compact passed checks - just a summary table
+    if passed:
+        table = Table(
+            show_header=False,
+            box=None,
+            padding=(0, 1, 0, 0),
+            collapse_padding=True,
+        )
+        table.add_column(style=ScribeTheme.SUCCESS, width=2)
+        table.add_column(style=ScribeTheme.TEXT_PRIMARY, width=20)
+        table.add_column(style=ScribeTheme.TEXT_MUTED)
+        
+        for result in passed:
+            # Extract key info from message (first line or short version)
+            short_msg = result.message.split('\n')[0][:40]
+            table.add_row("+", result.name, short_msg)
+        
+        console.print(table)
+        console.print()
+    
+    # Summary line
+    pass_count, warn_count, fail_count = diagnostics.get_summary()
     
     if fail_count == 0 and warn_count == 0:
-        console.print("[bold green]SUCCESS:[/bold green] [white]All checks passed![/white]")
-        console.print("[dim]Your system is ready to use Scribe.[/dim]")
+        console.print(f"[{ScribeTheme.SUCCESS}]ready[/{ScribeTheme.SUCCESS}] [{ScribeTheme.TEXT_MUTED}]{pass_count} checks passed[/{ScribeTheme.TEXT_MUTED}]")
     elif fail_count == 0:
-        console.print(f"[bold yellow]WARNING:[/bold yellow] [white]{warn_count} warning(s) detected[/white]")
-        console.print("[dim]Scribe will work, but some features may be limited.[/dim]")
+        console.print(f"[{ScribeTheme.WARNING}]ready with warnings[/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_MUTED}]{pass_count} passed, {warn_count} warnings[/{ScribeTheme.TEXT_MUTED}]")
     else:
-        console.print(f"[bold red]CRITICAL:[/bold red] [white]{fail_count} critical issue(s) found[/white]")
-        console.print("[dim]Please fix the issues above before using Scribe.[/dim]")
+        console.print(f"[{ScribeTheme.ERROR}]not ready[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_MUTED}]{fail_count} failed, {warn_count} warnings[/{ScribeTheme.TEXT_MUTED}]")
     
     console.print()
-    
-    # Summary stats with color coding
-    summary_parts = []
-    if pass_count > 0:
-        summary_parts.append(f"[green]{pass_count} passed[/green]")
-    if warn_count > 0:
-        summary_parts.append(f"[yellow]{warn_count} warnings[/yellow]")
-    if fail_count > 0:
-        summary_parts.append(f"[red]{fail_count} failed[/red]")
-    
-    console.print(f"[dim]Summary:[/dim] {', '.join(summary_parts)}")
-    console.print()
-    
-    # Show prioritized recommendations with better formatting
-    recommendations = diagnostics.get_recommendations()
-    if recommendations:
-        console.print("[bold cyan]Recommended Actions:[/bold cyan]")
-        for i, rec in enumerate(recommendations[:5], 1):  # Show top 5
-            if "CRITICAL" in rec:
-                console.print(f"  [red]{i}.[/red] [white]{rec}[/white]")
-            else:
-                console.print(f"  [yellow]{i}.[/yellow] [white]{rec}[/white]")
-        console.print()
     
     # Exit with error code if there are failures
     if fail_count > 0:
@@ -2183,12 +2155,10 @@ def health_check(
     """
     import os
     from scribe.providers.health import get_health_monitor
+    from scribe.utils.theme import ScribeTheme
     
     console.print()
-    console.print(Panel.fit(
-        "[bold cyan]Provider Health Check[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe health[/bold {ScribeTheme.PRIMARY_BRIGHT}]")
     console.print()
     
     # Get health monitor
@@ -2206,32 +2176,20 @@ def health_check(
         api_keys["gemini"] = os.getenv("GEMINI_API_KEY")
     
     if not api_keys:
-        console.print("[yellow]No API keys configured. Set environment variables:[/yellow]")
-        console.print("  - OPENAI_API_KEY")
-        console.print("  - XAI_API_KEY")
-        console.print("  - ANTHROPIC_API_KEY")
-        console.print("  - GEMINI_API_KEY")
+        console.print(f"[{ScribeTheme.WARNING}]no api keys configured[/{ScribeTheme.WARNING}]")
+        console.print(f"[{ScribeTheme.TEXT_MUTED}]set OPENAI_API_KEY, XAI_API_KEY, etc.[/{ScribeTheme.TEXT_MUTED}]")
         console.print()
         raise typer.Exit(1)
     
     # Check specific provider or all
     providers_to_check = [provider] if provider else list(api_keys.keys())
     
-    # Create results table
-    table = Table(title="Provider Health Status")
-    table.add_column("Provider", style="cyan", no_wrap=True)
-    table.add_column("Status", style="white")
-    table.add_column("Response Time", style="white")
-    table.add_column("Details", style="dim")
-    
     all_healthy = True
+    results = []
     
     for provider_name in providers_to_check:
         if provider_name not in api_keys:
-            console.print(f"[yellow]Skipping {provider_name}: No API key configured[/yellow]")
             continue
-        
-        console.print(f"Checking {provider_name}...", end=" ")
         
         try:
             status = monitor.check_provider_health(
@@ -2241,54 +2199,31 @@ def health_check(
             )
             
             if status.is_healthy:
-                status_text = "[green]✓ Healthy[/green]"
-                response_time = f"{status.response_time_ms:.0f}ms" if status.response_time_ms else "N/A"
-                details = "API responding normally"
-                console.print("[green]✓[/green]")
+                response_time = f"{status.response_time_ms:.0f}ms" if status.response_time_ms else ""
+                results.append((provider_name, True, response_time))
             else:
-                status_text = "[red]✗ Unhealthy[/red]"
-                response_time = "N/A"
-                details = status.error_message or "Unknown error"
+                results.append((provider_name, False, status.error_message or "error"))
                 all_healthy = False
-                console.print("[red]✗[/red]")
-            
-            table.add_row(
-                provider_name.upper(),
-                status_text,
-                response_time,
-                details
-            )
             
         except Exception as e:
-            console.print(f"[red]✗[/red]")
-            table.add_row(
-                provider_name.upper(),
-                "[red]✗ Error[/red]",
-                "N/A",
-                str(e)
-            )
+            results.append((provider_name, False, str(e)[:30]))
             all_healthy = False
     
-    console.print()
-    console.print(table)
+    # Display results
+    for name, healthy, detail in results:
+        if healthy:
+            console.print(f"  [{ScribeTheme.SUCCESS}]+[/{ScribeTheme.SUCCESS}] [{ScribeTheme.TEXT_PRIMARY}]{name:<12}[/{ScribeTheme.TEXT_PRIMARY}][{ScribeTheme.TEXT_MUTED}]{detail}[/{ScribeTheme.TEXT_MUTED}]")
+        else:
+            console.print(f"  [{ScribeTheme.ERROR}]x[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_PRIMARY}]{name:<12}[/{ScribeTheme.TEXT_PRIMARY}][{ScribeTheme.TEXT_MUTED}]{detail}[/{ScribeTheme.TEXT_MUTED}]")
+    
     console.print()
     
     # Summary
     if all_healthy:
-        console.print("[bold green]✓ All providers are healthy[/bold green]")
+        console.print(f"[{ScribeTheme.SUCCESS}]all providers healthy[/{ScribeTheme.SUCCESS}]")
     else:
-        console.print("[bold yellow]⚠ Some providers have issues[/bold yellow]")
-        console.print("[dim]Check API keys and network connectivity[/dim]")
+        console.print(f"[{ScribeTheme.WARNING}]some providers have issues[/{ScribeTheme.WARNING}]")
     
-    console.print()
-    
-    # Feature support info
-    console.print("[dim]Feature support by provider:[/dim]")
-    console.print("  [cyan]Jokes:[/cyan] OpenAI, XAI, Anthropic, Gemini")
-    console.print("  [cyan]Notes:[/cyan] OpenAI, XAI, Anthropic, Gemini")
-    console.print("  [cyan]Memes (text):[/cyan] OpenAI, XAI, Anthropic, Gemini")
-    console.print("  [cyan]Memes (image):[/cyan] OpenAI, XAI, Gemini")
-    console.print("  [cyan]Transcription:[/cyan] OpenAI only")
     console.print()
     
     if not all_healthy:
@@ -2354,7 +2289,7 @@ def support_bundle(
         console.print()
         
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] Failed to create support bundle")
+        console.print("[bold red]Error:[/bold red] Failed to create support bundle")
         console.print(f"[dim]{e}[/dim]")
         raise typer.Exit(1)
 
@@ -2362,7 +2297,20 @@ def support_bundle(
 @app.command()
 def version():
     """Show version information."""
-    console.print(f"[bold cyan]Scribe[/bold cyan] version [bold]{__version__}[/bold]")
+    console.print(f"Scribe {__version__}")
+
+
+@app.command(name="help")
+def help_command():
+    """Show help information."""
+    # Trigger the main help by invoking the app's format_help
+    import click
+    ctx = click.get_current_context()
+    # Go up to parent context (the main app)
+    if ctx.parent:
+        click.echo(ctx.parent.get_help())
+    else:
+        click.echo(ctx.get_help())
 
 
 @app.command()
@@ -2426,9 +2374,9 @@ def clean(
         if trim_to:
             panel_lines.append(f"[dim]Mode: Trim to {trim_to}[/dim]")
         elif analyze_only:
-            panel_lines.append(f"[dim]Mode: Analyze only[/dim]")
+            panel_lines.append("[dim]Mode: Analyze only[/dim]")
         else:
-            panel_lines.append(f"[dim]Mode: Remove silence[/dim]")
+            panel_lines.append("[dim]Mode: Remove silence[/dim]")
             panel_lines.append(f"[dim]Threshold: {threshold}, Min duration: {duration}s[/dim]")
         
         console.print(Panel.fit(
@@ -2453,14 +2401,14 @@ def clean(
                 new_hours = new_mins / 60
                 
                 console.print()
-                console.print(f"[bold green]Success![/bold green]")
+                console.print("[bold green]Success![/bold green]")
                 console.print(f"  Original: {original_mins} minutes ({original_mins/60:.1f} hours)")
                 console.print(f"  Trimmed:  {new_mins} minutes ({new_hours:.1f} hours)")
                 console.print()
                 console.print(f"[bold]Output:[/bold] {output_path}")
             else:
                 console.print()
-                console.print(f"[bold green]Success![/bold green]")
+                console.print("[bold green]Success![/bold green]")
                 console.print(f"[bold]Output:[/bold] {output_path}")
             
             return
@@ -2471,13 +2419,13 @@ def clean(
             analysis = analyze_silence(input_file, threshold, duration)
             
             console.print()
-            console.print(f"[bold]Silence Analysis:[/bold]")
+            console.print("[bold]Silence Analysis:[/bold]")
             console.print(f"  Total silence: {analysis['total_silence_minutes']:.1f} minutes ({analysis['total_silence_seconds']:.1f}s)")
             console.print(f"  Silent periods: {analysis['silence_periods']}")
             
             if analysis['silence_periods'] > 0:
                 console.print()
-                console.print(f"[dim]First few silent periods:[/dim]")
+                console.print("[dim]First few silent periods:[/dim]")
                 for i, period in enumerate(analysis['periods'][:5], 1):
                     start_min = int(period['start'] / 60)
                     duration_sec = period['duration']
@@ -2487,7 +2435,7 @@ def clean(
                     console.print(f"  ... and {analysis['silence_periods'] - 5} more")
             
             console.print()
-            console.print(f"[green]To remove silence, run without --analyze flag[/green]")
+            console.print("[green]To remove silence, run without --analyze flag[/green]")
             
         else:
             # Remove silence
@@ -2508,13 +2456,13 @@ def clean(
             size_reduction = ((original_size - new_size) / original_size) * 100
             
             console.print()
-            console.print(f"[bold green]Success![/bold green]")
+            console.print("[bold green]Success![/bold green]")
             console.print(f"  Original size: {original_size:.1f} MB")
             console.print(f"  Cleaned size:  {new_size:.1f} MB")
             console.print(f"  Reduction:     {size_reduction:.1f}%")
             console.print()
-            console.print(f"[dim]Note: Silent sections are reduced to near-silence.[/dim]")
-            console.print(f"[dim]This makes transcription much faster as Whisper skips silent parts.[/dim]")
+            console.print("[dim]Note: Silent sections are reduced to near-silence.[/dim]")
+            console.print("[dim]This makes transcription much faster as Whisper skips silent parts.[/dim]")
             console.print()
             console.print(f"[bold]Output:[/bold] {output_path}")
         

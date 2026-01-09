@@ -161,14 +161,16 @@ class ProviderHealthMonitor:
     def _check_openai(self, api_key: str):
         """Check OpenAI API health."""
         from openai import OpenAI
+        from scribe.providers.factory import _get_default_model
         
+        model = _get_default_model("openai", "joke")
         client = OpenAI(api_key=api_key, timeout=10)
         
         # Simple completion test
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": "test"}],
-            max_tokens=5,
+            max_completion_tokens=5,
         )
         
         if not response.choices:
@@ -177,7 +179,9 @@ class ProviderHealthMonitor:
     def _check_xai(self, api_key: str):
         """Check XAI API health."""
         from openai import OpenAI
+        from scribe.providers.factory import _get_default_model
         
+        model = _get_default_model("xai", "joke")
         client = OpenAI(
             api_key=api_key,
             base_url="https://api.x.ai/v1",
@@ -186,7 +190,7 @@ class ProviderHealthMonitor:
         
         # Simple completion test
         response = client.chat.completions.create(
-            model="grok-4-fast",
+            model=model,
             messages=[{"role": "user", "content": "test"}],
             max_completion_tokens=5,
         )
@@ -201,11 +205,14 @@ class ProviderHealthMonitor:
         except ImportError:
             raise ImportError("anthropic package not installed")
         
+        from scribe.providers.factory import _get_default_model
+        model = _get_default_model("anthropic", "joke")
+        
         client = anthropic.Anthropic(api_key=api_key, timeout=10)
         
         # Simple completion test
         response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model=model,
             max_tokens=5,
             messages=[{"role": "user", "content": "test"}],
         )
@@ -217,15 +224,25 @@ class ProviderHealthMonitor:
         """Check Gemini API health."""
         try:
             from google import genai
+            from google.genai import types
         except ImportError:
             raise ImportError("google-genai package not installed")
         
+        # Get the default model from factory
+        from scribe.providers.factory import _get_default_model
+        model = _get_default_model("gemini", "joke")
+        
         client = genai.Client(api_key=api_key)
         
-        # Simple completion test
+        # Test with actual model we use
+        # Use higher max_output_tokens because Gemini 3 thinking uses tokens
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=model,
             contents="test",
+            config=types.GenerateContentConfig(
+                max_output_tokens=200,
+                thinking_config=types.ThinkingConfig(thinking_level="low")
+            )
         )
         
         if not response.text:

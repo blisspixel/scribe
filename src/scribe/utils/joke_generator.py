@@ -111,7 +111,7 @@ COMEDY_STYLES: Dict[str, str] = {
 # -----------------------------------------------------------------------------
 @dataclass
 class HumorConfig:
-    model: str = "gpt-5"
+    model: str = ""  # Empty = let provider factory choose default
     spice_level: int = 5  # Humor intensity 0-10 (0=off, 5=default, 10=spicy)
     
     @classmethod
@@ -143,7 +143,7 @@ class HumorConfig:
     max_words: int = 18
     # Start higher to avoid "max_output_tokens" incomplete results with GPT-5 reasoning
     max_output_tokens: int = 160
-    reasoning_effort: str = "minimal"   # minimal | low | medium | high
+    reasoning_effort: str = "low"   # none | low | medium | high | xhigh
     verbosity: str = "low"              # low | medium | high
     api_key: Optional[str] = None
     seed: Optional[int] = None
@@ -288,9 +288,15 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
 """
     
     try:
+        # Disable thinking for simple archetype selection (saves tokens)
+        kwargs = {}
+        if hasattr(provider, 'config') and 'gemini' in provider.config.model.lower():
+            kwargs['disable_thinking'] = True
+        
         response = provider.chat_completion(
             messages=[{"role": "user", "content": selection_prompt}],
-            max_tokens=100  # Should be enough for other models
+            max_tokens=100,
+            **kwargs
         )
         
         # Defensive: handle None or missing content
@@ -532,25 +538,27 @@ def generate_transcript_joke(
     else:
         raise TypeError("api_key_or_cfg must be a str (API key), HumorConfig, or None")
 
-    # Get provider (supports multi-provider) - currently only for archetype selection
-    # Full provider integration for joke generation coming in v2.2.0
+    # Get provider (supports multi-provider) - XAI default for less filtered humor
     try:
         from scribe.providers import get_provider
+        # Don't pass OpenAI-specific models to the provider factory
+        # Let factory choose default if model is empty or OpenAI-specific
+        openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o", ""]
         provider = get_provider(
             feature="joke",
             api_key=None,  # Let factory get the right key for the provider
-            model=cfg.model if cfg.model != "gpt-5" else None,  # Let provider choose default
+            model=cfg.model if cfg.model and cfg.model not in openai_models else None,
             provider_name=provider_name,
         )
-        logger.info(f"Using provider for archetype selection: {provider.config.provider_name} | model: {provider.config.model}")
+        logger.info(f"Using provider: {provider.config.provider_name} | model: {provider.config.model}")
         use_provider = True
     except Exception as e:
-        logger.debug(f"Provider system not available for archetype selection: {e}")
+        logger.warning(f"Provider system failed: {e}, falling back to OpenAI client")
         use_provider = False
+        # Fallback to OpenAI client
+        client = _build_client(cfg.api_key)
     
-    # Always use OpenAI client for joke generation (for now)
-    client = _build_client(cfg.api_key)
-    logger.info(f"Using model: {cfg.model} | archetype override: {cfg.archetype or 'None'}")
+    logger.info(f"Archetype override: {cfg.archetype or 'None'}")
 
     # Read transcript with size limit (prevent loading gigabytes)
     MAX_TRANSCRIPT_SIZE = 500_000  # 500KB max
@@ -627,20 +635,36 @@ def generate_transcript_joke(
 
     if os.getenv("HUMOR_DEBUG", "0") == "1":
         logger.debug("Request preview (redacted): " + json.dumps({
-            "model": cfg.model,
-            "input": [
-                {"role": "system", "content": [{"type": "input_text", "text": _redact(system_prompt, 240)}]},
-                {"role": "user", "content": [
-                    {"type": "input_text", "text": _redact(instruction, 320)},
-                    {"type": "input_text", "text": _redact(context_text, 400)},
-                ]}
-            ],
-            "reasoning": {"effort": cfg.reasoning_effort},
-            "text": {"verbosity": cfg.verbosity},
-            "max_output_tokens": cfg.max_output_tokens
+            "provider": provider.config.provider_name if use_provider else "openai",
+            "model": provider.config.model if use_provider else cfg.model,
+            "system": _redact(system_prompt, 240),
+            "instruction": _redact(instruction, 320),
+            "context": _redact(context_text, 400),
+            "max_tokens": cfg.max_output_tokens
         }, ensure_ascii=False))
 
-    def _call(instruction_text: str, max_tokens: int):
+    def _call_provider(instruction_text: str, max_tokens: int) -> str:
+        """Call provider's chat_completion API."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"{instruction_text}\n\n{context_text}"},
+        ]
+        
+        # For simple joke generation, disable Gemini's thinking (wastes tokens)
+        kwargs = {}
+        if hasattr(provider.config, 'provider_name') and provider.config.provider_name == 'gemini':
+            kwargs['disable_thinking'] = True
+        
+        response = provider.chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            **kwargs
+        )
+        
+        return response.get("content", "").strip()
+
+    def _call_openai(instruction_text: str, max_tokens: int):
+        """Call OpenAI's responses API (fallback)."""
         # Add timeout protection (30 seconds for API call)
         import signal
         
@@ -693,42 +717,50 @@ def generate_transcript_joke(
     for attempt in range(4):
         max_tokens = token_ramp[attempt]
         try:
-            resp = _call(instruction, max_tokens)
-            # Debug model version + incomplete details if present
-            try:
-                d = resp.to_dict()
-                if "model" in d:
-                    logger.debug(f"Model version: {d['model']}")
-                if d.get("incomplete_details"):
-                    logger.debug(f"Incomplete details: {d['incomplete_details']}")
-            except Exception:
-                pass
-
-            text = _extract_output_text(resp)
-            if not text:
+            # Use provider system (XAI default) or fallback to OpenAI client
+            if use_provider:
+                text = _call_provider(instruction, max_tokens)
+            else:
+                resp = _call_openai(instruction, max_tokens)
+                # Debug model version + incomplete details if present
                 try:
                     d = resp.to_dict()
-                    inc = d.get("incomplete_details") or {}
-                    reason = inc.get("reason")
-                    if reason == "max_output_tokens":
-                        logger.warning(
-                            f"Empty output due to max_output_tokens at {max_tokens}. "
-                            f"Will ramp tokens if attempts remain."
-                        )
-                    else:
-                        logger.warning(
-                            "Empty model output. Response preview (truncated): " + _resp_to_dict_trunc(resp)
-                        )
+                    if "model" in d:
+                        logger.debug(f"Model version: {d['model']}")
+                    if d.get("incomplete_details"):
+                        logger.debug(f"Incomplete details: {d['incomplete_details']}")
                 except Exception:
-                    logger.warning("Empty model output and failed to preview response")
+                    pass
+                text = _extract_output_text(resp)
+            
+            if not text:
+                if not use_provider:
+                    try:
+                        d = resp.to_dict()
+                        inc = d.get("incomplete_details") or {}
+                        reason = inc.get("reason")
+                        if reason == "max_output_tokens":
+                            logger.warning(
+                                f"Empty output due to max_output_tokens at {max_tokens}. "
+                                f"Will ramp tokens if attempts remain."
+                            )
+                        else:
+                            logger.warning(
+                                "Empty model output. Response preview (truncated): " + _resp_to_dict_trunc(resp)
+                            )
+                    except Exception:
+                        logger.warning("Empty model output and failed to preview response")
                 raise RuntimeError("Empty model output")
 
             # Length refinement if needed
             if not _word_len_ok(text, cfg.min_words, cfg.max_words):
                 logger.info("Length miss; requesting single refinement.")
                 refine_instruction = instruction + " Ensure the output fits the word target precisely."
-                resp2 = _call(refine_instruction, max_tokens)
-                text2 = _extract_output_text(resp2)
+                if use_provider:
+                    text2 = _call_provider(refine_instruction, max_tokens)
+                else:
+                    resp2 = _call_openai(refine_instruction, max_tokens)
+                    text2 = _extract_output_text(resp2)
                 if text2:
                     text = text2
 
@@ -739,7 +771,7 @@ def generate_transcript_joke(
 
         except Exception as e:
             last_err = e
-            logger.warning(f"Responses call failed (attempt {attempt+1}): {e}")
+            logger.warning(f"API call failed (attempt {attempt+1}): {e}")
             if attempt < len(backoffs):
                 next_tokens = token_ramp[min(attempt + 1, len(token_ramp) - 1)]
                 logger.info(f"Retrying in {backoffs[attempt]:.1f}s with max_output_tokens={next_tokens}")
@@ -768,7 +800,7 @@ if __name__ == "__main__":
         seed=42,
         min_words=10,
         max_words=18,
-        reasoning_effort="minimal",
+        reasoning_effort="low",
         verbosity="low",
         max_output_tokens=int(os.getenv("HUMOR_MAX_OUTPUT_TOKENS", "160")),
     )

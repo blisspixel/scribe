@@ -14,7 +14,7 @@ def gemini_config():
     return ProviderConfig(
         provider_name="gemini",
         api_key="test-gemini-key",
-        model="gemini-2.5-flash",
+        model="gemini-3-pro-preview",
     )
 
 
@@ -114,7 +114,7 @@ class TestGeminiProvider:
         assert result["content"] == "Test response"
         assert result["usage"]["prompt_tokens"] == 10
         assert result["usage"]["completion_tokens"] == 20
-        assert result["model"] == "gemini-2.5-flash"
+        assert result["model"] == "gemini-3-pro-preview"
     
     def test_generate_image_converts_size(self, gemini_config, mock_google_genai):
         """Test that image generation converts size to aspect ratio."""

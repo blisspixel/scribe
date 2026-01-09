@@ -32,10 +32,10 @@ scribe doctor                         # System diagnostics
 ## What's New in v2.4.2
 
 - **Smart .env Loading**: Works from any directory - finds .env in current, home, or package directory
-- **Cleaner Output**: Removed unnecessary tip messages for better UX
-- **Test Suite Excellence**: 678 tests (641 unit + 17 integration + 20 e2e), 100% pass rate
-- **Documentation Cleanup**: Organized docs folder, archived historical documents
-- **Zero Diagnostics**: Maintained 100% clean codebase across all modules
+- **Cleaner Output**: Removed unnecessary warnings and tip messages
+- **Bug Fixes**: Fixed undefined ValidationError, removed all unused variables and imports
+- **Dependency Update**: Upgraded ctranslate2 to 4.6.3 (fixes pkg_resources deprecation warning)
+- **Code Quality**: Zero pyflakes errors across all core modules
 
 See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
 
@@ -278,7 +278,7 @@ See [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) for tech
 
 ### Meeting Notes
 
-GPT-5 analyzes transcripts and generates structured notes:
+GPT-5.2 analyzes transcripts and generates structured notes:
 - **Current State:** What's happening now
 - **Drivers:** What's pushing things forward
 - **Blockers:** What's in the way
@@ -288,7 +288,7 @@ GPT-5 analyzes transcripts and generates structured notes:
 ### Humor Pipeline
 
 **Jokes:**
-- GPT-5 analyzes tone, rhythm, and intent
+- GPT-5.2 analyzes tone, rhythm, and intent
 - Selects from 10 comedy archetypes
 - Generates context-aware observations
 - Optional bake-off mode (all providers compete)
@@ -305,10 +305,10 @@ GPT-5 analyzes transcripts and generates structured notes:
 Mix and match AI providers based on cost, performance, and features.
 
 **Supported Providers:**
-- **OpenAI:** GPT-5, GPT-4, GPT-Image-1, DALL-E, Whisper
-- **XAI/Grok:** Grok 4 Fast (reasoning), Grok 2 Image
+- **OpenAI:** GPT-5.2, GPT-5, GPT-5 mini, GPT-Image-1, DALL-E, Whisper
+- **XAI/Grok:** Grok 4.1 Fast (reasoning), Grok 2 Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
-- **Google Gemini:** Gemini 3 Pro (reasoning), Gemini 2.5 Flash/Pro (text), Imagen 4 (images)
+- **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 (images)
 
 **Configuration:**
 ```bash
@@ -323,12 +323,13 @@ export SCRIBE_ENABLE_MEME_BAKEOFF=true
 ```
 
 **Cost Comparison (per 1M tokens):**
-- Grok 4 Fast: $0.20 input / $0.50 output
+- Grok 4.1 Fast: $0.20 input / $0.50 output
+- GPT-5.2: $1.75 input / $14.00 output
+- GPT-5: $1.25 input
 - Claude 3.5 Sonnet: $3.00 input / $15.00 output
-- GPT-5: $3.00 input / $15.00 output
 
 **Images:**
-- Grok 2 Image: $0.10 per image
+- Grok 2 Image: $0.07 per image
 - GPT-Image-1: $0.40 per image
 
 ### Custom Vocabulary
@@ -444,7 +445,7 @@ scribe batch *.mp4 --vocabulary company-names.json
      ▼              ▼
 ┌──────────┐   ┌──────────┐
 │  Notes   │   │  Humor   │
-│  (GPT-5) │   │ (Jokes/  │
+│(GPT-5.2) │   │ (Jokes/  │
 │          │   │  Memes)  │
 └──────────┘   └──────────┘
 ```
@@ -478,7 +479,7 @@ scribe/
 - `recorder.py` - OBS Studio integration
 
 **Intelligence:**
-- `notes_generator.py` - GPT-5 meeting analysis
+- `notes_generator.py` - GPT-5.2 meeting analysis
 - `joke_generator.py` - Context-aware humor
 - `meme_generator.py` - Meme creation with QA loop
 - `meme_compositor.py` - Text overlay rendering
@@ -521,8 +522,8 @@ pytest tests/unit/ --tb=no -q
 ```
 
 **Test Status:**
-- 678 tests passing (100% pass rate)
-- Zero test failures
+- 753 tests passing (100% pass rate)
+- 12 platform-specific tests skipped (non-Windows)
 - Comprehensive unit, integration, and end-to-end coverage
 - Exception handling fully tested
 
@@ -679,8 +680,8 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 ---
 
 **Current Version:** 2.4.2  
-**Build Status:** PASSING (678/678 tests)  
-**Code Quality:** 100% clean (54/54 files, zero diagnostics)  
+**Build Status:** PASSING (753/753 tests, 12 platform-skipped)  
+**Code Quality:** 100% clean (zero pyflakes errors)  
 **Test Coverage:** Comprehensive unit, integration, and end-to-end testing  
 **Focus:** Excellence over features - see [ROADMAP](ROADMAP.md)  
-**Last Updated:** 2025-11-24
+**Last Updated:** 2026-01-08

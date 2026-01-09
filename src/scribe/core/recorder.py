@@ -350,7 +350,7 @@ class OBSRecorder:
         # Try connecting to already-running OBS
         client = self._try_connect_to_running_obs(hosts, ports)
         if client:
-            console.print(f"[green]Connected to OBS[/green]")
+            console.print("[green]Connected to OBS[/green]")
             try:
                 yield client
             finally:
@@ -379,7 +379,7 @@ class OBSRecorder:
             console.print("[cyan]Waiting for OBS to start...[/cyan]")
             client = self._wait_for_obs_startup(hosts, ports, max_wait_seconds)
             if client:
-                console.print(f"[green]Connected to OBS[/green]")
+                console.print("[green]Connected to OBS[/green]")
                 try:
                     yield client
                 finally:
@@ -470,6 +470,8 @@ class OBSRecorder:
         sys.stdout.write("Recording: 00:00")
         sys.stdout.flush()
         
+        stop_requested = False
+        
         while True:
             try:
                 status = client.get_record_status()
@@ -477,12 +479,13 @@ class OBSRecorder:
             except Exception:
                 active = last_active
             
-            if stop_event.is_set() and active:
-                # Clear the timer line and print stop message
+            if stop_event.is_set() and active and not stop_requested:
+                # Clear the timer line and print stop message (only once)
                 sys.stdout.write("\r" + " " * 50 + "\r")
                 sys.stdout.flush()
                 console.print("[cyan]Stopping recording...[/cyan]")
                 logger.info("Stopping recording...")
+                stop_requested = True
                 try:
                     client.stop_record()
                 except Exception as e:

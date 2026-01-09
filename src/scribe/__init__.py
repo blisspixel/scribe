@@ -9,8 +9,8 @@ Author: blissplixel
 License: MIT
 """
 
-__version__ = "2.4.1"
-__author__ = "blissplixel"
+__version__ = "2.4.2"
+__author__ = "Nick Seal"
 __license__ = "MIT"
 
 from scribe.exceptions import (

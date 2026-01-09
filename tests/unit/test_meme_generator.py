@@ -18,7 +18,7 @@ class TestMemeConfig:
         """Test default meme configuration."""
         config = MemeConfig()
         
-        assert config.model == "gpt-5"
+        assert config.model == "gpt-5.2"
         assert config.image_model == "gpt-image-1"
         assert config.size == "1024x1024"
         assert config.quality == "high"

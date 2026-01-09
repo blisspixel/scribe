@@ -132,7 +132,10 @@ format conversion, error recovery, and resource management transparently.
 """
 
 from pathlib import Path
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from scribe.utils.vocabulary import CustomVocabulary
 
 from scribe.models.config import ScribeConfig, TranscriptionMethod
 from scribe.models.session import TranscriptionSession
@@ -323,7 +326,7 @@ class Transcriber:
             if file_size_mb > 24:
                 from scribe.utils.logging import console
                 console.print(f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]")
-                console.print(f"[cyan]Converting to compressed MP3...[/cyan]")
+                console.print("[cyan]Converting to compressed MP3...[/cyan]")
                 logger.info(f"File is {file_size_mb:.1f}MB, converting to compressed MP3...")
                 return self.converter.convert_to_mp3(audio_path, bitrate=48)
             else:
@@ -353,8 +356,8 @@ class Transcriber:
             console.print(f" [green]{detected_lang.upper()}[/green] [dim]({confidence:.0%})[/dim]")
             return detected_lang
         else:
-            logger.info(f"Speech detected but uncertain language, using auto-detect")
-            console.print(f" [green]auto-detect[/green]")
+            logger.info("Speech detected but uncertain language, using auto-detect")
+            console.print(" [green]auto-detect[/green]")
             return None
     
     def _attempt_fallback_transcription(
@@ -453,7 +456,7 @@ class Transcriber:
         except TranscriptionError as e:
             # In music mode, instrumental detection is expected
             if music_mode and "No speech detected" in str(e):
-                logger.debug(f"No speech detected in music file (likely instrumental)")
+                logger.debug("No speech detected in music file (likely instrumental)")
                 raise
             
             logger.error(f"Primary transcription method ({chosen_method}) failed: {e}")

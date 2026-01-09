@@ -115,7 +115,7 @@ def get_provider(
                 logger.warning(f"No fallback available, proceeding with {provider_name}")
     
     # Determine model
-    if model is None:
+    if model is None or model == "":
         model = _get_default_model(provider_name, feature)
     
     # Create config
@@ -148,17 +148,17 @@ def _get_default_model(provider_name: str, feature: str) -> str:
     
     defaults = {
         "openai": {
-            "joke": "gpt-5",
-            "meme": "gpt-5",
+            "joke": "gpt-5.2",
+            "meme": "gpt-5.2",
             "meme_image": "gpt-image-1",
-            "notes": "gpt-5",
+            "notes": "gpt-5.2",
             "transcribe": "whisper-1",
         },
         "xai": {
-            "joke": "grok-4-fast-non-reasoning",
-            "meme": "grok-4-fast-non-reasoning",
+            "joke": "grok-4-1-fast-non-reasoning",
+            "meme": "grok-4-1-fast-non-reasoning",
             "meme_image": "grok-2-image-1212",  # Note: XAI image gen struggles with text, consider using OpenAI for images
-            "notes": "grok-4-fast-reasoning",
+            "notes": "grok-4-1-fast-reasoning",
             "transcribe": None,  # XAI doesn't support transcription yet
         },
         "anthropic": {

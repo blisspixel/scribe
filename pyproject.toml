@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.4.1"
+version = "2.4.2"
 description = "Professional GPU-accelerated speech-to-text transcription system"
 readme = "README.md"
 requires-python = ">=3.10"
