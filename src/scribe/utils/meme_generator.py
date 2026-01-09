@@ -35,7 +35,7 @@ logger.propagate = False  # Don't propagate to root logger
 @dataclass
 class MemeConfig:
     """Configuration for meme generation."""
-    model: str = "gpt-5"
+    model: str = "gpt-5.2"
     image_model: str = "gpt-image-1"
     size: str = "1024x1024"  # Default square, but will be overridden by template needs
     quality: str = "high"
@@ -900,10 +900,13 @@ def generate_meeting_meme(
         
         # Get provider for meme concept generation
         try:
+            # Don't pass OpenAI-specific models to the provider factory
+            # Let the factory choose the right model for the provider
+            openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o"]
             provider = get_provider(
                 feature="meme",
                 api_key=api_key,
-                model=config.model if config.model != "gpt-5" else None,
+                model=config.model if config.model not in openai_models else None,
                 provider_name=provider_name,
             )
             

@@ -384,10 +384,12 @@ def create_progress_bar(description: str = "Processing") -> Progress:
     Returns:
         Configured Progress instance
     """
+    from scribe.utils.theme import ScribeTheme
+    
     return Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
-        BarColumn(complete_style="green", finished_style="bold green"),
+        TextColumn(f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"),
+        BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
         TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
         TimeElapsedColumn(),
         TextColumn("•"),

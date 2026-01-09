@@ -5,20 +5,23 @@ from typing import Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from scribe.utils.theme import ScribeTheme
+
 console = Console()
 
 
 class SpinnerProgress:
     """Consistent spinner progress display with elapsed time."""
     
-    # Consistent color scheme
+    # Modern color scheme using ScribeTheme
     COLORS = {
-        "process": "cyan",      # For ongoing operations
-        "success": "green",     # For completed operations  
-        "warning": "yellow",    # For warnings
-        "error": "red",        # For errors
-        "info": "blue",        # For informational messages
-        "dim": "dim"           # For secondary info
+        "process": ScribeTheme.PRIMARY,       # Sophisticated teal for ongoing ops
+        "success": ScribeTheme.SUCCESS,       # Soft green for completion
+        "warning": ScribeTheme.WARNING,       # Amber for warnings
+        "error": ScribeTheme.ERROR,           # Soft red for errors
+        "info": ScribeTheme.INFO,             # Soft blue for info
+        "dim": ScribeTheme.TEXT_MUTED,        # Muted for secondary info
+        "ai": ScribeTheme.AI_ACCENT,          # Purple for AI features
     }
     
     def __init__(self, message: str, spinner_style: str = "dots"):
@@ -81,6 +84,14 @@ class SpinnerProgress:
             console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({extra}, {elapsed_str})[/{self.COLORS['dim']}]")
         else:
             console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]")
+    
+    def complete(self):
+        """Stop spinner silently without printing a message.
+        
+        Use this when the calling code will handle the success message itself.
+        """
+        if self.progress:
+            self.progress.stop()
     
     def error(self, message: str):
         """Display error message and stop spinner.

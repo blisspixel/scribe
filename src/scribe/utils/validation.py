@@ -314,39 +314,118 @@ def validate_model_name(model: str, valid_models: list) -> str:
     return model
 
 
+# Language name to ISO 639-1 code mapping
+# Supports common names, variations, and native names
+LANGUAGE_ALIASES = {
+    # English
+    "english": "en", "eng": "en",
+    # Spanish
+    "spanish": "es", "español": "es", "espanol": "es", "spa": "es",
+    # French
+    "french": "fr", "français": "fr", "francais": "fr", "fra": "fr",
+    # German
+    "german": "de", "deutsch": "de", "deu": "de", "ger": "de",
+    # Italian
+    "italian": "it", "italiano": "it", "ita": "it",
+    # Portuguese
+    "portuguese": "pt", "português": "pt", "portugues": "pt", "por": "pt",
+    # Russian
+    "russian": "ru", "русский": "ru", "rus": "ru",
+    # Japanese
+    "japanese": "ja", "日本語": "ja", "jpn": "ja", "jp": "ja",
+    # Chinese
+    "chinese": "zh", "中文": "zh", "mandarin": "zh", "zho": "zh", "chi": "zh", "cn": "zh",
+    # Korean
+    "korean": "ko", "한국어": "ko", "kor": "ko", "kr": "ko",
+    # Arabic
+    "arabic": "ar", "العربية": "ar", "ara": "ar",
+    # Hindi
+    "hindi": "hi", "हिन्दी": "hi", "hin": "hi",
+    # Dutch
+    "dutch": "nl", "nederlands": "nl", "nld": "nl",
+    # Polish
+    "polish": "pl", "polski": "pl", "pol": "pl",
+    # Turkish
+    "turkish": "tr", "türkçe": "tr", "turkce": "tr", "tur": "tr",
+    # Vietnamese
+    "vietnamese": "vi", "tiếng việt": "vi", "vie": "vi",
+    # Thai
+    "thai": "th", "ไทย": "th", "tha": "th",
+    # Swedish
+    "swedish": "sv", "svenska": "sv", "swe": "sv",
+    # Norwegian
+    "norwegian": "no", "norsk": "no", "nor": "no",
+    # Danish
+    "danish": "da", "dansk": "da", "dan": "da",
+    # Finnish
+    "finnish": "fi", "suomi": "fi", "fin": "fi",
+    # Greek
+    "greek": "el", "ελληνικά": "el", "ell": "el",
+    # Hebrew
+    "hebrew": "he", "עברית": "he", "heb": "he",
+    # Czech
+    "czech": "cs", "čeština": "cs", "cestina": "cs", "ces": "cs",
+    # Romanian
+    "romanian": "ro", "română": "ro", "romana": "ro", "ron": "ro",
+    # Hungarian
+    "hungarian": "hu", "magyar": "hu", "hun": "hu",
+    # Indonesian
+    "indonesian": "id", "bahasa indonesia": "id", "ind": "id",
+    # Malay
+    "malay": "ms", "bahasa melayu": "ms", "msa": "ms",
+    # Ukrainian
+    "ukrainian": "uk", "українська": "uk", "ukr": "uk",
+}
+
+
 def validate_language_code(language: str) -> str:
     """
-    Validate ISO 639-1 language code.
+    Validate and normalize language input to ISO 639-1 code.
+    
+    Accepts:
+        - ISO 639-1 codes: "en", "es", "fr"
+        - Full names: "english", "spanish", "french"
+        - Native names: "español", "français", "deutsch"
+        - Common abbreviations: "eng", "spa", "jpn"
     
     Args:
-        language: Language code to validate
+        language: Language code or name to validate
         
     Returns:
-        Validated language code (lowercase)
+        ISO 639-1 language code (lowercase, 2 letters)
         
     Raises:
-        ValidationError: If language code is invalid
+        ValidationError: If language is not recognized
+        
+    Examples:
+        >>> validate_language_code("spanish")
+        'es'
+        >>> validate_language_code("ES")
+        'es'
+        >>> validate_language_code("français")
+        'fr'
     """
     if not language or not language.strip():
-        raise ValidationError("Language code cannot be empty")
+        raise ValidationError("Language cannot be empty")
     
     language = language.strip().lower()
     
-    # Must be 2 letters
-    if len(language) != 2:
-        raise ValidationError(
-            "Language code must be 2-letter ISO 639-1 format (e.g., 'en', 'es', 'fr')",
-            context={"provided": language}
-        )
+    # Check if it's already a valid 2-letter code
+    if len(language) == 2 and language.isalpha():
+        return language
     
-    # Must be alphabetic
-    if not language.isalpha():
-        raise ValidationError(
-            "Language code must contain only letters",
-            context={"provided": language}
-        )
+    # Check aliases
+    if language in LANGUAGE_ALIASES:
+        return LANGUAGE_ALIASES[language]
     
-    return language
+    # Not found - provide helpful error
+    raise ValidationError(
+        f"Unknown language: '{language}'",
+        context={
+            "provided": language,
+            "hint": "Use language name (spanish, french) or ISO code (es, fr)"
+        }
+    )
 
 
 def validate_port(port: int) -> int:

@@ -102,16 +102,34 @@ class TestAudioPreparation:
     """Test audio format preparation for different methods."""
     
     def test_prepare_audio_for_local_converts_to_wav(self, temp_config: ScribeConfig, sample_audio: Path):
-        """Test audio is converted to WAV for local method."""
+        """Test audio is converted to WAV for local method when not already WAV."""
         transcriber = Transcriber(temp_config)
+        
+        # Create a non-WAV file path
+        mp3_file = sample_audio.parent / "test.mp3"
+        mp3_file.touch()
         
         with patch.object(transcriber.converter, 'convert_to_wav') as mock_convert:
             mock_convert.return_value = sample_audio.parent / "converted.wav"
             
-            result = transcriber._prepare_audio_for_method(sample_audio, "local")
+            result = transcriber._prepare_audio_for_method(mp3_file, "local")
             
-            mock_convert.assert_called_once_with(sample_audio)
+            mock_convert.assert_called_once_with(mp3_file)
             assert result == sample_audio.parent / "converted.wav"
+    
+    def test_prepare_audio_for_local_keeps_wav_files(self, temp_config: ScribeConfig, sample_audio: Path):
+        """Test WAV files are kept as-is for local method."""
+        transcriber = Transcriber(temp_config)
+        
+        # Create a WAV file path
+        wav_file = sample_audio.parent / "test.wav"
+        wav_file.touch()
+        
+        with patch.object(transcriber.converter, 'convert_to_wav') as mock_convert:
+            result = transcriber._prepare_audio_for_method(wav_file, "local")
+            
+            mock_convert.assert_not_called()
+            assert result == wav_file
     
     def test_prepare_audio_for_openai_keeps_small_files(self, temp_config: ScribeConfig, sample_audio: Path):
         """Test small files are kept as-is for OpenAI."""
@@ -179,50 +197,58 @@ class TestTranscriptionMethods:
 class TestFallbackLogic:
     """Test fallback behavior when primary method fails."""
     
-    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
-    @patch('scribe.core.transcriber.OpenAITranscriber')
-    def test_fallback_local_to_openai(self, mock_api_class, mock_local_class, 
+    @patch.object(Transcriber, '_transcribe_openai')
+    @patch.object(Transcriber, '_transcribe_local')
+    @patch.object(Transcriber, '_prepare_audio_for_method')
+    def test_fallback_local_to_openai(self, mock_prepare, mock_local, mock_api,
                                       temp_config: ScribeConfig, sample_audio: Path, mock_openai):
         """Test fallback from local to OpenAI when local fails."""
+        temp_config.openai_api_key = "sk-test"  # Ensure API key is set for fallback
         transcriber = Transcriber(temp_config)
         
-        # Mock local to fail
-        mock_local = Mock()
-        mock_local.transcribe.side_effect = RuntimeError("CUDA out of memory")
-        mock_local_class.return_value = mock_local
+        # Mock audio preparation
+        mock_prepare.return_value = sample_audio
+        
+        # Mock local to fail with TranscriptionError
+        mock_local.side_effect = TranscriptionError("CUDA out of memory")
         
         # Mock OpenAI to succeed
-        mock_api = Mock()
-        mock_api.transcribe.return_value = sample_audio.parent / "transcript.txt"
-        mock_api_class.return_value = mock_api
+        transcript_path = sample_audio.parent / "transcript.txt"
+        transcript_path.write_text("Test transcript")
+        mock_api.return_value = transcript_path
         
         # Should fallback to OpenAI
-        result = transcriber.transcribe(sample_audio, method="auto")
+        result = transcriber.transcribe(sample_audio, method="local")
         
         assert result is not None
-        assert result.exists()
+        mock_local.assert_called_once()
+        mock_api.assert_called_once()
     
-    @patch('scribe.core.transcriber.OpenAITranscriber')
-    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
-    def test_fallback_openai_to_local(self, mock_local_class, mock_api_class,
+    @patch.object(Transcriber, '_transcribe_local')
+    @patch.object(Transcriber, '_transcribe_openai')
+    @patch.object(Transcriber, '_prepare_audio_for_method')
+    def test_fallback_openai_to_local(self, mock_prepare, mock_api, mock_local,
                                       temp_config: ScribeConfig, sample_audio: Path, mock_gpu):
         """Test fallback from OpenAI to local when API fails."""
         transcriber = Transcriber(temp_config)
         
-        # Mock OpenAI to fail
-        mock_api = Mock()
-        mock_api.transcribe.side_effect = Exception("API Error")
-        mock_api_class.return_value = mock_api
+        # Mock audio preparation
+        mock_prepare.return_value = sample_audio
+        
+        # Mock OpenAI to fail with TranscriptionError
+        mock_api.side_effect = TranscriptionError("API Error")
         
         # Mock local to succeed
-        mock_local = Mock()
-        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
-        mock_local_class.return_value = mock_local
+        transcript_path = sample_audio.parent / "transcript.txt"
+        transcript_path.write_text("Test transcript")
+        mock_local.return_value = transcript_path
         
         # Should fallback to local
         result = transcriber.transcribe(sample_audio, method="openai")
         
         assert result is not None
+        mock_api.assert_called_once()
+        mock_local.assert_called_once()
     
     @patch('scribe.core.transcriber.LocalWhisperTranscriber')
     @patch('scribe.core.transcriber.OpenAITranscriber')
@@ -273,8 +299,8 @@ class TestResourceValidation:
         """Test file size validation."""
         transcriber = Transcriber(temp_config)
         
-        # Mock huge file
-        with patch('scribe.utils.validation.validate_audio_file') as mock_validate:
+        # Mock huge file - patch where it's used, not where it's defined
+        with patch('scribe.core.transcriber.validate_audio_file') as mock_validate:
             mock_validate.side_effect = ValidationError("File too large")
             
             with pytest.raises(ValidationError, match="File too large"):
@@ -284,8 +310,8 @@ class TestResourceValidation:
         """Test duration validation."""
         transcriber = Transcriber(temp_config)
         
-        # Mock very long audio
-        with patch('scribe.utils.validation.validate_audio_file') as mock_validate:
+        # Mock very long audio - patch where it's used, not where it's defined
+        with patch('scribe.core.transcriber.validate_audio_file') as mock_validate:
             mock_validate.side_effect = ValidationError("Audio too long")
             
             with pytest.raises(ValidationError, match="Audio too long"):
@@ -299,13 +325,15 @@ class TestCleanup:
         """Test cleanup removes intermediate files."""
         transcriber = Transcriber(temp_config)
         
-        # Create fake intermediate files
-        temp_file1 = temp_dir / "audio_16k_mono.wav"
-        temp_file2 = temp_dir / "audio_standardized.wav"
+        # Create fake intermediate files that match delete patterns but NOT keep patterns
+        # The keep patterns include *.mp3, *.wav, etc. so we need to use other extensions
+        # or patterns that are specifically deleted
+        temp_file1 = temp_dir / "audio_temp.tmp"  # matches *_temp.* but not any keep pattern
+        temp_file2 = temp_dir / "audio_tmp.dat"   # matches *_tmp.* but not any keep pattern
         temp_file1.write_text("fake")
         temp_file2.write_text("fake")
         
-        transcriber.cleanup_intermediate_files(temp_dir / "audio.mp4")
+        transcriber.cleanup_intermediate_files(temp_dir)
         
         # Intermediate files should be deleted
         assert not temp_file1.exists()
@@ -323,24 +351,24 @@ class TestErrorHandling:
         with pytest.raises((TranscriptionError, ValidationError)):
             transcriber.transcribe(fake_file, method="auto")
     
-    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
-    @patch('scribe.core.transcriber.OpenAITranscriber')
-    def test_handles_all_methods_failing(self, mock_api_class, mock_local_class,
+    @patch.object(Transcriber, '_transcribe_openai')
+    @patch.object(Transcriber, '_transcribe_local')
+    @patch.object(Transcriber, '_prepare_audio_for_method')
+    def test_handles_all_methods_failing(self, mock_prepare, mock_local, mock_api,
                                          temp_config: ScribeConfig, sample_audio: Path):
         """Test error when all methods fail."""
+        temp_config.openai_api_key = "sk-test"  # Ensure API key for fallback attempt
         transcriber = Transcriber(temp_config)
         
-        # Mock both methods to fail
-        mock_local = Mock()
-        mock_local.transcribe.side_effect = RuntimeError("GPU Error")
-        mock_local_class.return_value = mock_local
+        # Mock audio preparation
+        mock_prepare.return_value = sample_audio
         
-        mock_api = Mock()
-        mock_api.transcribe.side_effect = Exception("API Error")
-        mock_api_class.return_value = mock_api
+        # Mock both methods to fail with TranscriptionError
+        mock_local.side_effect = TranscriptionError("GPU Error")
+        mock_api.side_effect = TranscriptionError("API Error")
         
         with pytest.raises(TranscriptionError, match="All transcription methods failed"):
-            transcriber.transcribe(sample_audio, method="auto")
+            transcriber.transcribe(sample_audio, method="local")
 
 
 class TestCustomVocabulary:

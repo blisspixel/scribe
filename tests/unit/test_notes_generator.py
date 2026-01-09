@@ -29,8 +29,8 @@ class TestNotesGeneratorInit:
         """Test initialization with API key."""
         generator = NotesGenerator(api_key="sk-test123")
         assert generator.api_key == "sk-test123"
-        # Model may be gpt-5 or grok-4-fast-reasoning depending on provider
-        assert generator.config.model in ["gpt-5", "grok-4-fast-reasoning"]
+        # Model may be gpt-5.2 or grok-4-1-fast-reasoning depending on provider
+        assert generator.config.model in ["gpt-5.2", "grok-4-1-fast-reasoning"]
     
     def test_init_with_custom_model(self):
         """Test initialization with custom model."""

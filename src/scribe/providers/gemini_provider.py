@@ -104,21 +104,25 @@ class GeminiProvider(AIProvider):
         if max_tokens:
             config_params["max_output_tokens"] = max_tokens
         
-        # Thinking level configuration
-        # Gemini 3: Uses thinking_level (low/high)
-        # Gemini 2.5: Uses thinking_budget (0 to disable)
+        # Thinking configuration for Gemini 3
+        # Gemini 3 uses thinking_config with thinking_level: "low", "high" (Pro)
+        # or "minimal", "low", "medium", "high" (Flash)
+        # Default is "high" for maximum reasoning
         if is_gemini_3:
-            # Gemini 3: Use thinking_level parameter
-            thinking_level = kwargs.get("thinking_level", "high")  # Default to high for reasoning
+            thinking_level = kwargs.get("thinking_level", "high")
             if kwargs.get("disable_thinking", False):
-                thinking_level = "low"
+                # Use "low" for Pro, "minimal" for Flash
+                if "flash" in self.config.model.lower():
+                    thinking_level = "minimal"
+                else:
+                    thinking_level = "low"
             
-            # Only set if not default high
-            if thinking_level != "high":
-                config_params["thinking_level"] = thinking_level
+            config_params["thinking_config"] = self.types.ThinkingConfig(
+                thinking_level=thinking_level
+            )
         else:
-            # Gemini 2.5: Use legacy thinking_budget
-            if "flash" in self.config.model.lower() and kwargs.get("disable_thinking", False):
+            # Gemini 2.5: Use thinking_budget (0 to disable)
+            if kwargs.get("disable_thinking", False):
                 config_params["thinking_config"] = self.types.ThinkingConfig(thinking_budget=0)
         
         # Create config object if we have params

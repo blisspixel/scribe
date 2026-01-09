@@ -10,15 +10,13 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime
 
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
-
-from scribe.exceptions import TranscriptionError, GPUError
+from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
 from scribe.utils.audio import detect_silence_periods, get_audio_duration, format_timestamp
 from scribe.utils.files import extract_date_from_filename, format_date, format_duration_minutes
 from scribe.utils.gpu import set_gpu_optimizations, clear_gpu_cache
 from scribe.utils.gpu_manager import get_gpu_manager
-from scribe.utils.logging import console, get_logger
+from scribe.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -67,7 +65,7 @@ class LocalWhisperTranscriber:
             set_gpu_optimizations(enable_tensor_cores=True)
         
         # Log configuration
-        logger.info(f"Initializing local transcription:")
+        logger.info("Initializing local transcription:")
         logger.info(f"  Model: {model_size}")
         logger.info(f"  Language: {language if language else 'auto-detect'}")
         if gpu_config.has_gpu:
@@ -132,7 +130,7 @@ class LocalWhisperTranscriber:
             if has_speech:
                 logger.info(f"Detected: {detected_lang} (confidence: {detected_prob:.1%}, {segment_count} segments)")
             else:
-                logger.info(f"No speech detected (instrumental or silent)")
+                logger.info("No speech detected (instrumental or silent)")
                 return None, 0.0, False
             
             # Return language if confidence is reasonable
@@ -454,7 +452,7 @@ class LocalWhisperTranscriber:
             if duration:
                 f.write(f"Duration: {format_duration_minutes(duration)}\n")
             else:
-                f.write(f"Duration: Unknown\n")
+                f.write("Duration: Unknown\n")
             
             f.write("\n")
             f.write("─" * 80 + "\n")

@@ -339,7 +339,7 @@ class TestHumorConfig:
         """Test default configuration values."""
         cfg = HumorConfig()
         
-        assert cfg.model == "gpt-5"
+        assert cfg.model == "gpt-5.2"
         assert cfg.min_words == 10
         assert cfg.max_words == 18
         assert cfg.reasoning_effort == "minimal"
@@ -450,8 +450,8 @@ class TestJokeGeneration:
         assert mock_client.responses.create.called
         call_args = mock_client.responses.create.call_args
         
-        # Check it uses GPT-5
-        assert call_args[1]['model'] == 'gpt-5'
+        # Check it uses GPT-5.2
+        assert call_args[1]['model'] == 'gpt-5.2'
     
     @patch('scribe.utils.joke_generator.OpenAI')
     def test_generate_joke_handles_api_error(self, mock_openai_class, tmp_path):

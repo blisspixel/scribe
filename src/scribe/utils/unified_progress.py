@@ -204,9 +204,11 @@ class UnifiedProgress:
     
     def start(self):
         """Start the unified progress display."""
+        from scribe.utils.theme import ScribeTheme
+        
         self.progress = Progress(
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
+            TextColumn(f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"),
+            BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TextColumn("•"),
             TimeElapsedColumn(),
@@ -286,7 +288,7 @@ class UnifiedProgress:
             self.progress.update(
                 self.task,
                 completed=100,
-                description=f"[green]Complete ({minutes}m {seconds}s)[/green]"
+                description=f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)[/{ScribeTheme.SUCCESS}]"
             )
             self.progress.stop()
     

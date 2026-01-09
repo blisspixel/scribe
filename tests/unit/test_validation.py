@@ -207,14 +207,23 @@ class TestValidateLanguageCode:
             result = validate_language_code(code)
             assert result == code
     
+    def test_validate_language_names(self):
+        """Test validation accepts full language names."""
+        assert validate_language_code("english") == "en"
+        assert validate_language_code("spanish") == "es"
+        assert validate_language_code("french") == "fr"
+        assert validate_language_code("german") == "de"
+        assert validate_language_code("japanese") == "ja"
+        assert validate_language_code("chinese") == "zh"
+    
     def test_validate_auto_language(self):
-        """Test validation rejects 'auto' (not a valid ISO 639-1 code)."""
-        with pytest.raises(ValidationError, match="2-letter"):
+        """Test validation rejects 'auto' (not a valid language)."""
+        with pytest.raises(ValidationError, match="Unknown language"):
             validate_language_code("auto")
     
     def test_validate_invalid_language_code(self):
         """Test validation fails for invalid language code."""
-        with pytest.raises(ValidationError, match="2-letter"):
+        with pytest.raises(ValidationError, match="Unknown language"):
             validate_language_code("invalid")
     
     def test_validate_empty_language_code(self):
