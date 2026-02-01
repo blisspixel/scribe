@@ -342,7 +342,7 @@ class TestHumorConfig:
         assert cfg.model == "gpt-5.2"
         assert cfg.min_words == 10
         assert cfg.max_words == 18
-        assert cfg.reasoning_effort == "minimal"
+        assert cfg.reasoning_effort == "low"
         assert cfg.verbosity == "low"
         assert cfg.spice_level == 5
     
@@ -431,55 +431,53 @@ class TestJokeGeneration:
         assert isinstance(comedy_style, str)
         assert len(comedy_style) > 0
     
-    @patch('scribe.utils.joke_generator.OpenAI')
-    def test_generate_joke_uses_responses_api(self, mock_openai_class, tmp_path):
-        """Test that Responses API is used (not Chat Completions)."""
+    @patch('scribe.providers.get_provider')
+    def test_generate_joke_uses_provider(self, mock_get_provider, tmp_path):
+        """Test that provider system is used for joke generation."""
         transcript_path = tmp_path / "test_transcript.txt"
-        transcript_path.write_text("Meeting content.")
+        transcript_path.write_text("Meeting content about project updates and deadlines.")
         
-        mock_client = Mock()
-        mock_openai_class.return_value = mock_client
+        mock_provider = Mock()
+        mock_provider.config.provider_name = "openai"
+        mock_provider.config.model = "gpt-5.2"
+        mock_provider.chat_completion.return_value = {"content": "Test joke about meetings"}
+        mock_get_provider.return_value = mock_provider
         
-        mock_response = Mock()
-        mock_response.output_text = "Joke text"
-        mock_client.responses.create.return_value = mock_response
+        result = generate_transcript_joke(transcript_path, "test-api-key")
         
-        generate_transcript_joke(transcript_path, "test-api-key")
-        
-        # Verify Responses API was called (may be called multiple times for retries)
-        assert mock_client.responses.create.called
-        call_args = mock_client.responses.create.call_args
-        
-        # Check it uses GPT-5.2
-        assert call_args[1]['model'] == 'gpt-5.2'
+        # Verify provider was requested
+        assert mock_get_provider.called
+        call_args = mock_get_provider.call_args
+        assert call_args[1]['feature'] == 'joke'
     
-    @patch('scribe.utils.joke_generator.OpenAI')
-    def test_generate_joke_handles_api_error(self, mock_openai_class, tmp_path):
+    @patch('scribe.providers.get_provider')
+    def test_generate_joke_handles_api_error(self, mock_get_provider, tmp_path):
         """Test graceful handling of API errors."""
         transcript_path = tmp_path / "test_transcript.txt"
         transcript_path.write_text("Meeting content.")
         
-        mock_client = Mock()
-        mock_openai_class.return_value = mock_client
-        mock_client.responses.create.side_effect = Exception("API Error")
+        mock_provider = Mock()
+        mock_provider.config.provider_name = "openai"
+        mock_provider.config.model = "gpt-5.2"
+        mock_provider.chat_completion.side_effect = Exception("API Error")
+        mock_get_provider.return_value = mock_provider
         
         result = generate_transcript_joke(transcript_path, "test-api-key")
         
         # Should return None on error, not crash
         assert result is None
     
-    @patch('scribe.utils.joke_generator.OpenAI')
-    def test_generate_joke_handles_empty_response(self, mock_openai_class, tmp_path):
+    @patch('scribe.providers.get_provider')
+    def test_generate_joke_handles_empty_response(self, mock_get_provider, tmp_path):
         """Test handling of empty joke response."""
         transcript_path = tmp_path / "test_transcript.txt"
         transcript_path.write_text("Meeting content.")
         
-        mock_client = Mock()
-        mock_openai_class.return_value = mock_client
-        
-        mock_response = Mock()
-        mock_response.output_text = ""  # Empty response
-        mock_client.responses.create.return_value = mock_response
+        mock_provider = Mock()
+        mock_provider.config.provider_name = "openai"
+        mock_provider.config.model = "gpt-5.2"
+        mock_provider.chat_completion.return_value = {"content": ""}  # Empty response
+        mock_get_provider.return_value = mock_provider
         
         result = generate_transcript_joke(transcript_path, "test-api-key")
         

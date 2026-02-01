@@ -54,7 +54,7 @@ class SpinnerProgress:
         if self.progress:
             self.progress.stop()
     
-    def update(self, message: Optional[str] = None):
+    def update(self, message: Optional[str] = None) -> None:
         """Update the spinner message.
         
         Args:
@@ -67,7 +67,7 @@ class SpinnerProgress:
                 description=f"[{self.COLORS['process']}]{message}...[/{self.COLORS['process']}]"
             )
     
-    def success(self, message: str, extra: Optional[str] = None):
+    def success(self, message: str, extra: Optional[str] = None) -> None:
         """Display success message and stop spinner.
         
         Args:
@@ -85,7 +85,7 @@ class SpinnerProgress:
         else:
             console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]")
     
-    def complete(self):
+    def complete(self) -> None:
         """Stop spinner silently without printing a message.
         
         Use this when the calling code will handle the success message itself.
@@ -93,7 +93,7 @@ class SpinnerProgress:
         if self.progress:
             self.progress.stop()
     
-    def error(self, message: str):
+    def error(self, message: str) -> None:
         """Display error message and stop spinner.
         
         Args:
@@ -104,7 +104,7 @@ class SpinnerProgress:
         
         console.print(f"[{self.COLORS['error']}]ERROR[/{self.COLORS['error']}] {message}")
     
-    def warning(self, message: str):
+    def warning(self, message: str) -> None:
         """Display warning message.
         
         Args:

@@ -225,7 +225,7 @@ print(joke)
 Meme generation with QA loop.
 
 ```python
-from scribe.utils.meme_generator import generate_meme, MemeConfig
+from scribe.utils.meme_generator import generate_meeting_meme, MemeConfig
 
 config = MemeConfig(
     model="gpt-5",
@@ -237,9 +237,9 @@ config = MemeConfig(
     spice_level=5
 )
 
-meme_path = generate_meme(
+meme_path = generate_meeting_meme(
     transcript_path=Path("transcript.txt"),
-    output_path=None,
+    output_dir=None,
     config=config,
     show_reasoning=False
 )
@@ -247,7 +247,7 @@ meme_path = generate_meme(
 
 **Functions:**
 
-`generate_meme(transcript_path, output_path=None, config=None, show_reasoning=False) -> Path`
+`generate_meeting_meme(transcript_path, output_dir=None, config=None, show_reasoning=False) -> Path`
 - Generates meme with QA loop
 - Returns path to PNG file
 - Returns "SAFETY_BLOCKED" if rejected by safety filter

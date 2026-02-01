@@ -9,7 +9,6 @@ import base64
 import json
 import logging
 import os
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -322,7 +321,7 @@ Respond with valid JSON only."""},
                 try:
                     meme_concept = json.loads(result)
                     logger.info("JSON repair successful")
-                except:
+                except json.JSONDecodeError:
                     logger.error(f"JSON repair failed. Malformed JSON: {result[:500]}")
                     raise
         else:
@@ -680,7 +679,7 @@ If you answer NO to any of these, score MUST be below 7.0.
             return score, result
         else:
             logger.warning("Could not parse QA response as JSON")
-            return 5.0, {"overall": result_text, "issues": [], "critical_fixes": []}
+            return 5.0, {"overall": result, "issues": [], "critical_fixes": []}
             
     except Exception as e:
         logger.error(f"QA grading failed: {e}")
@@ -893,7 +892,6 @@ def generate_meeting_meme(
     # Try to use provider system for concept generation
     provider = None
     image_provider = None
-    use_provider = False
     
     try:
         from scribe.providers import get_provider
@@ -922,7 +920,6 @@ def generate_meeting_meme(
                 provider_name=image_provider_name,
             )
             
-            use_provider = True
             logger.info(f"Using provider for meme concept: {provider.config.provider_name} | model: {provider.config.model}")
             logger.info(f"Using provider for meme image: {image_provider.config.provider_name} | model: {image_provider.config.model}")
             api_key = provider.config.api_key
@@ -942,8 +939,7 @@ def generate_meeting_meme(
                 model=None,
                 provider_name="openai",
             )
-            use_provider = True
-            logger.info(f"Fallback to OpenAI provider successful")
+            logger.info("Fallback to OpenAI provider successful")
             api_key = provider.config.api_key
     except Exception as e:
         logger.debug(f"Provider system not available, falling back to OpenAI client: {e}")
@@ -973,11 +969,9 @@ def generate_meeting_meme(
     # Log full transcript length for transparency
     logger.info(f"Reading transcript: {len(transcript)} characters")
     
-    # Determine output path
+    # Determine output directory
     if output_dir is None:
         output_dir = transcript_path.parent
-    
-    output_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
     
     # Step 1: Analyze transcript and create meme concept
     bakeoff_result = None
@@ -1022,10 +1016,6 @@ def generate_meeting_meme(
     # Step 2: Generate meme image with QA loop
     max_attempts = config.max_retries
     all_attempts = []  # Track all attempts with scores
-    
-    # Import console for progress updates
-    from rich.console import Console
-    console = Console()
     
     for attempt in range(1, max_attempts + 1):
         logger.info(f"Meme generation attempt {attempt}/{max_attempts}")
@@ -1094,7 +1084,7 @@ def generate_meeting_meme(
                 print(f"Score: {score}/10")
                 print(f"Overall: {qa_feedback.get('overall', 'N/A')}")
                 if qa_feedback.get('critical_fixes'):
-                    print(f"Critical Fixes Needed:")
+                    print("Critical Fixes Needed:")
                     for fix in qa_feedback.get('critical_fixes', []):
                         print(f"  - {fix}")
                 print()

@@ -214,7 +214,7 @@ makes a big difference in user experience.
 
 import time
 from typing import Optional, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from rich.progress import (
     Progress,
@@ -223,9 +223,7 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
     TimeElapsedColumn,
-    MofNCompleteColumn,
 )
-from rich.console import Console
 
 from scribe.utils.logging import console
 

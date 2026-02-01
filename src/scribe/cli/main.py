@@ -34,7 +34,6 @@ from scribe.exceptions import ScribeError, ProcessError, TranscriptionError
 # Create Typer app with custom help
 # Using ScribeTheme colors for a modern, cohesive look
 from scribe.utils.theme import ScribeTheme
-import click
 
 # Custom help formatter that's minimal and clean
 class CleanGroup(typer.core.TyperGroup):

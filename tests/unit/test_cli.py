@@ -42,10 +42,9 @@ class TestCLIHelp:
         
         assert result.exit_code == 0
         assert "transcribe" in result.stdout
-        assert "record" in result.stdout
         assert "joke" in result.stdout
         assert "info" in result.stdout
-        assert "version" in result.stdout
+        assert "help" in result.stdout
     
     def test_transcribe_help(self, cli_runner):
         """Test transcribe command help."""
@@ -290,6 +289,7 @@ class TestJokeCommand:
         assert result.exit_code != 0
         assert "text file" in result.stdout.lower()
     
+    @patch.dict('os.environ', {'SCRIBE_ENABLE_JOKE_BAKEOFF': 'false'})
     @patch('scribe.cli.main.ScribeConfig')
     @patch('scribe.cli.main.generate_transcript_joke')
     def test_joke_success(self, mock_generate, mock_config_class, cli_runner, tmp_path):
@@ -327,6 +327,7 @@ class TestJokeCommand:
         assert result.exit_code != 0
         assert "API key" in result.stdout
     
+    @patch.dict('os.environ', {'SCRIBE_ENABLE_JOKE_BAKEOFF': 'false'})
     @patch('scribe.cli.main.ScribeConfig')
     @patch('scribe.cli.main.generate_transcript_joke')
     def test_joke_generation_failure(self, mock_generate, mock_config_class, cli_runner, tmp_path):

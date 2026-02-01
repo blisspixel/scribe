@@ -202,7 +202,7 @@ class UnifiedProgress:
                 "finishing": (99, 100, 0.0001)     # 0.1s / 1732s = 0.04% (just DOCX)
             }
     
-    def start(self):
+    def start(self) -> None:
         """Start the unified progress display."""
         from scribe.utils.theme import ScribeTheme
         
@@ -218,7 +218,7 @@ class UnifiedProgress:
         self.progress.start()
         self.task = self.progress.add_task("Starting...", total=100)
     
-    def update_phase(self, phase: str, progress_in_phase: float = 0.0, step_description: str = None):
+    def update_phase(self, phase: str, progress_in_phase: float = 0.0, step_description: str = None) -> None:
         """
         Update progress within a phase.
         
@@ -273,13 +273,15 @@ class UnifiedProgress:
                 description=description
             )
     
-    def refresh(self):
+    def refresh(self) -> None:
         """Refresh progress based on elapsed time in current phase."""
         if self.current_phase:
             self.update_phase(self.current_phase, 0.0)
     
-    def complete(self):
+    def complete(self) -> None:
         """Mark workflow as complete."""
+        from scribe.utils.theme import ScribeTheme
+        
         if self.progress and self.task is not None:
             elapsed = time.time() - self.start_time
             minutes = int(elapsed // 60)
@@ -292,7 +294,7 @@ class UnifiedProgress:
             )
             self.progress.stop()
     
-    def stop(self):
+    def stop(self) -> None:
         """Stop progress display."""
         if self.progress:
             self.progress.stop()

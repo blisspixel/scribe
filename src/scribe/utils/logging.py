@@ -243,7 +243,6 @@ module handles both with appropriate detail levels.
 """
 
 import logging
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -348,7 +347,6 @@ def log_system_info(logger: logging.Logger) -> None:
         logger: Logger instance
     """
     import platform
-    from scribe.utils.platform import get_platform_info
     from scribe.utils.gpu import detect_gpu_capability
     
     logger.debug("System Information:")

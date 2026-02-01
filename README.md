@@ -29,13 +29,11 @@ scribe doctor                         # System diagnostics
 
 ---
 
-## What's New in v2.4.2
+## What's New in v2.4.3
 
-- **Smart .env Loading**: Works from any directory - finds .env in current, home, or package directory
-- **Cleaner Output**: Removed unnecessary warnings and tip messages
-- **Bug Fixes**: Fixed undefined ValidationError, removed all unused variables and imports
-- **Dependency Update**: Upgraded ctranslate2 to 4.6.3 (fixes pkg_resources deprecation warning)
-- **Code Quality**: Zero pyflakes errors across all core modules
+- **OBS Recording Reliability**: Fixed "OBS not ready" error (code 207) when OBS is starting up - now properly retries connection
+- **Windows Input Fix**: Fixed stop commands (stop, q, quit) not working during recording on Windows
+- **Better Error Handling**: Improved client cleanup and retry logic for OBS WebSocket connections
 
 See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
 
@@ -522,8 +520,8 @@ pytest tests/unit/ --tb=no -q
 ```
 
 **Test Status:**
-- 753 tests passing (100% pass rate)
-- 12 platform-specific tests skipped (non-Windows)
+- 689 unit tests passing (100% pass rate)
+- 1 platform-specific test skipped
 - Comprehensive unit, integration, and end-to-end coverage
 - Exception handling fully tested
 
@@ -679,9 +677,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.2  
-**Build Status:** PASSING (753/753 tests, 12 platform-skipped)  
-**Code Quality:** 100% clean (zero pyflakes errors)  
+**Current Version:** 2.4.3  
+**Build Status:** PASSING (689 unit tests, 1 platform-skipped)  
+**Code Quality:** Clean (2 intentional re-exports in providers/__init__.py)  
 **Test Coverage:** Comprehensive unit, integration, and end-to-end testing  
 **Focus:** Excellence over features - see [ROADMAP](ROADMAP.md)  
-**Last Updated:** 2026-01-08
+**Last Updated:** 2026-01-30

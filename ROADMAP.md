@@ -4,19 +4,27 @@
 
 ---
 
-## Current Version: 2.4.2
+## Current Version: 2.4.3
 
-**Focus: Code Quality + Bug Fixes**
+**Focus: OBS Recording Reliability + Code Quality**
 
-- **Smart .env Loading**: Works from any directory - finds .env in current, home, or package directory
-- **Cleaner Output**: Removed unnecessary warnings and tip messages
-- **Bug Fixes**: Fixed undefined ValidationError, removed all unused variables and imports
-- **Dependency Update**: Upgraded ctranslate2 to 4.6.3 (fixes pkg_resources deprecation warning)
-- **Code Quality**: Zero pyflakes errors across all core modules
+- **OBS Not Ready Fix**: Fixed error code 207 when OBS is starting up - now properly retries connection with backoff
+- **Windows Input Fix**: Fixed stop commands (stop, q, quit, s, exit) not working during recording on Windows - now uses native keyboard input
+- **Better Error Handling**: Improved client cleanup and retry logic for OBS WebSocket connections
+- **Code Quality**: Fixed 2 runtime bugs (undefined variables), cleaned up 40+ unused imports/variables, fixed f-strings missing placeholders
+- **Test Fixes**: Fixed 8 failing tests (mock paths, Rich display conflicts, environment variable isolation)
+- **New Tests**: Added 2 new tests for OBS "not ready" scenario
 
 ---
 
 ## Recent Releases
+
+### v2.4.2 - Code Quality + Bug Fixes
+
+- Smart .env loading from any directory
+- Cleaner output, removed unnecessary warnings
+- Fixed undefined ValidationError
+- Upgraded ctranslate2 to 4.6.3
 
 ### v2.4.1 - OBS Recording Reliability
 
@@ -49,7 +57,8 @@
 
 | Version | Focus | Status |
 |---------|-------|--------|
-| 2.4.2 | Code Quality + Bug Fixes | ✅ Current |
+| 2.4.3 | OBS Recording Reliability | ✅ Current |
+| 2.4.2 | Code Quality + Bug Fixes | ✅ Production |
 | 2.4.1 | OBS Reliability | ✅ Production |
 | 2.4.0 | UX Polish | ✅ Production |
 | 2.3.1 | Gemini + Bake-off | ✅ Production |
@@ -76,9 +85,10 @@
 
 ### Clean Code
 
-- Zero unused variables or imports
-- Zero pyflakes errors
+- Zero unused variables or imports (cleaned up 40+ in v2.4.3)
+- 2 intentional pyflakes warnings (re-exports in providers/__init__.py)
 - Functions focused and testable
+- All tests passing (689 unit tests)
 
 ---
 
@@ -102,4 +112,4 @@
 
 ---
 
-**Last Updated:** 2026-01-08
+**Last Updated:** 2026-01-30

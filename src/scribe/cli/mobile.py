@@ -7,7 +7,6 @@ using OpenAI API for transcription. Fixes the missing find_wav_file bug.
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 
@@ -83,7 +82,7 @@ def mobile_transcribe(input_file: str) -> None:
         
         # Setup logging
         meeting_name = input_path.stem
-        logger = setup_logging(meeting_name, config.log_folder)
+        setup_logging(meeting_name, config.log_folder)  # Side effect: creates log file
         
         console.print(f"[green]Input: {input_path.name}[/green]\n")
         
@@ -110,7 +109,7 @@ def mobile_transcribe(input_file: str) -> None:
         if open_file_with_default_app(transcript_path):
             console.print("[green]Transcript opened successfully[/green]")
         else:
-            console.print(f"[yellow]Could not open transcript automatically[/yellow]")
+            console.print("[yellow]Could not open transcript automatically[/yellow]")
             console.print(f"[yellow]Please open manually: {transcript_path}[/yellow]")
         
         # Cleanup

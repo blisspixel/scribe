@@ -113,3 +113,79 @@ class TestUnifiedProgress:
         # 50% through transcribing = 70.5% overall (42 + 0.5 * 57)
         overall = start + (0.5 * (end - start))
         assert overall == 70.5
+
+
+class TestUnifiedProgressIntegration:
+    """Integration tests that exercise real code paths without mocking.
+    
+    These tests catch issues like missing imports that unit tests with
+    mocks would miss.
+    """
+    
+    @pytest.fixture(autouse=True)
+    def reset_console(self):
+        """Reset console state between tests to avoid LiveError."""
+        from scribe.utils.unified_progress import console
+        # Ensure no live display is active
+        if hasattr(console, '_live') and console._live is not None:
+            try:
+                console._live.stop()
+            except Exception:
+                pass
+        yield
+    
+    def test_full_lifecycle_no_mocks(self):
+        """Test complete lifecycle without mocking to catch import errors.
+        
+        This test catches bugs like missing imports in methods that are
+        only called at runtime (e.g., ScribeTheme not imported in complete()).
+        """
+        progress = UnifiedProgress(total_duration=100.0, include_api_features=True)
+        
+        try:
+            # Start - imports ScribeTheme
+            progress.start()
+            
+            # Update phases
+            progress.update_phase("preparing", 0.5, "Test preparing")
+            progress.update_phase("transcribing", 0.5, "Test transcribing")
+            progress.update_phase("finishing", 0.5, "Test finishing")
+            
+            # Complete - must also import ScribeTheme (this was the bug)
+            progress.complete()
+        finally:
+            # Ensure cleanup
+            progress.stop()
+        
+        # If we get here without NameError, the imports are correct
+    
+    def test_start_imports_theme(self):
+        """Verify start() has access to ScribeTheme."""
+        progress = UnifiedProgress()
+        try:
+            # This should not raise NameError
+            progress.start()
+        finally:
+            progress.stop()
+    
+    def test_complete_imports_theme(self):
+        """Verify complete() has access to ScribeTheme."""
+        progress = UnifiedProgress()
+        try:
+            progress.start()
+            # This should not raise NameError for ScribeTheme
+            progress.complete()
+        finally:
+            progress.stop()
+    
+    def test_stop_without_start(self):
+        """Test stop() handles case where start() wasn't called."""
+        progress = UnifiedProgress()
+        # Should not raise
+        progress.stop()
+    
+    def test_complete_without_start(self):
+        """Test complete() handles case where start() wasn't called."""
+        progress = UnifiedProgress()
+        # Should not raise (progress is None)
+        progress.complete()

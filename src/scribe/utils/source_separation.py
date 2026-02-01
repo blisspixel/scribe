@@ -206,7 +206,6 @@ significantly reduce hallucinations and enable complete lyric extraction.
 
 from pathlib import Path
 from typing import Optional
-import logging
 
 from scribe.utils.logging import get_logger
 
@@ -240,7 +239,6 @@ class VocalSeparator:
         
         try:
             from demucs.pretrained import get_model
-            from demucs.apply import apply_model
             
             logger.info(f"Loading Demucs model: {self.model_name}")
             self.model = get_model(self.model_name)
