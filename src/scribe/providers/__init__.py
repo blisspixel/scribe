@@ -28,13 +28,13 @@ __all__ = [
 
 # Optional providers
 try:
-    from scribe.providers.anthropic_provider import AnthropicProvider
+    from scribe.providers.anthropic_provider import AnthropicProvider  # noqa: F401
     __all__.append("AnthropicProvider")
 except ImportError:
     pass
 
 try:
-    from scribe.providers.gemini_provider import GeminiProvider
+    from scribe.providers.gemini_provider import GeminiProvider  # noqa: F401
     __all__.append("GeminiProvider")
 except ImportError:
     pass

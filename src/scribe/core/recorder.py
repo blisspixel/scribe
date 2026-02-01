@@ -255,12 +255,14 @@ class OBSRecorder:
         Attempt to connect to already-running OBS instance.
         
         Returns client if successful, None otherwise.
+        Handles the case where OBS is starting up and not yet ready.
         """
         for h in hosts:
             for p in ports:
                 is_listening = self._port_listening(h, p, timeout=0.3)
                 logger.debug(f"Port check {h}:{p} = {is_listening}")
                 if is_listening:
+                    client = None
                     try:
                         client = obs_reqs.ReqClient(
                             host=h,
@@ -268,16 +270,53 @@ class OBSRecorder:
                             password=self.obs_password,
                             timeout=3.0
                         )
-                        client.get_record_status()
-                        logger.info(f"Connected to OBS at ws://{h}:{p}")
-                        return client
+                        # Try to verify OBS is ready with retries
+                        for retry in range(5):
+                            try:
+                                client.get_record_status()
+                                logger.info(f"Connected to OBS at ws://{h}:{p}")
+                                return client
+                            except obs_error.OBSSDKRequestError as e:
+                                # OBS is connected but not ready yet (code 207)
+                                if "not ready" in str(e).lower():
+                                    logger.debug(f"OBS not ready yet, retry {retry + 1}/5")
+                                    time.sleep(0.5)
+                                    continue
+                                # Other OBS errors - connection works but request failed
+                                raise
+                        # Exhausted retries - OBS still not ready
+                        logger.debug(f"OBS at {h}:{p} not ready after retries")
+                        if client:
+                            try:
+                                client.close()
+                            except Exception:
+                                pass
                     except ValueError as e:
                         if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
-                            logger.debug(f"Hostname validation failed for {h}:{p} - {e}")
+                            logger.debug(f"Hostname validation failed for {h}:{p}")
                         else:
-                            logger.debug(f"ValueError during connection to {h}:{p}: {e}")
-                    except Exception as e:
-                        logger.debug(f"Connection attempt to {h}:{p} failed: {e}")
+                            logger.debug(f"ValueError during connection to {h}:{p}")
+                        if client:
+                            try:
+                                client.close()
+                            except Exception:
+                                pass
+                    except obs_error.OBSSDKRequestError:
+                        # Handle OBS SDK errors gracefully - don't log full traceback
+                        logger.debug(f"OBS SDK error at {h}:{p}")
+                        if client:
+                            try:
+                                client.close()
+                            except Exception:
+                                pass
+                    except Exception:
+                        # Connection failed - try next host/port
+                        logger.debug(f"Connection to {h}:{p} failed")
+                        if client:
+                            try:
+                                client.close()
+                            except Exception:
+                                pass
         return None
     
     def _wait_for_obs_startup(self, hosts: list, ports: list, max_wait_seconds: int) -> Optional[object]:
@@ -286,10 +325,14 @@ class OBSRecorder:
         
         Returns client if successful, None otherwise.
         """
+        # Wait a bit before first connection attempt to let OBS initialize
+        time.sleep(1.0)
+        
         for attempt in range(int(max_wait_seconds * 2)):
             for h in hosts:
                 for p in ports:
                     if self._port_listening(h, p, timeout=0.2):
+                        client = None
                         try:
                             client = obs_reqs.ReqClient(
                                 host=h,
@@ -297,30 +340,46 @@ class OBSRecorder:
                                 password=self.obs_password,
                                 timeout=3.0
                             )
-                            # Give OBS a moment to fully initialize
-                            if attempt < 4:
-                                time.sleep(0.5)
-                                continue
-                            
+                            # Try to verify OBS is ready
                             try:
                                 client.get_record_status()
+                                logger.info(f"Connected to OBS at ws://{h}:{p}")
+                                return client
                             except obs_error.OBSSDKRequestError as e:
+                                # OBS connected but not ready yet (code 207)
                                 if "not ready" in str(e).lower():
-                                    time.sleep(0.5)
-                                    continue
+                                    logger.debug(f"OBS not ready yet (attempt {attempt + 1})")
+                                    if client:
+                                        try:
+                                            client.close()
+                                        except Exception:
+                                            pass
+                                    # Don't continue inner loops, wait and retry
+                                    break
                                 raise
-                            
-                            logger.info(f"Connected to OBS at ws://{h}:{p}")
-                            return client
                             
                         except ValueError as e:
                             if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
-                                logger.debug(f"Hostname validation failed for {h}:{p} - {e}")
-                            else:
-                                logger.debug(f"ValueError during connection to {h}:{p}: {e}")
-                        except Exception as e:
-                            if "not ready" not in str(e).lower():
-                                logger.debug(f"Connection attempt to {h}:{p} failed: {e}")
+                                logger.debug(f"Hostname validation failed for {h}:{p}")
+                            if client:
+                                try:
+                                    client.close()
+                                except Exception:
+                                    pass
+                        except obs_error.OBSSDKRequestError:
+                            logger.debug(f"OBS SDK error during startup at {h}:{p}")
+                            if client:
+                                try:
+                                    client.close()
+                                except Exception:
+                                    pass
+                        except Exception:
+                            logger.debug(f"Connection to {h}:{p} failed")
+                            if client:
+                                try:
+                                    client.close()
+                                except Exception:
+                                    pass
             time.sleep(0.5)
         return None
     
@@ -576,29 +635,67 @@ class OBSRecorder:
         ev = threading.Event()
         
         def _listen():
-            if not sys.stdin or not sys.stdin.readable():
+            if not sys.stdin or not sys.stdin.isatty():
                 logger.debug("stdin not available for stop listener")
                 return
-            try:
-                while not ev.is_set():
-                    try:
-                        line = sys.stdin.readline()
-                        if not line:
-                            break
-                        cmd = line.strip().lower()
-                        if cmd in {"stop", "s", "q", "quit", "exit"}:
-                            console.print(f"\n[yellow]Stop command received: '{cmd}'[/yellow]")
-                            ev.set()
-                            break
-                    except Exception as e:
-                        logger.debug(f"Error reading input: {e}")
-                        break
-            except Exception as e:
-                logger.debug(f"Stop listener error: {e}")
+            
+            # Windows-specific: use msvcrt for non-blocking input
+            if sys.platform == 'win32':
+                try:
+                    import msvcrt
+                    buffer = []
+                    while not ev.is_set():
+                        # Check if a key is available
+                        if msvcrt.kbhit():
+                            char = msvcrt.getwch()
+                            if char == '\r' or char == '\n':
+                                # Enter pressed - check command
+                                cmd = ''.join(buffer).strip().lower()
+                                if cmd in {"stop", "s", "q", "quit", "exit"}:
+                                    console.print(f"\n[yellow]Stop command received: '{cmd}'[/yellow]")
+                                    ev.set()
+                                    break
+                                buffer = []
+                            elif char == '\x03':  # Ctrl+C
+                                ev.set()
+                                break
+                            else:
+                                buffer.append(char)
+                                # Echo the character
+                                sys.stdout.write(char)
+                                sys.stdout.flush()
+                        else:
+                            time.sleep(0.1)
+                except Exception as e:
+                    logger.debug(f"Windows input error: {e}")
+                    # Fall back to readline
+                    self._listen_readline(ev, console)
+            else:
+                # Unix: use select for non-blocking
+                self._listen_readline(ev, console)
         
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
         return ev
+    
+    def _listen_readline(self, ev: threading.Event, console) -> None:
+        """Fallback readline-based input listener."""
+        try:
+            while not ev.is_set():
+                try:
+                    line = sys.stdin.readline()
+                    if not line:
+                        break
+                    cmd = line.strip().lower()
+                    if cmd in {"stop", "s", "q", "quit", "exit"}:
+                        console.print(f"\n[yellow]Stop command received: '{cmd}'[/yellow]")
+                        ev.set()
+                        break
+                except Exception as e:
+                    logger.debug(f"Error reading input: {e}")
+                    break
+        except Exception as e:
+            logger.debug(f"Stop listener error: {e}")
     
     def _get_effective_record_dir(self, client, fallback: str) -> str:
         """Get effective recording directory from OBS."""

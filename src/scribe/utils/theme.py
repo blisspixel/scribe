@@ -20,7 +20,7 @@ This theme draws inspiration from:
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 from rich.theme import Theme
 from rich.style import Style
 

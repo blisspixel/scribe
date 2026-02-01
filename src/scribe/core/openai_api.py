@@ -8,7 +8,6 @@ This module provides cloud-based transcription using OpenAI's API with:
 - CRITICAL FIX: Proper text concatenation and file flushing
 """
 
-import os
 import time
 import random
 from pathlib import Path
@@ -20,7 +19,7 @@ from pydub.silence import split_on_silence
 from openai import OpenAI, APIConnectionError, RateLimitError, APIStatusError, AuthenticationError
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
-from scribe.exceptions import APIError, TranscriptionError, AudioFormatError
+from scribe.exceptions import APIError, TranscriptionError
 from scribe.utils.files import verify_file_content, extract_date_from_filename, format_date, format_duration_minutes
 from scribe.utils.logging import console, get_logger
 
@@ -144,9 +143,9 @@ class OpenAITranscriber:
             error_msg = str(e)
             # Check for duration limit error - retry with client-side chunking
             if "longer than" in error_msg and "seconds" in error_msg:
-                logger.warning(f"Hit OpenAI duration limit, retrying with client-side chunking...")
+                logger.warning("Hit OpenAI duration limit, retrying with client-side chunking...")
                 self.use_server_chunking = False
-                return self.transcribe(audio_path, output_path, prompt, cleanup_temp)
+                return self.transcribe(audio_path, output_path, prompt)
             
             raise TranscriptionError(
                 f"Server-side chunking transcription failed: {e}",

@@ -272,6 +272,61 @@ class TestWebSocketConnection:
         
         # Client should be closed at least once (may be called multiple times due to retry logic)
         assert mock_obs_client.close.called
+    
+    @patch('scribe.core.recorder.obs_error')
+    @patch('scribe.core.recorder.obs_reqs')
+    def test_connection_handles_obs_not_ready_error(self, mock_obs_reqs, mock_obs_error, recorder, mock_obs_client):
+        """Test connection handles 'OBS not ready' error gracefully with retries."""
+        # Create a mock OBSSDKRequestError
+        not_ready_error = Exception("Request GetRecordStatus returned code 207. OBS is not ready to perform the request.")
+        mock_obs_error.OBSSDKRequestError = type(not_ready_error)
+        
+        # First few calls fail with "not ready", then succeed
+        call_count = [0]
+        def get_record_status_side_effect():
+            call_count[0] += 1
+            if call_count[0] < 3:
+                raise not_ready_error
+            status = Mock()
+            status.output_active = False
+            return status
+        
+        mock_obs_client.get_record_status.side_effect = get_record_status_side_effect
+        mock_obs_reqs.ReqClient.return_value = mock_obs_client
+        
+        with patch.object(recorder, '_port_listening', return_value=True):
+            with recorder._connect_obs() as client:
+                assert client == mock_obs_client
+        
+        # Should have retried multiple times
+        assert call_count[0] >= 3
+    
+    @patch('scribe.core.recorder.obs_error')
+    @patch('scribe.core.recorder.obs_reqs')
+    def test_try_connect_handles_not_ready_with_retries(self, mock_obs_reqs, mock_obs_error, recorder, mock_obs_client):
+        """Test _try_connect_to_running_obs retries on 'not ready' error."""
+        # Create a mock OBSSDKRequestError
+        not_ready_error = Exception("OBS is not ready to perform the request")
+        mock_obs_error.OBSSDKRequestError = type(not_ready_error)
+        
+        # First 2 calls fail, third succeeds
+        call_count = [0]
+        def get_record_status_side_effect():
+            call_count[0] += 1
+            if call_count[0] < 3:
+                raise not_ready_error
+            status = Mock()
+            status.output_active = False
+            return status
+        
+        mock_obs_client.get_record_status.side_effect = get_record_status_side_effect
+        mock_obs_reqs.ReqClient.return_value = mock_obs_client
+        
+        with patch.object(recorder, '_port_listening', return_value=True):
+            result = recorder._try_connect_to_running_obs(["localhost"], [4455])
+        
+        assert result == mock_obs_client
+        assert call_count[0] == 3  # Should have retried until success
 
 
 class TestHostnameValidation:

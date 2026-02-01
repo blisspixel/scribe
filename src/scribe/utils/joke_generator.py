@@ -111,8 +111,17 @@ COMEDY_STYLES: Dict[str, str] = {
 # -----------------------------------------------------------------------------
 @dataclass
 class HumorConfig:
-    model: str = ""  # Empty = let provider factory choose default
+    model: str = "gpt-5.2"  # Default model for joke generation
     spice_level: int = 5  # Humor intensity 0-10 (0=off, 5=default, 10=spicy)
+    min_words: int = 10
+    max_words: int = 18
+    # Start higher to avoid "max_output_tokens" incomplete results with GPT-5 reasoning
+    max_output_tokens: int = 160
+    reasoning_effort: str = "low"   # none | low | medium | high | xhigh
+    verbosity: str = "low"              # low | medium | high
+    api_key: Optional[str] = None
+    seed: Optional[int] = None
+    archetype: Optional[str] = None
     
     @classmethod
     def from_env(cls) -> "HumorConfig":
@@ -139,15 +148,6 @@ class HumorConfig:
                 logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (not an integer), using default: {config.spice_level}")
         
         return config
-    min_words: int = 10
-    max_words: int = 18
-    # Start higher to avoid "max_output_tokens" incomplete results with GPT-5 reasoning
-    max_output_tokens: int = 160
-    reasoning_effort: str = "low"   # none | low | medium | high | xhigh
-    verbosity: str = "low"              # low | medium | high
-    api_key: Optional[str] = None
-    seed: Optional[int] = None
-    archetype: Optional[str] = None
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -587,7 +587,7 @@ def generate_transcript_joke(
     word_count = len(transcript_text.split())
     logger.info(f"Transcript stats: chars={char_count:,}, words={word_count:,}")
 
-    metadata = _extract_meeting_metadata(transcript_text)
+    _extract_meeting_metadata(transcript_text)  # Side effect: validates transcript structure
     entities = _mine_safe_entities(transcript_text)
     if entities:
         logger.info(f"Entity hints (safe): {entities[:8]}")

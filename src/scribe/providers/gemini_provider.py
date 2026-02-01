@@ -22,7 +22,6 @@ Model Selection:
 - gemini-2.5-pro: Balanced quality and speed
 """
 
-import base64
 import io
 from typing import Optional, List, Dict, Any
 
@@ -194,7 +193,6 @@ class GeminiProvider(AIProvider):
         **kwargs
     ) -> bytes:
         """Generate an image using Imagen."""
-        import httpx
         import logging
         logger = logging.getLogger(__name__)
         

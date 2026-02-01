@@ -4,7 +4,6 @@ Meme concept bake-off: Get concepts from multiple providers and pick the best.
 
 import logging
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 
 from scribe.utils.meme_generator import _analyze_transcript_for_meme, MemeConfig
 from scribe.providers import get_provider

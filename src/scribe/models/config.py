@@ -5,11 +5,10 @@ This module provides type-safe configuration management with runtime validation,
 environment variable loading, and self-healing for common configuration issues.
 """
 
-import os
 from pathlib import Path
 from typing import Optional, Literal
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from scribe.exceptions import ValidationError

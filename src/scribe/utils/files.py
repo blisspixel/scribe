@@ -282,9 +282,7 @@ PROGRAMMING: assume the worst, validate early, provide context, handle edge
 cases. This module implements all of these principles.
 """
 
-import os
 import re
-import glob
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime

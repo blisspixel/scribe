@@ -168,7 +168,7 @@ import sys
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
 from scribe.utils.platform import get_platform, is_windows
@@ -566,7 +566,6 @@ class SystemDiagnostics:
     def check_python_packages(self) -> DiagnosticResult:
         """Check critical Python packages."""
         missing = []
-        outdated = []
         
         critical_packages = {
             "torch": "2.0.0",

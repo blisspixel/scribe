@@ -85,7 +85,7 @@ def remove_silence(
     try:
         logger.info("Running FFmpeg silence removal...")
         logger.info("Note: This reduces silent sections for faster transcription")
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -239,7 +239,7 @@ def trim_file(
     
     try:
         logger.info("Running FFmpeg trim...")
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,

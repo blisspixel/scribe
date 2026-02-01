@@ -100,7 +100,6 @@ Simple machine learning beats static estimates.
 """
 
 import json
-import time
 from pathlib import Path
 from typing import Optional, Dict
 from dataclasses import dataclass, asdict
@@ -159,7 +158,7 @@ class PerformanceMetrics:
     # Sample count for averaging
     sample_count: int = 0
     
-    def update_from_actual(self, phase: str, audio_duration: float, actual_time: float):
+    def update_from_actual(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Update metrics based on actual performance.
         
@@ -325,7 +324,7 @@ class PerformanceTracker:
         except Exception as e:
             logger.warning(f"Failed to save performance metrics: {e}")
     
-    def record_phase(self, phase: str, audio_duration: float, actual_time: float):
+    def record_phase(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Record actual performance for a phase.
         

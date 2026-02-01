@@ -258,7 +258,7 @@ import os
 import platform
 import shutil
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Optional, Literal
 
 PlatformType = Literal["windows", "macos", "linux", "unknown"]
 

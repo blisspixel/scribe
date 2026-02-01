@@ -7,7 +7,7 @@ and safety filters.
 
 import logging
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 
@@ -139,7 +139,7 @@ class MemeCompositor:
             try:
                 bbox = font.getbbox(line)
                 line_height = bbox[3] - bbox[1]
-            except:
+            except (AttributeError, TypeError):
                 # Fallback for older Pillow versions
                 line_height = base_font_size
             line_heights.append(line_height)
@@ -157,7 +157,7 @@ class MemeCompositor:
             try:
                 bbox = font.getbbox(line)
                 text_width = bbox[2] - bbox[0]
-            except:
+            except (AttributeError, TypeError):
                 # Fallback
                 text_width = len(line) * base_font_size * 0.6
             

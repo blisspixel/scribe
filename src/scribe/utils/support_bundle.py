@@ -20,10 +20,9 @@ import os
 import sys
 import json
 import platform
-import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from scribe import __version__
 from scribe.utils.diagnostics import SystemDiagnostics
