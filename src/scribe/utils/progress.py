@@ -226,6 +226,7 @@ from rich.progress import (
 )
 
 from scribe.utils.logging import console
+from scribe.utils.terminal_ui import get_terminal_ui_config
 
 
 @dataclass
@@ -384,6 +385,7 @@ def create_progress_bar(description: str = "Processing") -> Progress:
     """
     from scribe.utils.theme import ScribeTheme
     
+    ui_config = get_terminal_ui_config()
     return Progress(
         SpinnerColumn(),
         TextColumn(f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"),
@@ -393,7 +395,9 @@ def create_progress_bar(description: str = "Processing") -> Progress:
         TextColumn("•"),
         TimeRemainingColumn(),
         console=console,
-        transient=False  # Keep progress visible after completion
+        transient=False,  # Keep progress visible after completion
+        auto_refresh=False,
+        refresh_per_second=max(2, ui_config.fps),
     )
 
 

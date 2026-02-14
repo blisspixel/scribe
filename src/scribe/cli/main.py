@@ -27,6 +27,7 @@ from scribe.utils.validation import validate_file_path, sanitize_meeting_name
 from scribe.utils.docx_converter import txt_to_docx
 from scribe.utils.logging import setup_logging, console, get_logger
 from scribe.utils.joke_generator import generate_transcript_joke, ARCHETYPE_DISPLAY_NAMES
+from scribe.utils.branding import brand_header_markup
 
 logger = get_logger(__name__)
 from scribe.exceptions import ScribeError, ProcessError, TranscriptionError
@@ -42,12 +43,17 @@ class CleanGroup(typer.core.TyperGroup):
     def format_help(self, ctx, formatter):
         """Override to provide clean, minimal help."""
         from rich.console import Console
+        from scribe.utils.branding import brand_header_markup
         
         console = Console()
         
         # Header - tight, no fluff
         console.print()
-        console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
+        header = (
+            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
+            f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print(header)
         console.print()
         
         # Commands - simple aligned list  
@@ -155,6 +161,7 @@ def transcribe_command(
       
       scribe transcribe technical.mp4 --vocabulary terms.txt
     """
+    unified_progress = None
     try:
         from scribe.utils.vocabulary import CustomVocabulary
         
@@ -218,7 +225,7 @@ def transcribe_command(
             outputs.append("meme")
         
         # Build panel content
-        panel_lines = [f"[bold {ScribeTheme.PRIMARY_BRIGHT}]Scribe v{__version__}[/bold {ScribeTheme.PRIMARY_BRIGHT}]"]
+        panel_lines = [brand_header_markup(f"Scribe v{__version__}", fallback_color=ScribeTheme.PRIMARY_BRIGHT)]
         panel_lines.append(f"[{ScribeTheme.TEXT_PRIMARY}]{audio_file.name}[/{ScribeTheme.TEXT_PRIMARY}]")
         
         if duration_mins:
@@ -324,7 +331,7 @@ def transcribe_command(
         def update_transcription_progress():
             while not transcription_done.is_set():
                 unified_progress.refresh()
-                time.sleep(1.0)
+                time.sleep(unified_progress.frame_delay)
         
         progress_thread = threading.Thread(target=update_transcription_progress, daemon=True)
         progress_thread.start()
@@ -493,6 +500,9 @@ def transcribe_command(
     except Exception as e:
         console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
         raise typer.Exit(1)
+    finally:
+        if unified_progress is not None:
+            unified_progress.stop()
 
 
 @app.command()
@@ -930,7 +940,7 @@ def batch_transcribe(
         # Display batch header
         console.print()
         console.print(Panel.fit(
-            f"[bold cyan]Scribe Batch Transcription v{__version__}[/bold cyan]\n"
+            f"{brand_header_markup(f'Scribe Batch Transcription v{__version__}')}\n"
             f"[white]Processing {len(valid_files)} file(s)[/white]",
             border_style="cyan",
             padding=(0, 1)
@@ -1197,10 +1207,12 @@ def music_transcribe(
             try:
                 # Setup logging for this track
                 logger = setup_logging(track_name, config.log_folder)
-                
+
                 # Display header
                 from scribe.utils.audio import get_audio_duration, format_duration
                 duration = get_audio_duration(audio_path)
+                if not duration:
+                    raise ValueError("Could not read audio duration (invalid or unsupported audio file)")
                 duration_str = format_duration(duration) if duration else "Unknown"
                 
                 console.print(f"[bold]File {idx}/{len(files_to_process)}:[/bold] {audio_path.name} [dim]({duration_str})[/dim]")
@@ -1646,7 +1658,7 @@ def joke(
             raise typer.Exit(1)
         
         # Display header
-        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
         panel_lines.append("[dim]Generating: joke[/dim]")
         
@@ -1783,7 +1795,7 @@ def meme(
             raise typer.Exit(1)
         
         # Display header
-        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
         panel_lines.append("[dim]Generating: meme[/dim]")
         
@@ -1935,7 +1947,7 @@ def notes(
             raise typer.Exit(1)
         
         # Display header
-        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
         panel_lines.append("[dim]Generating: notes[/dim]")
         
@@ -1994,10 +2006,12 @@ def info():
     and system configuration.
     """
     from scribe.utils.theme import ScribeTheme
+    from scribe.utils.terminal_ui import get_terminal_ui_config
     
     try:
         config = ScribeConfig()
         gpu_config = GPUConfig.detect()
+        ui_config = get_terminal_ui_config()
         
         console.print()
         console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe info[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
@@ -2017,6 +2031,29 @@ def info():
         console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]output[/{ScribeTheme.TEXT_PRIMARY}]    [{ScribeTheme.TEXT_MUTED}]{config.output_folder}[/{ScribeTheme.TEXT_MUTED}]")
         console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]model[/{ScribeTheme.TEXT_PRIMARY}]     [{ScribeTheme.TEXT_MUTED}]{config.default_model}[/{ScribeTheme.TEXT_MUTED}]")
         console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  [{ScribeTheme.TEXT_MUTED}]{config.default_language}[/{ScribeTheme.TEXT_MUTED}]")
+        console.print()
+
+        # UI section
+        console.print(f"[bold {ScribeTheme.SECONDARY}]ui[/bold {ScribeTheme.SECONDARY}]")
+        mode = ui_config.animation_mode
+        color_mode = ui_config.color_mode
+        fps = ui_config.fps
+        cap = ui_config.capabilities
+        color_state = "enabled" if ui_config.use_color else "disabled"
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]animations[/{ScribeTheme.TEXT_PRIMARY}] "
+            f"[{ScribeTheme.TEXT_MUTED}]{mode}[/{ScribeTheme.TEXT_MUTED}] "
+            f"[{ScribeTheme.TEXT_MUTED}]({fps} fps)[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]color[/{ScribeTheme.TEXT_PRIMARY}]      "
+            f"[{ScribeTheme.TEXT_MUTED}]{color_mode} ({color_state})[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]terminal[/{ScribeTheme.TEXT_PRIMARY}]   "
+            f"[{ScribeTheme.TEXT_MUTED}]tty={cap.is_tty} dumb={cap.is_dumb_terminal} "
+            f"ci={cap.is_ci} windows={cap.is_windows}[/{ScribeTheme.TEXT_MUTED}]"
+        )
         console.print()
         
         # API keys section
@@ -2064,7 +2101,11 @@ def doctor():
     from rich.table import Table
     
     console.print()
-    console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe doctor[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
+    doctor_header = (
+        f"{brand_header_markup('scribe doctor', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
+        f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+    )
+    console.print(doctor_header)
     console.print()
     
     # Run diagnostics
@@ -2157,7 +2198,7 @@ def health_check(
     from scribe.utils.theme import ScribeTheme
     
     console.print()
-    console.print(f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe health[/bold {ScribeTheme.PRIMARY_BRIGHT}]")
+    console.print(brand_header_markup("scribe health", fallback_color=ScribeTheme.PRIMARY_BRIGHT))
     console.print()
     
     # Get health monitor
@@ -2258,7 +2299,7 @@ def support_bundle(
     
     console.print()
     console.print(Panel.fit(
-        "[bold cyan]Generating Support Bundle[/bold cyan]",
+        brand_header_markup("Generating Support Bundle"),
         border_style="cyan"
     ))
     console.print()
@@ -2361,7 +2402,7 @@ def clean(
         from scribe.utils.audio import get_audio_duration
         
         # Display header
-        panel_lines = [f"[bold cyan]Scribe v{__version__}[/bold cyan]"]
+        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
         panel_lines.append(f"[white]{input_file.name}[/white]")
         
         # Get original duration

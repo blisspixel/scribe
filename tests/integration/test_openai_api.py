@@ -240,6 +240,24 @@ class TestChunkingBehavior:
         # Should have combined chunks
         assert "Chunk 1" in content or "Chunk 2" in content or "Chunk 3" in content
 
+    @patch('scribe.utils.audio.get_audio_duration')
+    def test_client_side_chunking_uses_initial_prompt(self, mock_duration, long_audio: Path, temp_config: ScribeConfig):
+        """Client-side chunking should pass initial_prompt through to chunk API calls."""
+        mock_duration.return_value = 1800.0  # Force client-side chunking path
+
+        transcriber = OpenAITranscriber(
+            api_key=temp_config.openai_api_key,
+            model="gpt-4o-transcribe",
+            use_server_chunking=False
+        )
+
+        with patch.object(transcriber, "standardize_audio", return_value=long_audio), \
+             patch.object(transcriber, "split_audio_on_silence", return_value=[long_audio]), \
+             patch.object(transcriber, "transcribe_chunk", return_value=(True, "chunk text")) as mock_chunk:
+            transcriber.transcribe(long_audio, initial_prompt="acme glossary")
+
+        mock_chunk.assert_called_once_with(long_audio, prompt="acme glossary")
+
 
 class TestTranscriptFormatting:
     """Test transcript output formatting."""

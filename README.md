@@ -1,8 +1,8 @@
 # Scribe
 
-**GPU-Accelerated Speech Intelligence for Teams, Creators, and Engineers**
+**Speech Transcription and Summarization CLI**
 
-Scribe transforms spoken content into structured understanding. It combines GPU-accelerated speech recognition with large language models to deliver accurate transcription, intelligent summaries, and creative humor automatically.
+Scribe converts spoken content into transcripts, notes, and optional humor outputs. It supports local GPU transcription and API-based transcription with fallback behavior.
 
 ---
 
@@ -37,6 +37,14 @@ scribe doctor                         # System diagnostics
 
 See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
 
+## Unreleased (Current Workspace)
+
+- Added terminal UI configuration: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
+- Added `scribe info` UI diagnostics (resolved mode, fps, terminal capabilities)
+- Added optional `full` mode shimmer for spinner/status lines
+- Added optional gradient branding for header lines in capable terminals
+- Added conservative fallback behavior for non-interactive terminals
+
 ---
 
 ## What Scribe Does
@@ -51,7 +59,7 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 **Key Features:**
 - GPU-accelerated local processing (11x real-time on RTX 4090)
 - Automatic fallback to OpenAI API when GPU unavailable
-- Production-grade music transcription with vocal separation
+- Music transcription with vocal separation
 - Batch processing for multiple files
 - Custom vocabulary for domain-specific terms
 - Multi-provider AI support (OpenAI, XAI/Grok, Anthropic, Gemini)
@@ -176,7 +184,7 @@ pip install -e .
 
 **Optional: Additional AI Providers**
 ```bash
-# XAI/Grok (47x cheaper for jokes/notes/memes)
+# XAI/Grok (lower cost for jokes/notes/memes in many workloads)
 pip install openai
 
 # Anthropic Claude
@@ -213,6 +221,14 @@ SCRIBE_OUTPUT_FOLDER=/path/to/scribe/output
 SCRIBE_DEFAULT_MODEL=large-v3
 SCRIBE_DEFAULT_LANGUAGE=en
 
+# Terminal UI (optional)
+# off|light|full
+SCRIBE_ANIMATIONS=light
+# auto|always|never
+SCRIBE_COLOR=auto
+# UI refresh rate (2-30)
+SCRIBE_FPS=10
+
 # OBS WebSocket (for recording)
 SCRIBE_OBS_HOST=localhost
 SCRIBE_OBS_PORT=4455
@@ -232,7 +248,7 @@ SCRIBE_OBS_PASSWORD=your_password
 - Ensures optimal transcription quality
 
 **2. Transcription**
-- **Local GPU:** Whisper large-v3 (maximum accuracy, 11x real-time on RTX 4090)
+- **Local GPU:** Whisper large-v3 (11x real-time on RTX 4090 in project benchmarks)
 - **API Mode:** gpt-4o-transcribe-diarize (speaker separation, server-side chunking)
 - Automatic method selection based on GPU availability
 
@@ -243,7 +259,7 @@ SCRIBE_OBS_PASSWORD=your_password
 
 ### Music Transcription
 
-Production-grade music transcription using separation-first architecture for complete, accurate lyrics.
+Music transcription uses a separation-first architecture to improve lyrics capture quality.
 
 **Key Features:**
 - Segment-based transcription with VAD timestamps
@@ -310,7 +326,7 @@ Mix and match AI providers based on cost, performance, and features.
 
 **Configuration:**
 ```bash
-# Use Grok for jokes, memes, notes (47x cheaper!)
+# Example: use XAI for jokes, memes, notes
 export SCRIBE_JOKE_PROVIDER=xai
 export SCRIBE_MEME_PROVIDER=xai
 export SCRIBE_NOTES_PROVIDER=xai
@@ -520,19 +536,17 @@ pytest tests/unit/ --tb=no -q
 ```
 
 **Test Status:**
-- 689 unit tests passing (100% pass rate)
-- 1 platform-specific test skipped
-- Comprehensive unit, integration, and end-to-end coverage
-- Exception handling fully tested
+- Large unit/integration/e2e test suite
+- Platform-specific skips in some environments
+- Use the commands above to verify in your environment
 
 ### Code Quality
 
 **Standards:**
-- PhD-level documentation for core modules
 - Structured logging with context
-- Comprehensive error handling
-- Type hints throughout
-- Defensive programming patterns
+- Error handling with fallback paths
+- Type hints in core modules
+- Test coverage for key workflows
 
 **Tools:**
 - pytest for testing
@@ -678,8 +692,6 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 ---
 
 **Current Version:** 2.4.3  
-**Build Status:** PASSING (689 unit tests, 1 platform-skipped)  
-**Code Quality:** Clean (2 intentional re-exports in providers/__init__.py)  
-**Test Coverage:** Comprehensive unit, integration, and end-to-end testing  
-**Focus:** Excellence over features - see [ROADMAP](ROADMAP.md)  
-**Last Updated:** 2026-01-30
+**Build Status:** Refer to local CI/test runs  
+**Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)  
+**Last Updated:** 2026-02-14

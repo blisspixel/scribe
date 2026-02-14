@@ -249,9 +249,11 @@ from typing import Optional
 from rich.console import Console
 from rich.logging import RichHandler
 
+from scribe.utils.terminal_ui import get_terminal_ui_config
 
 # Global console instance
-console = Console()
+_ui_config = get_terminal_ui_config()
+console = Console(no_color=not _ui_config.use_color)
 
 
 def setup_logging(
@@ -322,6 +324,16 @@ def setup_logging(
     # Log startup info
     logger.info(f"Logging initialized for session: {session_name}")
     logger.debug(f"Log file: {log_file}")
+    logger.debug(
+        "Terminal UI config: animations=%s color=%s fps=%s tty=%s dumb=%s ci=%s windows=%s",
+        _ui_config.animation_mode,
+        _ui_config.color_mode,
+        _ui_config.fps,
+        _ui_config.capabilities.is_tty,
+        _ui_config.capabilities.is_dumb_terminal,
+        _ui_config.capabilities.is_ci,
+        _ui_config.capabilities.is_windows,
+    )
     
     return logger
 

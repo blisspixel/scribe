@@ -411,3 +411,27 @@ class TestMusicMode:
         # Music mode should be passed
         call_args = mock_local.transcribe.call_args
         assert call_args is not None
+
+    @patch.object(Transcriber, '_detect_language_for_music')
+    @patch('scribe.core.transcriber.LocalWhisperTranscriber')
+    def test_music_mode_detected_language_is_per_call_only(
+        self,
+        mock_local_class,
+        mock_detect_language,
+        temp_config: ScribeConfig,
+        sample_audio: Path
+    ):
+        """Detected music language should not mutate global config defaults."""
+        temp_config.default_language = None
+        mock_detect_language.return_value = "es"
+        transcriber = Transcriber(temp_config)
+
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local_class.return_value = mock_local
+
+        transcriber.transcribe(sample_audio, method="local", music_mode=True)
+
+        assert temp_config.default_language is None
+        assert mock_local_class.call_args is not None
+        assert mock_local_class.call_args.kwargs["language"] == "es"

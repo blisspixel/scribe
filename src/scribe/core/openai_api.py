@@ -537,7 +537,7 @@ class OpenAITranscriber:
                 for i, chunk_path in enumerate(chunk_paths, 1):
                     logger.debug(f"Transcribing chunk {i}/{len(chunk_paths)}: {chunk_path.name}")
                     
-                    success, text = self.transcribe_chunk(chunk_path, prompt=prompt)
+                    success, text = self.transcribe_chunk(chunk_path, prompt=effective_prompt)
                     
                     if success and text:
                         transcripts.append(text.strip())

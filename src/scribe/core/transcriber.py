@@ -367,7 +367,8 @@ class Transcriber:
         session: Optional[TranscriptionSession],
         custom_vocabulary: Optional["CustomVocabulary"],
         music_mode: bool,
-        primary_error: Exception
+        primary_error: Exception,
+        language_override: Optional[str] = None,
     ) -> Path:
         """Attempt fallback transcription with alternate method."""
         fallback_method = "openai" if chosen_method == "local" else "local"
@@ -376,7 +377,13 @@ class Transcriber:
         # Convert to appropriate format for fallback
         if fallback_method == "local":
             audio_file = self.converter.convert_to_wav(audio_path)
-            transcript_path = self._transcribe_local(audio_file, session, custom_vocabulary, music_mode)
+            transcript_path = self._transcribe_local(
+                audio_file,
+                session,
+                custom_vocabulary,
+                music_mode,
+                language_override,
+            )
         else:
             if not self.config.openai_api_key:
                 raise TranscriptionError("OpenAI API key not configured for fallback")
@@ -431,6 +438,7 @@ class Transcriber:
         # Choose method and prepare audio
         chosen_method = self.choose_method(method)
         audio_file = self._prepare_audio_for_method(audio_path, chosen_method)
+        local_language_override: Optional[str] = None
         
         if session:
             session.add_file(audio_file, "audio")
@@ -439,12 +447,18 @@ class Transcriber:
         if music_mode and chosen_method == "local" and self.config.default_language is None:
             detected_lang = self._detect_language_for_music(audio_file)
             if detected_lang:
-                self.config.default_language = detected_lang
+                local_language_override = detected_lang
         
         # Try primary method
         try:
             if chosen_method == "local":
-                transcript_path = self._transcribe_local(audio_file, session, custom_vocabulary, music_mode)
+                transcript_path = self._transcribe_local(
+                    audio_file,
+                    session,
+                    custom_vocabulary,
+                    music_mode,
+                    local_language_override,
+                )
             else:
                 transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
             
@@ -468,7 +482,13 @@ class Transcriber:
             # Attempt fallback
             try:
                 transcript_path = self._attempt_fallback_transcription(
-                    audio_path, chosen_method, session, custom_vocabulary, music_mode, e
+                    audio_path,
+                    chosen_method,
+                    session,
+                    custom_vocabulary,
+                    music_mode,
+                    e,
+                    local_language_override,
                 )
                 return transcript_path
                 
@@ -490,12 +510,14 @@ class Transcriber:
         audio_path: Path,
         session: Optional[TranscriptionSession],
         custom_vocabulary: Optional["CustomVocabulary"] = None,
-        music_mode: bool = False
+        music_mode: bool = False,
+        language_override: Optional[str] = None,
     ) -> Path:
         """Transcribe using local GPU."""
+        language = language_override if language_override is not None else self.config.default_language
         transcriber = LocalWhisperTranscriber(
             model_size=self.config.default_model,
-            language=self.config.default_language,
+            language=language,
             gpu_config=self.gpu_config
         )
         

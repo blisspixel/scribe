@@ -128,9 +128,9 @@ Simple adaptive learning beats static estimates every time.
 import time
 from typing import Optional
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
-from rich.console import Console
 
-console = Console()
+from scribe.utils.logging import console
+from scribe.utils.terminal_ui import get_terminal_ui_config
 
 
 class UnifiedProgress:
@@ -160,6 +160,8 @@ class UnifiedProgress:
         self.current_phase = None
         self.phase_start_times = {}
         self.include_api_features = include_api_features
+        self.ui_config = get_terminal_ui_config()
+        self.frame_delay = self.ui_config.frame_delay
         
         # Try to load adaptive phase percentages based on machine performance
         if machine_id and total_duration:
@@ -213,10 +215,13 @@ class UnifiedProgress:
             TextColumn("•"),
             TimeElapsedColumn(),
             console=console,
-            transient=False
+            transient=False,
+            auto_refresh=False,
+            refresh_per_second=max(2, self.ui_config.fps),
         )
         self.progress.start()
         self.task = self.progress.add_task("Starting...", total=100)
+        self.progress.refresh()
     
     def update_phase(self, phase: str, progress_in_phase: float = 0.0, step_description: str = None) -> None:
         """
@@ -272,6 +277,7 @@ class UnifiedProgress:
                 completed=overall_progress,
                 description=description
             )
+            self.progress.refresh()
     
     def refresh(self) -> None:
         """Refresh progress based on elapsed time in current phase."""
@@ -292,6 +298,7 @@ class UnifiedProgress:
                 completed=100,
                 description=f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)[/{ScribeTheme.SUCCESS}]"
             )
+            self.progress.refresh()
             self.progress.stop()
     
     def stop(self) -> None:
