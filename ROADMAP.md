@@ -1,6 +1,6 @@
 # Scribe Roadmap
 
-**Philosophy:** Excellence over features. Every release focuses on making existing functionality more reliable, more polished, and more delightful to use.
+**Philosophy:** Reliability over feature count. Releases prioritize predictable behavior, clearer output, and maintainable code.
 
 ---
 
@@ -14,6 +14,18 @@
 - **Code Quality**: Fixed 2 runtime bugs (undefined variables), cleaned up 40+ unused imports/variables, fixed f-strings missing placeholders
 - **Test Fixes**: Fixed 8 failing tests (mock paths, Rich display conflicts, environment variable isolation)
 - **New Tests**: Added 2 new tests for OBS "not ready" scenario
+
+---
+
+## Unreleased (Current Workspace)
+
+**Focus: Cross-Platform CLI UX Controls**
+
+- Added terminal UI controls: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
+- Added optional shimmer status effect in `full` mode with capability fallback
+- Added optional gradient branding for command headers in `full` mode
+- Added UI diagnostics output in `scribe info`
+- Added tests for terminal UI config, shimmer, spinner, and branding helpers
 
 ---
 
@@ -57,15 +69,15 @@
 
 | Version | Focus | Status |
 |---------|-------|--------|
-| 2.4.3 | OBS Recording Reliability | ✅ Current |
-| 2.4.2 | Code Quality + Bug Fixes | ✅ Production |
-| 2.4.1 | OBS Reliability | ✅ Production |
-| 2.4.0 | UX Polish | ✅ Production |
-| 2.3.1 | Gemini + Bake-off | ✅ Production |
-| 2.3.0 | Music Transcription | ✅ Production |
-| 2.2.x | Multi-Provider | ✅ Production |
-| 2.1.x | Provider Abstraction | ✅ Production |
-| 2.0.x | GPU Acceleration | ✅ Production |
+| 2.4.3 | OBS Recording Reliability | Current |
+| 2.4.2 | Code Quality + Bug Fixes | Production |
+| 2.4.1 | OBS Reliability | Production |
+| 2.4.0 | UX Polish | Production |
+| 2.3.1 | Gemini + Bake-off | Production |
+| 2.3.0 | Music Transcription | Production |
+| 2.2.x | Multi-Provider | Production |
+| 2.1.x | Provider Abstraction | Production |
+| 2.0.x | GPU Acceleration | Production |
 
 ---
 
@@ -73,9 +85,9 @@
 
 ### Quality Over Speed
 
-- Uses Whisper large-v3 (best accuracy available)
-- Professional-grade audio normalization
-- Could use faster models, but accuracy is non-negotiable
+- Uses Whisper large-v3 by default for strong accuracy
+- Audio normalization is enabled for consistency
+- Faster models remain available when speed is preferred
 
 ### Defensive by Design
 
@@ -85,10 +97,10 @@
 
 ### Clean Code
 
-- Zero unused variables or imports (cleaned up 40+ in v2.4.3)
+- Ongoing cleanup of unused variables/imports
 - 2 intentional pyflakes warnings (re-exports in providers/__init__.py)
 - Functions focused and testable
-- All tests passing (689 unit tests)
+- Test suite is run continuously during development
 
 ---
 
@@ -112,4 +124,4 @@
 
 ---
 
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-14

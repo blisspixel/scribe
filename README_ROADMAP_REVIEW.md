@@ -10,12 +10,12 @@
 
 ### README.md
 
-#### ❌ Broken Links (3 issues)
+#### [needs-work] Broken Links (3 issues)
 1. **Line 23**: `docs/MUSIC_MODE_ARCHITECTURE.md` → Should be `docs/features/MUSIC_MODE_ARCHITECTURE.md`
 2. **Line 23**: `docs/ARCHITECTURE_DEEP_DIVE.md` → File archived, should link to `docs/ARCHITECTURE.md`
 3. **Line 35**: `docs/CODE_EXCELLENCE_PLAN.md` → File archived, should be removed or link to `docs/archive/CODE_EXCELLENCE_PLAN.md`
 
-#### ⚠️ Outdated Information
+#### [note] Outdated Information
 1. **Line 11**: "642 tests" → Should be **678 tests** (641 unit + 17 integration + 20 e2e)
 2. **Line 23**: References "Architecture Deep Dive" → Document archived
 3. **Line 35**: References "Excellence Plan" → Document archived
@@ -23,7 +23,7 @@
 5. **Line 642**: "642 tests passing" → Should be **678 tests**
 6. **Line 645**: "Last Updated: 2025-11-20" → Should be **2025-11-21**
 
-#### ✅ What's Good
+#### [done] What's Good
 - Comprehensive feature documentation
 - Clear installation instructions
 - Good CLI examples
@@ -34,19 +34,19 @@
 
 ### ROADMAP.md
 
-#### ⚠️ Missing Latest Changes
+#### [note] Missing Latest Changes
 1. **No v2.4.2 entry** for recent improvements:
    - .env loading from any directory
    - Removed Windows tip message
    - Test suite improvements (678 tests, 100% pass rate)
    - Documentation cleanup
 
-#### ⚠️ Outdated Test Counts
+#### [note] Outdated Test Counts
 1. **Line 11**: "642 tests total" → Should be **678 tests**
 2. **Line 18**: "642/642 tests passing" → Should be **678/678 tests**
 3. **Line 27**: "595/595 tests passing" → Outdated reference
 
-#### ✅ What's Good
+#### [done] What's Good
 - Clear version history
 - Good technical details
 - Philosophy statement is clear
@@ -155,15 +155,15 @@ This release focuses on user experience improvements and achieving 100% test pas
 ## 🎯 Priority Actions
 
 ### High Priority (Do Now)
-1. ✅ Fix broken links in README (3 links)
-2. ✅ Update test counts (642 → 678)
-3. ✅ Update last updated date
-4. ✅ Add v2.4.2 to ROADMAP
+1. [done] Fix broken links in README (3 links)
+2. [done] Update test counts (642 → 678)
+3. [done] Update last updated date
+4. [done] Add v2.4.2 to ROADMAP
 
 ### Medium Priority (Soon)
-1. ⚠️ Review and update PERFORMANCE_TUNING.md
-2. ⚠️ Verify API_REFERENCE.md is current
-3. ⚠️ Update docs/README.md with new structure
+1. [note] Review and update PERFORMANCE_TUNING.md
+2. [note] Verify API_REFERENCE.md is current
+3. [note] Update docs/README.md with new structure
 
 ### Low Priority (Eventually)
 1. 📝 Add more examples to examples/ folder
@@ -198,7 +198,7 @@ Both documents are well-written and comprehensive, but need updates to reflect:
 
 ---
 
-## ✅ Action Plan
+## [done] Action Plan
 
 1. **Fix README.md** (10 min)
    - Update 3 broken links

@@ -48,33 +48,33 @@ Contains API research, feature research notes, and implementation experiments.
 ### What Goes Where
 
 **docs/ (Root)**:
-- ✅ Current, actively maintained documentation
-- ✅ User-facing guides
-- ✅ Developer references
-- ✅ Architecture and design docs
-- ❌ Historical or completed plans
-- ❌ Session-specific logs
-- ❌ Research notes
+- [done] Current, actively maintained documentation
+- [done] User-facing guides
+- [done] Developer references
+- [done] Architecture and design docs
+- [needs-work] Historical or completed plans
+- [needs-work] Session-specific logs
+- [needs-work] Research notes
 
 **docs/features/**:
-- ✅ Feature-specific architecture
-- ✅ Detailed implementation guides
-- ✅ Complex feature documentation
-- ❌ General architecture (goes in docs/)
+- [done] Feature-specific architecture
+- [done] Detailed implementation guides
+- [done] Complex feature documentation
+- [needs-work] General architecture (goes in docs/)
 
 **docs/archive/**:
-- ✅ Completed plans and initiatives
-- ✅ Historical documentation
-- ✅ Session logs and summaries
-- ✅ Superseded documentation
-- ❌ Current, active documentation
+- [done] Completed plans and initiatives
+- [done] Historical documentation
+- [done] Session logs and summaries
+- [done] Superseded documentation
+- [needs-work] Current, active documentation
 
 **docs/research/**:
-- ✅ API research and exploration
-- ✅ Feature research notes
-- ✅ Implementation experiments
-- ✅ Raw research data
-- ❌ Finalized documentation
+- [done] API research and exploration
+- [done] Feature research notes
+- [done] Implementation experiments
+- [done] Raw research data
+- [needs-work] Finalized documentation
 
 ---
 
@@ -100,7 +100,7 @@ Contains API research, feature research notes, and implementation experiments.
 
 ---
 
-## ✅ Maintenance
+## [done] Maintenance
 
 ### When Adding New Docs
 
@@ -120,4 +120,4 @@ Contains API research, feature research notes, and implementation experiments.
 
 ---
 
-**Everything has its place!** 🚀
+**Everything has its place!** 
