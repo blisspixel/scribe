@@ -178,7 +178,7 @@ def transcribe_command(
             try:
                 validated_lang = validate_language_code(language)
                 config.default_language = validated_lang
-            except ValidationError:
+            except ValidationError as e:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 console.print("[dim]Use 2-letter ISO 639-1 codes (e.g., 'en', 'es', 'fr', 'de', 'zh', 'ja')[/dim]")
                 raise typer.Exit(1) from e
@@ -194,7 +194,7 @@ def transcribe_command(
                 console.print()
             except Exception as e:
                 console.print(f"[red]Failed to load vocabulary: {e}[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
 
         # Validate audio file first
         audio_path = validate_file_path(str(audio_file))
@@ -278,17 +278,17 @@ def transcribe_command(
             except ProcessError as e:
                 console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                 console.print("[yellow]Tip: Check that ffmpeg is installed and the audio file is valid[/yellow]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
             except Exception as e:
                 console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
         else:
             # OpenAI API accepts multiple formats but has 25MB limit
             try:
                 file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-            except (FileNotFoundError, OSError):
+            except (FileNotFoundError, OSError) as e:
                 console.print(f"[bold red]Error:[/bold red] Cannot access file: {audio_path}")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
 
             if file_size_mb > 24:
                 # File too large - compress to MP3 with normalized audio
@@ -313,10 +313,10 @@ def transcribe_command(
                 except ProcessError as e:
                     console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                     console.print("[yellow]Tip: Check that ffmpeg is installed and the audio file is valid[/yellow]")
-                    raise typer.Exit(1)
+                    raise typer.Exit(1) from e
                 except Exception as e:
                     console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
-                    raise typer.Exit(1)
+                    raise typer.Exit(1) from e
             else:
                 # File size OK - use original audio file
                 audio_file = audio_path
@@ -497,10 +497,10 @@ def transcribe_command(
         console.print(f"\n[bold red]Error:[/bold red] {e}")
         if e.context:
             console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     except Exception as e:
         console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     finally:
         if unified_progress is not None:
             unified_progress.stop()
