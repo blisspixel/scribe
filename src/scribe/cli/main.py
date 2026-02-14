@@ -8,6 +8,7 @@ transcription, recording, and system information.
 import time
 import warnings
 from pathlib import Path
+
 import typer
 from rich.panel import Panel
 from rich.table import Table
@@ -15,16 +16,19 @@ from rich.table import Table
 from scribe import __version__
 from scribe.core.recorder import OBSRecorder
 from scribe.core.transcriber import Transcriber
+from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
 from scribe.models.gpu import GPUConfig
 from scribe.models.session import TranscriptionSession
 from scribe.utils.branding import brand_header_markup
 from scribe.utils.docx_converter import txt_to_docx
-from scribe.utils.joke_generator import ARCHETYPE_DISPLAY_NAMES, generate_transcript_joke
+from scribe.utils.joke_generator import (
+    ARCHETYPE_DISPLAY_NAMES,
+    generate_transcript_joke,
+)
 from scribe.utils.logging import console, get_logger, setup_logging
-from scribe.utils.validation import sanitize_meeting_name, validate_file_path
-from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.utils.theme import ScribeTheme
+from scribe.utils.validation import sanitize_meeting_name, validate_file_path
 
 # Suppress TorchAudio MP3 warnings
 warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
@@ -40,7 +44,7 @@ logger = get_logger(__name__)
 class CleanGroup(typer.core.TyperGroup):
     """Custom group with minimal, elite-tier help formatting."""
 
-    def format_help(self, ctx, formatter):
+    def format_help(self, _, __):
         """Override to provide clean, minimal help."""
         from rich.console import Console
 
@@ -177,7 +181,7 @@ def transcribe_command(
             except ValidationError:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 console.print("[dim]Use 2-letter ISO 639-1 codes (e.g., 'en', 'es', 'fr', 'de', 'zh', 'ja')[/dim]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
 
