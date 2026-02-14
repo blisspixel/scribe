@@ -11,10 +11,10 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
+from dotenv import find_dotenv, load_dotenv
 from openai import OpenAI
-from dotenv import load_dotenv, find_dotenv
 
 # Load environment
 load_dotenv(find_dotenv(usecwd=True), override=False)
@@ -44,7 +44,7 @@ class MemeConfig:
     qa_enabled: bool = True  # Enable QA loop
     qa_threshold: float = 8.0  # Minimum score to accept (out of 10)
     spice_level: int = 5  # Humor intensity 0-10 (0=off, 5=default, 10=spicy)
-    
+
     @classmethod
     def from_env(cls) -> "MemeConfig":
         """Create config from environment variables.
@@ -58,7 +58,7 @@ class MemeConfig:
             MemeConfig instance with values from environment
         """
         config = cls()
-        
+
         # Read QA threshold from environment
         threshold_str = os.getenv("SCRIBE_MEME_QA_THRESHOLD")
         if threshold_str:
@@ -70,7 +70,7 @@ class MemeConfig:
                     logger.warning(f"Invalid SCRIBE_MEME_QA_THRESHOLD: {threshold_str} (must be 0.0-10.0), using default: {config.qa_threshold}")
             except ValueError:
                 logger.warning(f"Invalid SCRIBE_MEME_QA_THRESHOLD: {threshold_str} (not a number), using default: {config.qa_threshold}")
-        
+
         # Read max attempts from environment
         attempts_str = os.getenv("SCRIBE_MEME_QA_ATTEMPTS")
         if attempts_str:
@@ -82,7 +82,7 @@ class MemeConfig:
                     logger.warning(f"Invalid SCRIBE_MEME_QA_ATTEMPTS: {attempts_str} (must be 1-10), using default: {config.max_retries}")
             except ValueError:
                 logger.warning(f"Invalid SCRIBE_MEME_QA_ATTEMPTS: {attempts_str} (not an integer), using default: {config.max_retries}")
-        
+
         # Read spice level from environment
         spice_str = os.getenv("SCRIBE_HUMOR_SPICE")
         if spice_str:
@@ -94,7 +94,7 @@ class MemeConfig:
                     logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (must be 0-10), using default: {config.spice_level}")
             except ValueError:
                 logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (not an integer), using default: {config.spice_level}")
-        
+
         return config
 
 
@@ -103,9 +103,9 @@ def _analyze_transcript_for_meme(
     transcript: str,
     config: MemeConfig,
     show_reasoning: bool = False,
-    previous_attempt: Optional[Dict[str, Any]] = None,
+    previous_attempt: dict[str, Any] | None = None,
     make_safer: bool = False
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Use GPT-5 to analyze transcript and create meme concept.
     
@@ -121,12 +121,12 @@ def _analyze_transcript_for_meme(
     # Log transcript length for transparency
     transcript_length = len(transcript)
     logger.info(f"Analyzing transcript for meme concept... (transcript length: {transcript_length} characters)")
-    
+
     # If previous attempt was blocked, reduce spice level and add safety guidance
     if make_safer:
         logger.info("Generating safer meme concept after safety filter block")
         config.spice_level = max(1, config.spice_level - 2)  # Reduce by 2 levels
-    
+
     # Spice level descriptions
     # 0-5: Work-safe, shareable
     # 6-8: Edgy but still professional
@@ -144,9 +144,9 @@ def _analyze_transcript_for_meme(
         9: "SPICY - Brutally honest, potentially offensive, NSFW territory",
         10: "SPICY - NO FILTER - Offensive, sexual innuendo OK, definitely NSFW"
     }
-    
+
     spice_desc = spice_descriptions.get(config.spice_level, "HONEST - Default level")
-    
+
     # Detailed spice guidance
     if config.spice_level <= 3:
         spice_guidance = "Be extremely cautious and gentle. Avoid any edge or discomfort. Keep it extremely safe and work-appropriate."
@@ -158,7 +158,7 @@ def _analyze_transcript_for_meme(
         spice_guidance = "NSFW TERRITORY. Be brutally honest and potentially offensive. Expose the dysfunction, the waste, the quiet despair. Sexual innuendo is acceptable if it fits. Make them laugh uncomfortably and think twice before sharing it at work. This is 'send it in a private DM' humor."
     else:  # Level 10
         spice_guidance = "ABSOLUTELY NO FILTER. NSFW. Potentially offensive. Sexual innuendo and crude humor are ENCOURAGED if they land the joke. Say what everyone was thinking but would NEVER say out loud. Expose the absurdity, the dysfunction, the collective delusion with zero corporate politeness. Be SAVAGE, CRUDE, OFFENSIVE if it's funny. This is 'I can't believe this app said that' territory. Make it so honest and raw it stings. This is NOT for work - this is for sharing with your closest work friends who have the same dark sense of humor."
-    
+
     # Add guidance to avoid previous concept if it was blocked
     safety_guidance = ""
     if previous_attempt and make_safer:
@@ -176,7 +176,7 @@ Generate a COMPLETELY DIFFERENT concept that is:
 - Focuses on universal workplace humor
 - Uses simple, clean visual concepts
 """
-    
+
     analysis_prompt = f"""You are a PhD-level meme theorist. You understand Benign Violation Theory, semiotics, Grice's Maxims, and comedic theory. But you're not a robot following a checklist—you're an AGENTIC creative who uses these tools to find what's genuinely hilarious.
 
 FULL TRANSCRIPT ({transcript_length} characters):
@@ -291,15 +291,15 @@ Think deeply. Use your full reasoning capacity. Find the perfect moment ANYWHERE
 Respond with valid JSON only."""},
                 {"role": "user", "content": analysis_prompt}
             ]
-            
+
             # Gemini needs higher max_tokens for complex JSON responses
             max_tokens = 8000 if hasattr(provider.config, 'provider_name') and provider.config.provider_name == 'gemini' else 4000
-            
+
             response = provider.chat_completion(messages=messages, max_tokens=max_tokens)
             result = response["content"]
-            
+
             logger.debug(f"Raw provider response: {result[:500]}...")
-            
+
             # Try to extract JSON from response (handles markdown code blocks)
             import re
             json_match = re.search(r'\{.*\}', result, re.DOTALL)
@@ -308,7 +308,7 @@ Respond with valid JSON only."""},
             else:
                 logger.error(f"No JSON found in response. Full response: {result}")
                 raise ValueError("No JSON found in provider response")
-            
+
             # Try to parse JSON, with repair if needed
             try:
                 meme_concept = json.loads(result)
@@ -346,14 +346,14 @@ Respond with valid JSON only."""},
                 ],
                 reasoning={"effort": "medium"}  # Medium is faster than high (30s vs 5+ min)
             )
-            
+
             # Extract text from response
             result = response.output_text
             meme_concept = json.loads(result)  # Parse JSON response
-        
+
         # Add metadata for transparency
         meme_concept["transcript_length"] = transcript_length
-        
+
         # Extract API-level reasoning (if available)
         api_reasoning = []
         if hasattr(response, 'output') and response.output:
@@ -363,11 +363,11 @@ Respond with valid JSON only."""},
                         for summary_item in item.summary:
                             if hasattr(summary_item, 'text'):
                                 api_reasoning.append(summary_item.text)
-        
+
         if api_reasoning:
             meme_concept["api_reasoning"] = api_reasoning
             logger.info(f"GPT-5 API reasoning captured ({len(api_reasoning)} items)")
-        
+
         # Log the structured reasoning from the response
         if "summary" in meme_concept:
             logger.info(f"Meeting summary: {meme_concept['summary'][:100]}...")
@@ -375,25 +375,25 @@ Respond with valid JSON only."""},
             logger.info(f"Identified {len(meme_concept.get('opportunities', []))} meme opportunities")
         if "selected_idea" in meme_concept:
             logger.info(f"Selected idea: {meme_concept['selected_idea'][:100]}...")
-        
+
         logger.info(f"Meme concept: {meme_concept.get('concept', 'N/A')}")
         logger.info(f"Analyzed {transcript_length} characters of transcript")
         logger.debug(f"Full meme concept: {meme_concept}")
-        
+
         # Show reasoning if requested (for trust/validation)
         if show_reasoning:
             print("\n" + "="*80)
             print("GPT-5 MEMETIC ANALYSIS (PhD-Level Transparency)")
             print("="*80)
             print(f"\nTranscript analyzed: {transcript_length} characters")
-            
+
             # Step 1: Meeting Summary
             if "summary" in meme_concept:
                 print("\n" + "-"*80)
                 print("STEP 1: MEETING SUMMARY & CONTEXT")
                 print("-"*80)
                 print(meme_concept["summary"])
-            
+
             # Step 2: Comedic Mining
             if "opportunities" in meme_concept:
                 print("\n" + "-"*80)
@@ -401,14 +401,14 @@ Respond with valid JSON only."""},
                 print("-"*80)
                 for i, opp in enumerate(meme_concept["opportunities"], 1):
                     print(f"\n{i}. {opp}")
-            
+
             # Step 4: Selected Idea with Scoring
             if "selected_idea" in meme_concept:
                 print("\n" + "-"*80)
                 print("STEP 4: SELECTED IDEA (Multi-Objective Optimization)")
                 print("-"*80)
                 print(meme_concept["selected_idea"])
-            
+
             # Semiotic Analysis
             if "template_myth" in meme_concept or "match_type" in meme_concept:
                 print("\n" + "-"*80)
@@ -418,14 +418,14 @@ Respond with valid JSON only."""},
                     print(f"Template Myth: {meme_concept['template_myth']}")
                 if "match_type" in meme_concept:
                     print(f"Match Type: {meme_concept['match_type']}")
-            
+
             # Step 6: Final Judgment
             if "judgment" in meme_concept:
                 print("\n" + "-"*80)
                 print("STEP 6: FINAL BENIGN VIOLATION CHECK")
                 print("-"*80)
                 print(meme_concept["judgment"])
-            
+
             # API-level reasoning (if available)
             if api_reasoning:
                 print("\n" + "-"*80)
@@ -433,7 +433,7 @@ Respond with valid JSON only."""},
                 print("-"*80)
                 for i, reasoning in enumerate(api_reasoning, 1):
                     print(f"\n{i}. {reasoning}")
-            
+
             # Final Meme Concept
             print("\n" + "="*80)
             print("FINAL MEME ARTIFACT:")
@@ -443,9 +443,9 @@ Respond with valid JSON only."""},
             print(f"Bottom Text: {meme_concept.get('bottom_text', 'N/A')}")
             print(f"Benign Violation: {meme_concept.get('concept', 'N/A')}")
             print("="*80 + "\n")
-        
+
         return meme_concept
-        
+
     except Exception as e:
         logger.error(f"Failed to analyze transcript for meme: {e}")
         return None
@@ -453,11 +453,11 @@ Respond with valid JSON only."""},
 
 def _refine_prompt_from_feedback(
     provider,  # Provider interface (OpenAI or XAI)
-    meme_concept: Dict[str, Any],
-    qa_feedback: Dict[str, Any],
+    meme_concept: dict[str, Any],
+    qa_feedback: dict[str, Any],
     attempt: int,
     config: MemeConfig
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Use AI to analyze QA feedback and refine the image prompt.
     
@@ -472,7 +472,7 @@ def _refine_prompt_from_feedback(
         Updated meme concept with refined image_prompt
     """
     logger.info(f"Refining prompt based on QA feedback (attempt {attempt})...")
-    
+
     refinement_prompt = f"""You are a meme generation expert. Analyze this QA feedback and refine the image generation prompt to fix the issues.
 
 ORIGINAL MEME CONCEPT:
@@ -504,7 +504,7 @@ RESPOND IN JSON:
 
 Be surgical and specific. We need a 9+/10 meme.
 """
-    
+
     try:
         # Check if using provider or OpenAI client
         if hasattr(provider, 'chat_completion'):
@@ -520,19 +520,19 @@ Be surgical and specific. We need a 9+/10 meme.
                 reasoning={"effort": "medium"}
             )
             result = response.output_text
-        
-        
+
+
         refinement = json.loads(result)
-        
+
         logger.info(f"Refinement analysis: {refinement.get('analysis', 'N/A')[:100]}...")
         logger.debug(f"Key fixes: {refinement.get('key_fixes', [])}")
-        
+
         # Update meme concept with refined prompt
         meme_concept["image_prompt"] = refinement.get("refined_prompt", meme_concept["image_prompt"])
         meme_concept[f"qa_refinement_{attempt}"] = refinement
-        
+
         return meme_concept
-        
+
     except Exception as e:
         logger.error(f"Failed to refine prompt: {e}")
         # Fallback: just append feedback to original prompt
@@ -543,9 +543,9 @@ Be surgical and specific. We need a 9+/10 meme.
 def _qa_grade_meme(
     provider,  # Provider interface (OpenAI or XAI)
     meme_path: Path,
-    meme_concept: Dict[str, Any],
+    meme_concept: dict[str, Any],
     config: MemeConfig
-) -> tuple[float, Dict[str, Any]]:
+) -> tuple[float, dict[str, Any]]:
     """
     Use AI vision to grade the generated meme.
     
@@ -559,13 +559,13 @@ def _qa_grade_meme(
         Tuple of (score out of 10, feedback dict)
     """
     logger.info("Running QA check on generated meme...")
-    
+
     try:
         # Read image and encode to base64
         with open(meme_path, "rb") as f:
             image_bytes = f.read()
         image_b64 = base64.b64encode(image_bytes).decode('utf-8')
-        
+
         # Create QA prompt
         qa_prompt = f"""You are a strict meme quality expert. Grade this meme on a scale of 1-10.
 
@@ -631,14 +631,14 @@ VERIFICATION CHECKLIST:
 
 If you answer NO to any of these, score MUST be below 7.0.
 """
-        
+
         # Use AI vision to grade
         # Check if provider has analyze_image method
         if hasattr(provider, 'analyze_image'):
             # Use provider's vision capability
             with open(meme_path, "rb") as f:
                 image_data = f.read()
-            
+
             result = provider.analyze_image(image_data, qa_prompt)
         elif hasattr(provider, 'chat') and hasattr(provider.chat, 'completions'):
             # Using OpenAI client directly
@@ -660,27 +660,27 @@ If you answer NO to any of these, score MUST be below 7.0.
             ],
             max_tokens=1000
             )
-            
+
             # Parse response
             result = response.choices[0].message.content
         else:
             raise ValueError("Provider does not support vision capabilities")
-        
+
         # Try to extract JSON
         import re
         json_match = re.search(r'\{.*\}', result, re.DOTALL)
         if json_match:
             result = json.loads(json_match.group())
             score = float(result.get("score", 0))
-            
+
             logger.info(f"QA Score: {score}/10")
             logger.debug(f"QA Feedback: {result.get('overall', 'N/A')}")
-            
+
             return score, result
         else:
             logger.warning("Could not parse QA response as JSON")
             return 5.0, {"overall": result, "issues": [], "critical_fixes": []}
-            
+
     except Exception as e:
         logger.error(f"QA grading failed: {e}")
         return 5.0, {"overall": f"QA failed: {e}", "issues": [], "critical_fixes": []}
@@ -688,10 +688,10 @@ If you answer NO to any of these, score MUST be below 7.0.
 
 def _generate_meme_image(
     image_provider,
-    meme_concept: Dict[str, str],
+    meme_concept: dict[str, str],
     config: MemeConfig,
     output_path: Path
-) -> Optional[Path]:
+) -> Path | None:
     """
     Generate meme image using AI provider (provider-agnostic).
     
@@ -705,42 +705,42 @@ def _generate_meme_image(
         Path to saved meme image, or None if failed
     """
     logger.info("Generating meme image...")
-    
+
     # Use optimal size from concept if available
     size = meme_concept.get("optimal_size", config.size)
-    
+
     # Normalize size - extract just the dimensions, remove any descriptive text
     # Valid formats: '1024x1024', '1024x1536', '1536x1024', 'auto'
     if size and isinstance(size, str):
         # Remove any text in parentheses or after the dimensions
         size = size.split('(')[0].strip()
         size = size.split()[0].strip()
-        
+
         # Validate against allowed sizes
         valid_sizes = ['1024x1024', '1024x1536', '1536x1024', 'auto']
         if size not in valid_sizes:
             logger.warning(f"Invalid size '{size}', defaulting to '1024x1024'")
             size = '1024x1024'
-    
+
     logger.info(f"Using image size: {size}")
-    
+
     # Build image prompt
     image_prompt = meme_concept.get("image_prompt", "")
-    
+
     # Store text
     top_text = meme_concept.get("top_text", "")
     bottom_text = meme_concept.get("bottom_text", "")
-    
+
     # Check text rendering method
     # DEFAULT TO LOCAL: AI-generated text often looks bad (gibberish, cut-off, wrong font)
     # Local text overlay with Pillow produces clean, readable text
     import os
     text_method = os.getenv("SCRIBE_MEME_TEXT_METHOD", "local").lower()  # Changed default from "ai" to "local"
     use_local_text = text_method == "local"
-    
+
     # Check if we're using XAI (has 1024 char limit)
     is_xai = hasattr(image_provider, 'config') and image_provider.config.provider_name == 'xai'
-    
+
     if use_local_text:
         # LOCAL TEXT MODE: Generate clean base image, overlay text with Pillow (DEFAULT)
         # This produces much better results than AI-generated text which is often gibberish
@@ -763,10 +763,10 @@ def _generate_meme_image(
                 text_instructions += "- Text should have black outline for readability\n"
                 text_instructions += "- Text should be large and clearly visible\n"
                 text_instructions += "- Ensure full composition is visible, nothing cut off\n"
-            
+
             image_prompt += text_instructions
         logger.warning("Using AI text generation mode - text quality may be poor (gibberish, cut-off)")
-    
+
     # Validate prompt length for XAI (1024 char limit)
     if is_xai and len(image_prompt) > 1000:
         logger.error(f"Image prompt too long ({len(image_prompt)} chars) for XAI (max 1000). The AI should have generated a shorter prompt.")
@@ -774,9 +774,9 @@ def _generate_meme_image(
         # But if it does, we need to fail gracefully
         logger.warning("Falling back to OpenAI for this image generation")
         is_xai = False  # Force fallback
-    
+
     logger.debug(f"Final image prompt ({len(image_prompt)} chars): {image_prompt[:200]}...")
-    
+
     try:
         # Generate image using provider
         image_bytes = image_provider.generate_image(
@@ -785,20 +785,21 @@ def _generate_meme_image(
             model=config.image_model,
             quality=config.quality
         )
-        
+
         # Handle text overlay if using local mode
         if use_local_text and (top_text or bottom_text):
             # Load image
-            from PIL import Image
             import io
+
+            from PIL import Image
             base_image = Image.open(io.BytesIO(image_bytes))
-            
+
             # Overlay text locally using Pillow
             from scribe.utils.meme_compositor import MemeCompositor
             compositor = MemeCompositor()
             final_image = compositor.overlay_text(base_image, top_text, bottom_text)
             logger.info(f"Overlaid text locally: '{top_text}' / '{bottom_text}'")
-            
+
             # Save final image
             output_path.parent.mkdir(parents=True, exist_ok=True)
             final_image.save(output_path, quality=95)
@@ -807,13 +808,13 @@ def _generate_meme_image(
             output_path.parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "wb") as f:
                 f.write(image_bytes)
-        
+
         logger.info(f"Meme saved to: {output_path}")
         return output_path
-        
+
     except Exception as e:
         error_str = str(e)
-        
+
         # Check if it's a safety/moderation error
         if "moderation_blocked" in error_str or "safety system" in error_str:
             logger.warning(f"Image generation blocked by safety filter: {e}")
@@ -839,12 +840,12 @@ def _generate_meme_image(
                     model="gpt-image-1",
                     quality=config.quality
                 )
-                
+
                 # Save to file
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "wb") as f:
                     f.write(image_bytes)
-                
+
                 logger.info(f"Meme saved to: {output_path} (using OpenAI fallback)")
                 return output_path
             except Exception as fallback_error:
@@ -858,14 +859,14 @@ def _generate_meme_image(
 
 def generate_meeting_meme(
     transcript_path: Path,
-    output_dir: Optional[Path] = None,
-    api_key: Optional[str] = None,
-    config: Optional[MemeConfig] = None,
+    output_dir: Path | None = None,
+    api_key: str | None = None,
+    config: MemeConfig | None = None,
     show_reasoning: bool = False,
-    progress_callback: Optional[callable] = None,
-    provider_name: Optional[str] = None,
+    progress_callback: callable | None = None,
+    provider_name: str | None = None,
     enable_bakeoff: bool = False
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Generate a meme from a meeting transcript.
     
@@ -888,14 +889,14 @@ def generate_meeting_meme(
     """
     # Setup - use environment config if not provided
     config = config or MemeConfig.from_env()
-    
+
     # Try to use provider system for concept generation
     provider = None
     image_provider = None
-    
+
     try:
         from scribe.providers import get_provider
-        
+
         # Get provider for meme concept generation
         try:
             # Don't pass OpenAI-specific models to the provider factory
@@ -907,19 +908,19 @@ def generate_meeting_meme(
                 model=config.model if config.model not in openai_models else None,
                 provider_name=provider_name,
             )
-            
+
             # Get provider for image generation (may be different from concept provider)
             # Check for dedicated image provider env var
             import os
             image_provider_name = os.getenv("SCRIBE_MEME_IMAGE_PROVIDER", provider_name)
-            
+
             image_provider = get_provider(
                 feature="meme_image",
                 api_key=None,  # Let factory get the right key
                 model=config.image_model if config.image_model not in ["gpt-image-1", "dall-e-3"] else None,
                 provider_name=image_provider_name,
             )
-            
+
             logger.info(f"Using provider for meme concept: {provider.config.provider_name} | model: {provider.config.model}")
             logger.info(f"Using provider for meme image: {image_provider.config.provider_name} | model: {image_provider.config.model}")
             api_key = provider.config.api_key
@@ -947,63 +948,63 @@ def generate_meeting_meme(
         if not api_key:
             logger.error("No API key provided")
             return None
-        
+
         # Create OpenAI client as fallback
         from openai import OpenAI
         client = OpenAI(api_key=api_key, timeout=config.timeout)
         # Use client as both provider and image_provider for backward compat
         provider = client
         image_provider = client
-    
+
     # Read transcript
     try:
         transcript = transcript_path.read_text(encoding="utf-8")
     except Exception as e:
         logger.error(f"Failed to read transcript: {e}")
         return None
-    
+
     if not transcript.strip():
         logger.error("Transcript is empty")
         return None
-    
+
     # Log full transcript length for transparency
     logger.info(f"Reading transcript: {len(transcript)} characters")
-    
+
     # Determine output directory
     if output_dir is None:
         output_dir = transcript_path.parent
-    
+
     # Step 1: Analyze transcript and create meme concept
     bakeoff_result = None
-    
+
     if enable_bakeoff:
         # Run bake-off: get concepts from all providers and pick the best
         logger.info("🎭 Running meme concept bake-off...")
         from scribe.utils.meme_bakeoff import run_meme_bakeoff
-        
+
         try:
             bakeoff_result = run_meme_bakeoff(transcript, config)
             meme_concept = bakeoff_result['concept']
             provider_name = bakeoff_result['winner']
-            
+
             # Update provider and image_provider to use the winner
             provider = get_provider(feature='meme', provider_name=provider_name)
             image_provider = get_provider(feature='meme_image', provider_name=provider_name)
-            
+
             logger.info(f"🏆 Bake-off winner: {provider_name.upper()}")
             logger.info(f"   Reasoning: {bakeoff_result['reasoning']}")
         except Exception as e:
             logger.warning(f"Bake-off failed: {e}, falling back to single provider")
             enable_bakeoff = False
-    
+
     if not enable_bakeoff:
         # Standard single-provider approach
         meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
-    
+
     if not meme_concept:
         logger.error("Failed to create meme concept")
         return None
-    
+
     # Save meme concept to JSON for transparency/debugging using atomic write
     json_path = output_dir / f"{transcript_path.stem}_meme_concept.json"
     try:
@@ -1012,59 +1013,59 @@ def generate_meeting_meme(
         logger.info(f"Meme concept saved to: {json_path}")
     except Exception as e:
         logger.warning(f"Failed to save meme concept JSON: {e}")
-    
+
     # Step 2: Generate meme image with QA loop
     max_attempts = config.max_retries
     all_attempts = []  # Track all attempts with scores
-    
+
     for attempt in range(1, max_attempts + 1):
         logger.info(f"Meme generation attempt {attempt}/{max_attempts}")
-        
+
         # Notify progress callback
         if progress_callback:
             progress_callback(attempt, max_attempts, None)
-        
+
         # Save each attempt with numbered suffix
         attempt_path = output_dir / f"{transcript_path.stem}_meme_attempt{attempt}.{config.output_format}"
-        
+
         meme_path = _generate_meme_image(image_provider, meme_concept, config, attempt_path)
-        
+
         # Handle safety filter blocks by generating a completely new concept
         if meme_path == "SAFETY_BLOCKED":
             logger.warning(f"Meme concept blocked by safety filter on attempt {attempt}, generating new concept...")
             # Generate a completely new meme concept (safer, more professional)
             meme_concept = _analyze_transcript_for_meme(
-                provider, 
-                transcript, 
+                provider,
+                transcript,
                 config,
                 previous_attempt=meme_concept,  # Pass previous to avoid similar concepts
                 make_safer=True  # Request a safer concept
             )
             # Try again with new concept
             meme_path = _generate_meme_image(image_provider, meme_concept, config, attempt_path)
-        
+
         if not meme_path or meme_path == "SAFETY_BLOCKED":
             logger.error(f"Failed to generate meme image on attempt {attempt}")
             continue
-        
+
         # Run QA check if enabled
         score = None
         qa_feedback = None
-        
+
         if config.qa_enabled:
             score, qa_feedback = _qa_grade_meme(provider, meme_path, meme_concept, config)
-            
+
             # Track this attempt
             all_attempts.append({
                 "path": meme_path,
                 "attempt": attempt,
                 "score": score
             })
-            
+
             # Notify progress callback with score
             if progress_callback:
                 progress_callback(attempt, max_attempts, score)
-            
+
             # Log QA result with details
             if score >= config.qa_threshold:
                 logger.info(f"Meme passed QA (score: {score:.1f}/10)")
@@ -1078,7 +1079,7 @@ def generate_meeting_meme(
                     critical_fixes = qa_feedback.get('critical_fixes', [])
                     if critical_fixes:
                         logger.debug(f"Critical fixes needed: {', '.join(critical_fixes[:2])}")
-            
+
             if show_reasoning:
                 print(f"\n[QA CHECK - Attempt {attempt}]")
                 print(f"Score: {score}/10")
@@ -1088,25 +1089,25 @@ def generate_meeting_meme(
                     for fix in qa_feedback.get('critical_fixes', []):
                         print(f"  - {fix}")
                 print()
-            
+
             if score >= config.qa_threshold:
                 logger.info(f"Meme passed QA with score {score}/10")
                 # Rename best attempt to final meme.png (no duplication)
                 final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-                
+
                 # If final already exists (shouldn't happen), remove it first
                 if final_path.exists():
                     final_path.unlink()
-                
+
                 # Rename instead of copy (no duplication)
                 meme_path.rename(final_path)
                 logger.info(f"Best meme saved as: {final_path}")
-                
+
                 # Update the path in all_attempts to reflect the rename
                 for att in all_attempts:
                     if att["path"] == meme_path:
                         att["path"] = final_path
-                
+
                 return {
                     "final_path": final_path,
                     "attempts": all_attempts,
@@ -1126,57 +1127,57 @@ def generate_meeting_meme(
             })
             # Rename to final meme.png (no duplication)
             final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-            
+
             # If final already exists (shouldn't happen), remove it first
             if final_path.exists():
                 final_path.unlink()
-            
+
             # Rename instead of copy (no duplication)
             meme_path.rename(final_path)
-            
+
             # Update the path in all_attempts to reflect the rename
             all_attempts[0]["path"] = final_path
-            
+
             return {
                 "final_path": final_path,
                 "attempts": all_attempts,
                 "best_score": None
             }
-    
+
     # If we get here, all attempts failed QA but we have at least one meme
     if all_attempts:
         # Find best scoring attempt
         best_attempt = max(all_attempts, key=lambda x: x["score"] if x["score"] is not None else 0)
         logger.warning(f"No meme met QA threshold. Using best attempt (score: {best_attempt['score']}/10)")
-        
+
         # Rename best attempt to final meme.png (no duplication)
         final_path = output_dir / f"{transcript_path.stem}_meme.{config.output_format}"
-        
+
         # If final already exists (shouldn't happen), remove it first
         if final_path.exists():
             final_path.unlink()
-        
+
         # Rename instead of copy (no duplication)
         best_attempt["path"].rename(final_path)
         logger.info(f"Best meme saved as: {final_path}")
-        
+
         # Update the path in all_attempts to reflect the rename
         for att in all_attempts:
             if att["path"] == best_attempt["path"]:
                 att["path"] = final_path
-        
+
         # Log all attempts for user review
         logger.info(f"Generated {len(all_attempts)} meme attempts:")
         for att in all_attempts:
             score_str = f"{att['score']}/10" if att['score'] is not None else "N/A"
             logger.info(f"  Attempt {att['attempt']}: {att['path'].name} (score: {score_str})")
-        
+
         return {
             "final_path": final_path,
             "attempts": all_attempts,
             "best_score": best_attempt["score"]
         }
-    
+
     logger.error("Failed to generate any memes")
     return None
 
@@ -1184,9 +1185,9 @@ def generate_meeting_meme(
 def generate_meme_from_text(
     transcript_text: str,
     output_path: Path,
-    api_key: Optional[str] = None,
-    config: Optional[MemeConfig] = None
-) -> Optional[Path]:
+    api_key: str | None = None,
+    config: MemeConfig | None = None
+) -> Path | None:
     """
     Generate a meme from transcript text (not file).
     
@@ -1202,27 +1203,27 @@ def generate_meme_from_text(
     # Setup - use environment config if not provided
     config = config or MemeConfig.from_env()
     api_key = api_key or os.getenv("OPENAI_API_KEY")
-    
+
     if not api_key:
         logger.error("No OpenAI API key provided")
         return None
-    
+
     client = OpenAI(api_key=api_key)
-    
+
     if not transcript_text.strip():
         logger.error("Transcript text is empty")
         return None
-    
+
     # Step 1: Analyze transcript and create meme concept
     meme_concept = _analyze_transcript_for_meme(client, transcript_text, config)
     if not meme_concept:
         logger.error("Failed to create meme concept")
         return None
-    
+
     # Step 2: Generate meme image
     meme_path = _generate_meme_image(client, meme_concept, config, output_path)
     if not meme_path:
         logger.error("Failed to generate meme image")
         return None
-    
+
     return meme_path

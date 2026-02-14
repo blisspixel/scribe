@@ -100,12 +100,11 @@ Simple machine learning beats static estimates.
 """
 
 import json
+import os
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional, Dict
-from dataclasses import dataclass, asdict
 
 from scribe.utils.logging import get_logger
-import os
 
 logger = get_logger(__name__)
 
@@ -123,14 +122,14 @@ def get_provider_speedup() -> float:
     joke_provider = os.getenv("SCRIBE_JOKE_PROVIDER", "xai").lower()
     notes_provider = os.getenv("SCRIBE_NOTES_PROVIDER", "xai").lower()
     meme_provider = os.getenv("SCRIBE_MEME_PROVIDER", "xai").lower()
-    
+
     # If majority are XAI, use XAI speedup
     xai_count = sum([
         joke_provider == "xai",
         notes_provider == "xai",
         meme_provider == "xai"
     ])
-    
+
     if xai_count >= 2:
         return 2.5  # XAI is ~2.5x faster on average
     else:
@@ -140,24 +139,24 @@ def get_provider_speedup() -> float:
 @dataclass
 class PerformanceMetrics:
     """Performance metrics for a specific operation."""
-    
+
     # Conversion metrics (seconds per minute of audio)
     analysis_speed: float = 1.0  # Default: 1x real-time
     conversion_speed: float = 1.0  # Default: 1x real-time
-    
+
     # Transcription metrics (real-time multiplier)
     transcription_speed: float = 11.0  # Default: 11x for large-v3
-    
+
     # Post-processing metrics (fixed times in seconds)
     # Note: Times vary by provider (XAI/Grok is typically faster than OpenAI)
     docx_time: float = 1.0
     notes_time: float = 30.0  # ~15s with XAI, ~30s with OpenAI
     joke_time: float = 10.0   # ~2s with XAI, ~10s with OpenAI
     meme_time: float = 180.0  # ~60s with XAI, ~180s with OpenAI
-    
+
     # Sample count for averaging
     sample_count: int = 0
-    
+
     def update_from_actual(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Update metrics based on actual performance.
@@ -183,9 +182,9 @@ class PerformanceMetrics:
             attr_name = f"{phase}_time"
             current_value = getattr(self, attr_name)
             setattr(self, attr_name, self._weighted_average(current_value, actual_time))
-        
+
         self.sample_count += 1
-    
+
     def _weighted_average(self, current: float, new: float, weight: float = 0.3) -> float:
         """
         Calculate weighted average favoring recent measurements with outlier detection.
@@ -214,12 +213,12 @@ class PerformanceMetrics:
                 # Likely an outlier - reduce weight dramatically
                 logger.debug(f"Outlier detected: new={new:.2f}, current={current:.2f}, ratio={ratio:.2f}x")
                 weight = 0.1  # Use only 10% weight for outliers
-        
+
         return current * (1 - weight) + new * weight
-    
+
     def estimate_total_time(
-        self, 
-        audio_duration: float, 
+        self,
+        audio_duration: float,
         include_post: bool = True,
         provider_speedup: float = 1.0
     ) -> float:
@@ -237,19 +236,19 @@ class PerformanceMetrics:
         analysis_time = audio_duration * self.analysis_speed
         conversion_time = audio_duration * self.conversion_speed
         transcription_time = audio_duration / self.transcription_speed
-        
+
         total = analysis_time + conversion_time + transcription_time
-        
+
         if include_post:
             # Apply provider speedup to AI-dependent tasks
             total += self.docx_time  # Not AI-dependent
             total += (self.notes_time / provider_speedup)
             total += (self.joke_time / provider_speedup)
             total += (self.meme_time / provider_speedup)
-        
+
         return total
-    
-    def get_phase_percentages(self, audio_duration: float, include_api_features: bool = True) -> Dict[str, tuple]:
+
+    def get_phase_percentages(self, audio_duration: float, include_api_features: bool = True) -> dict[str, tuple]:
         """
         Calculate phase percentages based on estimated times.
         
@@ -263,18 +262,18 @@ class PerformanceMetrics:
         analysis_time = audio_duration * self.analysis_speed
         conversion_time = audio_duration * self.conversion_speed
         transcription_time = audio_duration / self.transcription_speed
-        
+
         if include_api_features:
             post_time = self.docx_time + self.notes_time + self.joke_time + self.meme_time
         else:
             post_time = self.docx_time  # Just DOCX, no API features
-        
+
         total_time = analysis_time + conversion_time + transcription_time + post_time
-        
+
         # Calculate percentages
         preparing_pct = ((analysis_time + conversion_time) / total_time) * 100
         transcribing_pct = (transcription_time / total_time) * 100
-        
+
         return {
             "preparing": (0, preparing_pct, (analysis_time + conversion_time) / audio_duration),
             "transcribing": (preparing_pct, preparing_pct + transcribing_pct, transcription_time / audio_duration),
@@ -284,8 +283,8 @@ class PerformanceMetrics:
 
 class PerformanceTracker:
     """Tracks and persists performance metrics per machine."""
-    
-    def __init__(self, machine_id: str, config_dir: Optional[Path] = None):
+
+    def __init__(self, machine_id: str, config_dir: Path | None = None):
         """
         Initialize performance tracker.
         
@@ -294,28 +293,28 @@ class PerformanceTracker:
             config_dir: Directory to store performance data (default: ~/.scribe)
         """
         self.machine_id = machine_id
-        
+
         if config_dir is None:
             config_dir = Path.home() / ".scribe"
-        
+
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.metrics_file = self.config_dir / f"performance_{machine_id}.json"
         self.metrics = self._load_metrics()
-    
+
     def _load_metrics(self) -> PerformanceMetrics:
         """Load metrics from disk or create defaults."""
         if self.metrics_file.exists():
             try:
-                with open(self.metrics_file, 'r') as f:
+                with open(self.metrics_file) as f:
                     data = json.load(f)
                 return PerformanceMetrics(**data)
             except Exception as e:
                 logger.warning(f"Failed to load performance metrics: {e}")
-        
+
         return PerformanceMetrics()
-    
+
     def _save_metrics(self):
         """Save metrics to disk."""
         try:
@@ -323,7 +322,7 @@ class PerformanceTracker:
                 json.dump(asdict(self.metrics), f, indent=2)
         except Exception as e:
             logger.warning(f"Failed to save performance metrics: {e}")
-    
+
     def record_phase(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Record actual performance for a phase.
@@ -335,22 +334,22 @@ class PerformanceTracker:
         """
         self.metrics.update_from_actual(phase, audio_duration, actual_time)
         self._save_metrics()
-        
+
         logger.debug(
             f"Updated {phase} performance: "
             f"audio={audio_duration:.0f}s, actual={actual_time:.1f}s, "
             f"samples={self.metrics.sample_count}"
         )
-    
+
     def get_metrics(self) -> PerformanceMetrics:
         """Get current performance metrics."""
         return self.metrics
-    
+
     def estimate_total_time(self, audio_duration: float) -> float:
         """Estimate total processing time."""
         return self.metrics.estimate_total_time(audio_duration)
-    
-    def get_phase_percentages(self, audio_duration: float) -> Dict[str, tuple]:
+
+    def get_phase_percentages(self, audio_duration: float) -> dict[str, tuple]:
         """Get adaptive phase percentages."""
         return self.metrics.get_phase_percentages(audio_duration)
 

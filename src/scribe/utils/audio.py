@@ -263,13 +263,12 @@ import json
 import subprocess
 import wave
 from pathlib import Path
-from typing import Optional, List, Tuple
 
 from scribe.exceptions import AudioFormatError
 from scribe.utils.platform import get_ffprobe_path
 
 
-def get_audio_duration(path: Path) -> Optional[float]:
+def get_audio_duration(path: Path) -> float | None:
     """
     Robustly determine audio file duration using multiple fallback methods.
     
@@ -288,22 +287,22 @@ def get_audio_duration(path: Path) -> Optional[float]:
     duration = _get_duration_wave(path)
     if duration is not None:
         return duration
-    
+
     # Method 2: Torchaudio metadata
     duration = _get_duration_torchaudio(path)
     if duration is not None:
         return duration
-    
+
     # Method 3: FFprobe subprocess
     duration = _get_duration_ffprobe(path)
     return duration
 
 
-def _get_duration_wave(path: Path) -> Optional[float]:
+def _get_duration_wave(path: Path) -> float | None:
     """Get duration from WAV file using wave module."""
     if path.suffix.lower() != ".wav":
         return None
-    
+
     try:
         with contextlib.closing(wave.open(str(path), "rb")) as w:
             frames = w.getnframes()
@@ -320,11 +319,11 @@ def _get_duration_wave(path: Path) -> Optional[float]:
         logger = get_logger(__name__)
         logger.debug(f"Failed to read WAV duration: {e}")
         pass
-    
+
     return None
 
 
-def _get_duration_torchaudio(path: Path) -> Optional[float]:
+def _get_duration_torchaudio(path: Path) -> float | None:
     """Get duration using torchaudio metadata."""
     try:
         import torchaudio
@@ -334,16 +333,16 @@ def _get_duration_torchaudio(path: Path) -> Optional[float]:
                 return float(info.num_frames) / float(info.sample_rate)
     except Exception:
         pass
-    
+
     return None
 
 
-def _get_duration_ffprobe(path: Path) -> Optional[float]:
+def _get_duration_ffprobe(path: Path) -> float | None:
     """Get duration using ffprobe subprocess."""
     ffprobe_path = get_ffprobe_path()
     if not ffprobe_path:
         return None
-    
+
     try:
         result = subprocess.run(
             [
@@ -358,25 +357,25 @@ def _get_duration_ffprobe(path: Path) -> Optional[float]:
             text=True,
             timeout=30
         )
-        
+
         if result.returncode != 0:
             return None
-        
+
         info = json.loads(result.stdout)
-        
+
         # Try format duration first
         duration = (info.get("format") or {}).get("duration")
         if duration:
             return float(duration)
-        
+
         # Try stream duration
         for stream in info.get("streams", []):
             if stream.get("codec_type") == "audio" and "duration" in stream:
                 return float(stream["duration"])
-        
+
     except Exception:
         pass
-    
+
     return None
 
 
@@ -384,7 +383,7 @@ def detect_silence_periods(
     audio_path: Path,
     silence_threshold: float = -40.0,
     min_silence_duration: float = 30.0
-) -> List[Tuple[float, float]]:
+) -> list[tuple[float, float]]:
     """
     Analyze audio file to detect significant periods of silence.
     
@@ -403,29 +402,29 @@ def detect_silence_periods(
     try:
         import torch
         import torchaudio
-        
+
         waveform, sample_rate = torchaudio.load(str(audio_path))
-        
+
         # Convert to mono if stereo
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
-        
+
         # Calculate RMS energy in sliding windows
         window_size = int(sample_rate * 0.5)  # 0.5 second windows
         hop_size = int(sample_rate * 0.1)     # 0.1 second hops
-        
+
         silence_periods = []
         current_silence_start = None
-        
+
         for i in range(0, waveform.shape[1] - window_size, hop_size):
             window = waveform[0, i:i + window_size]
-            
+
             # Calculate RMS and convert to dB
             rms = torch.sqrt(torch.mean(window ** 2))
             db = 20 * torch.log10(rms + 1e-10)  # Add small value to avoid log(0)
-            
+
             current_time = i / sample_rate
-            
+
             if db < silence_threshold:
                 # Start of silence period
                 if current_silence_start is None:
@@ -437,16 +436,16 @@ def detect_silence_periods(
                     if silence_duration >= min_silence_duration:
                         silence_periods.append((current_silence_start, current_time))
                     current_silence_start = None
-        
+
         # Handle silence that extends to end of file
         if current_silence_start is not None:
             total_duration = waveform.shape[1] / sample_rate
             silence_duration = total_duration - current_silence_start
             if silence_duration >= min_silence_duration:
                 silence_periods.append((current_silence_start, total_duration))
-        
+
         return silence_periods
-        
+
     except Exception:
         return []
 
@@ -466,13 +465,13 @@ def validate_audio_file(path: Path) -> None:
             f"Audio file does not exist: {path}",
             context={"path": str(path)}
         )
-    
+
     if not path.is_file():
         raise AudioFormatError(
             f"Path is not a file: {path}",
             context={"path": str(path)}
         )
-    
+
     # Check file size
     file_size = path.stat().st_size
     if file_size == 0:
@@ -480,7 +479,7 @@ def validate_audio_file(path: Path) -> None:
             f"Audio file is empty: {path}",
             context={"path": str(path)}
         )
-    
+
     # Warn if very large (> 2GB)
     if file_size > 2 * 1024 * 1024 * 1024:
         import logging
@@ -488,7 +487,7 @@ def validate_audio_file(path: Path) -> None:
             f"Large file size ({file_size / (1024**3):.2f} GB). "
             f"Processing may take a while: {path}"
         )
-    
+
     # Check file extension
     valid_extensions = {".wav", ".mp3", ".mp4", ".m4a", ".mkv", ".flac", ".ogg", ".webm"}
     if path.suffix.lower() not in valid_extensions:
@@ -500,7 +499,7 @@ def validate_audio_file(path: Path) -> None:
                 "supported": ", ".join(sorted(valid_extensions))
             }
         )
-    
+
     # Try to read first few bytes
     try:
         with open(path, "rb") as f:
@@ -547,7 +546,7 @@ def format_duration(seconds: float) -> str:
     """
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
-    
+
     if hours > 0 and minutes > 0:
         return f"{hours}h {minutes}m"
     elif hours > 0:
@@ -576,22 +575,22 @@ def get_audio_info(path: Path) -> dict:
         "channels": None,
         "format": path.suffix.lower() if path.exists() else None,
     }
-    
+
     if not path.exists():
         return info
-    
+
     # File size
     try:
         info["size_mb"] = path.stat().st_size / (1024 * 1024)
     except Exception:
         pass
-    
+
     # Duration
     duration = get_audio_duration(path)
     if duration:
         info["duration_seconds"] = duration
         info["duration_formatted"] = format_duration(duration)
-    
+
     # Try to get sample rate and channels
     try:
         import torchaudio
@@ -602,5 +601,5 @@ def get_audio_info(path: Path) -> dict:
             info["channels"] = audio_info.num_channels
     except Exception:
         pass
-    
+
     return info

@@ -6,7 +6,7 @@ settings for different GPU models, especially RTX 4090.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Literal
+from typing import Any, Literal
 
 from scribe.models.config import ModelSize
 
@@ -33,24 +33,24 @@ class GPUConfig:
         recommendation: Recommended transcription method
         reason: Explanation for the recommendation
     """
-    
+
     has_gpu: bool
-    gpu_name: Optional[str] = None
+    gpu_name: str | None = None
     gpu_memory_gb: float = 0.0
     cuda_available: bool = False
-    cuda_version: Optional[str] = None
-    
+    cuda_version: str | None = None
+
     # Optimized settings
     model_size: ModelSize = "base"
     beam_size: int = 5
     batch_size: int = 8
     use_fp16: bool = False
     enable_tensor_cores: bool = False
-    
+
     # Recommendation
     recommendation: Literal["local", "openai"] = "openai"
     reason: str = "No GPU detected"
-    
+
     @classmethod
     def detect(cls) -> "GPUConfig":
         """
@@ -66,42 +66,42 @@ class GPUConfig:
             GPUConfig with detection results and optimized settings
         """
         config = cls(has_gpu=False)
-        
+
         try:
             import torch
-            
+
             if not torch.cuda.is_available():
                 config.reason = "CUDA not available"
                 return config
-            
+
             # GPU detected
             config.has_gpu = True
             config.cuda_available = True
             config.cuda_version = torch.version.cuda
-            
+
             # Get GPU details
             config.gpu_name = torch.cuda.get_device_name(0)
             gpu_memory_bytes = torch.cuda.get_device_properties(0).total_memory
             config.gpu_memory_gb = gpu_memory_bytes / (1024**3)
-            
+
             # Configure based on GPU
             config._configure_for_gpu()
-            
+
         except ImportError:
             config.reason = "PyTorch not available for GPU detection"
         except Exception as e:
             config.reason = f"GPU detection error: {e}"
-        
+
         return config
-    
+
     def _configure_for_gpu(self) -> None:
         """Configure optimal settings based on detected GPU."""
         if not self.gpu_name:
             return
-        
+
         gpu_name_upper = self.gpu_name.upper()
         vram = self.gpu_memory_gb
-        
+
         # RTX 4090 - Maximum quality
         if "RTX 4090" in gpu_name_upper or vram >= 22:
             self.model_size = "large-v3"
@@ -111,7 +111,7 @@ class GPUConfig:
             self.enable_tensor_cores = True
             self.recommendation = "local"
             self.reason = f"High-end GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - optimal for local transcription"
-        
+
         # RTX 4080 - High performance
         elif "RTX 4080" in gpu_name_upper or (16 <= vram < 22):
             self.model_size = "large-v3"
@@ -121,7 +121,7 @@ class GPUConfig:
             self.enable_tensor_cores = True
             self.recommendation = "local"
             self.reason = f"High-end GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - excellent for local transcription"
-        
+
         # RTX 4070 Ti / 4070 Ti Super - Good performance
         elif "RTX 4070" in gpu_name_upper and "TI" in gpu_name_upper:
             self.model_size = "large-v3"
@@ -131,7 +131,7 @@ class GPUConfig:
             self.enable_tensor_cores = True
             self.recommendation = "local"
             self.reason = f"Mid-high GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - good for local transcription"
-        
+
         # RTX 4070 / 4060 Ti - Balanced
         elif "RTX 40" in gpu_name_upper or (10 <= vram < 16):
             self.model_size = "large-v2"
@@ -141,7 +141,7 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "local"
             self.reason = f"Mid-range GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - suitable for local transcription"
-        
+
         # RTX 30 series - Good performance
         elif "RTX 30" in gpu_name_upper or (8 <= vram < 10):
             self.model_size = "large-v2"
@@ -151,7 +151,7 @@ class GPUConfig:
             self.enable_tensor_cores = True
             self.recommendation = "local"
             self.reason = f"RTX 30 series GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - good for local transcription"
-        
+
         # Professional GPUs (Quadro, Tesla, A100, etc.)
         elif any(x in gpu_name_upper for x in ["QUADRO", "TESLA", "A100", "V100", "A40"]):
             self.model_size = "large-v3"
@@ -161,7 +161,7 @@ class GPUConfig:
             self.enable_tensor_cores = True
             self.recommendation = "local"
             self.reason = f"Professional GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - excellent for local transcription"
-        
+
         # Lower-end GPUs
         elif 6 <= vram < 8:
             self.model_size = "medium"
@@ -171,7 +171,7 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "local"
             self.reason = f"Entry-level GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - can handle local transcription with smaller model"
-        
+
         elif 4 <= vram < 6:
             self.model_size = "small"
             self.beam_size = 5
@@ -180,7 +180,7 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "openai"
             self.reason = f"Low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - OpenAI API recommended for quality"
-        
+
         else:
             # Very low VRAM
             self.model_size = "base"
@@ -190,8 +190,8 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "openai"
             self.reason = f"Insufficient VRAM ({vram:.1f}GB) - OpenAI API recommended"
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert GPU config to dictionary.
         
@@ -212,7 +212,7 @@ class GPUConfig:
             "recommendation": self.recommendation,
             "reason": self.reason,
         }
-    
+
     def get_expected_speed(self) -> str:
         """
         Get expected transcription speed description.
@@ -222,7 +222,7 @@ class GPUConfig:
         """
         if not self.has_gpu or self.recommendation == "openai":
             return "1-2x real-time (API)"
-        
+
         if self.model_size in ("large-v3", "large-v3-turbo"):
             if self.beam_size >= 10:
                 return "8-12x real-time"
@@ -236,7 +236,7 @@ class GPUConfig:
             return "10-15x real-time"
         else:
             return "15-20x real-time"
-    
+
     def is_high_end(self) -> bool:
         """
         Check if this is a high-end GPU.
@@ -246,9 +246,9 @@ class GPUConfig:
         """
         if not self.gpu_name:
             return False
-        
+
         gpu_upper = self.gpu_name.upper()
-        
+
         return (
             "RTX 4090" in gpu_upper
             or "RTX 4080" in gpu_upper

@@ -217,9 +217,8 @@ accuracy on domain-specific content without requiring model fine-tuning or
 complex post-processing.
 """
 
-from pathlib import Path
-from typing import List, Optional
 import json
+from pathlib import Path
 
 from scribe.utils.logging import get_logger
 
@@ -249,8 +248,8 @@ class CustomVocabulary:
         - Empty vocabulary is valid and returns empty string
         - Duplicate words are preserved (user may want emphasis)
     """
-    
-    def __init__(self, words: Optional[List[str]] = None):
+
+    def __init__(self, words: list[str] | None = None):
         """
         Initialize custom vocabulary.
         
@@ -268,7 +267,7 @@ class CustomVocabulary:
         """
         self.words = words or []
         logger.debug(f"Initialized vocabulary with {len(self.words)} terms")
-    
+
     @classmethod
     def from_file(cls, vocab_file: Path) -> "CustomVocabulary":
         """
@@ -301,28 +300,28 @@ class CustomVocabulary:
             - Empty strings after stripping are filtered out
         """
         logger.debug(f"Loading vocabulary from: {vocab_file}")
-        
+
         if not vocab_file.exists():
             logger.error(f"Vocabulary file not found: {vocab_file}")
             raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
-        
+
         suffix = vocab_file.suffix.lower()
-        
+
         if suffix == ".txt":
             # Plain text - one word per line, skip comments and empty lines
             logger.debug("Loading plain text vocabulary file")
-            with open(vocab_file, "r", encoding="utf-8") as f:
+            with open(vocab_file, encoding="utf-8") as f:
                 words = [
-                    line.strip() 
-                    for line in f 
+                    line.strip()
+                    for line in f
                     if line.strip() and not line.strip().startswith("#")
                 ]
             logger.debug(f"Loaded {len(words)} terms from text file (comments filtered)")
-            
+
         elif suffix == ".json":
             # JSON array
             logger.debug("Loading JSON vocabulary file")
-            with open(vocab_file, "r", encoding="utf-8") as f:
+            with open(vocab_file, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     words = [str(w).strip() for w in data if str(w).strip()]
@@ -333,10 +332,10 @@ class CustomVocabulary:
         else:
             logger.error(f"Unsupported file format: {suffix}")
             raise ValueError(f"Unsupported vocabulary file format: {suffix}")
-        
+
         logger.info(f"Successfully loaded {len(words)} vocabulary terms from {vocab_file.name}")
         return cls(words)
-    
+
     def to_whisper_format(self) -> str:
         """
         Convert vocabulary to Whisper prompt format.
@@ -364,13 +363,13 @@ class CustomVocabulary:
         if not self.words:
             logger.debug("Empty vocabulary, returning empty prompt")
             return ""
-        
+
         # Join words with commas for natural language format
         # Whisper works better with natural text than just a word list
         prompt = ", ".join(self.words)
         logger.debug(f"Generated Whisper prompt with {len(self.words)} terms ({len(prompt)} chars)")
         return prompt
-    
+
     def __len__(self) -> int:
         """
         Return number of vocabulary terms.
@@ -384,7 +383,7 @@ class CustomVocabulary:
             2
         """
         return len(self.words)
-    
+
     def __bool__(self) -> bool:
         """
         Return True if vocabulary is not empty.

@@ -10,6 +10,7 @@ It will be skipped during normal pytest runs.
 
 import time
 from pathlib import Path
+
 from scribe.core.converter import Converter
 from scribe.core.transcriber import Transcriber
 from scribe.models.config import ScribeConfig
@@ -58,8 +59,8 @@ def main():
     start = time.time()
 
     # Show progress during transcription
-    import threading
     import sys
+    import threading
 
     transcription_done = threading.Event()
 

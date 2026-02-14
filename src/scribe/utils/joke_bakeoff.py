@@ -189,10 +189,10 @@ achieve higher quality and more consistent results than any single model.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-from scribe.utils.joke_generator import generate_transcript_joke, HumorConfig
 from scribe.providers import get_provider
+from scribe.utils.joke_generator import HumorConfig, generate_transcript_joke
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +200,8 @@ logger = logging.getLogger(__name__)
 def run_joke_bakeoff(
     transcript: str,
     config: HumorConfig,
-    providers: Optional[List[str]] = None
-) -> Dict[str, Any]:
+    providers: list[str] | None = None
+) -> dict[str, Any]:
     """
     Run a joke bake-off across multiple providers.
     
@@ -221,40 +221,34 @@ def run_joke_bakeoff(
     # Default to all available providers
     if providers is None:
         providers = ['xai', 'openai', 'gemini', 'anthropic']
-    
+
     # Filter to only providers with API keys
     import os
     available_providers = []
     for provider_name in providers:
-        if provider_name == 'xai' and os.getenv('XAI_API_KEY'):
+        if provider_name == 'xai' and os.getenv('XAI_API_KEY') or provider_name == 'openai' and os.getenv('OPENAI_API_KEY') or provider_name == 'gemini' and os.getenv('GEMINI_API_KEY') or provider_name == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
             available_providers.append(provider_name)
-        elif provider_name == 'openai' and os.getenv('OPENAI_API_KEY'):
-            available_providers.append(provider_name)
-        elif provider_name == 'gemini' and os.getenv('GEMINI_API_KEY'):
-            available_providers.append(provider_name)
-        elif provider_name == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
-            available_providers.append(provider_name)
-    
+
     if not available_providers:
         raise ValueError("No providers available with API keys")
-    
+
     logger.info(f"Starting joke bake-off with {len(available_providers)} providers: {', '.join(available_providers)}")
-    
+
     # Collect jokes from all providers
     jokes = []
-    
+
     for provider_name in available_providers:
         logger.info(f"  → Getting joke from {provider_name.upper()}...")
-        
+
         try:
             # Write transcript to temp file for generate_transcript_joke
             import tempfile
             from pathlib import Path
-            
+
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
                 f.write(transcript)
                 temp_path = Path(f.name)
-            
+
             try:
                 result = generate_transcript_joke(
                     transcript_path=temp_path,
@@ -266,7 +260,7 @@ def run_joke_bakeoff(
                 # Clean up temp file
                 if temp_path.exists():
                     temp_path.unlink()
-            
+
             if joke_text:
                 jokes.append({
                     'provider': provider_name,
@@ -277,16 +271,16 @@ def run_joke_bakeoff(
                 logger.info(f"    ✓ {provider_name}: \"{display_joke}\"")
             else:
                 logger.warning(f"    ✗ {provider_name} returned no joke")
-        
+
         except Exception as e:
             logger.warning(f"    ✗ {provider_name} failed: {e}")
-    
+
     if not jokes:
         raise ValueError("No providers successfully generated jokes")
-    
+
     # Now judge the jokes using the best available provider
     logger.info(f"\nJudging {len(jokes)} jokes...")
-    
+
     # Use XAI/Grok for judging (default for jokes), fallback to OpenAI, then first available
     if 'xai' in available_providers:
         judge_provider_name = 'xai'
@@ -294,15 +288,15 @@ def run_joke_bakeoff(
         judge_provider_name = 'openai'
     else:
         judge_provider_name = available_providers[0]
-    
+
     judge_provider = get_provider(feature='joke', provider_name=judge_provider_name)
-    
+
     # Build judging prompt
     jokes_text = ""
     for i, j in enumerate(jokes, 1):
         jokes_text += f"\n\nJOKE {i} (from {j['provider'].upper()}):\n"
         jokes_text += f"{j['joke']}\n"
-    
+
     judging_prompt = f"""You are a comedy expert judging a joke competition.
 
 {len(jokes)} different AI models created jokes from the same meeting transcript. Your job is to pick the FUNNIEST one.
@@ -331,31 +325,31 @@ Respond in JSON:
     }}
 }}
 """
-    
+
     messages = [
         {"role": "system", "content": "You are an expert comedy judge. Pick the funniest joke. Respond with valid JSON only."},
         {"role": "user", "content": judging_prompt}
     ]
-    
+
     try:
         response = judge_provider.chat_completion(messages=messages, max_tokens=2000)
         result = response["content"]
-        
+
         # Extract JSON
-        import re
         import json
+        import re
         json_match = re.search(r'\{.*\}', result, re.DOTALL)
         if json_match:
             result = json_match.group()
-        
+
         judgment = json.loads(result)
-        
+
         winner_idx = int(judgment['winner']) - 1
         winner_joke = jokes[winner_idx]
-        
+
         logger.info(f"\nWINNER: {winner_joke['provider'].upper()}")
         logger.info(f"Reasoning: {judgment['reasoning']}")
-        
+
         return {
             'winner': winner_joke['provider'],
             'joke': winner_joke['joke'],
@@ -363,7 +357,7 @@ Respond in JSON:
             'all_jokes': jokes,
             'scores': judgment.get('scores', {})
         }
-    
+
     except Exception as e:
         logger.warning(f"Judging failed: {e}, defaulting to first joke")
         # Fallback: just use the first joke

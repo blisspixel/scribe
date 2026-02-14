@@ -16,23 +16,23 @@ Example:
     save_support_bundle(bundle, Path("support_bundle.json"))
 """
 
-import os
-import sys
 import json
+import os
 import platform
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 from scribe import __version__
 from scribe.utils.diagnostics import SystemDiagnostics
-from scribe.utils.run_context import get_run_history
 from scribe.utils.logging import get_logger
+from scribe.utils.run_context import get_run_history
 
 logger = get_logger(__name__)
 
 
-def get_system_info() -> Dict[str, Any]:
+def get_system_info() -> dict[str, Any]:
     """
     Collect comprehensive system information.
     
@@ -67,7 +67,7 @@ def get_system_info() -> Dict[str, Any]:
             "pythonpath": os.environ.get("PYTHONPATH", "")
         }
     }
-    
+
     # Add GPU info if available
     try:
         import torch
@@ -76,7 +76,7 @@ def get_system_info() -> Dict[str, Any]:
             "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
             "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
         }
-        
+
         if torch.cuda.is_available():
             info["gpu"]["devices"] = []
             for i in range(torch.cuda.device_count()):
@@ -88,11 +88,11 @@ def get_system_info() -> Dict[str, Any]:
                 })
     except ImportError:
         info["gpu"] = {"available": False, "reason": "PyTorch not installed"}
-    
+
     return info
 
 
-def get_environment_config() -> Dict[str, Any]:
+def get_environment_config() -> dict[str, Any]:
     """
     Collect Scribe-specific environment configuration.
     
@@ -102,7 +102,7 @@ def get_environment_config() -> Dict[str, Any]:
         Dictionary with configuration
     """
     config = {}
-    
+
     # Scribe environment variables
     scribe_vars = [
         "SCRIBE_OUTPUT_FOLDER",
@@ -117,23 +117,23 @@ def get_environment_config() -> Dict[str, Any]:
         "SCRIBE_ENABLE_NOTES",
         "SCRIBE_NOTES_MODEL"
     ]
-    
+
     for var in scribe_vars:
         value = os.getenv(var)
         if value is not None:
             config[var] = value
-    
+
     # API key status (sanitized)
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
     if api_key:
         config["OPENAI_API_KEY"] = f"{api_key[:10]}...{api_key[-4:]}" if len(api_key) > 14 else "[REDACTED]"
     else:
         config["OPENAI_API_KEY"] = None
-    
+
     return config
 
 
-def get_diagnostics_results() -> Dict[str, Any]:
+def get_diagnostics_results() -> dict[str, Any]:
     """
     Run system diagnostics and collect results.
     
@@ -142,7 +142,7 @@ def get_diagnostics_results() -> Dict[str, Any]:
     """
     diagnostics = SystemDiagnostics()
     results = diagnostics.run_all_checks()
-    
+
     # Convert to serializable format
     return {
         "summary": {
@@ -163,7 +163,7 @@ def get_diagnostics_results() -> Dict[str, Any]:
     }
 
 
-def get_run_history_summary(max_runs: int = 20) -> Dict[str, Any]:
+def get_run_history_summary(max_runs: int = 20) -> dict[str, Any]:
     """
     Get summary of recent runs.
     
@@ -176,7 +176,7 @@ def get_run_history_summary(max_runs: int = 20) -> Dict[str, Any]:
     history = get_run_history()
     recent = history.get_recent(count=max_runs)
     failed = history.get_failed_runs(count=10)
-    
+
     return {
         "total_runs": len(history.runs),
         "recent_runs": [r.to_dict() for r in recent],
@@ -192,7 +192,7 @@ def get_run_history_summary(max_runs: int = 20) -> Dict[str, Any]:
 def create_support_bundle(
     include_run_history: bool = True,
     max_runs: int = 20
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create a comprehensive support bundle.
     
@@ -204,7 +204,7 @@ def create_support_bundle(
         Dictionary containing all support information
     """
     logger.info("Creating support bundle...")
-    
+
     bundle = {
         "bundle_version": "1.0",
         "created_at": datetime.now().isoformat(),
@@ -212,16 +212,16 @@ def create_support_bundle(
         "environment_config": get_environment_config(),
         "diagnostics": get_diagnostics_results()
     }
-    
+
     if include_run_history:
         bundle["run_history"] = get_run_history_summary(max_runs=max_runs)
-    
+
     logger.info("Support bundle created successfully")
     return bundle
 
 
 def save_support_bundle(
-    bundle: Dict[str, Any],
+    bundle: dict[str, Any],
     output_path: Path,
     pretty: bool = True
 ) -> Path:
@@ -237,9 +237,9 @@ def save_support_bundle(
         Path to saved bundle file
     """
     from scribe.utils.safe_write import atomic_write_json
-    
+
     output_path = Path(output_path)
-    
+
     # Use atomic write for safety
     if pretty:
         content = json.dumps(bundle, indent=2, ensure_ascii=False)
@@ -247,12 +247,12 @@ def save_support_bundle(
         atomic_write(output_path, content, encoding="utf-8")
     else:
         atomic_write_json(output_path, bundle, indent=None)
-    
+
     logger.info(f"Support bundle saved to: {output_path}")
     return output_path
 
 
-def generate_support_bundle_cli(output_dir: Optional[Path] = None) -> Path:
+def generate_support_bundle_cli(output_dir: Path | None = None) -> Path:
     """
     Generate support bundle for CLI command.
     
@@ -264,17 +264,17 @@ def generate_support_bundle_cli(output_dir: Optional[Path] = None) -> Path:
     """
     if output_dir is None:
         output_dir = Path.cwd()
-    
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"scribe_support_bundle_{timestamp}.json"
     output_path = output_dir / filename
-    
+
     # Create and save bundle
     bundle = create_support_bundle()
     save_support_bundle(bundle, output_path)
-    
+
     return output_path

@@ -14,9 +14,9 @@ THE PROBLEM WITH NAIVE CROSS-PLATFORM CODE:
 Simple approach: "Just use os.path and hope it works"
 
 Problems:
-1. **Path separators**: Windows uses \, Unix uses /
+1. **Path separators**: Windows uses \\, Unix uses /
 2. **Executable names**: ffmpeg vs ffmpeg.exe
-3. **Installation locations**: C:\Program Files vs /usr/bin vs /opt/homebrew/bin
+3. **Installation locations**: C:\\Program Files vs /usr/bin vs /opt/homebrew/bin
 4. **File operations**: os.startfile (Windows only) vs open (macOS) vs xdg-open (Linux)
 5. **Disk space checks**: Different APIs on Windows vs Unix
 
@@ -61,10 +61,10 @@ The `get_ffmpeg_path()` function implements a COMPREHENSIVE search strategy:
 **Platform-specific locations:**
 
 Windows:
-- C:\Program Files\ffmpeg\bin
-- C:\Program Files (x86)\ffmpeg\bin
+- C:\\Program Files\ffmpeg\bin
+- C:\\Program Files (x86)\ffmpeg\bin
 - C:\ffmpeg\bin
-- %USERPROFILE%\AppData\Local\Microsoft\WinGet\Links (WinGet installs)
+- %USERPROFILE%\\AppData\\Local\\Microsoft\\WinGet\\Links (WinGet installs)
 
 macOS:
 - /usr/local/bin (Homebrew Intel)
@@ -258,7 +258,7 @@ import os
 import platform
 import shutil
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal
 
 PlatformType = Literal["windows", "macos", "linux", "unknown"]
 
@@ -271,7 +271,7 @@ def get_platform() -> PlatformType:
         Platform identifier: "windows", "macos", "linux", or "unknown"
     """
     system = platform.system().lower()
-    
+
     if system == "windows":
         return "windows"
     elif system == "darwin":
@@ -297,7 +297,7 @@ def is_linux() -> bool:
     return get_platform() == "linux"
 
 
-def get_ffmpeg_path() -> Optional[Path]:
+def get_ffmpeg_path() -> Path | None:
     """
     Find ffmpeg executable with platform-specific search.
     
@@ -314,7 +314,7 @@ def get_ffmpeg_path() -> Optional[Path]:
     path_result = shutil.which(ffmpeg_cmd)
     if path_result:
         return Path(path_result)
-    
+
     # Try environment variables
     for env_var in ["FFMPEG_DIR", "PUEO_FFMPEG_DIR"]:
         env_path = os.environ.get(env_var)
@@ -326,7 +326,7 @@ def get_ffmpeg_path() -> Optional[Path]:
             for candidate in candidates:
                 if candidate.exists():
                     return candidate
-    
+
     # Platform-specific common locations
     if is_windows():
         common_dirs = [
@@ -347,16 +347,16 @@ def get_ffmpeg_path() -> Optional[Path]:
             Path("/usr/local/bin"),
             Path("/snap/bin"),
         ]
-    
+
     for directory in common_dirs:
         candidate = directory / ffmpeg_cmd
         if candidate.exists():
             return candidate
-    
+
     return None
 
 
-def get_ffprobe_path() -> Optional[Path]:
+def get_ffprobe_path() -> Path | None:
     """
     Find ffprobe executable with platform-specific search.
     
@@ -368,18 +368,18 @@ def get_ffprobe_path() -> Optional[Path]:
     path_result = shutil.which(ffprobe_cmd)
     if path_result:
         return Path(path_result)
-    
+
     # If ffmpeg was found, ffprobe is usually in the same directory
     ffmpeg_path = get_ffmpeg_path()
     if ffmpeg_path:
         ffprobe_path = ffmpeg_path.parent / ffprobe_cmd
         if ffprobe_path.exists():
             return ffprobe_path
-    
+
     return None
 
 
-def get_obs_executable_path() -> Optional[Path]:
+def get_obs_executable_path() -> Path | None:
     """
     Find OBS Studio executable with platform-specific search.
     
@@ -390,7 +390,7 @@ def get_obs_executable_path() -> Optional[Path]:
     obs_exe = os.environ.get("OBS_EXE")
     if obs_exe and Path(obs_exe).exists():
         return Path(obs_exe)
-    
+
     if is_windows():
         candidates = [
             Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"),
@@ -407,11 +407,11 @@ def get_obs_executable_path() -> Optional[Path]:
             Path("/usr/local/bin/obs"),
             Path("/snap/bin/obs-studio"),
         ]
-    
+
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    
+
     return None
 
 
@@ -457,7 +457,7 @@ def get_default_output_directory() -> Path:
         Path to default output directory
     """
     home = get_home_directory()
-    
+
     if is_windows():
         # Windows: ~/Videos/Transcriptions
         return home / "Videos" / "Transcriptions"
@@ -521,7 +521,7 @@ def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
             import os
             stat = os.statvfs(str(path))
             free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
-        
+
         return free_gb >= required_gb
     except Exception:
         # If we can't check, assume it's okay
@@ -556,18 +556,18 @@ def normalize_path(path: str) -> Path:
     """
     # Remove quotes
     path = path.strip('"').strip("'")
-    
+
     # Create Path object (handles platform differences)
     p = Path(path)
-    
+
     # Expand home directory
     p = p.expanduser()
-    
+
     # Resolve to absolute path
     try:
         p = p.resolve()
     except Exception:
         # If resolve fails, just make it absolute
         p = p.absolute()
-    
+
     return p

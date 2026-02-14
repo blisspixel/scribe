@@ -22,11 +22,11 @@ import os
 import random
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, Union
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from openai import OpenAI
 
 # -----------------------------------------------------------------------------
@@ -50,7 +50,7 @@ logger.propagate = False  # Don't propagate to root logger
 # -----------------------------------------------------------------------------
 # Archetypes
 # -----------------------------------------------------------------------------
-ARCHETYPE_DISPLAY_NAMES: Dict[str, str] = {
+ARCHETYPE_DISPLAY_NAMES: dict[str, str] = {
     "trickster": "The Trickster-Employee",
     "fool_scholar": "The Fool-Scholar",
     "enthusiast": "The Devout Enthusiast",
@@ -63,7 +63,7 @@ ARCHETYPE_DISPLAY_NAMES: Dict[str, str] = {
     "gen_z": "The Gen Z Commentator",
 }
 
-COMEDY_STYLES: Dict[str, str] = {
+COMEDY_STYLES: dict[str, str] = {
     "trickster": (
         "You are the Trickster-Employee. Reframe meaning through playful subversion. "
         "Expose gaps between stated intent and outcome without cruelty. One line, 10–15 words."
@@ -119,12 +119,12 @@ class HumorConfig:
     max_output_tokens: int = 160
     reasoning_effort: str = "low"   # none | low | medium | high | xhigh
     verbosity: str = "low"              # low | medium | high
-    api_key: Optional[str] = None
-    seed: Optional[int] = None
-    archetype: Optional[str] = None
-    
+    api_key: str | None = None
+    seed: int | None = None
+    archetype: str | None = None
+
     @classmethod
-    def from_env(cls) -> "HumorConfig":
+    def from_env(cls) -> HumorConfig:
         """Create config from environment variables.
         
         Environment variables:
@@ -134,7 +134,7 @@ class HumorConfig:
             HumorConfig instance with values from environment
         """
         config = cls()
-        
+
         # Read spice level from environment
         spice_str = os.getenv("SCRIBE_HUMOR_SPICE")
         if spice_str:
@@ -146,7 +146,7 @@ class HumorConfig:
                     logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (must be 0-10), using default: {config.spice_level}")
             except ValueError:
                 logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (not an integer), using default: {config.spice_level}")
-        
+
         return config
 
 # -----------------------------------------------------------------------------
@@ -228,8 +228,8 @@ def _extract_meeting_metadata(transcript_text: str) -> dict:
         "circular_discussion": has_repetition and intent_drift,
     }
 
-def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> List[str]:
-    safe: List[str] = []
+def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> list[str]:
+    safe: list[str] = []
     safe += re.findall(r"\bProject\s+[A-Z][A-Za-z0-9\-]+\b", transcript_text)
     safe += re.findall(r"\b[A-Z]{2,}\b", transcript_text)
     safe += re.findall(r"\b[A-Z][a-z]+[A-Z][A-Za-z0-9]+\b", transcript_text)
@@ -254,20 +254,20 @@ def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> List[str]:
 
 def _select_archetype_ai_provider(provider, transcript_excerpt: str) -> str:
     """Use AI provider to intelligently select the best comedy archetype for this meeting."""
-    
+
     # Gemini 3 with high thinking uses too many tokens for simple selection
     # Fall back to heuristic for Gemini 3 until thinking_level is properly supported
     if hasattr(provider, 'config') and 'gemini-3' in provider.config.model.lower():
         logger.info("Using heuristic archetype selection for Gemini 3 (thinking overhead too high)")
         return _select_archetype_heuristic({}, None)
-    
+
     # Build archetype descriptions for AI
     archetype_options = []
     for key, display_name in ARCHETYPE_DISPLAY_NAMES.items():
         prompt = COMEDY_STYLES[key]
         # Extract the essence of each archetype
         archetype_options.append(f"- **{key}** ({display_name}): {prompt[:200]}...")
-    
+
     selection_prompt = f"""You are a comedy expert. Read this meeting transcript excerpt and choose the BEST comedy archetype for a joke about this meeting.
 
 MEETING EXCERPT (first ~2000 chars):
@@ -286,19 +286,19 @@ Consider:
 
 Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scholar", etc.)
 """
-    
+
     try:
         # Disable thinking for simple archetype selection (saves tokens)
         kwargs = {}
         if hasattr(provider, 'config') and 'gemini' in provider.config.model.lower():
             kwargs['disable_thinking'] = True
-        
+
         response = provider.chat_completion(
             messages=[{"role": "user", "content": selection_prompt}],
             max_tokens=100,
             **kwargs
         )
-        
+
         # Defensive: handle None or missing content
         content = response.get("content") if isinstance(response, dict) else None
         if not content:
@@ -306,9 +306,9 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
             provider_name = provider_name.provider_name if provider_name else "unknown"
             logger.debug(f"AI archetype selection returned empty content from {provider_name}, using heuristic")
             return _select_archetype_heuristic({}, None)
-        
+
         selected = content.strip().lower()
-        
+
         # Validate the selection - must be non-empty and in COMEDY_STYLES
         if selected and selected in COMEDY_STYLES:
             logger.info(f"AI selected archetype: {selected}")
@@ -317,7 +317,7 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
             # Log at debug level - archetype selection is optional, heuristic works fine
             logger.debug(f"AI returned invalid archetype '{selected}', using heuristic")
             return _select_archetype_heuristic({}, None)
-            
+
     except Exception as e:
         logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
         return _select_archetype_heuristic({}, None)
@@ -325,14 +325,14 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
 
 def _select_archetype_ai(client, transcript_excerpt: str) -> str:
     """Use GPT-5 to intelligently select the best comedy archetype for this meeting."""
-    
+
     # Build archetype descriptions for AI
     archetype_options = []
     for key, display_name in ARCHETYPE_DISPLAY_NAMES.items():
         prompt = COMEDY_STYLES[key]
         # Extract the essence of each archetype
         archetype_options.append(f"- **{key}** ({display_name}): {prompt[:200]}...")
-    
+
     selection_prompt = f"""You are a comedy expert. Read this meeting transcript excerpt and choose the BEST comedy archetype for a joke about this meeting.
 
 MEETING EXCERPT (first ~2000 chars):
@@ -351,16 +351,16 @@ Consider:
 
 Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scholar", etc.)
 """
-    
+
     try:
         response = client.chat.completions.create(
             model="gpt-5",
             messages=[{"role": "user", "content": selection_prompt}],
             max_completion_tokens=50
         )
-        
+
         selected = response.choices[0].message.content.strip().lower()
-        
+
         # Validate the selection
         if selected in COMEDY_STYLES:
             logger.info(f"AI selected archetype: {selected}")
@@ -368,18 +368,18 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         else:
             logger.warning(f"AI returned invalid archetype '{selected}', falling back to heuristic")
             return _select_archetype_heuristic({}, None)
-            
+
     except Exception as e:
         logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
         return _select_archetype_heuristic({}, None)
 
 
-def _select_archetype_heuristic(metadata: dict, seed: Optional[int]) -> str:
+def _select_archetype_heuristic(metadata: dict, seed: int | None) -> str:
     """Fallback heuristic-based archetype selection."""
     if seed is not None:
         random.seed(seed)
 
-    weights = {k: 1.0 for k in COMEDY_STYLES}
+    weights = dict.fromkeys(COMEDY_STYLES, 1.0)
 
     if metadata.get("has_jargon"):
         weights["translator"] *= 3.0
@@ -423,7 +423,7 @@ def _select_archetype_heuristic(metadata: dict, seed: Optional[int]) -> str:
 def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
     ent_hint = ", ".join(entities) if entities else ""
     hint = f" Use meeting-specific references when helpful (e.g., {ent_hint})." if ent_hint else ""
-    
+
     # Spice level descriptions
     spice_guidance = {
         0: "DISABLED - No joke should be generated",
@@ -438,9 +438,9 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
         9: "SPICY - Brutally honest, may make people flinch (but laugh)",
         10: "SPICY - 'I can't believe this app said that' funny - no filter"
     }
-    
+
     spice_desc = spice_guidance.get(cfg.spice_level, "HONEST - Default level")
-    
+
     # Adjust tone based on spice level
     if cfg.spice_level <= 3:
         tone = "Keep it extremely safe and gentle. Avoid any edge or discomfort."
@@ -452,9 +452,9 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
         tone = "Be brutally honest. Expose the dysfunction, the waste, the quiet despair. Make them laugh uncomfortably."
     else:  # Level 10
         tone = "NO FILTER. Say what everyone was thinking but would never say out loud. Expose the absurdity, the dysfunction, the collective delusion. Be savage but accurate. This is 'I can't believe this app said that' territory."
-    
+
     profanity_rule = "" if cfg.spice_level >= 9 else " No profanity."
-    
+
     return (
         "You will receive a meeting transcript as plain text. "
         f"Produce exactly one original joke. Target {cfg.min_words}-{cfg.max_words} words. "
@@ -463,7 +463,7 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
         f"avoid individuals or protected groups.{profanity_rule}" + hint
     )
 
-def _build_client(api_key: Optional[str]) -> OpenAI:
+def _build_client(api_key: str | None) -> OpenAI:
     key = api_key or os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("Missing OpenAI API key: pass it in or set OPENAI_API_KEY")
@@ -483,7 +483,7 @@ def _extract_output_text(resp) -> str:
     try:
         outputs = getattr(resp, "output", None)
         if outputs:
-            buff: List[str] = []
+            buff: list[str] = []
             for item in outputs:
                 typ = getattr(item, "type", None) or (isinstance(item, dict) and item.get("type"))
                 if typ == "output_text":
@@ -522,10 +522,10 @@ def _resp_to_dict_trunc(resp, n: int = 1200) -> str:
 # Public API
 # -----------------------------------------------------------------------------
 def generate_transcript_joke(
-    transcript_path: Union[str, Path],
-    api_key_or_cfg: Union[str, HumorConfig, None] = None,
-    provider_name: Optional[str] = None,
-) -> Optional[Tuple[str, str]]:
+    transcript_path: str | Path,
+    api_key_or_cfg: str | HumorConfig | None = None,
+    provider_name: str | None = None,
+) -> tuple[str, str] | None:
     logger.info("Starting joke generation")
 
     transcript_path = Path(transcript_path)
@@ -557,7 +557,7 @@ def generate_transcript_joke(
         use_provider = False
         # Fallback to OpenAI client
         client = _build_client(cfg.api_key)
-    
+
     logger.info(f"Archetype override: {cfg.archetype or 'None'}")
 
     # Read transcript with size limit (prevent loading gigabytes)
@@ -567,7 +567,7 @@ def generate_transcript_joke(
         if file_size > MAX_TRANSCRIPT_SIZE:
             logger.warning(f"Transcript is large ({file_size:,} bytes), truncating to {MAX_TRANSCRIPT_SIZE:,} bytes")
             # Read first and last portions
-            with open(transcript_path, 'r', encoding='utf-8') as f:
+            with open(transcript_path, encoding='utf-8') as f:
                 start = f.read(MAX_TRANSCRIPT_SIZE // 2)
                 f.seek(max(0, file_size - MAX_TRANSCRIPT_SIZE // 2))
                 end = f.read()
@@ -577,7 +577,7 @@ def generate_transcript_joke(
     except Exception as e:
         logger.error(f"Failed to read transcript: {e}")
         return None
-    
+
     if not transcript_text.strip():
         logger.error("Transcript appears empty or unreadable.")
         return None
@@ -621,7 +621,7 @@ def generate_transcript_joke(
             archetype_key = _select_archetype_ai_provider(provider, transcript_text)
         else:
             archetype_key = _select_archetype_ai(client, transcript_text)
-    
+
     system_prompt = COMEDY_STYLES[archetype_key]
     display_name = ARCHETYPE_DISPLAY_NAMES.get(archetype_key, archetype_key)
     logger.info(f"Selected archetype: {archetype_key} ({display_name})")
@@ -649,28 +649,28 @@ def generate_transcript_joke(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"{instruction_text}\n\n{context_text}"},
         ]
-        
+
         # For simple joke generation, disable Gemini's thinking (wastes tokens)
         kwargs = {}
         if hasattr(provider.config, 'provider_name') and provider.config.provider_name == 'gemini':
             kwargs['disable_thinking'] = True
-        
+
         response = provider.chat_completion(
             messages=messages,
             max_tokens=max_tokens,
             **kwargs
         )
-        
+
         return response.get("content", "").strip()
 
     def _call_openai(instruction_text: str, max_tokens: int):
         """Call OpenAI's responses API (fallback)."""
         # Add timeout protection (30 seconds for API call)
         import signal
-        
+
         def timeout_handler(signum, frame):
             raise TimeoutError("API call timed out after 30 seconds")
-        
+
         # Set timeout (Unix-like systems only)
         old_handler = None
         try:
@@ -679,7 +679,7 @@ def generate_transcript_joke(
                 signal.alarm(30)
         except Exception:
             pass  # Windows doesn't support SIGALRM
-        
+
         try:
             return client.responses.create(
                 model=cfg.model,
@@ -713,7 +713,7 @@ def generate_transcript_joke(
     ]
     backoffs = [0.6, 1.4, 2.8, 5.6]
 
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for attempt in range(4):
         max_tokens = token_ramp[attempt]
         try:
@@ -732,7 +732,7 @@ def generate_transcript_joke(
                 except Exception:
                     pass
                 text = _extract_output_text(resp)
-            
+
             if not text:
                 if not use_provider:
                     try:

@@ -213,16 +213,15 @@ makes a big difference in user experience.
 """
 
 import time
-from typing import Optional, List
 from dataclasses import dataclass
 
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    BarColumn,
     TextColumn,
-    TimeRemainingColumn,
     TimeElapsedColumn,
+    TimeRemainingColumn,
 )
 
 from scribe.utils.logging import console
@@ -257,7 +256,7 @@ class ProgressTracker:
         
         tracker.complete()
     """
-    
+
     def __init__(self, total_duration: float, operation: str = "Processing"):
         """
         Initialize progress tracker.
@@ -268,20 +267,20 @@ class ProgressTracker:
         """
         self.total_duration = total_duration
         self.operation = operation
-        self.start_time: Optional[float] = None
-        self.measurements: List[ProgressMeasurement] = []
-        
+        self.start_time: float | None = None
+        self.measurements: list[ProgressMeasurement] = []
+
         # Kalman filter state
-        self.speed_estimate: Optional[float] = None
+        self.speed_estimate: float | None = None
         self.variance: float = 1.0
-        
+
     def start(self) -> None:
         """Start tracking."""
         self.start_time = time.time()
         self.measurements = []
         self.speed_estimate = None
         self.variance = 1.0
-    
+
     def update(self, current_position: float) -> None:
         """
         Update progress with new measurement.
@@ -291,40 +290,40 @@ class ProgressTracker:
         """
         if self.start_time is None:
             return
-        
+
         elapsed = time.time() - self.start_time
         progress = min(1.0, current_position / self.total_duration)
-        
+
         measurement = ProgressMeasurement(
             progress=progress,
             elapsed=elapsed,
             timestamp=time.time()
         )
         self.measurements.append(measurement)
-        
+
         # Update Kalman filter
         self._update_kalman_filter(progress, elapsed)
-    
+
     def _update_kalman_filter(self, progress: float, elapsed: float) -> None:
         """Update speed estimate using Kalman filter."""
         if progress <= 0 or elapsed <= 0:
             return
-        
+
         # Current speed (progress per second)
         speed = progress / elapsed
-        
+
         if self.speed_estimate is None:
             self.speed_estimate = speed
         else:
             # Prediction
             prediction = self.speed_estimate
             prediction_variance = self.variance + 0.1
-            
+
             # Update
             kalman_gain = prediction_variance / (prediction_variance + 0.5)
             self.speed_estimate = prediction + kalman_gain * (speed - prediction)
             self.variance = (1 - kalman_gain) * prediction_variance
-    
+
     def get_eta(self, current_progress: float) -> float:
         """
         Get estimated time to completion.
@@ -337,10 +336,10 @@ class ProgressTracker:
         """
         if self.speed_estimate is None or self.speed_estimate <= 0:
             return float('inf')
-        
+
         remaining = 1.0 - current_progress
         return remaining / self.speed_estimate
-    
+
     def get_speed_ratio(self) -> float:
         """
         Get processing speed ratio (e.g., 8.5x realtime).
@@ -350,20 +349,20 @@ class ProgressTracker:
         """
         if not self.measurements or self.start_time is None:
             return 0.0
-        
+
         latest = self.measurements[-1]
         if latest.elapsed <= 0:
             return 0.0
-        
+
         processed_duration = latest.progress * self.total_duration
         return processed_duration / latest.elapsed
-    
+
     def complete(self) -> None:
         """Mark tracking as complete."""
         if self.start_time is not None:
             elapsed = time.time() - self.start_time
             speed_ratio = self.get_speed_ratio()
-            
+
             # Log completion (will be picked up by logger)
             import logging
             logger = logging.getLogger("scribe")
@@ -384,7 +383,7 @@ def create_progress_bar(description: str = "Processing") -> Progress:
         Configured Progress instance
     """
     from scribe.utils.theme import ScribeTheme
-    
+
     ui_config = get_terminal_ui_config()
     return Progress(
         SpinnerColumn(),
@@ -431,7 +430,7 @@ def format_eta(seconds: float) -> str:
     """
     if seconds == float('inf') or seconds < 0:
         return "calculating..."
-    
+
     if seconds < 60:
         return f"{int(seconds)}s"
     elif seconds < 3600:

@@ -164,12 +164,11 @@ One command (`scribe doctor`) replaces hours of back-and-forth debugging.
 """
 
 import os
-import sys
 import shutil
 import subprocess
-from pathlib import Path
-from typing import List, Tuple, Optional
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from scribe.utils.platform import get_platform, is_windows
 
@@ -180,54 +179,54 @@ class DiagnosticResult:
     name: str
     status: str  # "pass", "warn", "fail"
     message: str
-    details: Optional[str] = None
-    fix_suggestion: Optional[str] = None
+    details: str | None = None
+    fix_suggestion: str | None = None
 
 
 class SystemDiagnostics:
     """System diagnostics and health checks."""
-    
+
     def __init__(self):
-        self.results: List[DiagnosticResult] = []
-    
-    def run_all_checks(self) -> List[DiagnosticResult]:
+        self.results: list[DiagnosticResult] = []
+
+    def run_all_checks(self) -> list[DiagnosticResult]:
         """Run all diagnostic checks."""
         self.results = []
-        
+
         # Core system checks
         self.check_python_version()
         self.check_python_packages()
         self.check_ffmpeg()
         self.check_ffprobe()
-        
+
         # GPU and compute checks
         self.check_cuda()
         self.check_gpu()
         self.check_gpu_memory()
-        
+
         # API and provider checks
         self.check_openai_api_key()
         self.check_additional_providers()
-        
+
         # File system checks
         self.check_output_folder()
         self.check_disk_space()
         self.check_temp_space()
-        
+
         # Configuration checks
         self.check_env_file()
         self.check_configuration_conflicts()
-        
+
         # Performance checks
         self.check_system_resources()
-        
+
         return self.results
-    
+
     def check_python_version(self) -> DiagnosticResult:
         """Check Python version."""
         version = sys.version_info
         version_str = f"{version.major}.{version.minor}.{version.micro}"
-        
+
         if version.major == 3 and version.minor >= 10:
             result = DiagnosticResult(
                 name="Python Version",
@@ -251,14 +250,14 @@ class SystemDiagnostics:
                 details="Python 3.10+ required",
                 fix_suggestion="Install Python 3.10 or newer from python.org"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_ffmpeg(self) -> DiagnosticResult:
         """Check FFmpeg availability."""
         ffmpeg_path = shutil.which("ffmpeg")
-        
+
         if ffmpeg_path:
             try:
                 output = subprocess.check_output(
@@ -268,7 +267,7 @@ class SystemDiagnostics:
                     timeout=5
                 )
                 version_line = output.split('\n')[0]
-                
+
                 result = DiagnosticResult(
                     name="FFmpeg",
                     status="pass",
@@ -291,7 +290,7 @@ class SystemDiagnostics:
                 fix = "Install: brew install ffmpeg"
             else:
                 fix = "Install: sudo apt install ffmpeg"
-            
+
             result = DiagnosticResult(
                 name="FFmpeg",
                 status="fail",
@@ -299,14 +298,14 @@ class SystemDiagnostics:
                 details="FFmpeg is required for audio/video conversion",
                 fix_suggestion=fix
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_ffprobe(self) -> DiagnosticResult:
         """Check FFprobe availability."""
         ffprobe_path = shutil.which("ffprobe")
-        
+
         if ffprobe_path:
             result = DiagnosticResult(
                 name="FFprobe",
@@ -322,15 +321,15 @@ class SystemDiagnostics:
                 details="FFprobe is useful for media file inspection",
                 fix_suggestion="Usually installed with FFmpeg"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_cuda(self) -> DiagnosticResult:
         """Check CUDA availability."""
         try:
             import torch
-            
+
             if torch.cuda.is_available():
                 cuda_version = torch.version.cuda
                 result = DiagnosticResult(
@@ -355,23 +354,23 @@ class SystemDiagnostics:
                 details="GPU acceleration not available",
                 fix_suggestion="Install PyTorch for GPU support (optional)"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_gpu(self) -> DiagnosticResult:
         """Check GPU availability and details."""
         try:
             import torch
-            
+
             if torch.cuda.is_available():
                 gpu_count = torch.cuda.device_count()
                 gpu_name = torch.cuda.get_device_name(0)
-                
+
                 # Get VRAM
                 props = torch.cuda.get_device_properties(0)
                 vram_gb = props.total_memory / (1024**3)
-                
+
                 result = DiagnosticResult(
                     name="GPU",
                     status="pass",
@@ -394,14 +393,14 @@ class SystemDiagnostics:
                 details="Cannot detect GPU",
                 fix_suggestion="Install PyTorch to enable GPU detection"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_openai_api_key(self) -> DiagnosticResult:
         """Check OpenAI API key."""
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
-        
+
         if api_key:
             # Basic validation
             if api_key.startswith("sk-") and len(api_key) > 20:
@@ -427,14 +426,14 @@ class SystemDiagnostics:
                 details="Required for API transcription, notes, jokes, and memes",
                 fix_suggestion="Set OPENAI_API_KEY in your .env file"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_output_folder(self) -> DiagnosticResult:
         """Check output folder configuration and permissions."""
         output_folder = os.getenv("SCRIBE_OUTPUT_FOLDER")
-        
+
         if not output_folder:
             result = DiagnosticResult(
                 name="Output Folder",
@@ -445,7 +444,7 @@ class SystemDiagnostics:
             )
         else:
             output_path = Path(output_folder).expanduser()
-            
+
             if output_path.exists():
                 if output_path.is_dir():
                     # Check write permissions
@@ -453,7 +452,7 @@ class SystemDiagnostics:
                     try:
                         test_file.touch()
                         test_file.unlink()
-                        
+
                         result = DiagnosticResult(
                             name="Output Folder",
                             status="pass",
@@ -484,27 +483,27 @@ class SystemDiagnostics:
                     details=f"Path: {output_path}",
                     fix_suggestion="Folder will be created automatically on first use"
                 )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_disk_space(self) -> DiagnosticResult:
         """Check available disk space."""
         output_folder = os.getenv("SCRIBE_OUTPUT_FOLDER", "./output")
         output_path = Path(output_folder).expanduser()
-        
+
         try:
             # Get disk usage for the output folder's drive
             if output_path.exists():
                 check_path = output_path
             else:
                 check_path = output_path.parent
-            
+
             stat = shutil.disk_usage(check_path)
             free_gb = stat.free / (1024**3)
             total_gb = stat.total / (1024**3)
             percent_free = (stat.free / stat.total) * 100
-            
+
             if free_gb > 10:
                 result = DiagnosticResult(
                     name="Disk Space",
@@ -536,14 +535,14 @@ class SystemDiagnostics:
                 details=f"Error: {e}",
                 fix_suggestion=None
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_env_file(self) -> DiagnosticResult:
         """Check .env file existence."""
         env_file = Path(".env")
-        
+
         if env_file.exists():
             result = DiagnosticResult(
                 name=".env File",
@@ -559,14 +558,14 @@ class SystemDiagnostics:
                 details="Using environment variables or defaults",
                 fix_suggestion="Copy .env.example to .env and configure"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_python_packages(self) -> DiagnosticResult:
         """Check critical Python packages."""
         missing = []
-        
+
         critical_packages = {
             "torch": "2.0.0",
             "faster_whisper": "0.10.0",
@@ -574,13 +573,13 @@ class SystemDiagnostics:
             "typer": "0.9.0",
             "rich": "13.0.0"
         }
-        
+
         for package, min_version in critical_packages.items():
             try:
                 __import__(package)
             except ImportError:
                 missing.append(package)
-        
+
         if missing:
             result = DiagnosticResult(
                 name="Python Packages",
@@ -596,19 +595,19 @@ class SystemDiagnostics:
                 message="All critical packages installed",
                 details=f"Checked: {', '.join(critical_packages.keys())}"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_gpu_memory(self) -> DiagnosticResult:
         """Check GPU memory and recommend optimal settings."""
         try:
             import torch
-            
+
             if torch.cuda.is_available():
                 props = torch.cuda.get_device_properties(0)
                 vram_gb = props.total_memory / (1024**3)
-                
+
                 # Recommend model based on VRAM
                 if vram_gb >= 24:
                     recommendation = "large-v3 with beam_size=10 (optimal)"
@@ -625,7 +624,7 @@ class SystemDiagnostics:
                 else:
                     recommendation = "Use OpenAI API (insufficient VRAM)"
                     status = "warn"
-                
+
                 result = DiagnosticResult(
                     name="GPU Memory",
                     status=status,
@@ -649,21 +648,21 @@ class SystemDiagnostics:
                 details="Cannot check GPU memory",
                 fix_suggestion=None
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_additional_providers(self) -> DiagnosticResult:
         """Check additional AI provider configurations."""
         providers = {}
-        
+
         if os.getenv("XAI_API_KEY"):
             providers["XAI/Grok"] = "configured"
         if os.getenv("ANTHROPIC_API_KEY"):
             providers["Anthropic"] = "configured"
         if os.getenv("GEMINI_API_KEY"):
             providers["Gemini"] = "configured"
-        
+
         if providers:
             result = DiagnosticResult(
                 name="Additional Providers",
@@ -680,19 +679,19 @@ class SystemDiagnostics:
                 details="Only OpenAI configured",
                 fix_suggestion="Consider adding XAI (47x cheaper) or other providers for cost savings"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_temp_space(self) -> DiagnosticResult:
         """Check temporary directory space."""
         import tempfile
-        
+
         try:
             temp_dir = Path(tempfile.gettempdir())
             stat = shutil.disk_usage(temp_dir)
             free_gb = stat.free / (1024**3)
-            
+
             if free_gb > 5:
                 result = DiagnosticResult(
                     name="Temp Space",
@@ -724,21 +723,21 @@ class SystemDiagnostics:
                 details=f"Error: {e}",
                 fix_suggestion=None
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_configuration_conflicts(self) -> DiagnosticResult:
         """Check for configuration conflicts or issues."""
         issues = []
-        
+
         # Check for conflicting API keys
         openai_key = os.getenv("OPENAI_API_KEY")
         scribe_openai_key = os.getenv("SCRIBE_OPENAI_API_KEY")
-        
+
         if openai_key and scribe_openai_key and openai_key != scribe_openai_key:
             issues.append("Conflicting OPENAI_API_KEY and SCRIBE_OPENAI_API_KEY")
-        
+
         # Check for reasonable timeout values
         timeout = os.getenv("SCRIBE_PROCESS_TIMEOUT")
         if timeout:
@@ -748,7 +747,7 @@ class SystemDiagnostics:
                     issues.append(f"SCRIBE_PROCESS_TIMEOUT too low ({timeout_val}s)")
             except ValueError:
                 issues.append(f"Invalid SCRIBE_PROCESS_TIMEOUT: {timeout}")
-        
+
         # Check meme QA threshold
         qa_threshold = os.getenv("SCRIBE_MEME_QA_THRESHOLD")
         if qa_threshold:
@@ -758,7 +757,7 @@ class SystemDiagnostics:
                     issues.append(f"SCRIBE_MEME_QA_THRESHOLD out of range: {threshold_val}")
             except ValueError:
                 issues.append(f"Invalid SCRIBE_MEME_QA_THRESHOLD: {qa_threshold}")
-        
+
         if issues:
             result = DiagnosticResult(
                 name="Configuration",
@@ -774,29 +773,29 @@ class SystemDiagnostics:
                 message="No conflicts detected",
                 details="Configuration appears valid"
             )
-        
+
         self.results.append(result)
         return result
-    
+
     def check_system_resources(self) -> DiagnosticResult:
         """Check system resources (CPU, RAM)."""
         try:
             import psutil
-            
+
             # Check RAM
             ram = psutil.virtual_memory()
             ram_gb = ram.total / (1024**3)
             ram_available_gb = ram.available / (1024**3)
             ram_percent = ram.percent
-            
+
             # Check CPU
             cpu_count = psutil.cpu_count()
-            
+
             details_lines = [
                 f"RAM: {ram_gb:.1f} GB total, {ram_available_gb:.1f} GB available ({100-ram_percent:.1f}% free)",
                 f"CPU: {cpu_count} cores"
             ]
-            
+
             if ram_gb < 8:
                 status = "warn"
                 message = "Low RAM"
@@ -809,7 +808,7 @@ class SystemDiagnostics:
                 status = "pass"
                 message = "Adequate resources"
                 fix = None
-            
+
             result = DiagnosticResult(
                 name="System Resources",
                 status=status,
@@ -833,30 +832,30 @@ class SystemDiagnostics:
                 details=f"Error: {e}",
                 fix_suggestion=None
             )
-        
+
         self.results.append(result)
         return result
-    
-    def get_summary(self) -> Tuple[int, int, int]:
+
+    def get_summary(self) -> tuple[int, int, int]:
         """Get summary counts of pass/warn/fail."""
         pass_count = sum(1 for r in self.results if r.status == "pass")
         warn_count = sum(1 for r in self.results if r.status == "warn")
         fail_count = sum(1 for r in self.results if r.status == "fail")
-        
+
         return pass_count, warn_count, fail_count
-    
-    def get_recommendations(self) -> List[str]:
+
+    def get_recommendations(self) -> list[str]:
         """Get prioritized recommendations based on diagnostic results."""
         recommendations = []
-        
+
         # Critical issues first
         for result in self.results:
             if result.status == "fail" and result.fix_suggestion:
                 recommendations.append(f"CRITICAL: {result.name} - {result.fix_suggestion}")
-        
+
         # Then warnings
         for result in self.results:
             if result.status == "warn" and result.fix_suggestion:
                 recommendations.append(f"Warning: {result.name} - {result.fix_suggestion}")
-        
+
         return recommendations

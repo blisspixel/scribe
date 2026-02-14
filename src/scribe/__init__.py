@@ -14,11 +14,11 @@ __author__ = "Nick Seal"
 __license__ = "MIT"
 
 from scribe.exceptions import (
-    ScribeError,
-    ValidationError,
-    ProcessError,
-    TranscriptionError,
     FileOperationError,
+    ProcessError,
+    ScribeError,
+    TranscriptionError,
+    ValidationError,
 )
 
 __all__ = [

@@ -7,14 +7,13 @@ Useful for recordings left running overnight or with long pauses.
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def remove_silence(
     input_path: Path,
-    output_path: Optional[Path] = None,
+    output_path: Path | None = None,
     silence_threshold: str = "-50dB",
     silence_duration: float = 2.0,
     keep_silence: float = 0.5
@@ -49,14 +48,14 @@ def remove_silence(
     """
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
-    
+
     # Default output path
     if output_path is None:
         output_path = input_path.parent / f"{input_path.stem}_cleaned{input_path.suffix}"
-    
+
     logger.info(f"Removing silence from: {input_path.name}")
     logger.info(f"Threshold: {silence_threshold}, Min duration: {silence_duration}s")
-    
+
     # Use silenceremove filter
     # This reduces silent sections to near-silence, making transcription much faster
     filter_complex = (
@@ -69,7 +68,7 @@ def remove_silence(
         f"stop_duration={silence_duration}:"
         f"detection=peak"
     )
-    
+
     # Build FFmpeg command
     cmd = [
         "ffmpeg",
@@ -81,7 +80,7 @@ def remove_silence(
         "-y",  # Overwrite output file
         str(output_path)
     ]
-    
+
     try:
         logger.info("Running FFmpeg silence removal...")
         logger.info("Note: This reduces silent sections for faster transcription")
@@ -91,10 +90,10 @@ def remove_silence(
             text=True,
             check=True
         )
-        
+
         logger.info(f"Silence removed successfully: {output_path}")
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         logger.error(f"FFmpeg failed: {e.stderr}")
         raise RuntimeError(f"Failed to remove silence: {e.stderr}")
@@ -125,9 +124,9 @@ def analyze_silence(
     """
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
-    
+
     logger.info(f"Analyzing silence in: {input_path.name}")
-    
+
     # Use silencedetect filter to analyze
     cmd = [
         "ffmpeg",
@@ -136,7 +135,7 @@ def analyze_silence(
         "-f", "null",
         "-"
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -144,12 +143,12 @@ def analyze_silence(
             text=True,
             check=False  # Don't raise on non-zero exit (expected for analysis)
         )
-        
+
         # Parse silence periods from stderr
         stderr = result.stderr
         silence_starts = []
         silence_ends = []
-        
+
         for line in stderr.split('\n'):
             if 'silence_start' in line:
                 try:
@@ -163,11 +162,11 @@ def analyze_silence(
                     silence_ends.append(time)
                 except (IndexError, ValueError):
                     pass
-        
+
         # Calculate total silence
         total_silence = 0
         silence_periods = []
-        for start, end in zip(silence_starts, silence_ends):
+        for start, end in zip(silence_starts, silence_ends, strict=False):
             duration = end - start
             total_silence += duration
             silence_periods.append({
@@ -175,14 +174,14 @@ def analyze_silence(
                 'end': end,
                 'duration': duration
             })
-        
+
         return {
             'total_silence_seconds': total_silence,
             'total_silence_minutes': total_silence / 60,
             'silence_periods': len(silence_periods),
             'periods': silence_periods
         }
-        
+
     except FileNotFoundError:
         raise RuntimeError("FFmpeg not found. Please install FFmpeg.")
 
@@ -190,8 +189,8 @@ def analyze_silence(
 
 def trim_file(
     input_path: Path,
-    output_path: Optional[Path] = None,
-    end_time: Optional[str] = None,
+    output_path: Path | None = None,
+    end_time: str | None = None,
     start_time: str = "00:00:00"
 ) -> Path:
     """
@@ -214,17 +213,17 @@ def trim_file(
     """
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
-    
+
     if not end_time:
         raise ValueError("end_time is required")
-    
+
     # Default output path
     if output_path is None:
         output_path = input_path.parent / f"{input_path.stem}_trimmed{input_path.suffix}"
-    
+
     logger.info(f"Trimming file: {input_path.name}")
     logger.info(f"Time range: {start_time} to {end_time}")
-    
+
     # Build FFmpeg command
     # Using -t for duration or -to for end time
     cmd = [
@@ -236,7 +235,7 @@ def trim_file(
         "-y",               # Overwrite output file
         str(output_path)
     ]
-    
+
     try:
         logger.info("Running FFmpeg trim...")
         subprocess.run(
@@ -245,10 +244,10 @@ def trim_file(
             text=True,
             check=True
         )
-        
+
         logger.info(f"File trimmed successfully: {output_path}")
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         logger.error(f"FFmpeg failed: {e.stderr}")
         raise RuntimeError(f"Failed to trim file: {e.stderr}")

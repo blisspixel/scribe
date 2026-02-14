@@ -1,4 +1,4 @@
-"""
+r"""
 File operation utilities with defensive programming.
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -283,9 +283,8 @@ cases. This module implements all of these principles.
 """
 
 import re
-from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
+from pathlib import Path
 
 from scribe.exceptions import FileOperationError
 from scribe.utils.platform import normalize_path
@@ -313,7 +312,7 @@ def safe_path(path: str) -> Path:
     """
     if not path or not path.strip():
         raise FileOperationError("Path cannot be empty")
-    
+
     try:
         return normalize_path(path)
     except Exception as e:
@@ -348,10 +347,10 @@ def ensure_directory(path: Path) -> Path:
 
 def cleanup_files(
     directory: Path,
-    patterns: List[str],
-    keep_patterns: Optional[List[str]] = None,
+    patterns: list[str],
+    keep_patterns: list[str] | None = None,
     dry_run: bool = False
-) -> List[Path]:
+) -> list[Path]:
     """
     Clean up files matching patterns.
     
@@ -369,10 +368,10 @@ def cleanup_files(
     """
     if not directory.exists():
         return []
-    
+
     keep_patterns = keep_patterns or []
-    deleted_files: List[Path] = []
-    
+    deleted_files: list[Path] = []
+
     try:
         # Find all files matching delete patterns
         files_to_delete = set()
@@ -380,16 +379,16 @@ def cleanup_files(
             for file_path in directory.glob(pattern):
                 if file_path.is_file():
                     files_to_delete.add(file_path)
-        
+
         # Remove files matching keep patterns
         files_to_keep = set()
         for pattern in keep_patterns:
             for file_path in directory.glob(pattern):
                 if file_path.is_file():
                     files_to_keep.add(file_path)
-        
+
         files_to_delete -= files_to_keep
-        
+
         # Delete files
         for file_path in files_to_delete:
             if dry_run:
@@ -402,9 +401,9 @@ def cleanup_files(
                     # Log but don't fail on individual file deletion errors
                     import logging
                     logging.warning(f"Could not delete {file_path}: {e}")
-        
+
         return deleted_files
-        
+
     except Exception as e:
         raise FileOperationError(
             f"Cleanup failed in directory: {directory}",
@@ -439,25 +438,25 @@ def verify_file_content(path: Path, min_size: int = 100) -> bool:
             f"Cannot access file: {path}",
             context={"path": str(path), "error": str(e)}
         )
-    
+
     if not path.is_file():
         raise FileOperationError(
             f"Path is not a file: {path}",
             context={"path": str(path)}
         )
-    
+
     file_size = file_stat.st_size
-    
+
     if file_size < min_size:
         raise FileOperationError(
             f"File is too small (expected >= {min_size} bytes, got {file_size} bytes): {path}",
             context={"path": str(path), "size": file_size, "min_size": min_size}
         )
-    
+
     return True
 
 
-def extract_date_from_filename(filename: str) -> Optional[str]:
+def extract_date_from_filename(filename: str) -> str | None:
     """
     Extract date from filename like 'Meeting_2025-11-06_15-31-40.mp4'.
     
@@ -471,13 +470,13 @@ def extract_date_from_filename(filename: str) -> Optional[str]:
     match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
     if match:
         return match.group(1)
-    
+
     # Try to find YYYYMMDD pattern
     match = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
     if match:
         year, month, day = match.groups()
         return f"{year}-{month}-{day}"
-    
+
     return None
 
 
@@ -510,7 +509,7 @@ def format_duration_minutes(seconds: float) -> str:
     """
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
-    
+
     if hours > 0:
         hour_str = f"{hours} hour" + ("s" if hours != 1 else "")
         if minutes > 0:
@@ -566,7 +565,7 @@ def get_file_info(path: Path) -> dict:
         }
 
 
-def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Optional[Path]:
+def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Path | None:
     """
     Find the most recently created file matching pattern.
     
@@ -580,9 +579,9 @@ def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Option
     """
     if not directory.exists():
         return None
-    
+
     matching_files = []
-    
+
     for file_path in directory.glob(pattern):
         if file_path.is_file():
             try:
@@ -591,10 +590,10 @@ def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Option
                     matching_files.append((file_path, stat.st_ctime))
             except Exception:
                 continue
-    
+
     if not matching_files:
         return None
-    
+
     # Return file with latest creation time
     latest_file = max(matching_files, key=lambda x: x[1])
     return latest_file[0]
@@ -619,19 +618,19 @@ def wait_for_file_stable(
         True if file is stable, False if timeout
     """
     import time
-    
+
     start_time = time.time()
     last_size = -1
     stable_time = 0.0
-    
+
     while time.time() - start_time < max_wait:
         if not path.exists():
             time.sleep(check_interval)
             continue
-        
+
         try:
             current_size = path.stat().st_size
-            
+
             if current_size == last_size:
                 stable_time += check_interval
                 if stable_time >= stable_duration:
@@ -639,12 +638,12 @@ def wait_for_file_stable(
             else:
                 stable_time = 0.0
                 last_size = current_size
-            
+
         except Exception:
             pass
-        
+
         time.sleep(check_interval)
-    
+
     return False
 
 
@@ -668,13 +667,13 @@ def copy_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
             f"Source file does not exist: {source}",
             context={"source": str(source)}
         )
-    
+
     if destination.exists() and not overwrite:
         raise FileOperationError(
             f"Destination file already exists: {destination}",
             context={"destination": str(destination)}
         )
-    
+
     try:
         import shutil
         shutil.copy2(source, destination)
@@ -706,13 +705,13 @@ def move_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
             f"Source file does not exist: {source}",
             context={"source": str(source)}
         )
-    
+
     if destination.exists() and not overwrite:
         raise FileOperationError(
             f"Destination file already exists: {destination}",
             context={"destination": str(destination)}
         )
-    
+
     try:
         import shutil
         shutil.move(str(source), str(destination))

@@ -179,9 +179,8 @@ enabling the segment-based architecture that makes complete lyric extraction
 possible.
 """
 
-from pathlib import Path
-from typing import List, Dict
 import tempfile
+from pathlib import Path
 
 from scribe.utils.logging import get_logger
 
@@ -190,9 +189,9 @@ logger = get_logger(__name__)
 
 def slice_audio_by_segments(
     audio_path: Path,
-    segments: List[Dict[str, float]],
+    segments: list[dict[str, float]],
     output_dir: Path = None
-) -> List[Path]:
+) -> list[Path]:
     """
     Slice audio file into chunks based on segment timestamps.
     
@@ -206,26 +205,26 @@ def slice_audio_by_segments(
     """
     try:
         import torchaudio
-        
+
         if output_dir is None:
             output_dir = Path(tempfile.mkdtemp(prefix="audio_slices_"))
         else:
             output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info(f"Slicing audio into {len(segments)} segments")
-        
+
         # Load full audio
         waveform, sample_rate = torchaudio.load(str(audio_path))
-        
+
         sliced_paths = []
-        
+
         for i, segment in enumerate(segments):
             start_sample = int(segment["start"] * sample_rate)
             end_sample = int(segment["end"] * sample_rate)
-            
+
             # Extract segment
             segment_waveform = waveform[:, start_sample:end_sample]
-            
+
             # Save segment
             segment_path = output_dir / f"segment_{i:04d}.wav"
             torchaudio.save(
@@ -233,13 +232,13 @@ def slice_audio_by_segments(
                 segment_waveform,
                 sample_rate
             )
-            
+
             sliced_paths.append(segment_path)
             logger.debug(f"Sliced segment {i+1}/{len(segments)}: {segment['start']:.2f}s - {segment['end']:.2f}s")
-        
+
         logger.info(f"Created {len(sliced_paths)} audio slices in {output_dir}")
         return sliced_paths
-        
+
     except Exception as e:
         logger.error(f"Audio slicing failed: {e}")
         raise

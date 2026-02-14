@@ -2,8 +2,9 @@
 Tests for Anthropic provider.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestAnthropicProvider:

@@ -6,12 +6,12 @@ PyTorch or CUDA are unavailable, and returns optimized settings
 for different GPU models.
 """
 
-from typing import Dict, Any
+from typing import Any
 
 from scribe.models.gpu import GPUConfig
 
 
-def detect_gpu_capability() -> Dict[str, Any]:
+def detect_gpu_capability() -> dict[str, Any]:
     """
     Comprehensive GPU detection and capability assessment.
     
@@ -26,7 +26,7 @@ def detect_gpu_capability() -> Dict[str, Any]:
     return gpu_config.to_dict()
 
 
-def configure_gpu_optimizations(gpu_info: Dict[str, Any]) -> Dict[str, Any]:
+def configure_gpu_optimizations(gpu_info: dict[str, Any]) -> dict[str, Any]:
     """
     Configure optimal settings for detected GPU.
     
@@ -59,9 +59,9 @@ def is_high_end_gpu(gpu_name: str, vram_gb: float) -> bool:
     """
     if not gpu_name:
         return False
-    
+
     gpu_upper = gpu_name.upper()
-    
+
     return (
         "RTX 4090" in gpu_upper
         or "RTX 4080" in gpu_upper
@@ -99,11 +99,11 @@ def get_cuda_version() -> str:
             return torch.version.cuda or "Unknown"
     except ImportError:
         pass
-    
+
     return "Not available"
 
 
-def get_gpu_memory_info() -> Dict[str, float]:
+def get_gpu_memory_info() -> dict[str, float]:
     """
     Get GPU memory information.
     
@@ -115,19 +115,19 @@ def get_gpu_memory_info() -> Dict[str, float]:
         "used_gb": 0.0,
         "free_gb": 0.0,
     }
-    
+
     try:
         import torch
         if torch.cuda.is_available():
             total = torch.cuda.get_device_properties(0).total_memory
             allocated = torch.cuda.memory_allocated(0)
-            
+
             info["total_gb"] = total / (1024**3)
             info["used_gb"] = allocated / (1024**3)
             info["free_gb"] = (total - allocated) / (1024**3)
     except Exception:
         pass
-    
+
     return info
 
 
@@ -151,14 +151,14 @@ def set_gpu_optimizations(enable_tensor_cores: bool = True) -> None:
     """
     try:
         import torch
-        
+
         if torch.cuda.is_available():
             # Set matrix multiplication precision for Tensor Cores
             if enable_tensor_cores:
                 torch.set_float32_matmul_precision("high")
-            
+
             # Note: cuDNN benchmark can cause issues in some environments
             # torch.backends.cudnn.benchmark = True
-            
+
     except Exception:
         pass
