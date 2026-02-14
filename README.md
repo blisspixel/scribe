@@ -409,7 +409,7 @@ scribe batch *.mp4 --vocabulary company-names.json
 
 ### Audio Recommendations
 
-- 16kHz mono WAV input for best local results
+- 16kHz mono WAV input is recommended for local transcription
 - Normalize to -16 LUFS integrated loudness
 - Minimize background noise
 - Use quality microphones
@@ -590,7 +590,7 @@ sudo apt install ffmpeg
 ```
 
 ### Poor Transcription Quality
-- Scribe uses large-v3 by default (maximum accuracy)
+- Scribe uses large-v3 by default for strong baseline accuracy
 - Ensure clean audio with minimal background noise
 - Check microphone quality and placement
 - Audio normalization is automatic
