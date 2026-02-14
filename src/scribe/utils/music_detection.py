@@ -206,7 +206,8 @@ This improves maintainability without changing functionality.
 """
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 import numpy as np
 
 from scribe.utils.logging import get_logger
@@ -224,12 +225,12 @@ class MusicDetector:
     - Rhythm/beat presence (periodic patterns)
     - Harmonic content (musical vs noise)
     """
-    
+
     def __init__(self):
         """Initialize music detector."""
         pass
-    
-    def analyze_music(self, audio_path: Path) -> Dict[str, Any]:
+
+    def analyze_music(self, audio_path: Path) -> dict[str, Any]:
         """
         Comprehensive music analysis including metadata extraction.
         
@@ -246,20 +247,21 @@ class MusicDetector:
         """
         try:
             import librosa
+
             from scribe.utils.audio import get_audio_duration
-            
+
             logger.info(f"Analyzing music: {audio_path.name}")
-            
+
             # Load full audio for complete analysis
             y, sr = librosa.load(str(audio_path), sr=22050)
             duration = get_audio_duration(audio_path) or len(y) / sr
-            
+
             # Extract music metadata
             metadata = self._extract_metadata(y, sr, duration)
-            
+
             # Validate it's actually music
             is_music, confidence, reason = self._validate_music(y, sr, metadata)
-            
+
             return {
                 "is_music": is_music,
                 "confidence": confidence,
@@ -267,25 +269,25 @@ class MusicDetector:
                 "metadata": metadata,
                 "features": metadata.get("technical", {})
             }
-            
+
         except ImportError:
             logger.warning("librosa not installed, skipping music analysis")
             return self._fallback_analysis(audio_path)
         except Exception as e:
             logger.warning(f"Music analysis failed: {e}")
             return self._fallback_analysis(audio_path)
-    
-    def _extract_metadata(self, y: np.ndarray, sr: int, duration: float) -> Dict[str, Any]:
+
+    def _extract_metadata(self, y: np.ndarray, sr: int, duration: float) -> dict[str, Any]:
         """Extract comprehensive music metadata."""
         import librosa
-        
+
         metadata = {}
-        
+
         try:
             # 1. Tempo (BPM) - use onset strength for better detection
             onset_env = librosa.onset.onset_strength(y=y, sr=sr)
             tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
-            
+
             # Validate tempo is reasonable
             if tempo > 0 and 40 <= tempo <= 220:
                 metadata["tempo"] = round(float(tempo), 1)
@@ -308,7 +310,7 @@ class MusicDetector:
             logger.debug(f"Tempo detection failed: {e}")
             metadata["tempo"] = 0
             metadata["beat_count"] = 0
-        
+
         try:
             # 2. Key detection
             chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
@@ -318,29 +320,29 @@ class MusicDetector:
         except Exception as e:
             logger.debug(f"Key detection failed: {e}")
             metadata["key"] = "Unknown"
-        
+
         # 3. Duration
         metadata["duration"] = round(duration, 1)
         metadata["duration_formatted"] = self._format_duration(duration)
-        
+
         try:
             # 4. Energy and dynamics
             rms = librosa.feature.rms(y=y)
             metadata["energy"] = round(float(np.mean(rms)), 4)
             metadata["dynamic_range"] = round(float(np.max(rms) - np.min(rms)), 4)
-            
+
             # 5. Spectral features
             spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
             metadata["spectral_centroid"] = round(float(np.mean(spectral_centroid)), 1)
-            
+
             # 6. Harmonic/Percussive separation
             harmonic, percussive = librosa.effects.hpss(y)
             harmonic_ratio = np.sum(np.abs(harmonic)) / (np.sum(np.abs(y)) + 1e-6)
             percussive_ratio = np.sum(np.abs(percussive)) / (np.sum(np.abs(y)) + 1e-6)
-            
+
             metadata["harmonic_ratio"] = round(float(harmonic_ratio), 3)
             metadata["percussive_ratio"] = round(float(percussive_ratio), 3)
-            
+
             # 7. Measurable characteristics (not genre guesses)
             characteristics = []
             if percussive_ratio > 0.3:
@@ -348,7 +350,7 @@ class MusicDetector:
             if harmonic_ratio > 0.3:
                 characteristics.append("melodic")
             metadata["characteristics"] = characteristics
-            
+
             # Store technical features separately
             metadata["technical"] = {
                 "sample_rate": sr,
@@ -365,70 +367,70 @@ class MusicDetector:
             metadata.setdefault("percussive_ratio", 0)
             metadata.setdefault("characteristics", [])
             metadata.setdefault("technical", {})
-        
+
         return metadata
-    
+
     def _validate_music(
-        self, 
-        y: np.ndarray, 
-        sr: int, 
-        metadata: Dict[str, Any]
+        self,
+        y: np.ndarray,
+        sr: int,
+        metadata: dict[str, Any]
     ) -> tuple[bool, float, str]:
         """Validate that audio is actually music."""
-        
+
         rms_energy = metadata["technical"]["rms_energy"]
         tempo = metadata["tempo"]
         harmonic_ratio = metadata["harmonic_ratio"]
         percussive_ratio = metadata["percussive_ratio"]
         zcr = metadata["technical"]["zero_crossing_rate"]
-        
+
         # Check indicators
         indicators = []
-        
+
         # 1. Not silent
         if rms_energy > 0.001:
             indicators.append("has_energy")
-        
+
         # 2. Has reasonable tempo
         if 40 <= tempo <= 220:
             indicators.append("has_tempo")
-        
+
         # 3. Has musical content
         if harmonic_ratio > 0.1 or percussive_ratio > 0.1:
             indicators.append("has_musical_content")
-        
+
         # 4. Reasonable zero crossing rate
         if 0.01 < zcr < 0.3:
             indicators.append("reasonable_zcr")
-        
+
         # 5. Has spectral content
         if metadata["spectral_centroid"] > 500:
             indicators.append("has_spectral_content")
-        
+
         is_music = len(indicators) >= 3
         confidence = len(indicators) / 5.0
-        
+
         if is_music:
             reason = f"Music detected ({len(indicators)}/5 indicators: {', '.join(indicators)})"
         else:
             reason = f"Not music (only {len(indicators)}/5 indicators met)"
-        
-        return is_music, confidence, reason
-    
 
-    
+        return is_music, confidence, reason
+
+
+
     def _format_duration(self, seconds: float) -> str:
         """Format duration as MM:SS."""
         minutes = int(seconds // 60)
         secs = int(seconds % 60)
         return f"{minutes}:{secs:02d}"
-    
-    def _fallback_analysis(self, audio_path: Path) -> Dict[str, Any]:
+
+    def _fallback_analysis(self, audio_path: Path) -> dict[str, Any]:
         """Fallback when librosa unavailable."""
         from scribe.utils.audio import get_audio_duration
-        
+
         duration = get_audio_duration(audio_path)
-        
+
         return {
             "is_music": True,
             "confidence": 0.5,
@@ -439,8 +441,8 @@ class MusicDetector:
             },
             "features": {}
         }
-    
-    def is_music(self, audio_path: Path) -> Dict[str, Any]:
+
+    def is_music(self, audio_path: Path) -> dict[str, Any]:
         """
         Quick music validation (delegates to analyze_music).
         

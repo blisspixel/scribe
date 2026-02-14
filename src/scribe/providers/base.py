@@ -153,35 +153,35 @@ the best AI service for each task while maintaining a simple, unified interface.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 
 @dataclass
 class ProviderConfig:
     """Configuration for an AI provider."""
-    
+
     provider_name: str  # "openai", "xai", "anthropic"
     api_key: str
     model: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     timeout: int = 120
     max_retries: int = 3
 
 
 class AIProvider(ABC):
     """Abstract base class for AI providers."""
-    
+
     def __init__(self, config: ProviderConfig):
         self.config = config
-    
+
     @abstractmethod
     def chat_completion(
         self,
-        messages: List[Dict[str, Any]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        messages: list[dict[str, Any]],
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a chat completion.
         
@@ -195,12 +195,12 @@ class AIProvider(ABC):
             Response dict with 'content', 'usage', etc.
         """
         pass
-    
+
     @abstractmethod
     def transcribe_audio(
         self,
         audio_path: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         **kwargs
     ) -> str:
         """
@@ -215,7 +215,7 @@ class AIProvider(ABC):
             Transcription text
         """
         pass
-    
+
     @abstractmethod
     def generate_image(
         self,
@@ -235,7 +235,7 @@ class AIProvider(ABC):
             Image bytes
         """
         pass
-    
+
     @abstractmethod
     def analyze_image(
         self,
@@ -255,15 +255,15 @@ class AIProvider(ABC):
             Analysis text
         """
         pass
-    
+
     def chat_completion_with_json(
         self,
-        messages: List[Dict[str, Any]],
-        json_schema: Optional[Dict[str, Any]] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        messages: list[dict[str, Any]],
+        json_schema: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a chat completion with JSON output.
         
@@ -288,7 +288,7 @@ class AIProvider(ABC):
                 f"{json_schema}\n"
                 "Do not include any explanations, markdown, or code fences. Only the JSON object."
             )
-            
+
             # Add schema instruction to the last user message
             modified_messages = messages.copy()
             for i in range(len(modified_messages) - 1, -1, -1):
@@ -296,7 +296,7 @@ class AIProvider(ABC):
                     modified_messages[i] = modified_messages[i].copy()
                     modified_messages[i]["content"] += schema_instruction
                     break
-            
+
             return self.chat_completion(
                 modified_messages,
                 max_tokens=max_tokens,

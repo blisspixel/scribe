@@ -4,7 +4,7 @@ Anthropic Claude provider implementation.
 
 import logging
 import os
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 try:
     from anthropic import Anthropic
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 class AnthropicProvider(AIProvider):
     """Provider for Anthropic Claude models."""
-    
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022", config: Optional[ProviderConfig] = None):
+
+    def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-20241022", config: ProviderConfig | None = None):
         """
         Initialize Anthropic provider.
         
@@ -31,7 +31,7 @@ class AnthropicProvider(AIProvider):
         """
         if not ANTHROPIC_AVAILABLE:
             raise ImportError("anthropic package not installed. Install with: pip install anthropic")
-        
+
         # Handle both direct initialization and config-based initialization
         if config:
             super().__init__(config)
@@ -48,17 +48,17 @@ class AnthropicProvider(AIProvider):
                 api_key=self.api_key,
                 model=self.model
             )
-        
+
         self.client = Anthropic(api_key=self.api_key)
         logger.info(f"Initialized Anthropic provider with model: {self.model}")
-    
+
     def chat_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 4096,
         temperature: float = 1.0,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate chat completion using Claude.
         
@@ -74,7 +74,7 @@ class AnthropicProvider(AIProvider):
         # Claude uses 'system' parameter separately from messages
         system_message = None
         user_messages = []
-        
+
         for msg in messages:
             if msg["role"] == "system":
                 system_message = msg["content"]
@@ -82,7 +82,7 @@ class AnthropicProvider(AIProvider):
                 # Claude uses 'user' and 'assistant' roles
                 role = "user" if msg["role"] in ["user", "developer"] else "assistant"
                 user_messages.append({"role": role, "content": msg["content"]})
-        
+
         # Call Claude API
         params = {
             "model": self.model,
@@ -90,15 +90,15 @@ class AnthropicProvider(AIProvider):
             "temperature": temperature,
             "messages": user_messages
         }
-        
+
         if system_message:
             params["system"] = system_message
-        
+
         response = self.client.messages.create(**params)
-        
+
         # Extract content from response
         content = response.content[0].text if response.content else ""
-        
+
         return {
             "content": content,
             "usage": {
@@ -107,7 +107,7 @@ class AnthropicProvider(AIProvider):
                 "total_tokens": response.usage.input_tokens + response.usage.output_tokens
             }
         }
-    
+
     def generate_image(
         self,
         prompt: str,
@@ -122,11 +122,11 @@ class AnthropicProvider(AIProvider):
             NotImplementedError: Always raised
         """
         raise NotImplementedError("Anthropic Claude does not support image generation")
-    
+
     def transcribe_audio(
         self,
         audio_path: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         **kwargs
     ) -> str:
         """
@@ -136,7 +136,7 @@ class AnthropicProvider(AIProvider):
             NotImplementedError: Always raised
         """
         raise NotImplementedError("Anthropic Claude does not support audio transcription")
-    
+
     def analyze_image(
         self,
         image_data: bytes,
@@ -155,10 +155,10 @@ class AnthropicProvider(AIProvider):
             Analysis text
         """
         import base64
-        
+
         # Convert image to base64
         image_b64 = base64.b64encode(image_data).decode('utf-8')
-        
+
         # Claude vision API
         response = self.client.messages.create(
             model=self.model,
@@ -183,5 +183,5 @@ class AnthropicProvider(AIProvider):
                 }
             ],
         )
-        
+
         return response.content[0].text if response.content else ""

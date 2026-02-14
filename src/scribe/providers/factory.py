@@ -2,9 +2,8 @@
 Provider factory for creating AI provider instances.
 """
 
-import os
 import logging
-from typing import Optional
+import os
 
 from scribe.providers.base import AIProvider, ProviderConfig
 from scribe.providers.openai_provider import OpenAIProvider
@@ -27,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 def get_provider(
     feature: str,
-    api_key: Optional[str] = None,
-    model: Optional[str] = None,
-    provider_name: Optional[str] = None,
+    api_key: str | None = None,
+    model: str | None = None,
+    provider_name: str | None = None,
     enable_health_check: bool = False,
 ) -> AIProvider:
     """
@@ -57,11 +56,11 @@ def get_provider(
         ANTHROPIC_API_KEY: Anthropic API key
         GEMINI_API_KEY: Google Gemini API key
     """
-    
+
     # Check if health checks are enabled globally
     if not enable_health_check:
         enable_health_check = os.getenv("SCRIBE_ENABLE_HEALTH_CHECKS", "false").lower() == "true"
-    
+
     # Determine provider with feature-specific defaults
     if provider_name is None:
         # Special handling for meme_image - check dedicated env var first
@@ -76,9 +75,9 @@ def get_provider(
             # OpenAI for everything else
             default_provider = "xai" if feature in ["joke", "meme"] else "openai"
             provider_name = os.getenv(env_var, default_provider)
-        
+
         provider_name = provider_name.lower()
-    
+
     # Get API key
     if api_key is None:
         if provider_name == "xai":
@@ -91,17 +90,17 @@ def get_provider(
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
-    
+
     if not api_key:
         raise ValueError(f"No API key found for provider: {provider_name}")
-    
+
     # Health check if enabled
     if enable_health_check:
         from scribe.providers.health import get_health_monitor
-        
+
         monitor = get_health_monitor()
         status = monitor.check_provider_health(provider_name, api_key)
-        
+
         if not status.is_healthy:
             logger.warning(
                 f"Provider {provider_name} failed health check: {status.error_message}"
@@ -113,11 +112,11 @@ def get_provider(
                 return get_provider(feature, provider_name=fallback, enable_health_check=False)
             else:
                 logger.warning(f"No fallback available, proceeding with {provider_name}")
-    
+
     # Determine model
     if model is None or model == "":
         model = _get_default_model(provider_name, feature)
-    
+
     # Create config
     config = ProviderConfig(
         provider_name=provider_name,
@@ -125,7 +124,7 @@ def get_provider(
         model=model,
         timeout=int(os.getenv("SCRIBE_API_TIMEOUT", "120")),
     )
-    
+
     # Create provider
     if provider_name == "openai":
         return OpenAIProvider(config)
@@ -145,7 +144,7 @@ def get_provider(
 
 def _get_default_model(provider_name: str, feature: str) -> str:
     """Get default model for a provider and feature."""
-    
+
     defaults = {
         "openai": {
             "joke": "gpt-5.2",
@@ -176,14 +175,14 @@ def _get_default_model(provider_name: str, feature: str) -> str:
             "transcribe": None,  # Gemini doesn't support dedicated transcription yet
         },
     }
-    
+
     model = defaults.get(provider_name, {}).get(feature)
-    
+
     if model is None:
         raise ValueError(
             f"Provider '{provider_name}' does not support feature '{feature}'"
         )
-    
+
     return model
 
 
@@ -191,7 +190,7 @@ def _get_fallback_provider(
     feature: str,
     failed_provider: str,
     original_api_key: str
-) -> Optional[str]:
+) -> str | None:
     """
     Get a fallback provider when the primary fails.
     
@@ -211,13 +210,13 @@ def _get_fallback_provider(
         "notes": ["gemini", "xai", "openai", "anthropic"],
         "transcribe": ["openai"],  # Only OpenAI supports transcription
     }
-    
+
     chain = fallbacks.get(feature, [])
-    
+
     # Remove the failed provider from the chain
     if failed_provider in chain:
         chain = [p for p in chain if p != failed_provider]
-    
+
     # Try to find a provider with an API key
     for provider in chain:
         api_key = None
@@ -229,8 +228,8 @@ def _get_fallback_provider(
             api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
         elif provider == "gemini":
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
-        
+
         if api_key:
             return provider
-    
+
     return None

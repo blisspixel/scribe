@@ -205,7 +205,6 @@ significantly reduce hallucinations and enable complete lyric extraction.
 """
 
 from pathlib import Path
-from typing import Optional
 
 from scribe.utils.logging import get_logger
 
@@ -219,7 +218,7 @@ class VocalSeparator:
     This is the key to accurate music transcription - by isolating vocals
     before transcription, we eliminate hallucinations caused by instruments.
     """
-    
+
     def __init__(self, model_name: str = "htdemucs", device: str = "cuda"):
         """
         Initialize vocal separator.
@@ -231,22 +230,22 @@ class VocalSeparator:
         self.model_name = model_name
         self.device = device
         self.model = None
-    
+
     def _load_model(self):
         """Load Demucs model lazily."""
         if self.model is not None:
             return
-        
+
         try:
             from demucs.pretrained import get_model
-            
+
             logger.info(f"Loading Demucs model: {self.model_name}")
             self.model = get_model(self.model_name)
             self.model.to(self.device)
             self.model.eval()
-            
+
             logger.info(f"Demucs model loaded on {self.device}")
-            
+
         except ImportError:
             raise ImportError(
                 "Demucs not installed. Install with: pip install demucs"
@@ -254,11 +253,11 @@ class VocalSeparator:
         except Exception as e:
             logger.error(f"Failed to load Demucs model: {e}")
             raise
-    
+
     def separate_vocals(
         self,
         audio_path: Path,
-        output_dir: Optional[Path] = None
+        output_dir: Path | None = None
     ) -> Path:
         """
         Separate vocals from music track.
@@ -271,45 +270,46 @@ class VocalSeparator:
             Path to isolated vocals file
         """
         self._load_model()
-        
+
         if output_dir is None:
             output_dir = audio_path.parent
-        
+
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Output path for vocals
         vocals_path = output_dir / f"{audio_path.stem}_vocals.wav"
-        
+
         # Check if already separated
         if vocals_path.exists():
             logger.info(f"Using existing separated vocals: {vocals_path.name}")
             return vocals_path
-        
+
         try:
+            import os
+            import sys
+
             import torch
             import torchaudio
             from demucs.apply import apply_model
-            import sys
-            import os
-            
+
             logger.info(f"Separating vocals from: {audio_path.name}")
-            
+
             # Load audio
             wav, sr = torchaudio.load(str(audio_path))
-            
+
             # Resample if needed (Demucs expects 44.1kHz)
             if sr != 44100:
                 resampler = torchaudio.transforms.Resample(sr, 44100)
                 wav = resampler(wav)
                 sr = 44100
-            
+
             # Ensure stereo
             if wav.shape[0] == 1:
                 wav = wav.repeat(2, 1)
-            
+
             # Move to device
             wav = wav.to(self.device)
-            
+
             # Suppress Demucs progress bar spam
             old_stdout = sys.stdout
             old_stderr = sys.stderr
@@ -317,7 +317,7 @@ class VocalSeparator:
                 # Redirect to devnull to suppress tqdm progress bars
                 sys.stdout = open(os.devnull, 'w')
                 sys.stderr = open(os.devnull, 'w')
-                
+
                 # Apply separation (progress=False to disable tqdm)
                 with torch.no_grad():
                     sources = apply_model(
@@ -335,22 +335,22 @@ class VocalSeparator:
                 sys.stderr.close()
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
-            
+
             # Extract vocals (index 3 in htdemucs: drums, bass, other, vocals)
             vocals = sources[3].cpu()
-            
+
             # Save vocals
             torchaudio.save(str(vocals_path), vocals, sr)
-            
+
             logger.info(f"Vocals saved to: {vocals_path.name}")
             return vocals_path
-            
+
         except Exception as e:
             logger.error(f"Vocal separation failed: {e}")
             raise
 
 
-def separate_vocals(audio_path: Path, output_dir: Optional[Path] = None) -> Path:
+def separate_vocals(audio_path: Path, output_dir: Path | None = None) -> Path:
     """
     Convenience function for vocal separation.
     

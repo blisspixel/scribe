@@ -91,7 +91,6 @@ enabling graceful degradation and intelligent error recovery throughout the
 transcription pipeline.
 """
 
-from typing import Optional
 
 
 class ScribeError(Exception):
@@ -105,8 +104,8 @@ class ScribeError(Exception):
         message: Human-readable error message
         context: Optional dictionary with additional error context
     """
-    
-    def __init__(self, message: str, context: Optional[dict] = None):
+
+    def __init__(self, message: str, context: dict | None = None):
         """
         Initialize ScribeError with message and optional context.
         
@@ -117,7 +116,7 @@ class ScribeError(Exception):
         self.message = message
         self.context = context or {}
         super().__init__(self.message)
-    
+
     def __str__(self) -> str:
         """Return formatted error message with context."""
         if self.context:

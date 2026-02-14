@@ -20,15 +20,15 @@ Example:
         ctx.mark_success()
 """
 
+import contextvars
 import os
 import sys
-import uuid
 import threading
-import contextvars
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field, asdict
+import uuid
 from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from typing import Any, Optional
 
 from scribe.utils.logging import get_logger
 
@@ -37,7 +37,7 @@ logger = get_logger(__name__)
 # Context variable for async/await support (Python 3.7+)
 # This works with both threading and asyncio
 _context_var: contextvars.ContextVar[Optional["RunContext"]] = contextvars.ContextVar(
-    "run_context", 
+    "run_context",
     default=None
 )
 
@@ -79,24 +79,24 @@ class RunContext:
         metadata: Additional structured data about the run
         parent_run_id: ID of parent run if this is a sub-operation
     """
-    
+
     run_id: str
     operation: str
     start_time: datetime
-    end_time: Optional[datetime] = None
-    success: Optional[bool] = None
-    error_message: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    parent_run_id: Optional[str] = None
-    
+    end_time: datetime | None = None
+    success: bool | None = None
+    error_message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    parent_run_id: str | None = None
+
     def __post_init__(self):
         """Capture system information on initialization."""
         self.metadata["python_version"] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         self.metadata["platform"] = sys.platform
         self.metadata["pid"] = os.getpid()
-    
+
     @classmethod
-    def create(cls, operation: str, parent_run_id: Optional[str] = None) -> "RunContext":
+    def create(cls, operation: str, parent_run_id: str | None = None) -> "RunContext":
         """
         Create a new run context.
         
@@ -108,7 +108,7 @@ class RunContext:
             New RunContext instance
         """
         run_id = _generate_run_id()
-        
+
         logger.info(
             f"Starting run: {run_id}",
             extra={
@@ -117,14 +117,14 @@ class RunContext:
                 "parent_run_id": parent_run_id
             }
         )
-        
+
         return cls(
             run_id=run_id,
             operation=operation,
             start_time=datetime.now(),
             parent_run_id=parent_run_id
         )
-    
+
     def add_metadata(self, key: str, value: Any) -> None:
         """
         Add metadata to the run context.
@@ -137,19 +137,19 @@ class RunContext:
             value: Metadata value (must be JSON-serializable)
         """
         self.metadata[key] = value
-        
+
         logger.debug(
             f"Run metadata: {key}={value}",
             extra={"run_id": self.run_id, "metadata_key": key}
         )
-    
+
     def mark_success(self) -> None:
         """Mark the run as successful and record end time."""
         self.end_time = datetime.now()
         self.success = True
-        
+
         duration = (self.end_time - self.start_time).total_seconds()
-        
+
         logger.info(
             f"Run completed successfully: {self.run_id} ({duration:.2f}s)",
             extra={
@@ -159,7 +159,7 @@ class RunContext:
                 "success": True
             }
         )
-    
+
     def mark_failure(self, error_message: str) -> None:
         """
         Mark the run as failed and record error.
@@ -170,9 +170,9 @@ class RunContext:
         self.end_time = datetime.now()
         self.success = False
         self.error_message = error_message
-        
+
         duration = (self.end_time - self.start_time).total_seconds()
-        
+
         logger.error(
             f"Run failed: {self.run_id} - {error_message}",
             extra={
@@ -183,8 +183,8 @@ class RunContext:
                 "error_message": error_message
             }
         )
-    
-    def get_duration(self) -> Optional[float]:
+
+    def get_duration(self) -> float | None:
         """
         Get run duration in seconds.
         
@@ -193,10 +193,10 @@ class RunContext:
         """
         if self.end_time is None:
             return None
-        
+
         return (self.end_time - self.start_time).total_seconds()
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert context to dictionary for serialization.
         
@@ -204,15 +204,15 @@ class RunContext:
             Dictionary representation with ISO timestamps
         """
         data = asdict(self)
-        
+
         # Convert datetime objects to ISO format
         data["start_time"] = self.start_time.isoformat()
         if self.end_time:
             data["end_time"] = self.end_time.isoformat()
             data["duration_seconds"] = self.get_duration()
-        
+
         return data
-    
+
     @classmethod
     def get_current(cls) -> Optional["RunContext"]:
         """
@@ -225,7 +225,7 @@ class RunContext:
             Current RunContext, or None if no context is active
         """
         return _context_var.get()
-    
+
     @classmethod
     def set_current(cls, context: Optional["RunContext"]) -> None:
         """
@@ -238,7 +238,7 @@ class RunContext:
             context: RunContext to set as current, or None to clear
         """
         _context_var.set(context)
-    
+
     def __enter__(self) -> "RunContext":
         """
         Enter context manager - set as current context.
@@ -250,7 +250,7 @@ class RunContext:
         self._previous_context = self.get_current()
         self.set_current(self)
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """
         Exit context manager - mark success/failure and restore previous context.
@@ -267,15 +267,15 @@ class RunContext:
         elif self.success is None:
             # No exception and not explicitly marked - assume success
             self.mark_success()
-        
+
         # Add to global history
         _run_history.add(self)
-        
+
         # Restore previous context (for nested contexts)
         self.set_current(self._previous_context)
 
 
-def get_current_run_id() -> Optional[str]:
+def get_current_run_id() -> str | None:
     """
     Get the current run ID from active context.
     
@@ -320,7 +320,7 @@ def nested_operation(operation: str):
     """
     parent_context = RunContext.get_current()
     parent_run_id = parent_context.run_id if parent_context else None
-    
+
     with RunContext.create(operation, parent_run_id=parent_run_id) as ctx:
         yield ctx
 
@@ -334,7 +334,7 @@ class RunHistory:
     
     Thread-safe for concurrent access.
     """
-    
+
     def __init__(self, max_size: int = 100):
         """
         Initialize run history.
@@ -343,9 +343,9 @@ class RunHistory:
             max_size: Maximum number of runs to keep in history
         """
         self.max_size = max_size
-        self.runs: List[RunContext] = []
+        self.runs: list[RunContext] = []
         self._lock = threading.Lock()
-    
+
     def add(self, context: RunContext) -> None:
         """
         Add a run context to history.
@@ -355,12 +355,12 @@ class RunHistory:
         """
         with self._lock:
             self.runs.append(context)
-            
+
             # Trim to max size (FIFO)
             if len(self.runs) > self.max_size:
                 self.runs = self.runs[-self.max_size:]
-    
-    def get_recent(self, count: int = 10) -> List[RunContext]:
+
+    def get_recent(self, count: int = 10) -> list[RunContext]:
         """
         Get most recent runs.
         
@@ -372,8 +372,8 @@ class RunHistory:
         """
         with self._lock:
             return list(reversed(self.runs[-count:]))
-    
-    def get_by_id(self, run_id: str) -> Optional[RunContext]:
+
+    def get_by_id(self, run_id: str) -> RunContext | None:
         """
         Get a specific run by ID.
         
@@ -388,8 +388,8 @@ class RunHistory:
                 if run.run_id == run_id:
                     return run
             return None
-    
-    def get_failed_runs(self, count: int = 10) -> List[RunContext]:
+
+    def get_failed_runs(self, count: int = 10) -> list[RunContext]:
         """
         Get recent failed runs.
         
@@ -402,7 +402,7 @@ class RunHistory:
         with self._lock:
             failed = [r for r in self.runs if r.success is False]
             return list(reversed(failed[-count:]))
-    
+
     def clear(self) -> None:
         """Clear all run history."""
         with self._lock:

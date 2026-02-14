@@ -6,15 +6,15 @@ with RTX 4090 optimization, silence detection, and clean output formatting.
 """
 
 import time
-from pathlib import Path
-from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
-from scribe.utils.audio import detect_silence_periods, get_audio_duration, format_timestamp
+from scribe.utils.audio import detect_silence_periods, format_timestamp, get_audio_duration
 from scribe.utils.files import extract_date_from_filename, format_date, format_duration_minutes
-from scribe.utils.gpu import set_gpu_optimizations, clear_gpu_cache
+from scribe.utils.gpu import clear_gpu_cache, set_gpu_optimizations
 from scribe.utils.gpu_manager import get_gpu_manager
 from scribe.utils.logging import get_logger
 
@@ -32,12 +32,12 @@ class LocalWhisperTranscriber:
     - Silence detection and marking
     - Clean transcript output (no technical metadata)
     """
-    
+
     def __init__(
         self,
         model_size: str = "large-v3",
-        language: Optional[str] = "en",
-        gpu_config: Optional[GPUConfig] = None
+        language: str | None = "en",
+        gpu_config: GPUConfig | None = None
     ):
         """
         Initialize local whisper transcriber.
@@ -49,21 +49,21 @@ class LocalWhisperTranscriber:
         """
         self.model_size = model_size
         self.language = language
-        
+
         # Detect GPU if not provided
         if gpu_config is None:
             gpu_config = GPUConfig.detect()
-        
+
         self.gpu_config = gpu_config
-        
+
         # Validate GPU availability
         if not gpu_config.has_gpu:
             logger.warning("No GPU detected, will use CPU (significantly slower)")
-        
+
         # Set GPU optimizations
         if gpu_config.has_gpu and gpu_config.enable_tensor_cores:
             set_gpu_optimizations(enable_tensor_cores=True)
-        
+
         # Log configuration
         logger.info("Initializing local transcription:")
         logger.info(f"  Model: {model_size}")
@@ -73,10 +73,10 @@ class LocalWhisperTranscriber:
             logger.info(f"  VRAM: {gpu_config.gpu_memory_gb:.1f}GB")
             logger.info(f"  Beam size: {gpu_config.beam_size}")
             logger.info(f"  FP16: {gpu_config.use_fp16}")
-        
+
         self.model = None
-    
-    def detect_language(self, audio_path: Path, sample_duration: int = 30) -> tuple[Optional[str], float, bool]:
+
+    def detect_language(self, audio_path: Path, sample_duration: int = 30) -> tuple[str | None, float, bool]:
         """
         Detect the language of audio file with confidence scoring.
         
@@ -94,10 +94,10 @@ class LocalWhisperTranscriber:
                 - has_speech: True if speech detected, False if instrumental/silent
         """
         self._load_model()
-        
+
         try:
             logger.info(f"Detecting language (sampling {sample_duration}s)...")
-            
+
             # Quick transcription for language detection only
             segments_iter, info = self.model.transcribe(
                 str(audio_path),
@@ -109,7 +109,7 @@ class LocalWhisperTranscriber:
                 condition_on_previous_text=False,
                 temperature=0.0
             )
-            
+
             # Consume segments to check if any speech was detected
             segment_count = 0
             total_text_length = 0
@@ -119,20 +119,20 @@ class LocalWhisperTranscriber:
                 # Only sample first portion for speed
                 if segment.end > sample_duration:
                     break
-            
+
             # Get detected language from info
             detected_lang = info.language
             detected_prob = info.language_probability
-            
+
             # Determine if speech is present
             has_speech = segment_count > 0 and total_text_length > 10
-            
+
             if has_speech:
                 logger.info(f"Detected: {detected_lang} (confidence: {detected_prob:.1%}, {segment_count} segments)")
             else:
                 logger.info("No speech detected (instrumental or silent)")
                 return None, 0.0, False
-            
+
             # Return language if confidence is reasonable
             # Lower threshold (0.3) because even uncertain detection is better than none
             if detected_prob >= 0.3:
@@ -140,26 +140,27 @@ class LocalWhisperTranscriber:
             else:
                 logger.info(f"Low confidence ({detected_prob:.1%}), will use auto-detect during transcription")
                 return None, detected_prob, True
-                
+
         except Exception as e:
             logger.warning(f"Language detection failed: {e}")
             # Assume speech present, let transcription handle it
             return None, 0.0, True
-    
+
     def _load_model(self) -> None:
         """Load faster-whisper model with GPU optimization and resource management."""
         if self.model is not None:
             return
-        
+
         try:
-            from faster_whisper import WhisperModel
             import os
-            
+
+            from faster_whisper import WhisperModel
+
             # Suppress download progress bars
             os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
-            
+
             logger.info(f"Loading {self.model_size} model...")
-            
+
             if self.gpu_config.has_gpu:
                 device = "cuda"
                 compute_type = "float16" if self.gpu_config.use_fp16 else "float32"
@@ -168,17 +169,17 @@ class LocalWhisperTranscriber:
                 device = "cpu"
                 compute_type = "int8"
                 num_workers = 4
-            
+
             # Acquire GPU resource lock to prevent concurrent model loading
             gpu_manager = get_gpu_manager()
             model_id = f"faster-whisper-{self.model_size}"
-            
+
             # Check if we need to unload a different model
             current_model = gpu_manager.get_current_model()
             if current_model and current_model != model_id:
                 logger.info(f"Unloading previous model: {current_model}")
                 gpu_manager.unload_current_model()
-            
+
             # Map model names to faster-whisper compatible names
             # faster-whisper uses "large-v3" for both regular and turbo variants
             model_name = self.model_size
@@ -186,7 +187,7 @@ class LocalWhisperTranscriber:
                 # faster-whisper automatically uses turbo variant for large-v3
                 model_name = "large-v3"
                 logger.info("Using large-v3 (turbo variant)")
-            
+
             self.model = WhisperModel(
                 model_name,
                 device=device,
@@ -194,13 +195,13 @@ class LocalWhisperTranscriber:
                 compute_type=compute_type,
                 num_workers=num_workers
             )
-            
+
             # Register model with GPU manager
             gpu_manager._current_model = model_id
             gpu_manager._current_model_obj = self.model
-            
+
             logger.info("Model loaded successfully")
-            
+
         except ImportError as e:
             raise TranscriptionError(
                 "faster-whisper not installed. Install with: pip install faster-whisper",
@@ -211,30 +212,30 @@ class LocalWhisperTranscriber:
                 f"Failed to load Whisper model: {e}",
                 context={"model": self.model_size, "error": str(e)}
             )
-    
-    def _generate_output_path(self, audio_path: Path, output_path: Optional[Path]) -> Path:
+
+    def _generate_output_path(self, audio_path: Path, output_path: Path | None) -> Path:
         """Generate clean output path removing intermediate suffixes."""
         if output_path is not None:
             return output_path
-        
+
         clean_stem = audio_path.stem
         for suffix in ['_16k_mono', '_standardized', '_converted']:
             clean_stem = clean_stem.replace(suffix, '')
         return audio_path.parent / f"{clean_stem}_transcription.txt"
-    
-    def _validate_and_correct_duration(self, audio_path: Path, duration: Optional[float]) -> Optional[float]:
+
+    def _validate_and_correct_duration(self, audio_path: Path, duration: float | None) -> float | None:
         """Validate duration and correct if WAV header is incorrect."""
         if not duration:
             logger.warning("Could not determine audio duration")
             return None
-        
+
         duration_mins = duration / 60
         logger.info(f"Audio duration: {duration:.1f}s ({duration_mins:.1f} minutes)")
-        
+
         # Sanity check - WAV files with wrong headers can report incorrect duration
         if duration > 7200:  # More than 2 hours seems suspicious
             logger.debug(f"WAV duration seems incorrect: {duration_mins:.1f} minutes, checking original file")
-            
+
             # Try to find original file
             for ext in ['.mp4', '.mp3']:
                 original_path = audio_path.parent / audio_path.name.replace("_16k_mono.wav", ext)
@@ -243,19 +244,19 @@ class LocalWhisperTranscriber:
                     if original_duration and original_duration < duration:
                         logger.debug(f"Using original file duration: {original_duration:.1f}s instead of {duration:.1f}s")
                         return original_duration
-        
+
         return duration
-    
+
     def _detect_silence_if_needed(
         self,
         audio_path: Path,
-        duration: Optional[float],
+        duration: float | None,
         detect_silence: bool
-    ) -> List[Tuple[float, float]]:
+    ) -> list[tuple[float, float]]:
         """Detect silence periods if enabled and audio is long enough."""
         if not detect_silence or not duration or duration <= 300:
             return []
-        
+
         logger.info("Analyzing audio for silence periods...")
         try:
             silence_periods = detect_silence_periods(
@@ -275,8 +276,8 @@ class LocalWhisperTranscriber:
         except Exception as e:
             logger.warning(f"Silence detection failed: {e}")
             return []
-    
-    def _prepare_initial_prompt(self, initial_prompt: Optional[str], music_mode: bool) -> str:
+
+    def _prepare_initial_prompt(self, initial_prompt: str | None, music_mode: bool) -> str:
         """Prepare initial prompt for transcription."""
         if not initial_prompt:
             return "Meeting recording. High-quality transcription with proper punctuation and capitalization."
@@ -285,8 +286,8 @@ class LocalWhisperTranscriber:
         else:
             # Custom vocabulary - combine with meeting context
             return f"Meeting recording. High-quality transcription with proper punctuation and capitalization. Key terms: {initial_prompt}"
-    
-    def _estimate_transcription_time(self, duration: Optional[float]) -> tuple:
+
+    def _estimate_transcription_time(self, duration: float | None) -> tuple:
         """Estimate transcription time based on GPU."""
         if "4090" in self.gpu_config.gpu_name:
             expected_speed = 11.5
@@ -296,21 +297,21 @@ class LocalWhisperTranscriber:
             expected_speed = 6.0
         else:
             expected_speed = 4.0
-        
+
         estimated_time = (duration / expected_speed) if duration else 60
         return expected_speed, estimated_time
-    
+
     def _execute_transcription(
         self,
         audio_path: Path,
-        duration: Optional[float],
+        duration: float | None,
         initial_prompt: str
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Execute the actual transcription and return segments."""
         if duration:
             duration_mins = int(duration / 60)
             logger.info(f"Transcribing {duration_mins} min audio with Whisper {self.model_size}...")
-        
+
         segments_iter, info = self.model.transcribe(
             str(audio_path),
             language=self.language,
@@ -322,7 +323,7 @@ class LocalWhisperTranscriber:
             condition_on_previous_text=False,
             initial_prompt=initial_prompt
         )
-        
+
         segments = []
         for segment in segments_iter:
             segments.append({
@@ -330,15 +331,15 @@ class LocalWhisperTranscriber:
                 "end": segment.end,
                 "text": segment.text
             })
-        
+
         return segments
-    
+
     def transcribe(
         self,
         audio_path: Path,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
         detect_silence: bool = True,
-        initial_prompt: Optional[str] = None,
+        initial_prompt: str | None = None,
         music_mode: bool = False
     ) -> Path:
         """
@@ -358,27 +359,27 @@ class LocalWhisperTranscriber:
             TranscriptionError: If transcription fails
         """
         logger.info(f"Starting local transcription: {audio_path.name}")
-        
+
         # Prepare paths and validate duration
         output_path = self._generate_output_path(audio_path, output_path)
         duration = get_audio_duration(audio_path)
         duration = self._validate_and_correct_duration(audio_path, duration)
-        
+
         # Detect silence periods if needed
         silence_periods = self._detect_silence_if_needed(audio_path, duration, detect_silence)
-        
+
         # Load model and prepare prompt
         self._load_model()
         prompt = self._prepare_initial_prompt(initial_prompt, music_mode)
-        
+
         # Execute transcription
         logger.info("Starting GPU-accelerated transcription...")
         start_time = time.time()
-        
+
         try:
             segments = self._execute_transcription(audio_path, duration, prompt)
             elapsed = time.time() - start_time
-            
+
             if not segments:
                 if duration and duration < 1.0:
                     raise TranscriptionError(
@@ -390,12 +391,12 @@ class LocalWhisperTranscriber:
                         "No speech detected in audio (file may be silent or contain only noise)",
                         context={"audio_path": str(audio_path), "duration": duration}
                     )
-            
+
             # Log performance
             if duration and elapsed > 0:
                 speed_ratio = duration / elapsed
                 logger.info(f"Transcription completed in {elapsed:.1f}s ({speed_ratio:.1f}x realtime)")
-            
+
             # Write transcript
             self._write_clean_transcript(
                 segments=segments,
@@ -404,10 +405,10 @@ class LocalWhisperTranscriber:
                 duration=duration,
                 silence_periods=silence_periods
             )
-            
+
             logger.info(f"Transcript saved: {output_path}")
             return output_path
-            
+
         except TranscriptionError:
             raise
         except Exception as e:
@@ -418,14 +419,14 @@ class LocalWhisperTranscriber:
         finally:
             if self.gpu_config.has_gpu:
                 clear_gpu_cache()
-    
+
     def _write_clean_transcript(
         self,
-        segments: List[Dict[str, Any]],
+        segments: list[dict[str, Any]],
         output_path: Path,
         audio_path: Path,
-        duration: Optional[float],
-        silence_periods: List[Tuple[float, float]]
+        duration: float | None,
+        silence_periods: list[tuple[float, float]]
     ) -> None:
         """
         Write clean transcript with minimal metadata.
@@ -441,27 +442,27 @@ class LocalWhisperTranscriber:
             # Extract meeting info
             meeting_name = audio_path.stem.replace("_16k_mono", "").replace("_converted", "")
             date_str = extract_date_from_filename(audio_path.name)
-            
+
             # Write header
             f.write(f"Meeting: {meeting_name}\n")
             if date_str:
                 f.write(f"Date: {format_date(date_str)}\n")
             else:
                 f.write(f"Date: {datetime.now().strftime('%B %d, %Y')}\n")
-            
+
             if duration:
                 f.write(f"Duration: {format_duration_minutes(duration)}\n")
             else:
                 f.write("Duration: Unknown\n")
-            
+
             f.write("\n")
             f.write("─" * 80 + "\n")
             f.write("\n")
             f.flush()
-            
+
             # Write transcript with silence markers
             last_end = 0.0
-            
+
             for segment in segments:
                 # Check for silence gaps
                 if silence_periods:
@@ -484,16 +485,16 @@ class LocalWhisperTranscriber:
                                 f.write(marker)
                                 f.flush()
                                 break
-                
+
                 # Write segment (without timestamp)
                 text = segment["text"].strip()
-                
+
                 if text:
                     f.write(f"{text}\n\n")
                     f.flush()
-                
+
                 last_end = segment["end"]
-            
+
             # Final flush
             f.flush()
 
@@ -501,7 +502,7 @@ class LocalWhisperTranscriber:
 def transcribe_with_local_whisper(
     audio_path: Path,
     model_size: str = "large-v3",
-    language: Optional[str] = "en",
+    language: str | None = "en",
     **kwargs
 ) -> Path:
     """

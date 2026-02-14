@@ -23,17 +23,17 @@ Model Selection:
 """
 
 import io
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from scribe.providers.base import AIProvider, ProviderConfig
 
 
 class GeminiProvider(AIProvider):
     """Google Gemini API provider."""
-    
+
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
-        
+
         try:
             from google import genai
             from google.genai import types
@@ -42,33 +42,33 @@ class GeminiProvider(AIProvider):
                 "google-genai package not installed. "
                 "Install with: pip install google-genai"
             )
-        
+
         self.genai = genai
         self.types = types
         self.client = genai.Client(api_key=config.api_key)
-    
+
     def chat_completion(
         self,
-        messages: List[Dict[str, Any]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        messages: list[dict[str, Any]],
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a chat completion using Gemini.
         
         Supports both Gemini 2.5 and Gemini 3 models with automatic parameter adaptation.
         """
-        
+
         # Convert OpenAI-style messages to Gemini format
         # Gemini uses system_instruction separately and contents for user/assistant
         system_instruction = None
         contents = []
-        
+
         for msg in messages:
             role = msg["role"]
             content = msg["content"]
-            
+
             if role == "system":
                 system_instruction = content
             elif role == "user":
@@ -77,18 +77,18 @@ class GeminiProvider(AIProvider):
                 # Gemini doesn't have explicit assistant role in contents
                 # We'll add it as a user message with context
                 contents.append(f"[Previous response: {content}]")
-        
+
         # Build config
         config_params = {}
-        
+
         if system_instruction:
             config_params["system_instruction"] = system_instruction
-        
+
         # Temperature handling
         # Gemini 3: Strongly recommend keeping at default 1.0
         # Gemini 2.5: Can be tuned
         is_gemini_3 = "gemini-3" in self.config.model.lower()
-        
+
         if temperature is not None:
             if is_gemini_3 and temperature != 1.0:
                 # Warn but allow override
@@ -99,10 +99,10 @@ class GeminiProvider(AIProvider):
                     f"Using temperature={temperature} may degrade performance."
                 )
             config_params["temperature"] = temperature
-        
+
         if max_tokens:
             config_params["max_output_tokens"] = max_tokens
-        
+
         # Thinking configuration for Gemini 3
         # Gemini 3 uses thinking_config with thinking_level: "low", "high" (Pro)
         # or "minimal", "low", "medium", "high" (Flash)
@@ -115,7 +115,7 @@ class GeminiProvider(AIProvider):
                     thinking_level = "minimal"
                 else:
                     thinking_level = "low"
-            
+
             config_params["thinking_config"] = self.types.ThinkingConfig(
                 thinking_level=thinking_level
             )
@@ -123,28 +123,28 @@ class GeminiProvider(AIProvider):
             # Gemini 2.5: Use thinking_budget (0 to disable)
             if kwargs.get("disable_thinking", False):
                 config_params["thinking_config"] = self.types.ThinkingConfig(thinking_budget=0)
-        
+
         # Create config object if we have params
         config = None
         if config_params:
             config = self.types.GenerateContentConfig(**config_params)
-        
+
         # Generate content
         response = self.client.models.generate_content(
             model=self.config.model,
             contents=contents,
             config=config,
         )
-        
+
         # Extract text from response
         # Gemini may return None for response.text if there's a safety filter or error
         response_text = response.text
-        
+
         # Check for safety ratings or blocked content
         if response_text is None:
             import logging
             logger = logging.getLogger(__name__)
-            
+
             # Check if response was blocked
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
@@ -152,27 +152,27 @@ class GeminiProvider(AIProvider):
                     logger.warning(f"Gemini response blocked: {candidate.finish_reason}")
                 if hasattr(candidate, 'safety_ratings'):
                     logger.warning(f"Safety ratings: {candidate.safety_ratings}")
-            
+
             # Return empty string instead of None
             response_text = ""
-        
+
         # Extract usage info (Gemini provides token counts)
         usage = {
             "prompt_tokens": getattr(response.usage_metadata, "prompt_token_count", 0),
             "completion_tokens": getattr(response.usage_metadata, "candidates_token_count", 0),
             "total_tokens": getattr(response.usage_metadata, "total_token_count", 0),
         }
-        
+
         return {
             "content": response_text,
             "usage": usage,
             "model": self.config.model,
         }
-    
+
     def transcribe_audio(
         self,
         audio_path: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         **kwargs
     ) -> str:
         """
@@ -185,7 +185,7 @@ class GeminiProvider(AIProvider):
             "Gemini does not currently support dedicated audio transcription. "
             "Use OpenAI provider for transcription."
         )
-    
+
     def generate_image(
         self,
         prompt: str,
@@ -195,57 +195,57 @@ class GeminiProvider(AIProvider):
         """Generate an image using Imagen."""
         import logging
         logger = logging.getLogger(__name__)
-        
+
         # Parse size to aspect ratio
         aspect_ratio = self._size_to_aspect_ratio(size)
-        
+
         # Determine image size (1K or 2K) - only for Standard/Ultra models
         image_size = "1K"
         if "2048" in size or kwargs.get("quality") == "hd":
             image_size = "2K"
-        
+
         # Build config
         config_params = {
             "number_of_images": 1,
             "aspect_ratio": aspect_ratio,
         }
-        
+
         # Get model, but ignore non-Imagen models (e.g., gpt-image-1, dall-e-3)
         model = kwargs.get("model", "imagen-4.0-generate-001")
         if not model.startswith("imagen"):
             logger.warning(f"Non-Imagen model '{model}' specified, using imagen-4.0-generate-001")
             model = "imagen-4.0-generate-001"
-        
+
         # Only add image_size for Standard/Ultra models
         if "ultra" in model.lower() or "standard" in model.lower():
             config_params["image_size"] = image_size
-        
+
         # Person generation setting
         # Default to "allow_adult" (Imagen's default) for maximum flexibility
         # Options: "dont_allow", "allow_adult", "allow_all" (not available in EU/UK/CH/MENA)
         person_gen = kwargs.get("person_generation", "allow_adult")
         config_params["person_generation"] = person_gen
-        
+
         config = self.types.GenerateImagesConfig(**config_params)
-        
+
         # Generate image
         response = self.client.models.generate_images(
             model=model,
             prompt=prompt,
             config=config,
         )
-        
+
         if not response.generated_images:
             raise ValueError("Imagen API returned no images")
-        
+
         # Get the first image
         generated_image = response.generated_images[0]
-        
+
         # Convert PIL Image to bytes
         img_byte_arr = io.BytesIO()
         generated_image.image.save(img_byte_arr, format='PNG')
         return img_byte_arr.getvalue()
-    
+
     def analyze_image(
         self,
         image_data: bytes,
@@ -254,18 +254,18 @@ class GeminiProvider(AIProvider):
     ) -> str:
         """Analyze an image using Gemini vision."""
         from PIL import Image
-        
+
         # Convert bytes to PIL Image
         image = Image.open(io.BytesIO(image_data))
-        
+
         # Generate content with image and text
         response = self.client.models.generate_content(
             model=self.config.model,
             contents=[image, prompt],
         )
-        
+
         return response.text
-    
+
     def _size_to_aspect_ratio(self, size: str) -> str:
         """
         Convert size string to Imagen aspect ratio.
@@ -285,5 +285,5 @@ class GeminiProvider(AIProvider):
             "2048x3584": "9:16",
             "3584x2048": "16:9",
         }
-        
+
         return size_map.get(size, "1:1")  # Default to square

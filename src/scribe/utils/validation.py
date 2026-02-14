@@ -7,7 +7,6 @@ file paths, API keys, and configuration values with clear error messages.
 
 import re
 from pathlib import Path
-from typing import Optional, Union
 
 from scribe.exceptions import ValidationError
 from scribe.utils.platform import normalize_path
@@ -37,17 +36,17 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
     """
     if not path or not path.strip():
         raise ValidationError("File path cannot be empty")
-    
+
     try:
         # Normalize path (handles quotes, ~, etc.)
         validated_path = normalize_path(path)
-        
+
         if must_exist and not validated_path.exists():
             raise ValidationError(
                 f"File does not exist: {validated_path}",
                 context={"path": str(validated_path)}
             )
-        
+
         if must_exist and must_be_file and not validated_path.is_file():
             if validated_path.is_dir():
                 raise ValidationError(
@@ -59,9 +58,9 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
                     f"Path exists but is not a regular file: {validated_path}",
                     context={"path": str(validated_path)}
                 )
-        
+
         return validated_path
-        
+
     except ValidationError:
         raise
     except Exception as e:
@@ -88,22 +87,22 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
     """
     if not path or not path.strip():
         raise ValidationError("Directory path cannot be empty")
-    
+
     try:
         validated_path = normalize_path(path)
-        
+
         if must_exist and not validated_path.exists():
             raise ValidationError(
                 f"Directory does not exist: {validated_path}",
                 context={"path": str(validated_path)}
             )
-        
+
         if validated_path.exists() and not validated_path.is_dir():
             raise ValidationError(
                 f"Path exists but is not a directory: {validated_path}",
                 context={"path": str(validated_path)}
             )
-        
+
         if create and not validated_path.exists():
             try:
                 validated_path.mkdir(parents=True, exist_ok=True)
@@ -112,9 +111,9 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
                     f"Cannot create directory: {validated_path}",
                     context={"error": str(e)}
                 )
-        
+
         return validated_path
-        
+
     except ValidationError:
         raise
     except Exception as e:
@@ -124,7 +123,7 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
         )
 
 
-def validate_audio_file(path: Union[str, Path]) -> Path:
+def validate_audio_file(path: str | Path) -> Path:
     """
     Validate audio file format and readability.
     
@@ -140,21 +139,21 @@ def validate_audio_file(path: Union[str, Path]) -> Path:
     # Convert to Path if string
     if isinstance(path, str):
         path = Path(path)
-    
+
     # Check file exists
     if not path.exists():
         raise ValidationError(
             f"Audio file does not exist: {path}",
             context={"path": str(path)}
         )
-    
+
     # Check file size (must be > 0)
     if path.stat().st_size == 0:
         raise ValidationError(
             f"Audio file is empty: {path}",
             context={"path": str(path)}
         )
-    
+
     # Check file extension
     valid_extensions = {".wav", ".mp3", ".mp4", ".m4a", ".mkv", ".flac", ".ogg", ".webm"}
     if path.suffix.lower() not in valid_extensions:
@@ -166,7 +165,7 @@ def validate_audio_file(path: Union[str, Path]) -> Path:
                 "supported": ", ".join(sorted(valid_extensions))
             }
         )
-    
+
     # Check file is readable
     try:
         with open(path, "rb") as f:
@@ -177,11 +176,11 @@ def validate_audio_file(path: Union[str, Path]) -> Path:
             f"Cannot read audio file: {path}",
             context={"path": str(path), "error": str(e)}
         )
-    
+
     return path
 
 
-def validate_api_key(api_key: Optional[str], service: str = "OpenAI") -> str:
+def validate_api_key(api_key: str | None, service: str = "OpenAI") -> str:
     """
     Validate API key format.
     
@@ -200,15 +199,15 @@ def validate_api_key(api_key: Optional[str], service: str = "OpenAI") -> str:
             f"{service} API key is required",
             context={"service": service}
         )
-    
+
     api_key = api_key.strip()
-    
+
     if not api_key:
         raise ValidationError(
             f"{service} API key cannot be empty",
             context={"service": service}
         )
-    
+
     # OpenAI-specific validation
     if service.lower() == "openai":
         if not api_key.startswith("sk-"):
@@ -216,13 +215,13 @@ def validate_api_key(api_key: Optional[str], service: str = "OpenAI") -> str:
                 "Invalid OpenAI API key format (should start with 'sk-')",
                 context={"key_prefix": api_key[:10] if len(api_key) >= 10 else api_key}
             )
-        
+
         if len(api_key) < 20:
             raise ValidationError(
                 "OpenAI API key is too short",
                 context={"length": len(api_key)}
             )
-    
+
     return api_key
 
 
@@ -247,34 +246,34 @@ def sanitize_meeting_name(name: str) -> str:
     """
     if not name or not name.strip():
         raise ValidationError("Meeting name cannot be empty")
-    
+
     # Remove leading/trailing whitespace
     name = name.strip()
-    
+
     # Remove or replace invalid filename characters
     # Invalid: < > : " / \ | ? *
     invalid_chars = r'[<>:"/\\|?*]'
     name = re.sub(invalid_chars, "", name)
-    
+
     # Replace spaces and multiple underscores with single underscore
     name = re.sub(r'\s+', "_", name)
     name = re.sub(r'_+', "_", name)
-    
+
     # Remove leading/trailing underscores
     name = name.strip("_")
-    
+
     # Limit length (leave room for timestamps and extensions)
     max_length = 100
     if len(name) > max_length:
         name = name[:max_length].rstrip("_")
-    
+
     # Ensure we still have a valid name
     if not name:
         raise ValidationError(
             "Meeting name contains only invalid characters",
             context={"original": name}
         )
-    
+
     return name
 
 
@@ -294,9 +293,9 @@ def validate_model_name(model: str, valid_models: list) -> str:
     """
     if not model or not model.strip():
         raise ValidationError("Model name cannot be empty")
-    
+
     model = model.strip().lower()
-    
+
     if model not in [m.lower() for m in valid_models]:
         raise ValidationError(
             f"Invalid model: {model}",
@@ -305,12 +304,12 @@ def validate_model_name(model: str, valid_models: list) -> str:
                 "valid_models": ", ".join(valid_models)
             }
         )
-    
+
     # Return original case from valid_models
     for valid_model in valid_models:
         if valid_model.lower() == model:
             return valid_model
-    
+
     return model
 
 
@@ -407,17 +406,17 @@ def validate_language_code(language: str) -> str:
     """
     if not language or not language.strip():
         raise ValidationError("Language cannot be empty")
-    
+
     language = language.strip().lower()
-    
+
     # Check if it's already a valid 2-letter code
     if len(language) == 2 and language.isalpha():
         return language
-    
+
     # Check aliases
     if language in LANGUAGE_ALIASES:
         return LANGUAGE_ALIASES[language]
-    
+
     # Not found - provide helpful error
     raise ValidationError(
         f"Unknown language: '{language}'",
@@ -446,13 +445,13 @@ def validate_port(port: int) -> int:
             "Port must be an integer",
             context={"provided": port, "type": type(port).__name__}
         )
-    
+
     if not (1 <= port <= 65535):
         raise ValidationError(
             "Port must be between 1 and 65535",
             context={"provided": port}
         )
-    
+
     return port
 
 
@@ -476,13 +475,13 @@ def validate_positive_number(value: float, name: str = "value", min_value: float
             f"{name} must be a number",
             context={"provided": value, "type": type(value).__name__}
         )
-    
+
     if value < min_value:
         raise ValidationError(
             f"{name} must be >= {min_value}",
             context={"provided": value, "min": min_value}
         )
-    
+
     return float(value)
 
 
@@ -501,18 +500,18 @@ def validate_email(email: str) -> str:
     """
     if not email or not email.strip():
         raise ValidationError("Email address cannot be empty")
-    
+
     email = email.strip().lower()
-    
+
     # Basic email regex
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    
+
     if not re.match(email_pattern, email):
         raise ValidationError(
             "Invalid email address format",
             context={"provided": email}
         )
-    
+
     return email
 
 
@@ -531,16 +530,16 @@ def validate_url(url: str) -> str:
     """
     if not url or not url.strip():
         raise ValidationError("URL cannot be empty")
-    
+
     url = url.strip()
-    
+
     # Basic URL regex
     url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
-    
+
     if not re.match(url_pattern, url, re.IGNORECASE):
         raise ValidationError(
             "Invalid URL format",
             context={"provided": url}
         )
-    
+
     return url

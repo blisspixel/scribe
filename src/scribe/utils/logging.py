@@ -244,7 +244,6 @@ module handles both with appropriate detail levels.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -283,20 +282,20 @@ def setup_logging(
     # Create log directory
     log_dir = Path(log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate log filename
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"scribe_{session_name}_{timestamp}.log"
-    
+
     # Get root logger
     logger = logging.getLogger("scribe")
     logger.setLevel(logging.DEBUG)
-    
+
     # Clear existing handlers
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
-    
+
     # File handler with detailed format
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(file_level)
@@ -305,7 +304,7 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     file_handler.setFormatter(file_formatter)
-    
+
     # Console handler with Rich formatting
     console_handler = RichHandler(
         console=console,
@@ -316,11 +315,11 @@ def setup_logging(
         tracebacks_show_locals=False,
     )
     console_handler.setLevel(console_level)
-    
+
     # Add handlers
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-    
+
     # Log startup info
     logger.info(f"Logging initialized for session: {session_name}")
     logger.debug(f"Log file: {log_file}")
@@ -334,7 +333,7 @@ def setup_logging(
         _ui_config.capabilities.is_ci,
         _ui_config.capabilities.is_windows,
     )
-    
+
     return logger
 
 
@@ -359,13 +358,14 @@ def log_system_info(logger: logging.Logger) -> None:
         logger: Logger instance
     """
     import platform
+
     from scribe.utils.gpu import detect_gpu_capability
-    
+
     logger.debug("System Information:")
     logger.debug(f"  Platform: {platform.system()} {platform.release()}")
     logger.debug(f"  Python: {platform.python_version()}")
     logger.debug(f"  Machine: {platform.machine()}")
-    
+
     # GPU info
     try:
         gpu_info = detect_gpu_capability()
@@ -379,7 +379,7 @@ def log_system_info(logger: logging.Logger) -> None:
         logger.debug(f"  GPU: Detection failed ({e})")
 
 
-def log_exception(logger: logging.Logger, exc: Exception, context: Optional[dict] = None) -> None:
+def log_exception(logger: logging.Logger, exc: Exception, context: dict | None = None) -> None:
     """
     Log exception with context.
     
@@ -389,10 +389,10 @@ def log_exception(logger: logging.Logger, exc: Exception, context: Optional[dict
         context: Optional context dictionary
     """
     logger.error(f"Exception: {type(exc).__name__}: {exc}")
-    
+
     if context:
         logger.error(f"Context: {context}")
-    
+
     logger.debug("Exception details:", exc_info=True)
 
 

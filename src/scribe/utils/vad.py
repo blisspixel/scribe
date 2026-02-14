@@ -147,7 +147,7 @@ providing precise vocal timestamps that enable complete, accurate lyric extracti
 """
 
 from pathlib import Path
-from typing import List, Dict
+
 import torch
 
 from scribe.utils.logging import get_logger
@@ -161,7 +161,7 @@ class VocalActivityDetector:
     
     Optimized for singing voice detection on isolated vocal tracks.
     """
-    
+
     def __init__(
         self,
         threshold: float = 0.35,
@@ -181,32 +181,32 @@ class VocalActivityDetector:
         self.speech_pad_ms = speech_pad_ms
         self.model = None
         self.utils = None
-    
+
     def _load_model(self):
         """Load Silero VAD model from torch hub."""
         if self.model is not None:
             return
-        
+
         try:
-            import warnings
-            import sys
             import os
-            
+            import sys
+            import warnings
+
             logger.info("Loading Silero VAD model...")
-            
+
             # Suppress all torch.hub output
             old_stdout = sys.stdout
             old_stderr = sys.stderr
-            
+
             try:
                 # Redirect stdout/stderr to suppress cache messages
                 sys.stdout = open(os.devnull, 'w')
                 sys.stderr = open(os.devnull, 'w')
-                
+
                 # Suppress warnings
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=UserWarning)
-                    
+
                     # Load from torch hub
                     self.model, self.utils = torch.hub.load(
                         repo_or_dir='snakers4/silero-vad',
@@ -222,18 +222,18 @@ class VocalActivityDetector:
                 sys.stderr.close()
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
-            
+
             logger.info("Silero VAD model loaded")
-            
+
         except Exception as e:
             logger.error(f"Failed to load Silero VAD: {e}")
             raise
-    
+
     def detect_vocal_segments(
         self,
         audio_path: Path,
         sample_rate: int = 16000
-    ) -> List[Dict[str, float]]:
+    ) -> list[dict[str, float]]:
         """
         Detect vocal segments in audio.
         
@@ -245,30 +245,30 @@ class VocalActivityDetector:
             List of segments: [{"start": 10.5, "end": 14.2}, ...]
         """
         self._load_model()
-        
+
         try:
             import torchaudio
-            
+
             logger.info(f"Detecting vocal segments in: {audio_path.name}")
-            
+
             # Load audio
             wav, sr = torchaudio.load(str(audio_path))
-            
+
             # Convert to mono if stereo
             if wav.shape[0] > 1:
                 wav = wav.mean(dim=0, keepdim=True)
-            
+
             # Resample if needed
             if sr != sample_rate:
                 resampler = torchaudio.transforms.Resample(sr, sample_rate)
                 wav = resampler(wav)
-            
+
             # Flatten to 1D
             wav = wav.squeeze()
-            
+
             # Get timestamps using Silero VAD
             (get_speech_timestamps, _, read_audio, _, _) = self.utils
-            
+
             speech_timestamps = get_speech_timestamps(
                 wav,
                 self.model,
@@ -278,7 +278,7 @@ class VocalActivityDetector:
                 speech_pad_ms=self.speech_pad_ms,
                 return_seconds=True
             )
-            
+
             # Convert to our format
             segments = [
                 {
@@ -287,23 +287,23 @@ class VocalActivityDetector:
                 }
                 for ts in speech_timestamps
             ]
-            
+
             # Merge segments that are very close together (< 500ms gap)
             merged_segments = self._merge_close_segments(segments, gap_threshold=0.5)
-            
+
             logger.info(f"Detected {len(merged_segments)} vocal segments")
-            
+
             return merged_segments
-            
+
         except Exception as e:
             logger.error(f"VAD failed: {e}")
             raise
-    
+
     def _merge_close_segments(
         self,
-        segments: List[Dict[str, float]],
+        segments: list[dict[str, float]],
         gap_threshold: float = 0.5
-    ) -> List[Dict[str, float]]:
+    ) -> list[dict[str, float]]:
         """
         Merge segments with small gaps between them.
         
@@ -316,24 +316,24 @@ class VocalActivityDetector:
         """
         if not segments:
             return []
-        
+
         merged = [segments[0].copy()]
-        
+
         for seg in segments[1:]:
             last = merged[-1]
             gap = seg["start"] - last["end"]
-            
+
             if gap < gap_threshold:
                 # Merge with previous segment
                 last["end"] = seg["end"]
             else:
                 # Add as new segment
                 merged.append(seg.copy())
-        
+
         return merged
 
 
-def detect_vocal_segments(audio_path: Path) -> List[Dict[str, float]]:
+def detect_vocal_segments(audio_path: Path) -> list[dict[str, float]]:
     """
     Convenience function for vocal segment detection.
     

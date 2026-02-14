@@ -7,29 +7,28 @@ so it's been preserved with minimal changes.
 """
 
 import os
-import sys
-import time
-import socket
-import tempfile
-import uuid
 import shutil
+import socket
 import subprocess
+import sys
+import tempfile
 import threading
+import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Tuple
 
-from scribe.models.config import ScribeConfig
 from scribe.exceptions import ProcessError
-from scribe.utils.platform import get_ffmpeg_path, get_obs_executable_path
+from scribe.models.config import ScribeConfig
 from scribe.utils.logging import get_logger
+from scribe.utils.platform import get_ffmpeg_path, get_obs_executable_path
 
 logger = get_logger(__name__)
 
 # Try to import OBS WebSocket library
 try:
-    from obsws_python import reqs as obs_reqs
     from obsws_python import error as obs_error
+    from obsws_python import reqs as obs_reqs
     OBS_AVAILABLE = True
 except ImportError:
     OBS_AVAILABLE = False
@@ -47,7 +46,7 @@ class OBSRecorder:
     - MKV to MP4 remuxing
     - File detection and finalization
     """
-    
+
     def __init__(self, config: ScribeConfig):
         """
         Initialize OBS recorder.
@@ -60,7 +59,7 @@ class OBSRecorder:
         self.obs_port = config.obs_port
         self.obs_password = config.obs_password
         self.output_folder = config.output_folder
-    
+
     def record(self, meeting_name: str) -> Path:
         """
         Start OBS recording and wait for completion.
@@ -75,7 +74,7 @@ class OBSRecorder:
             ProcessError: If recording fails
         """
         logger.info(f"Starting OBS recording: {meeting_name}")
-        
+
         # Ensure output directory is writable
         try:
             self._ensure_dir_writable(self.output_folder)
@@ -84,9 +83,9 @@ class OBSRecorder:
             fallback = Path(tempfile.gettempdir()) / "obs_recordings"
             logger.warning(f"Falling back to: {fallback}")
             self.output_folder = self._ensure_dir_writable(fallback)
-        
+
         stop_event = self._start_stop_listener()
-        
+
         try:
             # Try WebSocket control first
             if OBS_AVAILABLE:
@@ -94,14 +93,14 @@ class OBSRecorder:
             else:
                 logger.info("Using CLI fallback (obsws_python not available)")
                 return self._record_with_cli(meeting_name, stop_event)
-                
+
         except Exception as e:
             logger.error(f"Recording failed: {e}")
             raise ProcessError(
                 f"OBS recording failed: {e}",
                 context={"meeting": meeting_name}
             )
-    
+
     def _record_with_websocket(
         self,
         meeting_name: str,
@@ -112,27 +111,27 @@ class OBSRecorder:
             with self._connect_obs() as client:
                 self._set_record_dir_if_possible(client, str(self.output_folder))
                 eff_dir = self._get_effective_record_dir(client, str(self.output_folder))
-                
+
                 self._start_recording_if_needed(client)
                 # Set timestamp AFTER recording has started
                 start_ts = time.time()
                 self._wait_for_stop_with_input(client, stop_event)
-                
+
                 # Find recorded file
                 mp4, mkv = self._newest_media_since(eff_dir, start_ts)
                 media = mp4 or mkv
-                
+
                 if not media:
                     raise ProcessError("Could not locate recorded media")
-                
+
                 ext = ".mp4" if mp4 else ".mkv"
                 return self._finalize_recording(media, ext, meeting_name, start_ts)
-                
+
         except Exception as ws_err:
             logger.debug(f"WebSocket failed: {ws_err}")
             # Silently fall back to CLI mode
             return self._record_with_cli(meeting_name, stop_event)
-    
+
     def _record_with_cli(
         self,
         meeting_name: str,
@@ -145,44 +144,45 @@ class OBSRecorder:
         It tries to launch OBS with recording, but provides clear feedback
         if recording doesn't actually start.
         """
-        from scribe.utils.logging import console
         from pathlib import Path as PathType
-        
+
+        from scribe.utils.logging import console
+
         console.print("[yellow]Using CLI fallback mode[/yellow]")
         console.print("[dim]Note: CLI mode has limited control over OBS[/dim]")
         console.print("[yellow]Please start recording manually in OBS[/yellow]")
         console.print()
-        
+
         # CLI mode: Don't try to launch OBS automatically
         # User must start OBS and recording manually
         # This is intentional - CLI mode has limited control
         console.print("[dim]CLI mode does not auto-launch OBS[/dim]")
         console.print("[dim]Please ensure OBS is running and start recording manually[/dim]")
-        
+
         # Set timestamp AFTER we've sent the start recording command
         # This ensures we only detect files created after this point
         start_ts = time.time()
-        
+
         # Monitor for new file with better feedback
         console.print()
         console.print("[cyan]Waiting for recording to start...[/cyan]")
         console.print("[dim]Looking for new media files in:[/dim]")
-        
+
         candidate_dirs = [
             self.output_folder,
             Path.home() / "Videos",
             Path.home() / "Videos" / "OBS",
         ]
-        
+
         for d in candidate_dirs:
             if d.exists():
                 console.print(f"[dim]  • {d}[/dim]")
-        
+
         found_path = None
         ext = ".mp4"
         deadline = time.time() + 30
         last_check_msg = 0
-        
+
         while time.time() < deadline and not found_path:
             for d in candidate_dirs:
                 if not d.exists():
@@ -192,16 +192,16 @@ class OBSRecorder:
                 if found_path:
                     ext = ".mp4" if mp4 else ".mkv"
                     break
-            
+
             # Show progress every 5 seconds
             elapsed = time.time() - start_ts
             if elapsed - last_check_msg >= 5:
                 remaining = int(deadline - time.time())
                 console.print(f"[dim]Still waiting... ({remaining}s remaining)[/dim]")
                 last_check_msg = elapsed
-            
+
             time.sleep(0.5)
-        
+
         if not found_path:
             console.print()
             console.print("[bold red]ERROR: No recording file detected[/bold red]")
@@ -220,37 +220,37 @@ class OBSRecorder:
                 "No media file appeared after starting recording. "
                 "OBS may not be recording. Please check OBS window and start recording manually."
             )
-        
+
         # Convert string path to Path object for consistent handling
         found_path = PathType(found_path)
-        
+
         console.print(f"[green]Recording detected: {found_path.name}[/green]")
         console.print()
-        
+
         # Now start the stop listener thread (after file is detected)
         threading.Thread(
             target=self._wait_for_stop_cli,
             args=(stop_event,),
             daemon=True
         ).start()
-        
+
         # Wait for user to type 'stop'
         stop_event.wait()
-        
+
         console.print()
         console.print("[cyan]Waiting for OBS to finalize file...[/cyan]")
         console.print("[dim]This may take a few seconds...[/dim]")
-        
+
         # Give OBS time to stop and finalize the file
         # The --stoprecording command was sent by _wait_for_stop_cli
         time.sleep(3)
-        
+
         # Wait for file to stabilize (stop growing)
         self._wait_until_file_finalized(str(found_path))
-        
+
         return self._finalize_recording(found_path, ext, meeting_name, start_ts)
-    
-    def _try_connect_to_running_obs(self, hosts: list, ports: list) -> Optional[object]:
+
+    def _try_connect_to_running_obs(self, hosts: list, ports: list) -> object | None:
         """
         Attempt to connect to already-running OBS instance.
         
@@ -318,8 +318,8 @@ class OBSRecorder:
                             except Exception:
                                 pass
         return None
-    
-    def _wait_for_obs_startup(self, hosts: list, ports: list, max_wait_seconds: int) -> Optional[object]:
+
+    def _wait_for_obs_startup(self, hosts: list, ports: list, max_wait_seconds: int) -> object | None:
         """
         Wait for OBS to start and attempt connection with retry.
         
@@ -327,7 +327,7 @@ class OBSRecorder:
         """
         # Wait a bit before first connection attempt to let OBS initialize
         time.sleep(1.0)
-        
+
         for attempt in range(int(max_wait_seconds * 2)):
             for h in hosts:
                 for p in ports:
@@ -357,7 +357,7 @@ class OBSRecorder:
                                     # Don't continue inner loops, wait and retry
                                     break
                                 raise
-                            
+
                         except ValueError as e:
                             if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
                                 logger.debug(f"Hostname validation failed for {h}:{p}")
@@ -382,7 +382,7 @@ class OBSRecorder:
                                     pass
             time.sleep(0.5)
         return None
-    
+
     @contextmanager
     def _connect_obs(self, max_wait_seconds: int = 15):
         """
@@ -394,18 +394,18 @@ class OBSRecorder:
         3. Retry with backoff during OBS startup
         """
         from scribe.utils.logging import console
-        
+
         # Prioritize IPv4 - WebSocket libraries have better IPv4 support
         hosts = [self.obs_host, "127.0.0.1"]
         if self.obs_host not in ["localhost", "127.0.0.1", "::1"]:
             hosts.append("::1")
-        
+
         ports = [self.obs_port]
         if self.obs_port != 4455:
             ports.append(4455)
-        
+
         console.print(f"[cyan]Connecting to OBS (checking {hosts[0]}:{ports[0]})...[/cyan]")
-        
+
         # Try connecting to already-running OBS
         client = self._try_connect_to_running_obs(hosts, ports)
         if client:
@@ -418,7 +418,7 @@ class OBSRecorder:
                 except Exception:
                     pass
             return
-        
+
         # Try launching OBS
         obs_exe = get_obs_executable_path()
         if obs_exe:
@@ -433,7 +433,7 @@ class OBSRecorder:
                 )
             except Exception as e:
                 logger.warning(f"Could not launch OBS: {e}")
-            
+
             # Wait for OBS to start
             console.print("[cyan]Waiting for OBS to start...[/cyan]")
             client = self._wait_for_obs_startup(hosts, ports, max_wait_seconds)
@@ -447,9 +447,9 @@ class OBSRecorder:
                     except Exception:
                         pass
                 return
-        
+
         raise ConnectionError("Could not connect to OBS WebSocket")
-    
+
     def _set_record_dir_if_possible(self, client, out_dir: str) -> bool:
         """Set OBS recording directory."""
         out_dir = out_dir.replace("\\", "/")
@@ -458,42 +458,42 @@ class OBSRecorder:
             if getattr(status, "output_active", False):
                 logger.warning("Recording already active, skipping directory set")
                 return False
-            
+
             try:
                 cur = client.get_record_directory()
                 cur_dir = getattr(cur, "record_directory", None) or ""
             except Exception:
                 cur_dir = ""
-            
+
             if cur_dir and os.path.normcase(cur_dir) == os.path.normcase(out_dir):
                 logger.debug("Record directory already set")
                 return True
-            
+
             client.set_record_directory(out_dir)
             logger.info(f"Recording directory set to: {out_dir}")
             return True
-            
+
         except obs_error.OBSSDKRequestError as e:
             logger.warning(f"SetRecordDirectory rejected: {e}")
             return False
         except Exception as e:
             logger.warning(f"Could not set record directory: {e}")
             return False
-    
+
     def _start_recording_if_needed(self, client) -> None:
         """Start recording if not already active."""
         from scribe.utils.logging import console
-        
+
         status = client.get_record_status()
         if getattr(status, "output_active", False):
             console.print("[yellow]Recording already active[/yellow]")
             logger.info("Recording already active")
             return
-        
+
         console.print("[cyan]Starting recording...[/cyan]")
         logger.info("Starting recording...")
         client.start_record()
-        
+
         # Verify recording started
         for _ in range(25):
             time.sleep(0.2)
@@ -502,14 +502,15 @@ class OBSRecorder:
                 console.print("Recording started")
                 logger.info("Recording started successfully")
                 return
-        
+
         raise ProcessError("Recording failed to start within 5 seconds")
-    
+
     def _wait_for_stop_with_input(self, client, stop_event: threading.Event) -> None:
         """Wait for user to stop recording."""
-        from scribe.utils.logging import console
         from rich.panel import Panel
-        
+
+        from scribe.utils.logging import console
+
         if sys.stdin and sys.stdin.isatty():
             console.print()
             console.print(Panel.fit(
@@ -520,24 +521,24 @@ class OBSRecorder:
                 padding=(1, 2)
             ))
             console.print()
-        
+
         last_active = True
         recording_time = 0
         last_update = 0
-        
+
         # Print initial status line using raw stdout for proper \r handling
         sys.stdout.write("Recording: 00:00")
         sys.stdout.flush()
-        
+
         stop_requested = False
-        
+
         while True:
             try:
                 status = client.get_record_status()
                 active = getattr(status, "output_active", False)
             except Exception:
                 active = last_active
-            
+
             if stop_event.is_set() and active and not stop_requested:
                 # Clear the timer line and print stop message (only once)
                 sys.stdout.write("\r" + " " * 50 + "\r")
@@ -549,7 +550,7 @@ class OBSRecorder:
                     client.stop_record()
                 except Exception as e:
                     logger.warning(f"Stop command failed: {e}")
-            
+
             if not active and last_active:
                 # Clear the timer line and print stopped message
                 sys.stdout.write("\r" + " " * 50 + "\r")
@@ -557,7 +558,7 @@ class OBSRecorder:
                 console.print("[green]Recording stopped[/green]")
                 logger.info("Recording stopped")
                 return
-            
+
             # Update recording time every second
             if active:
                 recording_time += 0.5
@@ -569,15 +570,16 @@ class OBSRecorder:
                     # Use raw stdout with \r for proper overwriting
                     sys.stdout.write(f"\rRecording: {mins:02d}:{secs:02d}")
                     sys.stdout.flush()
-            
+
             last_active = active
             time.sleep(0.5)
-    
+
     def _wait_for_stop_cli(self, stop_event: threading.Event) -> None:
         """CLI fallback stop listener with timer."""
-        from scribe.utils.logging import console
         from rich.panel import Panel
-        
+
+        from scribe.utils.logging import console
+
         if sys.stdin and sys.stdin.isatty():
             console.print()
             console.print(Panel.fit(
@@ -588,15 +590,15 @@ class OBSRecorder:
                 padding=(1, 2)
             ))
             console.print()
-        
+
         # Show elapsed time timer
         start_time = time.time()
         last_update = 0
-        
+
         # Print initial timer using raw stdout for proper \r handling
         sys.stdout.write("Recording: 00:00")
         sys.stdout.flush()
-        
+
         while not stop_event.is_set():
             elapsed = time.time() - start_time
             # Update display every second
@@ -608,11 +610,11 @@ class OBSRecorder:
                 sys.stdout.write(f"\rRecording: {mins:02d}:{secs:02d}")
                 sys.stdout.flush()
             time.sleep(0.2)
-        
+
         # Clear the timer line
         sys.stdout.write("\r" + " " * 50 + "\r")
         sys.stdout.flush()
-        
+
         console.print("[cyan]Sending stop signal...[/cyan]")
         logger.info("Sending stop signal...")
         obs_exe = get_obs_executable_path()
@@ -628,17 +630,17 @@ class OBSRecorder:
                 )
             except Exception:
                 logger.warning("Could not signal OBS to stop")
-    
+
     def _start_stop_listener(self) -> threading.Event:
         """Start background thread listening for stop command."""
         from scribe.utils.logging import console
         ev = threading.Event()
-        
+
         def _listen():
             if not sys.stdin or not sys.stdin.isatty():
                 logger.debug("stdin not available for stop listener")
                 return
-            
+
             # Windows-specific: use msvcrt for non-blocking input
             if sys.platform == 'win32':
                 try:
@@ -673,11 +675,11 @@ class OBSRecorder:
             else:
                 # Unix: use select for non-blocking
                 self._listen_readline(ev, console)
-        
+
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
         return ev
-    
+
     def _listen_readline(self, ev: threading.Event, console) -> None:
         """Fallback readline-based input listener."""
         try:
@@ -696,7 +698,7 @@ class OBSRecorder:
                     break
         except Exception as e:
             logger.debug(f"Stop listener error: {e}")
-    
+
     def _get_effective_record_dir(self, client, fallback: str) -> str:
         """Get effective recording directory from OBS."""
         try:
@@ -707,40 +709,40 @@ class OBSRecorder:
         except Exception:
             pass
         return os.path.abspath(fallback)
-    
+
     def _newest_media_since(
         self,
         dir_path: str,
         since_ts: float
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """Find newest MP4/MKV file since timestamp."""
         best_mp4 = (None, -1.0)
         best_mkv = (None, -1.0)
-        
+
         try:
             entries = os.listdir(dir_path)
         except Exception:
             return None, None
-        
+
         for name in entries:
             lower = name.lower()
             if not (lower.endswith(".mp4") or lower.endswith(".mkv")):
                 continue
-            
+
             p = os.path.join(dir_path, name)
             try:
                 c = os.path.getctime(p)
             except Exception:
                 continue
-            
+
             if c >= since_ts - 120:
                 if lower.endswith(".mp4") and c > best_mp4[1]:
                     best_mp4 = (p, c)
                 if lower.endswith(".mkv") and c > best_mkv[1]:
                     best_mkv = (p, c)
-        
+
         return best_mp4[0], best_mkv[0]
-    
+
     def _wait_until_file_finalized(
         self,
         path: str,
@@ -751,7 +753,7 @@ class OBSRecorder:
         last = -1
         stable = 0.0
         waited = 0.0
-        
+
         while waited < max_wait:
             try:
                 size = os.path.getsize(path)
@@ -759,7 +761,7 @@ class OBSRecorder:
                 time.sleep(0.5)
                 waited += 0.5
                 continue
-            
+
             if size == last:
                 stable += 0.5
                 if stable >= idle_seconds:
@@ -767,10 +769,10 @@ class OBSRecorder:
             else:
                 stable = 0.0
                 last = size
-            
+
             time.sleep(0.5)
             waited += 0.5
-    
+
     def _finalize_recording(
         self,
         media_path: str,
@@ -780,10 +782,10 @@ class OBSRecorder:
     ) -> Path:
         """Finalize recording file."""
         from scribe.utils.logging import console
-        
+
         src_path = media_path
         target_ext = ".mp4"
-        
+
         # Remux MKV to MP4 if needed
         if ext == ".mkv":
             console.print("[cyan]Converting MKV to MP4...[/cyan]")
@@ -801,15 +803,15 @@ class OBSRecorder:
             else:
                 target_ext = ".mkv"
                 console.print("[yellow]FFmpeg not found, keeping MKV format[/yellow]")
-        
+
         # Move to final location
         final_name = self._safe_filename(meeting_name, start_ts, target_ext)
         final_path = self.output_folder / final_name
-        
+
         try:
             if Path(src_path).parent != self.output_folder:
                 self._ensure_dir_writable(self.output_folder)
-            
+
             try:
                 os.replace(src_path, str(final_path))
             except Exception:
@@ -820,22 +822,22 @@ class OBSRecorder:
                     pass
         except Exception as e:
             raise ProcessError(f"Failed to place final file: {e}")
-        
+
         logger.info(f"Recording saved: {final_path}")
         return final_path
-    
+
     def _safe_filename(self, label: str, ts: float, ext: str = ".mp4") -> str:
         """Generate safe filename with timestamp."""
         base = "".join(c for c in label if c not in r'<>:"/\\|?*').strip() or "Recording"
         dt = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(ts))
         return f"{base}_{dt}{ext}"
-    
+
     def _remux_mkv_to_mp4(self, mkv_path: str, mp4_path: str) -> bool:
         """Remux MKV to MP4 using ffmpeg."""
         ffmpeg_path = get_ffmpeg_path()
         if not ffmpeg_path:
             return False
-        
+
         try:
             cmd = [str(ffmpeg_path), "-y", "-i", mkv_path, "-c", "copy", mp4_path]
             subprocess.check_call(
@@ -846,7 +848,7 @@ class OBSRecorder:
             return os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0
         except Exception:
             return False
-    
+
     def _port_listening(self, host: str, port: int, timeout: float = 0.75) -> bool:
         """Check if port is listening."""
         try:
@@ -854,12 +856,12 @@ class OBSRecorder:
                 return True
         except OSError:
             return False
-    
+
     def _ensure_dir_writable(self, path: Path) -> Path:
         """Ensure directory exists and is writable."""
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
-        
+
         # Test write permissions
         probe = path / f".write_test_{uuid.uuid4().hex}.tmp"
         try:
@@ -867,5 +869,5 @@ class OBSRecorder:
             probe.unlink()
         except Exception as e:
             raise ProcessError(f"Directory not writable: {path}. Reason: {e}")
-        
+
         return path

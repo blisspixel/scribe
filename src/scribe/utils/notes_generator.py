@@ -123,15 +123,15 @@ Despite limitations, this provides real value:
 The multi-step approach produces better notes than single-step generation.
 """
 
-import os
 import json
+import os
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from scribe.exceptions import ScribeError
 from scribe.utils.logging import get_logger
@@ -187,10 +187,10 @@ class NotesGenerator:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         model: str = "gpt-5",
         max_retries: int = 3,
-        provider_name: Optional[str] = None
+        provider_name: str | None = None
     ):
         """
         Initialize notes generator with AI provider configuration.
@@ -207,7 +207,7 @@ class NotesGenerator:
         # Try to use provider system
         self.provider = None
         self.use_provider = False
-        
+
         try:
             from scribe.providers import get_provider
             self.provider = get_provider(
@@ -218,7 +218,7 @@ class NotesGenerator:
             )
             self.use_provider = True
             logger.info(f"Using provider: {self.provider.config.provider_name} | model: {self.provider.config.model}")
-            
+
             # Set config from provider
             self.config = NotesConfig(
                 api_key=self.provider.config.api_key,
@@ -226,11 +226,11 @@ class NotesGenerator:
                 max_retries=max_retries
             )
             self.api_key = self.provider.config.api_key
-            
+
         except Exception as e:
             logger.debug(f"Provider system not available, falling back to OpenAI: {e}")
             self.use_provider = False
-            
+
             # Fallback to OpenAI - get key from environment if not provided
             self.api_key = api_key or os.getenv("OPENAI_API_KEY")
             if not self.api_key:
@@ -257,7 +257,7 @@ class NotesGenerator:
     def generate_notes(
         self,
         transcript_path: Path,
-        output_path: Optional[Path] = None
+        output_path: Path | None = None
     ) -> Path:
         """
         Generate structured meeting notes from transcript.
@@ -288,8 +288,8 @@ class NotesGenerator:
         else:
             # Map-Reduce path with overlap for zero loss
             logger.info(f"Segmented transcript into {len(segments)} chunks for full coverage")
-            summaries: List[str] = []
-            breakdowns: List[Dict[str, Any]] = []
+            summaries: list[str] = []
+            breakdowns: list[dict[str, Any]] = []
             for i, seg in enumerate(segments):
                 logger.info(f"Processing segment {i+1}/{len(segments)}")
                 seg_summary = self._generate_detailed_summary(seg)
@@ -339,7 +339,7 @@ class NotesGenerator:
         try:
             outputs = getattr(resp, "output", None)
             if outputs:
-                buff: List[str] = []
+                buff: list[str] = []
                 for item in outputs:
                     typ = getattr(item, "type", None) or (isinstance(item, dict) and item.get("type"))
                     if typ == "message":
@@ -363,7 +363,7 @@ class NotesGenerator:
 
         return ""
 
-    def _build_json_schema_prompt_hint(self, schema: Dict[str, Any]) -> str:
+    def _build_json_schema_prompt_hint(self, schema: dict[str, Any]) -> str:
         """
         Prompt fallback to approximate strict JSON via schema description.
         """
@@ -379,33 +379,33 @@ class NotesGenerator:
         Lightweight JSON fixer for common issues if the model returns near-JSON in fallback mode.
         """
         import re
-        
+
         raw = s.strip()
-        
+
         # Trim code fences if present
         if raw.startswith("```"):
             raw = raw.strip("`").lstrip()
             if raw.lower().startswith("json"):
                 raw = raw[4:].lstrip()
-        
+
         # Remove any text before the first {
         first_brace = raw.find("{")
         if first_brace > 0:
             raw = raw[first_brace:]
-        
+
         # Remove any text after the last }
         last_brace = raw.rfind("}")
         if last_brace > 0 and last_brace < len(raw) - 1:
             raw = raw[:last_brace + 1]
-        
+
         # Fix missing commas between array elements (common Grok issue)
         # Pattern: "text" "text" should be "text", "text"
         raw = re.sub(r'"\s+"', '", "', raw)
-        
+
         # Fix missing commas between array elements with newlines
         # Pattern: "text"\n"text" should be "text",\n"text"
         raw = re.sub(r'"\s*\n\s*"', '",\n"', raw)
-        
+
         # Balance braces if obviously off by one
         open_braces = raw.count("{")
         close_braces = raw.count("}")
@@ -418,7 +418,7 @@ class NotesGenerator:
                 last_close = raw.rfind("}")
                 if last_close > 0:
                     raw = raw[:last_close] + raw[last_close + 1:]
-        
+
         # Balance brackets - add missing ] before the final }
         open_brackets = raw.count("[")
         close_brackets = raw.count("]")
@@ -430,13 +430,13 @@ class NotesGenerator:
                 raw = raw[:last_brace_pos] + missing_brackets + raw[last_brace_pos:]
             else:
                 raw = raw + ("]" * (open_brackets - close_brackets))
-        
+
         # Remove trailing commas in common places
         raw = re.sub(r',(\s*[}\]])', r'\1', raw)
-        
+
         # Fix common quote issues
         raw = raw.replace('\\"', '"')  # Unescape quotes
-        
+
         return raw
 
     @retry(
@@ -450,8 +450,8 @@ class NotesGenerator:
         reasoning_effort: str = "medium",
         verbosity: str = "low",
         phase: str = "unknown",
-        json_schema: Optional[Dict[str, Any]] = None
-    ) -> Tuple[str, Dict[str, Any]]:
+        json_schema: dict[str, Any] | None = None
+    ) -> tuple[str, dict[str, Any]]:
         """
         Call AI provider with retry logic (provider-agnostic).
 
@@ -472,26 +472,26 @@ class NotesGenerator:
             if self.use_provider:
                 # Provider-agnostic path
                 messages = [{"role": "user", "content": input_text}]
-                
+
                 # Determine max tokens based on phase
                 max_tokens = 4000 if json_schema else 2000
-                
+
                 response = self.provider.chat_completion_with_json(
                     messages=messages,
                     json_schema=json_schema,
                     max_tokens=max_tokens
                 )
-                
+
                 content = response["content"]
                 tokens_used = response.get("usage", {}).get("total_tokens", 0)
-                
+
             else:
                 # OpenAI Responses API path (legacy)
                 prompt_text = input_text
                 if json_schema is not None:
                     prompt_text = self._build_json_schema_prompt_hint(json_schema) + "\n\n" + input_text
 
-                params: Dict[str, Any] = {
+                params: dict[str, Any] = {
                     "model": self.config.model,
                     "input": [
                         {"role": "user", "content": [{"type": "input_text", "text": prompt_text}]}
@@ -541,7 +541,7 @@ class NotesGenerator:
 
     # ---------------- Pipeline Steps ----------------
 
-    def _read_transcript(self, path: Path) -> Dict[str, str]:
+    def _read_transcript(self, path: Path) -> dict[str, str]:
         if not path.exists():
             raise NotesGenerationError(f"Transcript file not found: {path}")
         if not path.is_file():
@@ -580,8 +580,8 @@ class NotesGenerator:
 
         logger.debug(f"Transcript validation passed: {word_count} words")
 
-    def _extract_metadata(self, content: str) -> Dict[str, str]:
-        metadata: Dict[str, str] = {}
+    def _extract_metadata(self, content: str) -> dict[str, str]:
+        metadata: dict[str, str] = {}
         lines = content.split("\n")
         for line in lines[:10]:
             line = line.strip()
@@ -626,7 +626,7 @@ Write 2-4 paragraphs. Be comprehensive but concise."""
         self,
         transcript: str,
         summary: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         logger.info("Generating analytical breakdown...")
 
         breakdown_schema = {
@@ -722,8 +722,8 @@ CRITICAL FORMATTING RULES:
     def _refine_and_polish(
         self,
         transcript: str,
-        breakdown: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        breakdown: dict[str, Any]
+    ) -> dict[str, Any]:
         logger.info("Refining and polishing breakdown...")
 
         breakdown_schema = {
@@ -813,7 +813,7 @@ Each bullet should be a complete sentence with maximum detail density."""
         text: str,
         approx_token_per_chunk: int = 220_000,
         overlap_tokens: int = 2_000
-    ) -> Optional[List[str]]:
+    ) -> list[str] | None:
         """
         Deterministic, overlap-aware segmentation that guarantees every character is processed.
         Returns None if the text seems short enough for a single pass.
@@ -827,7 +827,7 @@ Each bullet should be a complete sentence with maximum detail density."""
         if len(text) <= size:
             return None
 
-        chunks: List[str] = []
+        chunks: list[str] = []
         i = 0
         n = len(text)
         while i < n:
@@ -844,7 +844,7 @@ Each bullet should be a complete sentence with maximum detail density."""
             i = max(end - overlap, end)
         return chunks
 
-    def _merge_breakdowns(self, parts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge_breakdowns(self, parts: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Lossless union of multiple breakdowns with simple de-dup on exact sentences.
         Conflicts are preserved as distinct bullets.
@@ -855,8 +855,8 @@ Each bullet should be a complete sentence with maximum detail density."""
             "future_state_business", "future_state_technical",
             "next_steps"
         ]
-        merged: Dict[str, List[str]] = {k: [] for k in keys}
-        seen: Dict[str, set] = {k: set() for k in keys}
+        merged: dict[str, list[str]] = {k: [] for k in keys}
+        seen: dict[str, set] = {k: set() for k in keys}
         for b in parts:
             for k in keys:
                 for bullet in b.get(k, []):
@@ -868,7 +868,7 @@ Each bullet should be a complete sentence with maximum detail density."""
 
     # ---------------- Validation, Formatting, Helpers ----------------
 
-    def _validate_breakdown_keys(self, breakdown: Dict[str, Any]) -> None:
+    def _validate_breakdown_keys(self, breakdown: dict[str, Any]) -> None:
         required_keys = [
             "current_state_business", "current_state_technical",
             "drivers", "blockers",
@@ -881,7 +881,7 @@ Each bullet should be a complete sentence with maximum detail density."""
             if not isinstance(breakdown[key], list):
                 raise ValidationError(f"Section {key} must be a list of strings")
 
-    def _validate_output(self, breakdown: Dict[str, Any]) -> float:
+    def _validate_output(self, breakdown: dict[str, Any]) -> float:
         """
         Soft validation for presence and detail density.
         Returns confidence score (0.0-1.0).
@@ -952,12 +952,12 @@ Each bullet should be a complete sentence with maximum detail density."""
     def _format_markdown(
         self,
         summary: str,
-        breakdown: Dict[str, Any],
-        metadata: Dict[str, str]
+        breakdown: dict[str, Any],
+        metadata: dict[str, str]
     ) -> str:
         logger.debug("Formatting output as Markdown...")
 
-        lines: List[str] = []
+        lines: list[str] = []
         meeting_name = metadata.get("meeting_name", "Meeting Notes")
         lines.append(f"# Meeting Notes: {meeting_name}")
         lines.append("")
