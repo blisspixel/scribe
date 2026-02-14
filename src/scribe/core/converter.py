@@ -8,6 +8,7 @@ This module provides conversion to optimal formats for transcription:
 
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -45,7 +46,7 @@ class Converter:
         input_file: Path,
         duration: float | None,
         show_progress: bool,
-        progress_callback: callable | None
+        progress_callback: Callable[[float], None] | None
     ) -> dict:
         """
         Analyze audio for optimal loudness normalization parameters.
@@ -181,7 +182,7 @@ class Converter:
         input_file: Path,
         duration: float | None,
         show_progress: bool,
-        progress_callback: callable | None
+        progress_callback: Callable[[float], None] | None
     ) -> None:
         """Execute ffmpeg conversion with progress monitoring."""
         start_time = time.time()
@@ -274,7 +275,7 @@ class Converter:
         sample_rate: int = 16000,
         channels: int = 1,
         show_progress: bool = True,
-        progress_callback: callable | None = None
+        progress_callback: Callable[[float], None] | None = None
     ) -> Path:
         """
         Convert audio/video to optimized WAV for transcription.

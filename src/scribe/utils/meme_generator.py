@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 from dotenv import find_dotenv, load_dotenv
 from openai import OpenAI
@@ -863,7 +864,7 @@ def generate_meeting_meme(
     api_key: str | None = None,
     config: MemeConfig | None = None,
     show_reasoning: bool = False,
-    progress_callback: callable | None = None,
+    progress_callback: Callable[[int, int, float | None], None] | None = None,
     provider_name: str | None = None,
     enable_bakeoff: bool = False
 ) -> dict[str, Any] | None:
