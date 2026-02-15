@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Local meme text compositor using Pillow.
 
@@ -8,8 +10,19 @@ and safety filters.
 import logging
 import textwrap
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from PIL import Image, ImageDraw, ImageFont
+if TYPE_CHECKING:
+    from PIL import Image as PILImage
+    from PIL import ImageDraw as PILImageDraw
+    from PIL import ImageFont as PILImageFont
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:  # Optional dependency
+    Image = None  # type: ignore[assignment]
+    ImageDraw = None  # type: ignore[assignment]
+    ImageFont = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +69,11 @@ class MemeCompositor:
 
     def overlay_text(
         self,
-        image: Image.Image,
+        image: PILImage.Image,
         top_text: str = "",
         bottom_text: str = "",
         font_size_ratio: float = 0.08
-    ) -> Image.Image:
+    ) -> PILImage.Image:
         """
         Overlay meme text on image with Impact font styling.
         
@@ -74,6 +87,7 @@ class MemeCompositor:
             Image with text overlaid
         """
         # Work on a copy
+        self._ensure_pillow_available()
         img = image.copy()
         draw = ImageDraw.Draw(img)
         width, height = img.size
@@ -111,8 +125,8 @@ class MemeCompositor:
 
     def _draw_caption(
         self,
-        draw: ImageDraw.ImageDraw,
-        font: ImageFont.FreeTypeFont,
+        draw: Any,
+        font: Any,
         text: str,
         width: int,
         height: int,
@@ -174,3 +188,11 @@ class MemeCompositor:
             )
 
             current_y += line_height + line_spacing
+
+    @staticmethod
+    def _ensure_pillow_available() -> None:
+        """Raise a clear error when Pillow is not installed."""
+        if Image is None or ImageDraw is None or ImageFont is None:
+            raise RuntimeError(
+                "Pillow is required for meme text composition. Install with: pip install Pillow"
+            )
