@@ -30,7 +30,9 @@ class AnthropicProvider(AIProvider):
             model: Model to use (default: claude-3-5-sonnet-20241022)
             config: Provider configuration (optional)
         """
-        if not ANTHROPIC_AVAILABLE:
+        # Check the runtime symbol rather than only the import flag so tests
+        # can patch Anthropic without requiring the package to be installed.
+        if Anthropic is None:
             raise ImportError("anthropic package not installed. Install with: pip install anthropic")
 
         # Handle both direct initialization and config-based initialization
