@@ -73,7 +73,7 @@ jobs:
 
       - name: Run unit tests (CI-safe subset)
         env:
-          OPENAI_API_KEY: test-key
+          OPENAI_API_KEY: sk-test-key
           XAI_API_KEY: test-key
           GEMINI_API_KEY: test-key
           ANTHROPIC_API_KEY: test-key
@@ -106,7 +106,7 @@ jobs:
 
       - name: Run unit tests with coverage
         env:
-          OPENAI_API_KEY: test-key
+          OPENAI_API_KEY: sk-test-key
           XAI_API_KEY: test-key
           GEMINI_API_KEY: test-key
           ANTHROPIC_API_KEY: test-key
