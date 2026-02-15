@@ -1647,16 +1647,16 @@ def joke(
     Example: scribe joke transcript.txt
     """
     try:
+        # Validate file is a text file
+        if transcript_file.suffix.lower() not in ['.txt', '.md']:
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            raise typer.Exit(1)
+
         config = ScribeConfig()
 
         if not config.openai_api_key:
             console.print("[bold red]Error:[/bold red] OpenAI API key not configured")
             console.print("[dim]Set SCRIBE_OPENAI_API_KEY in your .env file[/dim]")
-            raise typer.Exit(1)
-
-        # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
 
         # Display header
@@ -1784,16 +1784,16 @@ def meme(
     Example: scribe meme transcript.txt --show-reasoning
     """
     try:
+        # Validate file is a text file
+        if transcript_file.suffix.lower() not in ['.txt', '.md']:
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            raise typer.Exit(1)
+
         config = ScribeConfig()
 
         if not config.openai_api_key:
             console.print("[bold red]Error:[/bold red] OpenAI API key not configured")
             console.print("[dim]Set OPENAI_API_KEY or SCRIBE_OPENAI_API_KEY in your .env file[/dim]")
-            raise typer.Exit(1)
-
-        # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
 
         # Display header
@@ -1937,16 +1937,16 @@ def notes(
     Example: scribe notes transcript.txt --provider xai
     """
     try:
+        # Validate file is a text file
+        if transcript_file.suffix.lower() not in ['.txt', '.md']:
+            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+            raise typer.Exit(1)
+
         config = ScribeConfig()
 
         if not config.openai_api_key:
             console.print("[bold red]Error:[/bold red] OpenAI API key not configured")
             console.print("[dim]Set OPENAI_API_KEY in your .env file[/dim]")
-            raise typer.Exit(1)
-
-        # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
             raise typer.Exit(1)
 
         # Display header
