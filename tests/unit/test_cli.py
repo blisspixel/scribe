@@ -5,6 +5,7 @@ Tests command-line interface including argument parsing,
 command execution, and error handling.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -13,6 +14,11 @@ from typer.testing import CliRunner
 
 from scribe.cli.main import app
 from scribe.exceptions import ScribeError
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences for stable CLI assertions across environments."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 @pytest.fixture
@@ -51,20 +57,22 @@ class TestCLIHelp:
     def test_transcribe_help(self, cli_runner):
         """Test transcribe command help."""
         result = cli_runner.invoke(app, ["transcribe", "--help"])
+        output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
-        assert "audio" in result.stdout.lower() or "video" in result.stdout.lower()
-        assert "--method" in result.stdout
-        assert "--model" in result.stdout
-        assert "--language" in result.stdout
-        assert "--no-joke" in result.stdout
+        assert "audio" in output.lower() or "video" in output.lower()
+        assert "--method" in output
+        assert "--model" in output
+        assert "--language" in output
+        assert "--no-joke" in output
 
     def test_record_help(self, cli_runner):
         """Test record command help."""
         result = cli_runner.invoke(app, ["record", "--help"])
+        output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
-        assert "--name" in result.stdout
+        assert "--name" in output
 
     def test_joke_help(self, cli_runner):
         """Test joke command help."""
