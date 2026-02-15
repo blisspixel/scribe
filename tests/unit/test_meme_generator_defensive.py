@@ -331,7 +331,7 @@ class TestXAIImageProviderDefensive:
         )
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
-            with patch("requests.get") as mock_get:
+            with patch.object(XAIProvider, "_download_image_url", return_value=b"image_data") as mock_download:
                 mock_client = Mock()
 
                 # First call (b64_json) fails
@@ -340,17 +340,13 @@ class TestXAIImageProviderDefensive:
                     Mock(data=[Mock(url="http://example.com/image.jpg", b64_json=None)])
                 ]
 
-                mock_response = Mock()
-                mock_response.content = b"image_data"
-                mock_response.raise_for_status = Mock()
-                mock_get.return_value = mock_response
-
                 mock_openai.return_value = mock_client
 
                 provider = XAIProvider(config)
                 result = provider.generate_image("test prompt")
 
                 assert result == b"image_data"
+                mock_download.assert_called_once_with("http://example.com/image.jpg", timeout=30)
 
     def test_xai_image_no_data_raises_error(self):
         """Test XAI image generation with no data raises error."""

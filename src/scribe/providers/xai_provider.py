@@ -3,6 +3,7 @@ XAI/Grok provider implementation.
 """
 
 import base64
+import urllib.request
 from typing import Any
 
 from openai import OpenAI  # XAI API is OpenAI-compatible
@@ -80,10 +81,7 @@ class XAIProvider(AIProvider):
         **kwargs
     ) -> bytes:
         """Generate an image using Grok."""
-        import base64
         import logging
-
-        import requests
         logger = logging.getLogger(__name__)
 
         # XAI uses grok-2-image-1212 model
@@ -143,14 +141,25 @@ class XAIProvider(AIProvider):
 
                 # Download the image
                 logger.debug(f"Downloading image from: {image_url}")
-                image_response = requests.get(image_url, timeout=30)
-                image_response.raise_for_status()
+                image_data = self._download_image_url(image_url, timeout=30)
                 logger.info("Successfully generated image with XAI URL format")
-                return image_response.content
+                return image_data
 
             except Exception as url_error:
                 logger.error(f"XAI image generation failed with both formats: {url_error}")
                 raise
+
+    def _download_image_url(self, image_url: str, timeout: int = 30) -> bytes:
+        """Download image bytes from URL with optional requests dependency."""
+        try:
+            import requests  # Optional dependency
+
+            response = requests.get(image_url, timeout=timeout)
+            response.raise_for_status()
+            return response.content
+        except ImportError:
+            with urllib.request.urlopen(image_url, timeout=timeout) as response:
+                return response.read()
 
     def analyze_image(
         self,
