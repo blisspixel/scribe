@@ -10,6 +10,7 @@ try:
     from anthropic import Anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
+    Anthropic = None
     ANTHROPIC_AVAILABLE = False
 
 from .base import AIProvider, ProviderConfig
