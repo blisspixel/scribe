@@ -238,9 +238,10 @@ class TestRecordCommand:
     def test_record_help_shows_options(self, cli_runner):
         """Test record command help shows all options."""
         result = cli_runner.invoke(app, ["record", "--help"])
+        output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
-        assert "--name" in result.stdout
+        assert "--name" in output
 
     @patch('scribe.cli.main.ScribeConfig')
     @patch('scribe.cli.main.OBSRecorder')
