@@ -10,6 +10,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+pytestmark = pytest.mark.requires_ffmpeg
+
 from scribe.core.transcriber import Transcriber
 from scribe.exceptions import TranscriptionError, ValidationError
 from scribe.models.config import ScribeConfig

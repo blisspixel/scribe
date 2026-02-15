@@ -299,5 +299,8 @@ site/
 # Keep test data
 !tests/data/**
 !tests/fixtures/**
+# Claude Code
+.claude/
+
 /.kiro
 /docs/research
