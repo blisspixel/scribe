@@ -538,6 +538,12 @@ def generate_transcript_joke(
     else:
         raise TypeError("api_key_or_cfg must be a str (API key), HumorConfig, or None")
 
+    # Backward compatibility: callers that pass an explicit API key historically
+    # expected OpenAI routing. Keep provider auto-selection only when no key is passed.
+    resolved_provider_name = provider_name
+    if resolved_provider_name is None and cfg.api_key:
+        resolved_provider_name = "openai"
+
     # Get provider (supports multi-provider) - XAI default for less filtered humor
     client: OpenAI | None = None
 
@@ -550,7 +556,7 @@ def generate_transcript_joke(
             feature="joke",
             api_key=None,  # Let factory get the right key for the provider
             model=cfg.model if cfg.model and cfg.model not in openai_models else None,
-            provider_name=provider_name,
+            provider_name=resolved_provider_name,
         )
         logger.info(f"Using provider: {provider.config.provider_name} | model: {provider.config.model}")
         use_provider = True
