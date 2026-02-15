@@ -242,9 +242,10 @@ class TestXAIProvider:
         mock_response.data = [Mock(url="https://example.com/grok-image.png")]
         mock_client.images.generate.return_value = mock_response
 
-        with patch('requests.get') as mock_get:
-            mock_get.return_value.content = b"fake_grok_image"
-
+        mock_requests = Mock()
+        mock_requests.get.return_value = Mock(content=b"fake_grok_image")
+        mock_requests.get.return_value.raise_for_status = Mock()
+        with patch.dict('sys.modules', {'requests': mock_requests}):
             provider = XAIProvider(config)
             result = provider.generate_image(prompt="Test Grok image")
 
