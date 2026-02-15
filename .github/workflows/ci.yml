@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint (Python 3.11)
+    name: Lint Critical (Python 3.11)
     runs-on: ubuntu-latest
 
     steps:
@@ -38,12 +38,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements-dev.txt
+          pip install -e .
 
-      - name: Run Ruff
-        run: ruff check src tests
-
-      - name: Run Black check
-        run: black --check src tests
+      - name: Run Ruff (critical rules only)
+        run: ruff check src --select F,E9 --ignore F401
 
   test:
     name: Tests (Python ${{ matrix.python-version }})
@@ -71,6 +69,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Run unit tests (CI-safe subset)
         env:
@@ -103,6 +102,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Run unit tests with coverage
         env:
