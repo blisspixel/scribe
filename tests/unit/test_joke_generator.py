@@ -444,7 +444,8 @@ class TestJokeGeneration:
         mock_provider.chat_completion.return_value = {"content": "Test joke about meetings"}
         mock_get_provider.return_value = mock_provider
 
-        result = generate_transcript_joke(transcript_path, "test-api-key")
+        # Pass config without explicit API key to force provider path
+        result = generate_transcript_joke(transcript_path, HumorConfig(api_key=None))
 
         # Verify provider was requested
         assert mock_get_provider.called
@@ -463,7 +464,8 @@ class TestJokeGeneration:
         mock_provider.chat_completion.side_effect = Exception("API Error")
         mock_get_provider.return_value = mock_provider
 
-        result = generate_transcript_joke(transcript_path, "test-api-key")
+        # Pass config without explicit API key to force provider path
+        result = generate_transcript_joke(transcript_path, HumorConfig(api_key=None))
 
         # Should return None on error, not crash
         assert result is None
@@ -480,7 +482,8 @@ class TestJokeGeneration:
         mock_provider.chat_completion.return_value = {"content": ""}  # Empty response
         mock_get_provider.return_value = mock_provider
 
-        result = generate_transcript_joke(transcript_path, "test-api-key")
+        # Pass config without explicit API key to force provider path
+        result = generate_transcript_joke(transcript_path, HumorConfig(api_key=None))
 
         # Should return None for empty joke
         assert result is None
