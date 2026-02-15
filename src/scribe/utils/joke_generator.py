@@ -539,6 +539,8 @@ def generate_transcript_joke(
         raise TypeError("api_key_or_cfg must be a str (API key), HumorConfig, or None")
 
     # Get provider (supports multi-provider) - XAI default for less filtered humor
+    client: OpenAI | None = None
+
     try:
         from scribe.providers import get_provider
         # Don't pass OpenAI-specific models to the provider factory
@@ -770,6 +772,17 @@ def generate_transcript_joke(
             return text, display_name
 
         except Exception as e:
+            # Network/provider connectivity can fail even when a direct OpenAI key path exists.
+            # In that case, fail over once to the OpenAI client path before giving up.
+            if use_provider and "connection error" in str(e).lower():
+                try:
+                    client = _build_client(cfg.api_key)
+                    use_provider = False
+                    logger.warning("Provider connection failed; falling back to OpenAI client")
+                    continue
+                except Exception as fallback_err:
+                    logger.debug(f"OpenAI fallback unavailable: {fallback_err}")
+
             last_err = e
             logger.warning(f"API call failed (attempt {attempt+1}): {e}")
             if attempt < len(backoffs):
