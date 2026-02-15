@@ -539,32 +539,36 @@ def generate_transcript_joke(
         raise TypeError("api_key_or_cfg must be a str (API key), HumorConfig, or None")
 
     # Backward compatibility: callers that pass an explicit API key historically
-    # expected OpenAI routing. Keep provider auto-selection only when no key is passed.
-    resolved_provider_name = provider_name
-    if resolved_provider_name is None and cfg.api_key:
-        resolved_provider_name = "openai"
+    # expected the direct OpenAI client path (which unit tests mock).
+    # Keep provider auto-selection only when no explicit key is supplied.
+    use_legacy_openai_path = provider_name is None and bool(cfg.api_key)
 
     # Get provider (supports multi-provider) - XAI default for less filtered humor
     client: OpenAI | None = None
 
-    try:
-        from scribe.providers import get_provider
-        # Don't pass OpenAI-specific models to the provider factory
-        # Let factory choose default if model is empty or OpenAI-specific
-        openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o", ""]
-        provider = get_provider(
-            feature="joke",
-            api_key=None,  # Let factory get the right key for the provider
-            model=cfg.model if cfg.model and cfg.model not in openai_models else None,
-            provider_name=resolved_provider_name,
-        )
-        logger.info(f"Using provider: {provider.config.provider_name} | model: {provider.config.model}")
-        use_provider = True
-    except Exception as e:
-        logger.warning(f"Provider system failed: {e}, falling back to OpenAI client")
+    if use_legacy_openai_path:
         use_provider = False
-        # Fallback to OpenAI client
         client = _build_client(cfg.api_key)
+        logger.info("Using direct OpenAI client path (explicit API key provided)")
+    else:
+        try:
+            from scribe.providers import get_provider
+            # Don't pass OpenAI-specific models to the provider factory
+            # Let factory choose default if model is empty or OpenAI-specific
+            openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o", ""]
+            provider = get_provider(
+                feature="joke",
+                api_key=None,  # Let factory get the right key for the provider
+                model=cfg.model if cfg.model and cfg.model not in openai_models else None,
+                provider_name=provider_name,
+            )
+            logger.info(f"Using provider: {provider.config.provider_name} | model: {provider.config.model}")
+            use_provider = True
+        except Exception as e:
+            logger.warning(f"Provider system failed: {e}, falling back to OpenAI client")
+            use_provider = False
+            # Fallback to OpenAI client
+            client = _build_client(cfg.api_key)
 
     logger.info(f"Archetype override: {cfg.archetype or 'None'}")
 
