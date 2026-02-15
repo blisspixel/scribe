@@ -3,6 +3,7 @@ OpenAI provider implementation.
 """
 
 import base64
+import urllib.request
 from typing import Any
 
 from openai import OpenAI
@@ -125,10 +126,15 @@ class OpenAIProvider(AIProvider):
             return base64.b64decode(response.data[0].b64_json)
         else:
             # Download from URL (dall-e-3)
-            import requests
             image_url = response.data[0].url
-            image_response = requests.get(image_url)
-            return image_response.content
+            try:
+                import requests  # Optional dependency
+                image_response = requests.get(image_url)
+                image_response.raise_for_status()
+                return image_response.content
+            except ImportError:
+                with urllib.request.urlopen(image_url) as resp:
+                    return resp.read()
 
     def analyze_image(
         self,

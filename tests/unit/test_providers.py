@@ -182,9 +182,10 @@ class TestOpenAIProvider:
         mock_response.data = [Mock(b64_json=None, url="https://example.com/image.png")]
         mock_client.images.generate.return_value = mock_response
 
-        with patch('requests.get') as mock_get:
-            mock_get.return_value.content = b"fake_image_data"
-
+        # Mock requests module as imported inside generate_image
+        mock_requests = Mock()
+        mock_requests.get.return_value = Mock(content=b"fake_image_data")
+        with patch.dict('sys.modules', {'requests': mock_requests}):
             provider = OpenAIProvider(config)
             result = provider.generate_image(prompt="Test image", model="dall-e-3")
 
