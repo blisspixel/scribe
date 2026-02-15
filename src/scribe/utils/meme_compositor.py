@@ -5,11 +5,18 @@ Overlays Impact font text on images to bypass AI text rendering issues
 and safety filters.
 """
 
+from __future__ import annotations
+
 import logging
 import textwrap
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None
+    ImageDraw = None
+    ImageFont = None
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,8 @@ class MemeCompositor:
         Args:
             font_path: Path to Impact.ttf font file (optional)
         """
+        if Image is None:
+            raise ImportError("Pillow package not installed. Install with: pip install Pillow")
         self.font_path = font_path
 
         # Try to find Impact font in common locations

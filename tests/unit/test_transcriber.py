@@ -15,6 +15,8 @@ from scribe.exceptions import TranscriptionError, ValidationError
 from scribe.models.config import ScribeConfig
 from scribe.models.session import TranscriptionSession
 
+pytestmark = pytest.mark.requires_ffmpeg
+
 
 class TestTranscriberInitialization:
     """Test Transcriber initialization and setup."""
