@@ -75,13 +75,15 @@ class TestURLDownloader:
         fake_file = tmp_path / "Test_Video.wav"
         fake_file.write_text("fake audio data")
 
-        # Mock yt-dlp
-        mock_ydl = MagicMock()
-        mock_ydl.extract_info.return_value = {
+        info = {
             "title": "Test Video",
             "duration": 180,
             "requested_downloads": [{"filepath": str(fake_file)}],
         }
+
+        # Mock yt-dlp — extract_info called twice: once dry-run, once with download
+        mock_ydl = MagicMock()
+        mock_ydl.extract_info.return_value = info
         mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
         mock_ydl.__exit__ = MagicMock(return_value=False)
 
@@ -285,7 +287,7 @@ class TestFindDownloadedFile:
         dl = URLDownloader(output_dir=tmp_path)
         info = {"requested_downloads": [{"filepath": str(fake_file)}]}
 
-        result = dl._find_downloaded_file(info, MagicMock())
+        result = dl._find_downloaded_file(info)
         assert result == fake_file
 
     def test_fallback_to_directory_scan(self, tmp_path):
@@ -295,7 +297,7 @@ class TestFindDownloadedFile:
         dl = URLDownloader(output_dir=tmp_path)
         info = {}  # No requested_downloads
 
-        result = dl._find_downloaded_file(info, MagicMock())
+        result = dl._find_downloaded_file(info)
         assert result == fake_file
 
     def test_ignores_non_media_files(self, tmp_path):
@@ -303,12 +305,12 @@ class TestFindDownloadedFile:
         txt_file.write_text("not media")
 
         dl = URLDownloader(output_dir=tmp_path)
-        result = dl._find_downloaded_file({}, MagicMock())
+        result = dl._find_downloaded_file({})
         assert result is None
 
     def test_returns_none_when_empty(self, tmp_path):
         dl = URLDownloader(output_dir=tmp_path)
-        result = dl._find_downloaded_file({}, MagicMock())
+        result = dl._find_downloaded_file({})
         assert result is None
 
 

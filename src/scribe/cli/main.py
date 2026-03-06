@@ -48,17 +48,24 @@ class CleanGroup(typer.core.TyperGroup):
         """Override to provide clean, minimal help."""
         from rich.console import Console
 
+        from scribe.utils.banner import show_banner
         from scribe.utils.branding import brand_header_markup
 
         console = Console()
 
-        # Header - tight, no fluff
-        console.print()
-        header = (
-            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
-            f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(header)
+        # Animated banner, falling back to simple text header
+        if show_banner(console):
+            console.print(
+                f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+            )
+        else:
+            console.print()
+            header = (
+                f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
+                f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+            )
+            console.print(header)
+
         console.print()
 
         # Commands - simple aligned list
@@ -584,6 +591,7 @@ def url_command(
     """
     unified_progress = None
     downloaded_file = None
+    config = None
     try:
         from scribe.core.downloader import URLDownloader
         from scribe.utils.validation import validate_media_url
@@ -861,18 +869,10 @@ def url_command(
                 meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
                 session.add_file(meme_path, "meme")
 
-        # Cleanup
+        # Cleanup intermediate transcription files
         if not keep_all:
             unified_progress.update_phase("finishing", 0.95, "Cleaning up")
             transcriber.cleanup_intermediate_files(audio_path.parent)
-
-        # Cleanup downloaded file unless user wants to keep it
-        if not config.keep_downloads and downloaded_file and downloaded_file.exists():
-            try:
-                downloaded_file.unlink()
-                logger.info(f"Cleaned up downloaded file: {downloaded_file}")
-            except Exception as e:
-                logger.warning(f"Could not clean up download: {e}")
 
         unified_progress.update_phase("finishing", 1.0)
         unified_progress.complete()
@@ -935,6 +935,25 @@ def url_command(
     finally:
         if unified_progress is not None:
             unified_progress.stop()
+        # Cleanup downloaded file unless user wants to keep it
+        if (
+            config is not None
+            and not config.keep_downloads
+            and downloaded_file
+            and downloaded_file.exists()
+        ):
+            try:
+                downloaded_file.unlink()
+                logger.info(f"Cleaned up downloaded file: {downloaded_file}")
+                parent = downloaded_file.parent
+                if parent.name.startswith("scribe_dl_") and parent.exists():
+                    import shutil
+
+                    shutil.rmtree(parent, ignore_errors=True)
+            except Exception as cleanup_err:
+                logger.warning(
+                    f"Could not clean up download: {cleanup_err}"
+                )
 
 
 @app.command()
@@ -2959,11 +2978,29 @@ def main():
     """Main entry point with smart command detection."""
     import sys
 
+    # Handle --banner flag (show animated banner and exit)
+    if '--banner' in sys.argv:
+        from rich.console import Console as BannerConsole
+
+        from scribe.utils.banner import show_banner
+
+        c = BannerConsole()
+        show_banner(c)
+        c.print(
+            f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        c.print()
+        return
+
     # If first argument looks like a file path, inject 'transcribe' command
     if len(sys.argv) > 1:
         first_arg = sys.argv[1]
         # Check if it's not a known command and looks like a file
-        known_commands = ['transcribe', 'url', 'record', 'joke', 'meme', 'notes', 'clean', 'info', 'version', 'doctor', 'support-bundle', 'diagnose', '--help', '-h', '--version']
+        known_commands = [
+            'transcribe', 'url', 'record', 'joke', 'meme', 'notes',
+            'clean', 'info', 'version', 'doctor', 'support-bundle',
+            'diagnose', '--help', '-h', '--version', '--banner',
+        ]
         if first_arg not in known_commands and not first_arg.startswith('-'):
             # Check if it looks like a file path
             if '.' in first_arg or '/' in first_arg or '\\' in first_arg or Path(first_arg).exists():

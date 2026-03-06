@@ -198,6 +198,7 @@ class SystemDiagnostics:
         self.check_python_packages()
         self.check_ffmpeg()
         self.check_ffprobe()
+        self.check_ytdlp()
 
         # GPU and compute checks
         self.check_cuda()
@@ -320,6 +321,30 @@ class SystemDiagnostics:
                 message="Not found",
                 details="FFprobe is useful for media file inspection",
                 fix_suggestion="Usually installed with FFmpeg"
+            )
+
+        self.results.append(result)
+        return result
+
+    def check_ytdlp(self) -> DiagnosticResult:
+        """Check yt-dlp availability for URL downloads."""
+        try:
+            import yt_dlp
+            version = getattr(yt_dlp, "version", None)
+            ver_str = getattr(version, "__version__", "installed") if version else "installed"
+            result = DiagnosticResult(
+                name="yt-dlp",
+                status="pass",
+                message=ver_str,
+                details="Required for scribe url command"
+            )
+        except ImportError:
+            result = DiagnosticResult(
+                name="yt-dlp",
+                status="warn",
+                message="Not installed",
+                details="Required for scribe url (YouTube, Vimeo, etc.)",
+                fix_suggestion="Run: pip install yt-dlp"
             )
 
         self.results.append(result)
@@ -494,10 +519,7 @@ class SystemDiagnostics:
 
         try:
             # Get disk usage for the output folder's drive
-            if output_path.exists():
-                check_path = output_path
-            else:
-                check_path = output_path.parent
+            check_path = output_path if output_path.exists() else output_path.parent
 
             stat = shutil.disk_usage(check_path)
             free_gb = stat.free / (1024**3)
@@ -574,7 +596,7 @@ class SystemDiagnostics:
             "rich": "13.0.0"
         }
 
-        for package, min_version in critical_packages.items():
+        for package, _min_version in critical_packages.items():
             try:
                 __import__(package)
             except ImportError:

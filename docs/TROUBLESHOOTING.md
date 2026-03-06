@@ -9,7 +9,7 @@ Always start with system diagnostics:
 scribe doctor
 ```
 
-This runs 15 comprehensive checks and provides actionable recommendations.
+This runs 16 comprehensive checks and provides actionable recommendations.
 
 ## Common Issues
 
@@ -85,6 +85,42 @@ sudo apt install ffmpeg
 ```bash
 which ffmpeg
 which ffprobe
+```
+
+### URL Download Issues (yt-dlp)
+
+**Symptoms:**
+- `scribe url` fails with DownloadError
+- "yt-dlp not installed" message
+- Download times out or produces empty file
+
+**Diagnosis:**
+```bash
+scribe doctor          # Check yt-dlp availability
+yt-dlp --version       # Verify installation
+```
+
+**Solutions:**
+
+1. **Install yt-dlp:**
+```bash
+pip install yt-dlp
+```
+
+2. **Update yt-dlp (sites frequently change):**
+```bash
+pip install --upgrade yt-dlp
+```
+
+3. **Video unavailable or age-restricted:**
+   - Check the URL is accessible in a browser
+   - Private/unlisted videos require authentication (not yet supported)
+   - Age-restricted content may require cookies
+
+4. **Download timeout:**
+```bash
+# Increase timeout (default 600 seconds)
+export SCRIBE_DOWNLOAD_TIMEOUT=1200
 ```
 
 ### Poor Transcription Quality

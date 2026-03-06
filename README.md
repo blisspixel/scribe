@@ -40,6 +40,9 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 ## Unreleased (Current Workspace)
 
 - **URL Transcription**: New `scribe url <link>` command — download and transcribe from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
+- **Animated Banner**: ASCII wordmark with gradient sweep animation on help screen and `scribe --banner`
+- **CLI Polish**: Cleaner panel headers across all commands — lowercase branding, compact info lines
+- **Doctor**: Added yt-dlp check to system diagnostics
 - Added terminal UI configuration: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
 - Added `scribe info` UI diagnostics (resolved mode, fps, terminal capabilities)
 - Added optional `full` mode shimmer for spinner/status lines
@@ -135,6 +138,9 @@ scribe info
 
 # Version
 scribe version
+
+# Show animated banner
+scribe --banner
 ```
 
 ### Common Options
@@ -235,6 +241,8 @@ SCRIBE_ANIMATIONS=light
 SCRIBE_COLOR=auto
 # UI refresh rate (2-30)
 SCRIBE_FPS=10
+# off to disable ASCII banner on help screen
+SCRIBE_BANNER=on
 
 # OBS WebSocket (for recording)
 SCRIBE_OBS_HOST=localhost
@@ -520,6 +528,9 @@ scribe/
 - `safe_write.py` - Atomic file operations
 - `diagnostics.py` - System health checks
 - `vocabulary.py` - Custom vocabulary handling
+- `banner.py` - Animated ASCII banner with gradient sweep
+- `branding.py` - Gradient header markup
+- `terminal_ui.py` - Terminal capability detection
 
 See [Architecture Guide](docs/ARCHITECTURE.md) for detailed technical discussion.
 

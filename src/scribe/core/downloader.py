@@ -114,11 +114,12 @@ class URLDownloader:
 
                 logger.info(f"Downloading: {title} (duration: {duration}s)")
 
-                # Now actually download
-                ydl.download([url])
+                # Download and get final info (includes post-processor file renames)
+                final_info = ydl.extract_info(url, download=True)
 
-                # Find the downloaded file
-                downloaded_file = self._find_downloaded_file(info, ydl)
+                # Find the downloaded file using final_info (has correct paths
+                # after FFmpegExtractAudio postprocessor runs)
+                downloaded_file = self._find_downloaded_file(final_info or info)
 
                 if not downloaded_file or not downloaded_file.exists():
                     raise DownloadError(
@@ -206,7 +207,7 @@ class URLDownloader:
         elif d.get("status") == "finished":
             self.progress_callback(1.0)
 
-    def _find_downloaded_file(self, info: dict, _ydl) -> Path | None:
+    def _find_downloaded_file(self, info: dict) -> Path | None:
         """Find the actual downloaded file on disk."""
         # yt-dlp prepares the filename — use it directly
         if info.get("requested_downloads"):
@@ -218,9 +219,15 @@ class URLDownloader:
                         return path
 
         # Fallback: search output_dir for recently created files
+        def _safe_mtime(p: Path) -> float:
+            try:
+                return p.stat().st_mtime
+            except OSError:
+                return 0.0
+
         candidates = sorted(
             self.output_dir.iterdir(),
-            key=lambda p: p.stat().st_mtime,
+            key=_safe_mtime,
             reverse=True,
         )
         for candidate in candidates:

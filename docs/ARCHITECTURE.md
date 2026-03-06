@@ -103,6 +103,13 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Quality optimization
 - Progress tracking
 
+**downloader.py** - URL media download
+- yt-dlp integration (YouTube, Vimeo, Twitter/X, 1000+ sites)
+- Audio-only download by default
+- Progress tracking with callback hooks
+- File discovery with post-processor awareness
+- Size and duration limit enforcement
+
 **local_whisper.py** - GPU transcription
 - faster-whisper integration
 - GPU resource management
@@ -201,7 +208,7 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Rollback on failure
 
 **diagnostics.py** - System health checks
-- 15 comprehensive checks
+- 16 comprehensive checks (including yt-dlp)
 - Actionable recommendations
 - Priority ranking
 - Configuration validation
@@ -235,6 +242,21 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Impact font styling
 - Black outline for readability
 - Aspect ratio handling
+
+**banner.py** - Animated ASCII banner
+- Box-drawing wordmark with gradient sweep
+- Rich Live animation engine
+- Progressive degradation (full/light/off/plain)
+- Respects SCRIBE_ANIMATIONS and SCRIBE_BANNER env vars
+
+**branding.py** - Gradient header markup
+- Per-character HSV gradient generation
+- Terminal capability-aware rendering
+
+**terminal_ui.py** - Terminal capability detection
+- Cross-platform animation mode resolution
+- FPS and color mode configuration
+- CI/dumb terminal detection
 
 ## Data Flow
 
@@ -394,7 +416,8 @@ ScribeError (base)
 ├── ConversionError
 ├── AudioFormatError
 ├── GPUError
-└── APIError
+├── APIError
+└── DownloadError
 ```
 
 ### Error Context

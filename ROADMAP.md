@@ -19,17 +19,24 @@
 
 ## Unreleased (Current Workspace)
 
-**Focus: URL Transcription + Cross-Platform CLI UX Controls**
+**Focus: URL Transcription + CLI Polish + Animated Banner**
 
 - **URL Transcription**: New `scribe url <link>` command for downloading and transcribing from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
   - Audio-only download by default (saves bandwidth)
   - Progress tracking, size/duration limits, automatic cleanup
   - Configurable via `SCRIBE_DOWNLOAD_TIMEOUT`, `SCRIBE_KEEP_DOWNLOADS`, `SCRIBE_DOWNLOAD_FOLDER`
+- **Animated Banner**: ASCII wordmark with gradient sweep animation on help screen (`scribe` with no args)
+  - `scribe --banner` for standalone display
+  - Progressive degradation: full sweep → quick sweep → static gradient → plain text
+  - Respects `SCRIBE_ANIMATIONS`, `SCRIBE_BANNER`, `NO_COLOR` env vars
+- **CLI Polish**: Cleaner branding across all commands — lowercase `scribe` headers, muted version, compact info lines
+- **Doctor**: Added yt-dlp availability check to system diagnostics
+- **Bug Fix**: Download cleanup now runs in `finally` block (no leaked temp files on transcription failure)
 - Added terminal UI controls: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
 - Added optional shimmer status effect in `full` mode with capability fallback
 - Added optional gradient branding for command headers in `full` mode
 - Added UI diagnostics output in `scribe info`
-- Added tests for terminal UI config, shimmer, spinner, and branding helpers
+- Added tests for terminal UI config, shimmer, spinner, branding, banner, and downloader
 
 ---
 
