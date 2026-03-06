@@ -44,7 +44,8 @@ ScribeError (base)
 ├── ConversionError      → Audio/video format conversion failures
 ├── AudioFormatError     → Invalid or unsupported audio formats
 ├── GPUError            → GPU-specific failures (CUDA, memory, driver)
-└── APIError            → External API failures (rate limits, auth, network)
+├── APIError            → External API failures (rate limits, auth, network)
+└── DownloadError       → URL download failures (network, unavailable, timeout)
 
 Each exception type maps to a specific recovery strategy:
 - ValidationError → Fail fast with clear configuration guidance
@@ -295,6 +296,26 @@ class APIError(ScribeError):
         raise APIError(
             "OpenAI API rate limit exceeded",
             context={"status_code": 429, "retry_after": 60}
+        )
+    """
+    pass
+
+
+class DownloadError(ScribeError):
+    """
+    URL download failed.
+    
+    Raised when:
+    - URL is unreachable or unsupported
+    - Video is unavailable, private, or age-restricted
+    - Download times out or exceeds size limits
+    - Network connectivity issues during download
+    - yt-dlp encounters an extraction error
+    
+    Example:
+        raise DownloadError(
+            "Video unavailable",
+            context={"url": "https://youtube.com/watch?v=...", "reason": "private"}
         )
     """
     pass

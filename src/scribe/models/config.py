@@ -209,6 +209,29 @@ class ScribeConfig(BaseSettings):
         description="GPT model to use for notes generation"
     )
 
+    # URL download settings
+    download_timeout: int = Field(
+        default=600,
+        ge=30,
+        le=7200,
+        description="Maximum time in seconds for URL downloads"
+    )
+
+    keep_downloads: bool = Field(
+        default=False,
+        description="Keep downloaded files after transcription (default: cleanup)"
+    )
+
+    download_folder: Path | None = Field(
+        default=None,
+        description="Directory for downloaded files (default: temp directory)"
+    )
+
+    download_audio_only: bool = Field(
+        default=True,
+        description="Download audio only from URLs (saves bandwidth)"
+    )
+
     @field_validator("output_folder", "log_folder")
     @classmethod
     def validate_and_create_folder(cls, v: Path) -> Path:

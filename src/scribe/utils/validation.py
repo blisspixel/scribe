@@ -543,3 +543,31 @@ def validate_url(url: str) -> str:
         )
 
     return url
+
+
+def validate_media_url(url: str) -> str:
+    """
+    Validate a URL for media download (YouTube, direct links, etc.).
+    
+    Validates format and checks that the scheme is http/https.
+    Does not probe the URL — that happens at download time.
+    
+    Args:
+        url: URL to validate
+        
+    Returns:
+        Validated and cleaned URL
+        
+    Raises:
+        ValidationError: If URL format is invalid
+    """
+    url = validate_url(url)
+
+    # Reject file:// and other non-http schemes (already covered by validate_url, but explicit)
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValidationError(
+            "Only http:// and https:// URLs are supported",
+            context={"provided": url}
+        )
+
+    return url

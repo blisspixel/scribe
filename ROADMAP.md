@@ -19,8 +19,12 @@
 
 ## Unreleased (Current Workspace)
 
-**Focus: Cross-Platform CLI UX Controls**
+**Focus: URL Transcription + Cross-Platform CLI UX Controls**
 
+- **URL Transcription**: New `scribe url <link>` command for downloading and transcribing from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
+  - Audio-only download by default (saves bandwidth)
+  - Progress tracking, size/duration limits, automatic cleanup
+  - Configurable via `SCRIBE_DOWNLOAD_TIMEOUT`, `SCRIBE_KEEP_DOWNLOADS`, `SCRIBE_DOWNLOAD_FOLDER`
 - Added terminal UI controls: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
 - Added optional shimmer status effect in `full` mode with capability fallback
 - Added optional gradient branding for command headers in `full` mode

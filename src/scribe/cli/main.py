@@ -64,6 +64,7 @@ class CleanGroup(typer.core.TyperGroup):
         # Commands - simple aligned list
         cmds = [
             ("transcribe FILE  ", "transcribe audio/video"),
+            ("url LINK         ", "transcribe from URL"),
             ("batch FILES      ", "process multiple files"),
             ("rec NAME         ", "record via OBS"),
             ("music FILE       ", "extract lyrics"),
@@ -225,13 +226,14 @@ def transcribe_command(
             outputs.append("meme")
 
         # Build panel content
-        panel_lines = [brand_header_markup(f"Scribe v{__version__}", fallback_color=ScribeTheme.PRIMARY_BRIGHT)]
+        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
         panel_lines.append(f"[{ScribeTheme.TEXT_PRIMARY}]{audio_file.name}[/{ScribeTheme.TEXT_PRIMARY}]")
 
+        details = []
         if duration_mins:
-            panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]Duration: {duration_mins} minutes[/{ScribeTheme.TEXT_MUTED}]")
-
-        panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]Generating: {', '.join(outputs)}[/{ScribeTheme.TEXT_MUTED}]")
+            details.append(f"{duration_mins} min")
+        details.append(" · ".join(outputs))
+        panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]{' · '.join(details)}[/{ScribeTheme.TEXT_MUTED}]")
 
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -506,6 +508,435 @@ def transcribe_command(
             unified_progress.stop()
 
 
+@app.command(name="url")
+def url_command(
+    source_url: str = typer.Argument(
+        ...,
+        help="URL to download and transcribe (YouTube, Vimeo, direct links, etc.)"
+    ),
+    method: TranscriptionMethod = typer.Option(
+        "auto",
+        "--method", "-m",
+        help="Transcription method: auto (intelligent choice), local (GPU), openai (API)"
+    ),
+    model: ModelSize | None = typer.Option(
+        None,
+        "--model",
+        help="Whisper model size (overrides config default)"
+    ),
+    language: str | None = typer.Option(
+        None,
+        "--language", "-l",
+        help="Language (english, spanish, french, german, japanese, chinese, or ISO code)"
+    ),
+    no_docx: bool = typer.Option(
+        False,
+        "--no-docx",
+        help="Skip DOCX document generation"
+    ),
+    no_notes: bool = typer.Option(
+        False,
+        "--no-notes",
+        help="Skip meeting notes generation"
+    ),
+    keep_all: bool = typer.Option(
+        False,
+        "--keep-all",
+        help="Keep all intermediate files (don't cleanup)"
+    ),
+    no_joke: bool = typer.Option(
+        False,
+        "--no-joke",
+        help="Skip joke generation"
+    ),
+    no_meme: bool = typer.Option(
+        False,
+        "--no-meme",
+        help="Skip meme generation"
+    ),
+    vocabulary: Path | None = typer.Option(
+        None,
+        "--vocabulary", "--vocab",
+        help="Custom vocabulary file (.txt or .json) for improved accuracy"
+    ),
+    keep_download: bool = typer.Option(
+        False,
+        "--keep-download",
+        help="Keep the downloaded file after transcription"
+    ),
+):
+    """
+    Download and transcribe audio/video from a URL.
+    
+    Supports YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp.
+    
+    Examples:
+    
+      scribe url https://www.youtube.com/watch?v=dQw4w9WgXcQ
+      
+      scribe url https://vimeo.com/123456789 --method local
+      
+      scribe url https://example.com/podcast.mp3 --language es
+      
+      scribe url https://youtu.be/abc123 --no-joke --no-meme
+      
+      scribe url https://youtube.com/watch?v=xyz --keep-download
+    """
+    unified_progress = None
+    downloaded_file = None
+    try:
+        from scribe.core.downloader import URLDownloader
+        from scribe.utils.validation import validate_media_url
+        from scribe.utils.vocabulary import CustomVocabulary
+
+        # Validate URL
+        validated_url = validate_media_url(source_url)
+
+        # Load configuration
+        config = ScribeConfig()
+
+        # Override config with CLI options
+        if model:
+            config.default_model = model
+        if language:
+            from scribe.exceptions import ValidationError
+            from scribe.utils.validation import validate_language_code
+            try:
+                validated_lang = validate_language_code(language)
+                config.default_language = validated_lang
+            except ValidationError as e:
+                console.print(f"[red]Invalid language code: {language}[/red]")
+                console.print("[dim]Use 2-letter ISO 639-1 codes (e.g., 'en', 'es', 'fr', 'de', 'zh', 'ja')[/dim]")
+                raise typer.Exit(1) from e
+        if keep_all:
+            config.keep_intermediate_files = True
+
+        # Override keep_downloads from CLI flag
+        if keep_download:
+            config.keep_downloads = True
+
+        # Load custom vocabulary if provided
+        custom_vocab = None
+        if vocabulary:
+            try:
+                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
+                console.print()
+            except Exception as e:
+                console.print(f"[red]Failed to load vocabulary: {e}[/red]")
+                raise typer.Exit(1) from e
+
+        # Setup logging
+        setup_logging("url_download", config.log_folder)
+
+        # Show download panel
+        console.print(Panel.fit(
+            "\n".join([
+                brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]",
+                f"[{ScribeTheme.TEXT_PRIMARY}]downloading...[/{ScribeTheme.TEXT_PRIMARY}]",
+                f"[{ScribeTheme.TEXT_MUTED}]{validated_url}[/{ScribeTheme.TEXT_MUTED}]",
+            ]),
+            border_style=ScribeTheme.PRIMARY_DIM,
+            padding=(0, 1)
+        ))
+        console.print()
+
+        # Download the media
+        output_dir = config.download_folder or config.output_folder
+        downloader = URLDownloader(
+            output_dir=output_dir,
+            audio_only=config.download_audio_only,
+            timeout=config.download_timeout,
+            max_file_size_gb=config.max_file_size_gb,
+        )
+
+        with console.status(f"[{ScribeTheme.PRIMARY}]Downloading...[/{ScribeTheme.PRIMARY}]"):
+            result = downloader.download(validated_url)
+
+        downloaded_file = result.file_path
+        meeting_name = sanitize_meeting_name(result.title)
+
+        duration_str = ""
+        if result.duration:
+            mins = int(result.duration / 60)
+            duration_str = f" ({mins} min)"
+
+        console.print(f"[green]Downloaded:[/green] {result.title}{duration_str}")
+        console.print(f"[dim]File: {downloaded_file}[/dim]")
+        console.print()
+
+        # Now run the standard transcription pipeline on the downloaded file
+        audio_path = downloaded_file
+
+        # Re-setup logging with the actual meeting name
+        setup_logging(meeting_name, config.log_folder)
+
+        # Get audio duration for progress estimation
+        from scribe.utils.audio import get_audio_duration
+        audio_duration = result.duration or get_audio_duration(audio_path)
+        duration_mins = int(audio_duration / 60) if audio_duration else 0
+
+        # Check what features are enabled
+        has_api_key = bool(config.openai_api_key)
+        will_generate_notes = not no_notes and config.enable_notes and has_api_key
+        will_generate_joke = not no_joke and has_api_key
+        will_generate_meme = not no_meme and has_api_key
+        include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
+
+        outputs = ["transcript"]
+        if will_generate_notes:
+            outputs.append("notes")
+        if will_generate_joke:
+            outputs.append("joke")
+        if will_generate_meme:
+            outputs.append("meme")
+
+        # Display transcription info
+        panel_lines = [f"[{ScribeTheme.TEXT_PRIMARY}]{result.title}[/{ScribeTheme.TEXT_PRIMARY}]"]
+        details = []
+        if duration_mins:
+            details.append(f"{duration_mins} min")
+        details.append(" · ".join(outputs))
+        panel_lines.append(f"[{ScribeTheme.TEXT_MUTED}]{' · '.join(details)}[/{ScribeTheme.TEXT_MUTED}]")
+
+        console.print(Panel.fit(
+            "\n".join(panel_lines),
+            border_style=ScribeTheme.PRIMARY_DIM,
+            padding=(0, 1)
+        ))
+        console.print()
+
+        # Initialize unified progress
+        import hashlib
+        import platform
+
+        from scribe.utils.unified_progress import UnifiedProgress
+
+        machine_info = f"{platform.node()}-{platform.processor()}"
+        machine_id = hashlib.md5(machine_info.encode()).hexdigest()[:16]
+
+        unified_progress = UnifiedProgress(audio_duration, machine_id=machine_id, include_api_features=include_api_features)
+        unified_progress.start()
+
+        # Create session
+        session = TranscriptionSession.create(meeting_name)
+        session.add_file(audio_path, "source")
+
+        # Determine transcription method
+        transcriber = Transcriber(config)
+        chosen_method = transcriber.choose_method(method)
+
+        # Phase 1: Preparing audio (0-15%)
+        if chosen_method == "local":
+            unified_progress.update_phase("preparing", 0.0)
+            try:
+                from scribe.core.converter import Converter
+                converter = Converter()
+                audio_file = converter.convert_to_wav(
+                    audio_path,
+                    show_progress=False,
+                    progress_callback=lambda p: unified_progress.update_phase("preparing", p)
+                )
+                unified_progress.update_phase("preparing", 1.0)
+            except ProcessError as e:
+                console.print(f"[bold red]Conversion failed:[/bold red] {e}")
+                raise typer.Exit(1) from e
+            except Exception as e:
+                console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
+                raise typer.Exit(1) from e
+        else:
+            try:
+                file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+            except (FileNotFoundError, OSError) as e:
+                console.print(f"[bold red]Error:[/bold red] Cannot access file: {audio_path}")
+                raise typer.Exit(1) from e
+
+            if file_size_mb > 24:
+                console.print(f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]")
+                console.print("[cyan]Converting to compressed MP3...[/cyan]")
+                try:
+                    from scribe.core.converter import Converter
+                    converter = Converter()
+                    audio_file = converter.convert_to_mp3(audio_path, bitrate=48)
+                    compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
+                    if compressed_size_mb > 24:
+                        console.print(f"[bold red]Error:[/bold red] Compressed file still too large ({compressed_size_mb:.1f}MB)")
+                        raise typer.Exit(1)
+                    console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
+                except ProcessError as e:
+                    console.print(f"[bold red]Conversion failed:[/bold red] {e}")
+                    raise typer.Exit(1) from e
+                except Exception as e:
+                    console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
+                    raise typer.Exit(1) from e
+            else:
+                audio_file = audio_path
+            console.print()
+
+        # Phase 2: Transcribing (18-68%)
+        unified_progress.update_phase("transcribing", 0.0)
+
+        import threading
+        transcription_done = threading.Event()
+
+        def update_transcription_progress():
+            while not transcription_done.is_set():
+                unified_progress.refresh()
+                time.sleep(unified_progress.frame_delay)
+
+        progress_thread = threading.Thread(target=update_transcription_progress, daemon=True)
+        progress_thread.start()
+
+        try:
+            transcript_path = transcriber.transcribe(
+                audio_file,
+                method=chosen_method,
+                session=session,
+                custom_vocabulary=custom_vocab
+            )
+        finally:
+            transcription_done.set()
+            progress_thread.join(timeout=1.0)
+
+        unified_progress.update_phase("transcribing", 1.0)
+
+        if not transcript_path or not transcript_path.exists():
+            console.print("[red]Error: Transcription failed - no output file created[/red]")
+            raise typer.Exit(1)
+
+        if transcript_path.stat().st_size < 10:
+            console.print("[red]Error: Transcription failed - output file is empty[/red]")
+            raise typer.Exit(1)
+
+        # Phase 3: Finishing (85-100%)
+        unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
+
+        if not no_docx:
+            try:
+                docx_path = txt_to_docx(transcript_path)
+                session.add_file(docx_path, "docx")
+            except Exception as e:
+                logger.error(f"DOCX generation failed: {e}")
+
+        notes_path = None
+        if not no_notes and config.enable_notes and config.openai_api_key:
+            unified_progress.update_phase("finishing", 0.2, "Generating notes")
+            try:
+                from scribe.utils.notes_generator import NotesGenerator
+                notes_generator = NotesGenerator(
+                    api_key=None,
+                    model=config.notes_model,
+                    provider_name=None
+                )
+                notes_path = notes_generator.generate_notes(transcript_path)
+                session.add_file(notes_path, "notes")
+            except Exception as e:
+                logger.error(f"Notes generation failed: {e}")
+
+        if not no_joke and config.openai_api_key:
+            unified_progress.update_phase("finishing", 0.6, "Generating joke")
+            result_joke = generate_transcript_joke(transcript_path, config.openai_api_key)
+            if result_joke:
+                joke_text, comedy_style = result_joke
+                if not hasattr(session, 'joke_data'):
+                    session.joke_data = {"text": joke_text, "style": comedy_style}
+
+        if not no_meme and config.openai_api_key:
+            from scribe.utils.meme_generator import generate_meeting_meme
+
+            def meme_progress(attempt, max_attempts, score):
+                if score is None:
+                    unified_progress.update_phase("finishing", 0.8, f"Generating meme (attempt {attempt}/{max_attempts})")
+                else:
+                    unified_progress.update_phase("finishing", 0.8, f"Refining meme (score: {score:.1f}/10, attempt {attempt}/{max_attempts})")
+
+            unified_progress.update_phase("finishing", 0.8, "Generating meme")
+            meme_result = generate_meeting_meme(
+                transcript_path,
+                output_dir=config.output_folder,
+                api_key=None,
+                progress_callback=meme_progress
+            )
+            if meme_result:
+                meme_path = meme_result["final_path"] if isinstance(meme_result, dict) else meme_result
+                session.add_file(meme_path, "meme")
+
+        # Cleanup
+        if not keep_all:
+            unified_progress.update_phase("finishing", 0.95, "Cleaning up")
+            transcriber.cleanup_intermediate_files(audio_path.parent)
+
+        # Cleanup downloaded file unless user wants to keep it
+        if not config.keep_downloads and downloaded_file and downloaded_file.exists():
+            try:
+                downloaded_file.unlink()
+                logger.info(f"Cleaned up downloaded file: {downloaded_file}")
+            except Exception as e:
+                logger.warning(f"Could not clean up download: {e}")
+
+        unified_progress.update_phase("finishing", 1.0)
+        unified_progress.complete()
+
+        session.complete(success=True)
+        session.save_summary(config.output_folder)
+        console.print()
+
+        if hasattr(session, 'joke_data') and session.joke_data:
+            joke_text = session.joke_data["text"]
+            console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
+            console.print()
+
+        # Display output files
+        console.print()
+        console.print("[bold green]Transcription Complete![/bold green]")
+        console.print(f"[dim]Source: {validated_url}[/dim]")
+        console.print()
+        console.print("[bold cyan]Output Files:[/bold cyan]")
+        console.print()
+
+        def make_clickable_path(file_path: Path) -> str:
+            import platform
+            import urllib.parse
+            abs_path = file_path.resolve()
+            path_str = str(abs_path)
+            if platform.system() == "Windows":
+                path_str = path_str.replace("\\", "/")
+                url = f"file:///{path_str}"
+            else:
+                url = f"file://{urllib.parse.quote(path_str)}"
+            return url
+
+        if transcript_path:
+            file_url = make_clickable_path(transcript_path)
+            console.print(f"  [green]-[/green] [white]Transcript:[/white] [link={file_url}]{transcript_path}[/link]")
+
+        if not no_docx and session.docx_file:
+            file_url = make_clickable_path(session.docx_file)
+            console.print(f"  [green]-[/green] [white]Document:[/white]   [link={file_url}]{session.docx_file}[/link]")
+
+        if notes_path:
+            file_url = make_clickable_path(notes_path)
+            console.print(f"  [green]-[/green] [white]Notes:[/white]      [link={file_url}]{notes_path}[/link]")
+
+        if session.meme_file:
+            file_url = make_clickable_path(session.meme_file)
+            console.print(f"  [green]-[/green] [white]Meme:[/white]       [link={file_url}]{session.meme_file}[/link]")
+
+        console.print()
+
+    except ScribeError as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        if e.context:
+            console.print(f"[dim]Context: {e.context}[/dim]")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(1) from e
+    finally:
+        if unified_progress is not None:
+            unified_progress.stop()
+
+
 @app.command()
 def record(
     name: str | None = typer.Option(
@@ -563,7 +994,7 @@ def record(
 
         # Display header first
         console.print(Panel.fit(
-            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]Scribe Recording System v{__version__}[/bold {ScribeTheme.PRIMARY_BRIGHT}]",
+            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]",
             border_style=ScribeTheme.PRIMARY_DIM
         ))
 
@@ -941,8 +1372,8 @@ def batch_transcribe(
         # Display batch header
         console.print()
         console.print(Panel.fit(
-            f"{brand_header_markup(f'Scribe Batch Transcription v{__version__}')}\n"
-            f"[white]Processing {len(valid_files)} file(s)[/white]",
+            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]\n"
+            f"[white]{len(valid_files)} file(s)[/white]",
             border_style="cyan",
             padding=(0, 1)
         ))
@@ -1660,9 +2091,9 @@ def joke(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
+        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append("[dim]Generating: joke[/dim]")
+        panel_lines.append("[dim]joke[/dim]")
 
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -1797,9 +2228,9 @@ def meme(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
+        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append("[dim]Generating: meme[/dim]")
+        panel_lines.append("[dim]meme[/dim]")
 
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -1950,9 +2381,9 @@ def notes(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
+        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
         panel_lines.append(f"[white]{transcript_file.name}[/white]")
-        panel_lines.append("[dim]Generating: notes[/dim]")
+        panel_lines.append("[dim]notes[/dim]")
 
         console.print(Panel.fit(
             "\n".join(panel_lines),
@@ -2408,7 +2839,7 @@ def clean(
         from scribe.utils.silence_remover import analyze_silence, remove_silence, trim_file
 
         # Display header
-        panel_lines = [brand_header_markup(f"Scribe v{__version__}")]
+        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
         panel_lines.append(f"[white]{input_file.name}[/white]")
 
         # Get original duration
@@ -2532,7 +2963,7 @@ def main():
     if len(sys.argv) > 1:
         first_arg = sys.argv[1]
         # Check if it's not a known command and looks like a file
-        known_commands = ['transcribe', 'record', 'joke', 'meme', 'notes', 'clean', 'info', 'version', 'doctor', 'support-bundle', 'diagnose', '--help', '-h', '--version']
+        known_commands = ['transcribe', 'url', 'record', 'joke', 'meme', 'notes', 'clean', 'info', 'version', 'doctor', 'support-bundle', 'diagnose', '--help', '-h', '--version']
         if first_arg not in known_commands and not first_arg.startswith('-'):
             # Check if it looks like a file path
             if '.' in first_arg or '/' in first_arg or '\\' in first_arg or Path(first_arg).exists():

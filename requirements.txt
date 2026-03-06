@@ -41,6 +41,9 @@ obsws-python>=1.5.0
 # Utilities
 tenacity>=8.2.0
 
+# URL/Video Downloading
+yt-dlp>=2024.1.0
+
 # Optional: Music Analysis (for instrumental validation)
 # librosa>=0.10.0  # Audio analysis for music detection
 

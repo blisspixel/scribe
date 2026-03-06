@@ -39,6 +39,7 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 
 ## Unreleased (Current Workspace)
 
+- **URL Transcription**: New `scribe url <link>` command — download and transcribe from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
 - Added terminal UI configuration: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
 - Added `scribe info` UI diagnostics (resolved mode, fps, terminal capabilities)
 - Added optional `full` mode shimmer for spinner/status lines
@@ -76,6 +77,12 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 # Single file
 scribe meeting.mp4
 scribe transcribe meeting.mp4
+
+# From URL (YouTube, Vimeo, direct links, etc.)
+scribe url https://www.youtube.com/watch?v=VIDEO_ID
+scribe url https://vimeo.com/123456789
+scribe url https://example.com/podcast.mp3 --language es
+scribe url https://youtu.be/abc123 --keep-download
 
 # Batch processing
 scribe batch *.mp4
@@ -422,18 +429,18 @@ scribe batch *.mp4 --vocabulary company-names.json
 ┌─────────────────────────────────────────┐
 │            Scribe CLI                   │
 ├─────────────────────────────────────────┤
-│  Commands: transcribe, batch, rec,      │
+│  Commands: transcribe, url, batch, rec, │
 │            notes, joke, meme            │
 └──────────────┬──────────────────────────┘
                │
-    ┌──────────┴──────────┐
-    ▼                     ▼
-┌─────────┐         ┌──────────┐
-│ Record  │         │Transcribe│
-│ (OBS)   │         │          │
-└────┬────┘         └────┬─────┘
-     │                   │
-     └───────┬───────────┘
+    ┌──────────┼──────────┐
+    ▼          ▼          ▼
+┌─────────┐ ┌──────────┐ ┌──────────┐
+│ Record  │ │Transcribe│ │URL       │
+│ (OBS)   │ │          │ │Download  │
+└────┬────┘ └────┬─────┘ │(yt-dlp)  │
+     │           │       └────┬─────┘
+     └───────┬───┴────────────┘
              ▼
       ┌──────────────┐
       │  Converter   │
@@ -488,6 +495,7 @@ scribe/
 **Core:**
 - `transcriber.py` - Orchestrates transcription workflow
 - `converter.py` - Audio/video format conversion
+- `downloader.py` - URL media download (yt-dlp)
 - `local_whisper.py` - GPU-accelerated transcription
 - `openai_api.py` - API transcription with diarization
 - `recorder.py` - OBS Studio integration
