@@ -12,6 +12,9 @@ from scribe.utils.banner import (
     _animate_sweep,
     _ease_in_out_cubic,
     _is_banner_enabled,
+    _precise_sleep,
+    _precompute_gradient,
+    _render_ansi_frame,
     colorize_banner,
     render_banner_plain,
     render_banner_static,
@@ -316,83 +319,140 @@ class TestShowBanner:
         assert result is True
 
 
+# ─── Raw ANSI Rendering ──────────────────────────────────────────────────
+
+
+class TestPrecomputeGradient:
+    def test_returns_correct_count(self):
+        codes = _precompute_gradient(10)
+        assert len(codes) == 10
+
+    def test_codes_are_ansi_rgb(self):
+        codes = _precompute_gradient(5)
+        for code in codes:
+            assert code.startswith("\033[1;38;2;")
+            assert code.endswith("m")
+
+
+class TestRenderAnsiFrame:
+    def test_contains_ansi_codes(self):
+        lines = ["AB"]
+        codes = _precompute_gradient(2)
+        frame = _render_ansi_frame(lines, 2, 1.0, codes, "\033[38;2;96;96;96m")
+        assert "\033[1;38;2;" in frame
+
+    def test_muted_chars_use_muted_code(self):
+        lines = ["AB"]
+        codes = _precompute_gradient(2)
+        muted = "\033[38;2;96;96;96m"
+        frame = _render_ansi_frame(lines, 2, 0.0, codes, muted)
+        # At 0.0 sweep, only first char (col_ratio=0.0) is colored
+        assert muted in frame
+
+    def test_spaces_are_literal(self):
+        lines = ["A B"]
+        codes = _precompute_gradient(3)
+        frame = _render_ansi_frame(lines, 3, 1.0, codes, "\033[38;2;96;96;96m")
+        # Space should appear as-is without ANSI codes around it
+        assert " " in frame
+
+    def test_multiline_has_newlines(self):
+        lines = ["A", "B"]
+        codes = _precompute_gradient(1)
+        frame = _render_ansi_frame(lines, 1, 1.0, codes, "\033[38;2;96;96;96m")
+        assert "\n" in frame
+
+    def test_ends_with_reset(self):
+        lines = ["AB"]
+        codes = _precompute_gradient(2)
+        frame = _render_ansi_frame(lines, 2, 1.0, codes, "\033[38;2;96;96;96m")
+        assert frame.endswith("\033[0m")
+
+
+class TestPreciseSleep:
+    @patch("scribe.utils.banner.time.perf_counter", side_effect=[100.0, 100.005, 100.011])
+    @patch("scribe.utils.banner.time.sleep")
+    def test_sleeps_when_remaining(self, mock_sleep, _mock_counter):
+        _precise_sleep(100.010)
+        assert mock_sleep.called
+
+    @patch("scribe.utils.banner.time.perf_counter", return_value=100.0)
+    @patch("scribe.utils.banner.time.sleep")
+    def test_skips_when_past_target(self, mock_sleep, _mock_counter):
+        _precise_sleep(99.0)
+        assert not mock_sleep.called
+
+
 # ─── Animate Sweep ───────────────────────────────────────────────────────
 
 
 class TestAnimateSweep:
-    @patch("scribe.utils.banner.time.sleep")
-    @patch("scribe.utils.banner.Live")
-    def test_animation_calls_live_update(self, mock_live_cls, mock_sleep):
-        mock_live = MagicMock()
-        mock_live.__enter__ = MagicMock(return_value=mock_live)
-        mock_live.__exit__ = MagicMock(return_value=False)
-        mock_live_cls.return_value = mock_live
-
+    @patch("scribe.utils.banner._precise_sleep")
+    @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
+    def test_animation_writes_to_console_file(
+        self, _mock_counter, _mock_sleep
+    ):
         console = MagicMock()
         cfg = _make_config(animation_mode="full", fps=10)
         _animate_sweep(console, BANNER_ART, cfg, duration=0.5)
 
-        assert mock_live.update.call_count > 0
-        assert mock_sleep.call_count > 0
+        assert console.file.write.call_count > 0
+        assert console.file.flush.call_count > 0
 
-    @patch("scribe.utils.banner.time.sleep")
-    @patch("scribe.utils.banner.Live")
-    def test_animation_frame_count(self, mock_live_cls, _mock_sleep):
-        mock_live = MagicMock()
-        mock_live.__enter__ = MagicMock(return_value=mock_live)
-        mock_live.__exit__ = MagicMock(return_value=False)
-        mock_live_cls.return_value = mock_live
-
+    @patch("scribe.utils.banner._precise_sleep")
+    @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
+    def test_animation_frame_count(self, _mock_counter, _mock_sleep):
         console = MagicMock()
         cfg = _make_config(fps=10)
         _animate_sweep(console, "ABC", cfg, duration=0.5)
 
-        expected_frames = int(0.5 * 10)  # frames 1 through N (frame 0 is initial)
-        assert mock_live.update.call_count == expected_frames
+        # 60fps * 0.5s = 30 frames; _precise_sleep called for frames 1..30
+        expected_sleeps = int(0.5 * 60)
+        assert _mock_sleep.call_count == expected_sleeps
 
-    @patch("scribe.utils.banner.time.sleep")
-    @patch("scribe.utils.banner.Live")
-    def test_animation_prints_final_state(self, mock_live_cls, _mock_sleep):
-        mock_live = MagicMock()
-        mock_live.__enter__ = MagicMock(return_value=mock_live)
-        mock_live.__exit__ = MagicMock(return_value=False)
-        mock_live_cls.return_value = mock_live
-
+    @patch("scribe.utils.banner._precise_sleep")
+    @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
+    def test_animation_hides_and_shows_cursor(
+        self, _mock_counter, _mock_sleep
+    ):
         console = MagicMock()
         cfg = _make_config(fps=10)
         _animate_sweep(console, "AB", cfg, duration=0.3)
 
-        # After animation, should print static final state
-        assert console.print.call_count >= 1
+        writes = [c.args[0] for c in console.file.write.call_args_list]
+        assert writes[0] == "\033[?25l"  # hide cursor first
+        all_output = "".join(writes)
+        assert "\033[?25h" in all_output  # show cursor at end
 
     @patch(
-        "scribe.utils.banner.time.sleep", side_effect=Exception("boom")
+        "scribe.utils.banner._precise_sleep",
+        side_effect=Exception("boom"),
     )
-    def test_animation_fallback_on_error(self, _mock_sleep):
+    @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
+    def test_animation_fallback_on_error(
+        self, _mock_counter, _mock_sleep
+    ):
         console = MagicMock()
         cfg = _make_config(animation_mode="full", fps=10)
 
         # Should not raise — falls back to static
         _animate_sweep(console, BANNER_ART, cfg, duration=0.1)
 
-        # Should have printed static fallback
+        # Should have printed static fallback via Rich
         assert console.print.call_count >= 1
 
-    @patch("scribe.utils.banner.time.sleep")
-    @patch("scribe.utils.banner.Live")
-    def test_live_created_with_transient(self, mock_live_cls, _mock_sleep):
-        mock_live = MagicMock()
-        mock_live.__enter__ = MagicMock(return_value=mock_live)
-        mock_live.__exit__ = MagicMock(return_value=False)
-        mock_live_cls.return_value = mock_live
-
+    @patch("scribe.utils.banner._precise_sleep")
+    @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
+    def test_animation_writes_cursor_up_codes(
+        self, _mock_counter, _mock_sleep
+    ):
         console = MagicMock()
         cfg = _make_config(fps=10)
-        _animate_sweep(console, "X", cfg, duration=0.2)
+        _animate_sweep(console, "X\nY", cfg, duration=0.2)
 
-        _, kwargs = mock_live_cls.call_args
-        assert kwargs.get("transient") is True
-        assert kwargs.get("console") is console
+        writes = [c.args[0] for c in console.file.write.call_args_list]
+        cursor_ups = [w for w in writes if "\033[" in w and "A" in w]
+        assert len(cursor_ups) > 0  # used cursor-up for frame updates
 
 
 # ─── CLI Integration ─────────────────────────────────────────────────────

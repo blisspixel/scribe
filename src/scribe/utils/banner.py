@@ -3,16 +3,21 @@ Animated ASCII banner for Scribe CLI.
 
 Renders a gradient-colored wordmark with optional sweep animation,
 building on Scribe's existing branding and terminal UI systems.
+
+The animation engine bypasses Rich's rendering pipeline during playback,
+writing pre-rendered ANSI escape strings directly to stdout at 60fps
+with precise timing (hybrid sleep + busy-wait to defeat Windows timer
+granularity). Inspired by GitHub Copilot CLI's animation approach.
 """
 
 from __future__ import annotations
 
 import colorsys
 import os
+import sys
 import time
 
 from rich.console import Console
-from rich.live import Live
 from rich.markup import escape
 from rich.text import Text
 
@@ -37,12 +42,100 @@ _START_HUE = 200 / 360
 _END_HUE = 320 / 360
 _MUTED_COLOR = ScribeTheme.TEXT_MUTED
 
+# ANSI escape constants
+_ANSI_RESET = "\033[0m"
+_ANSI_HIDE_CURSOR = "\033[?25l"
+_ANSI_SHOW_CURSOR = "\033[?25h"
+
+# Animation: 60fps for buttery smooth playback
+_ANIM_FPS = 60
+_ANIM_FRAME_TIME = 1.0 / _ANIM_FPS
+
+
+# ─── Timing ──────────────────────────────────────────────────────────────
+
 
 def _ease_in_out_cubic(t: float) -> float:
     """Ease-in-out cubic for smooth animation acceleration and deceleration."""
     if t < 0.5:
         return 4.0 * t * t * t
     return 1.0 - (-2.0 * t + 2.0) ** 3 / 2.0
+
+
+def _precise_sleep(target_time: float) -> None:
+    """Sleep until target_time with sub-millisecond precision.
+
+    Windows time.sleep() has ~15.6ms granularity, so a 16.7ms request
+    actually sleeps ~31ms. This hybrid approach sleeps for the bulk,
+    then busy-waits the final 2ms for precise frame timing.
+    """
+    remaining = target_time - time.perf_counter()
+    if remaining <= 0:
+        return
+    if remaining > 0.002:
+        time.sleep(remaining - 0.002)
+    while time.perf_counter() < target_time:
+        pass
+
+
+# ─── Raw ANSI Frame Rendering ───────────────────────────────────────────
+
+
+def _precompute_gradient(max_width: int) -> list[str]:
+    """Pre-compute bold RGB ANSI codes for each column position."""
+    codes: list[str] = []
+    for col in range(max_width):
+        col_ratio = col / max(1, max_width - 1)
+        hue = _START_HUE + (_END_HUE - _START_HUE) * col_ratio
+        r, g, b = [
+            int(v * 255)
+            for v in colorsys.hsv_to_rgb(hue % 1.0, 0.85, 0.92)
+        ]
+        codes.append(f"\033[1;38;2;{r};{g};{b}m")
+    return codes
+
+
+def _render_ansi_frame(
+    lines: list[str],
+    max_width: int,
+    sweep_progress: float,
+    gradient_codes: list[str],
+    muted_code: str,
+) -> str:
+    """Render one animation frame as a raw ANSI escape string.
+
+    Tracks the last-emitted color code and only emits a new code
+    when the color actually changes, reducing output size.
+    """
+    parts: list[str] = []
+    for line_idx, line in enumerate(lines):
+        if line_idx > 0:
+            parts.append("\n")
+        last_code: str | None = None
+        for col, ch in enumerate(line):
+            if ch == " ":
+                parts.append(" ")
+                last_code = None
+                continue
+
+            col_ratio = col / max(1, max_width - 1)
+            code = (
+                gradient_codes[col]
+                if col_ratio <= sweep_progress
+                else muted_code
+            )
+
+            if code != last_code:
+                parts.append(code)
+                last_code = code
+            parts.append(ch)
+
+        parts.append(_ANSI_RESET)
+
+    return "".join(parts)
+
+
+# ─── Rich Markup Rendering (static output / backward compat) ────────────
 
 
 def colorize_banner(
@@ -114,6 +207,9 @@ def _is_banner_enabled() -> bool:
     return val not in ("off", "false", "0", "no")
 
 
+# ─── Banner Display ─────────────────────────────────────────────────────
+
+
 def show_banner(console: Console, art: str = BANNER_ART) -> bool:
     """
     Display the banner with appropriate styling for the terminal.
@@ -136,15 +232,11 @@ def show_banner(console: Console, art: str = BANNER_ART) -> bool:
     if not cfg.use_color:
         console.print(render_banner_plain(art))
     elif (
-        cfg.animation_mode == "full"
+        cfg.animation_mode in ("full", "light")
         and cfg.capabilities.supports_advanced_effects
     ):
-        _animate_sweep(console, art, cfg, duration=1.5)
-    elif (
-        cfg.animation_mode == "light"
-        and cfg.capabilities.supports_advanced_effects
-    ):
-        _animate_sweep(console, art, cfg, duration=0.8)
+        anim_duration = 1.5 if cfg.animation_mode == "full" else 0.8
+        _animate_sweep(console, art, cfg, duration=anim_duration)
     else:
         console.print(Text.from_markup(render_banner_static(art)))
 
@@ -157,31 +249,60 @@ def _animate_sweep(
     cfg: TerminalUIConfig,
     duration: float = 1.5,
 ) -> None:
-    """Animate a gradient sweep across the banner using Rich Live."""
+    """Animate a gradient sweep at 60fps using direct ANSI output.
+
+    Bypasses Rich's rendering pipeline during animation for maximum
+    smoothness. Pre-renders all frames as raw ANSI escape strings,
+    then plays them back with precise timing and cursor repositioning.
+    """
     try:
-        total_frames = max(2, int(duration * cfg.fps))
+        lines = art.split("\n")
+        num_lines = len(lines)
+        max_width = max(len(line) for line in lines)
+        total_frames = max(2, int(duration * _ANIM_FPS))
 
-        # Pre-render all frames to eliminate per-frame computation jank
-        frames: list[Text] = []
-        for frame in range(total_frames + 1):
-            progress = frame / total_frames
+        # Pre-compute gradient ANSI codes (shared across all frames)
+        gradient_codes = _precompute_gradient(max_width)
+        muted_code = "\033[38;2;96;96;96m"
+
+        # Pre-render every frame as a raw ANSI string
+        frames: list[str] = []
+        for f in range(total_frames + 1):
+            progress = f / total_frames
             eased = _ease_in_out_cubic(progress)
-            markup = colorize_banner(art, sweep_progress=eased)
-            frames.append(Text.from_markup(markup))
+            frames.append(
+                _render_ansi_frame(
+                    lines, max_width, eased, gradient_codes, muted_code
+                )
+            )
 
-        with Live(
-            frames[0],
-            console=console,
-            refresh_per_second=cfg.fps,
-            transient=True,
-        ) as live:
-            for i in range(1, len(frames)):
-                time.sleep(cfg.frame_delay)
-                live.update(frames[i])
+        out = console.file or sys.stdout
+        cursor_up = f"\033[{num_lines - 1}A\r"
 
-        # Print final static version permanently
-        console.print(Text.from_markup(render_banner_static(art)))
+        # Hide cursor and render first frame
+        out.write(_ANSI_HIDE_CURSOR)
+        out.write(frames[0])
+        out.flush()
+
+        # Play remaining frames with precise timing
+        start = time.perf_counter()
+        for i in range(1, len(frames)):
+            _precise_sleep(start + i * _ANIM_FRAME_TIME)
+            out.write(cursor_up)
+            out.write(frames[i])
+            out.flush()
+
+        # Show cursor and move to next line
+        out.write(_ANSI_SHOW_CURSOR + "\n")
+        out.flush()
 
     except Exception:
-        # Fallback to static on any animation error
+        # Ensure cursor is visible on any error
+        try:
+            out = console.file or sys.stdout
+            out.write(_ANSI_SHOW_CURSOR + _ANSI_RESET + "\n")
+            out.flush()
+        except Exception:
+            pass
+        # Fall back to static banner via Rich
         console.print(Text.from_markup(render_banner_static(art)))
