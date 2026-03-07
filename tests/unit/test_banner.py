@@ -10,7 +10,7 @@ import pytest
 from scribe.utils.banner import (
     BANNER_ART,
     _animate_sweep,
-    _ease_out_cubic,
+    _ease_in_out_cubic,
     _is_banner_enabled,
     colorize_banner,
     render_banner_plain,
@@ -81,28 +81,27 @@ class TestBannerArt:
 # ─── Easing ──────────────────────────────────────────────────────────────
 
 
-class TestEaseOutCubic:
+class TestEaseInOutCubic:
     def test_start_is_zero(self):
-        assert _ease_out_cubic(0.0) == 0.0
+        assert _ease_in_out_cubic(0.0) == 0.0
 
     def test_end_is_one(self):
-        assert _ease_out_cubic(1.0) == 1.0
+        assert _ease_in_out_cubic(1.0) == 1.0
 
-    def test_midpoint_above_linear(self):
-        result = _ease_out_cubic(0.5)
-        assert result > 0.5
-        assert result < 1.0
+    def test_midpoint_is_half(self):
+        result = _ease_in_out_cubic(0.5)
+        assert abs(result - 0.5) < 0.001
 
     def test_monotonically_increasing(self):
-        values = [_ease_out_cubic(t / 20) for t in range(21)]
+        values = [_ease_in_out_cubic(t / 20) for t in range(21)]
         for i in range(len(values) - 1):
             assert values[i] <= values[i + 1]
 
-    def test_quarter_above_linear(self):
-        assert _ease_out_cubic(0.25) > 0.25
+    def test_quarter_below_linear(self):
+        assert _ease_in_out_cubic(0.25) < 0.25
 
-    def test_three_quarter(self):
-        result = _ease_out_cubic(0.75)
+    def test_three_quarter_above_linear(self):
+        result = _ease_in_out_cubic(0.75)
         assert result > 0.75
 
 
@@ -284,7 +283,7 @@ class TestShowBanner:
         assert result is True
         mock_animate.assert_called_once()
         _, kwargs = mock_animate.call_args
-        assert kwargs.get("duration") == 0.5
+        assert kwargs.get("duration") == 0.8
 
     @patch("scribe.utils.banner.get_terminal_ui_config")
     @patch("scribe.utils.banner._is_banner_enabled", return_value=True)
@@ -348,7 +347,7 @@ class TestAnimateSweep:
         cfg = _make_config(fps=10)
         _animate_sweep(console, "ABC", cfg, duration=0.5)
 
-        expected_frames = int(0.5 * 10) + 1  # 6 frames (0 through 5)
+        expected_frames = int(0.5 * 10)  # frames 1 through N (frame 0 is initial)
         assert mock_live.update.call_count == expected_frames
 
     @patch("scribe.utils.banner.time.sleep")

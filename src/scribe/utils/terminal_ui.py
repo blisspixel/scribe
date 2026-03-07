@@ -97,7 +97,7 @@ def _resolve_fps(capabilities: TerminalCapabilities, mode: AnimationMode) -> int
 
     if mode == "off":
         return 2
-    return 8 if capabilities.is_windows else 10
+    return 15
 
 
 def _resolve_use_color(

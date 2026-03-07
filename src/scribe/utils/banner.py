@@ -38,9 +38,11 @@ _END_HUE = 320 / 360
 _MUTED_COLOR = ScribeTheme.TEXT_MUTED
 
 
-def _ease_out_cubic(t: float) -> float:
-    """Ease-out cubic for smooth animation deceleration."""
-    return 1.0 - (1.0 - t) ** 3
+def _ease_in_out_cubic(t: float) -> float:
+    """Ease-in-out cubic for smooth animation acceleration and deceleration."""
+    if t < 0.5:
+        return 4.0 * t * t * t
+    return 1.0 - (-2.0 * t + 2.0) ** 3 / 2.0
 
 
 def colorize_banner(
@@ -142,7 +144,7 @@ def show_banner(console: Console, art: str = BANNER_ART) -> bool:
         cfg.animation_mode == "light"
         and cfg.capabilities.supports_advanced_effects
     ):
-        _animate_sweep(console, art, cfg, duration=0.5)
+        _animate_sweep(console, art, cfg, duration=0.8)
     else:
         console.print(Text.from_markup(render_banner_static(art)))
 
@@ -157,20 +159,25 @@ def _animate_sweep(
 ) -> None:
     """Animate a gradient sweep across the banner using Rich Live."""
     try:
-        total_frames = max(1, int(duration * cfg.fps))
+        total_frames = max(2, int(duration * cfg.fps))
+
+        # Pre-render all frames to eliminate per-frame computation jank
+        frames: list[Text] = []
+        for frame in range(total_frames + 1):
+            progress = frame / total_frames
+            eased = _ease_in_out_cubic(progress)
+            markup = colorize_banner(art, sweep_progress=eased)
+            frames.append(Text.from_markup(markup))
 
         with Live(
-            Text.from_markup(colorize_banner(art, sweep_progress=0.0)),
+            frames[0],
             console=console,
             refresh_per_second=cfg.fps,
             transient=True,
         ) as live:
-            for frame in range(total_frames + 1):
-                progress = frame / total_frames
-                eased = _ease_out_cubic(progress)
-                markup = colorize_banner(art, sweep_progress=eased)
-                live.update(Text.from_markup(markup))
+            for i in range(1, len(frames)):
                 time.sleep(cfg.frame_delay)
+                live.update(frames[i])
 
         # Print final static version permanently
         console.print(Text.from_markup(render_banner_static(art)))
