@@ -106,6 +106,8 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 **downloader.py** - URL media download
 - yt-dlp integration (YouTube, Vimeo, Twitter/X, 1000+ sites)
 - Audio-only download by default
+- Browser cookie support for authenticated downloads
+- Hardened retries (10 attempts), User-Agent spoofing
 - Progress tracking with callback hooks
 - File discovery with post-processor awareness
 - Size and duration limit enforcement
@@ -244,10 +246,12 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Aspect ratio handling
 
 **banner.py** - Animated ASCII banner
-- Box-drawing wordmark with gradient sweep
-- Rich Live animation engine
+- ANSI Shadow block font (6-line, 45-char wide)
+- Gradient sweep animation (blue→purple, HSV color space)
+- Rich Live animation engine with ease-out cubic easing
 - Progressive degradation (full/light/off/plain)
-- Respects SCRIBE_ANIMATIONS and SCRIBE_BANNER env vars
+- Cross-platform: Windows (8 FPS), macOS/Linux (10 FPS)
+- Respects SCRIBE_ANIMATIONS, SCRIBE_BANNER, NO_COLOR env vars
 
 **branding.py** - Gradient header markup
 - Per-character HSV gradient generation

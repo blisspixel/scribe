@@ -92,6 +92,7 @@ which ffprobe
 **Symptoms:**
 - `scribe url` fails with DownloadError
 - "yt-dlp not installed" message
+- HTTP 403 Forbidden errors
 - Download times out or produces empty file
 
 **Diagnosis:**
@@ -107,17 +108,23 @@ yt-dlp --version       # Verify installation
 pip install yt-dlp
 ```
 
-2. **Update yt-dlp (sites frequently change):**
+2. **Update yt-dlp (sites frequently change their anti-bot protections):**
 ```bash
 pip install --upgrade yt-dlp
 ```
 
-3. **Video unavailable or age-restricted:**
-   - Check the URL is accessible in a browser
-   - Private/unlisted videos require authentication (not yet supported)
-   - Age-restricted content may require cookies
+3. **HTTP 403 Forbidden:**
+   - Most common cause: outdated yt-dlp — update first (step 2)
+   - Try browser cookies to authenticate: `scribe url <link> --cookies edge`
+   - Supported browsers: `edge`, `chrome`, `firefox`, `safari`, `opera`, `brave`
+   - Scribe automatically retries up to 10 times with exponential backoff
 
-4. **Download timeout:**
+4. **Video unavailable or age-restricted:**
+   - Check the URL is accessible in a browser
+   - Use `--cookies` to authenticate via your logged-in browser session
+   - Age-restricted content requires cookies: `scribe url <link> --cookies chrome`
+
+5. **Download timeout:**
 ```bash
 # Increase timeout (default 600 seconds)
 export SCRIBE_DOWNLOAD_TIMEOUT=1200
@@ -404,7 +411,7 @@ scribe transcribe audio.mp4 --model medium    # Even faster
 
 **Diagnosis:**
 ```bash
-scribe meme transcript.txt --show-reasoning
+scribe meme transcript.md --show-reasoning
 ```
 
 **Solutions:**
@@ -422,8 +429,8 @@ scribe meme transcript.txt --show-reasoning
 3. **Provider issues:**
 ```bash
 # Try different provider
-scribe meme transcript.txt --provider openai
-scribe meme transcript.txt --provider gemini
+scribe meme transcript.docx --provider openai
+scribe meme transcript.md --provider gemini
 ```
 
 4. **Image generation errors:**
@@ -639,3 +646,4 @@ pip install -e .
    - Error messages
    - Steps to reproduce
    - Log files
+

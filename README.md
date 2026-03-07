@@ -40,7 +40,8 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 ## Unreleased (Current Workspace)
 
 - **URL Transcription**: New `scribe url <link>` command — download and transcribe from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
-- **Animated Banner**: ASCII wordmark with gradient sweep animation on help screen and `scribe --banner`
+- **YouTube 403 Fix**: Upgraded yt-dlp, added browser cookie support (`--cookies`), hardened retries and User-Agent
+- **Animated Banner**: Bold ANSI Shadow block font with animated gradient sweep (blue→purple), cross-platform (Windows, macOS, Linux)
 - **CLI Polish**: Cleaner panel headers across all commands — lowercase branding, compact info lines
 - **Doctor**: Added yt-dlp check to system diagnostics
 - Added terminal UI configuration: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
@@ -86,6 +87,7 @@ scribe url https://www.youtube.com/watch?v=VIDEO_ID
 scribe url https://vimeo.com/123456789
 scribe url https://example.com/podcast.mp3 --language es
 scribe url https://youtu.be/abc123 --keep-download
+scribe url https://youtu.be/abc123 --cookies edge    # Use browser cookies for auth
 
 # Batch processing
 scribe batch *.mp4
@@ -115,14 +117,15 @@ scribe record --no-auto-transcribe
 ### Intelligence
 ```bash
 # Generate notes from transcript
-scribe notes transcript.txt
+scribe notes transcript.md
 
 # Generate joke
-scribe joke transcript.txt --spice 5
+scribe joke transcript.docx --spice 5
 
 # Generate meme
-scribe meme transcript.txt --qa-threshold 8.5
+scribe meme transcript.md --qa-threshold 8.5
 ```
+Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md`, `.docx`
 
 ### Utilities
 ```bash
@@ -149,6 +152,7 @@ scribe --banner
 - `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
 - `--vocabulary FILE` - Custom vocabulary
 - `--provider openai|xai|anthropic|gemini` - AI provider
+- `--cookies BROWSER` - Use browser cookies for URL downloads (edge, chrome, firefox)
 - `--no-docx` - Skip DOCX generation (just .txt transcript)
 - `--no-notes` - Skip meeting notes
 - `--no-joke` - Skip joke generation
@@ -552,11 +556,15 @@ pytest --cov=scribe --cov-report=term-missing
 
 # Quick check
 pytest tests/unit/ --tb=no -q
+
+# Skip end-to-end tests that require external API access
+pytest -q -k 'not e2e'
 ```
 
 **Test Status:**
 - Large unit/integration/e2e test suite
 - Platform-specific skips in some environments
+- End-to-end tests may require a valid `OPENAI_API_KEY`
 - Use the commands above to verify in your environment
 
 ### Code Quality
@@ -619,6 +627,25 @@ sudo apt install ffmpeg
 - Check API quota and billing
 - Ensure stable network connection
 - Use `scribe health` to check provider status
+
+### URL Download Errors (403 Forbidden)
+
+YouTube and other sites frequently change their anti-bot protections. If `scribe url` fails with a 403:
+
+```bash
+# 1. Update yt-dlp (most common fix)
+pip install --upgrade yt-dlp
+
+# 2. Try with browser cookies (authenticates via your logged-in browser session)
+scribe url https://youtu.be/VIDEO_ID --cookies edge
+scribe url https://youtu.be/VIDEO_ID --cookies chrome
+scribe url https://youtu.be/VIDEO_ID --cookies firefox
+
+# 3. Run diagnostics
+scribe doctor
+```
+
+Scribe automatically sets a browser User-Agent and retries with exponential backoff (up to 10 attempts).
 
 ### Meme Generation Issues
 
@@ -714,3 +741,5 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 **Build Status:** Refer to local CI/test runs  
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)  
 **Last Updated:** 2026-02-14
+
+
