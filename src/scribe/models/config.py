@@ -20,12 +20,12 @@ ModelSize = Literal["tiny", "base", "small", "medium", "large", "large-v2", "lar
 def _find_env_file() -> str | None:
     """
     Find .env file in multiple locations.
-    
+
     Search order:
     1. Current working directory
     2. User's home directory
     3. Package installation directory (where this file is)
-    
+
     Returns:
         Path to .env file if found, None otherwise
     """
@@ -52,18 +52,18 @@ def _find_env_file() -> str | None:
 class ScribeConfig(BaseSettings):
     """
     System configuration with validation and environment variable loading.
-    
+
     This configuration class provides:
     - Automatic loading from environment variables (SCRIBE_ prefix)
     - Loading from .env file
     - Runtime validation of all values
     - Self-healing for common path issues
     - Type safety with Pydantic
-    
+
     Example:
         # Load from environment
         config = ScribeConfig()
-        
+
         # Or provide values directly
         config = ScribeConfig(
             output_folder=Path("/custom/output"),
@@ -232,24 +232,29 @@ class ScribeConfig(BaseSettings):
         description="Download audio only from URLs (saves bandwidth)"
     )
 
+    cookies_from_browser: str | None = Field(
+        default=None,
+        description="Browser to extract cookies from for URL downloads (chrome, firefox, edge, etc.)"
+    )
+
     @field_validator("output_folder", "log_folder")
     @classmethod
     def validate_and_create_folder(cls, v: Path) -> Path:
         """
         Validate and create directory if it doesn't exist.
-        
+
         This validator:
         - Expands ~ to home directory
         - Converts to absolute path
         - Creates directory if missing
         - Tests write permissions
-        
+
         Args:
             v: Path to validate
-            
+
         Returns:
             Validated and created Path
-            
+
         Raises:
             ValidationError: If path is not writable
         """
@@ -294,15 +299,15 @@ class ScribeConfig(BaseSettings):
     def validate_api_key(cls, v: str | None) -> str | None:
         """
         Validate OpenAI API key format.
-        
+
         Accepts OPENAI_API_KEY (standard) or SCRIBE_OPENAI_API_KEY (legacy).
-        
+
         Args:
             v: API key to validate
-            
+
         Returns:
             Validated API key or None
-            
+
         Raises:
             ValidationError: If API key format is invalid
         """
@@ -327,13 +332,13 @@ class ScribeConfig(BaseSettings):
     def validate_language_code(cls, v: str) -> str:
         """
         Validate language code is 2-letter ISO 639-1 format.
-        
+
         Args:
             v: Language code to validate
-            
+
         Returns:
             Validated language code
-            
+
         Raises:
             ValidationError: If language code format is invalid
         """
@@ -352,13 +357,13 @@ class ScribeConfig(BaseSettings):
     def validate_port(cls, v: int) -> int:
         """
         Validate port number is in valid range.
-        
+
         Args:
             v: Port number to validate
-            
+
         Returns:
             Validated port number
-            
+
         Raises:
             ValidationError: If port is out of range
         """
@@ -373,19 +378,18 @@ class ScribeConfig(BaseSettings):
     def validate_for_transcription(self, method: TranscriptionMethod) -> None:
         """
         Validate configuration for specific transcription method.
-        
+
         Args:
             method: Transcription method to validate for
-            
+
         Raises:
             ValidationError: If configuration is invalid for method
         """
-        if method == "openai":
-            if not self.openai_api_key:
-                raise ValidationError(
-                    "OpenAI API key required for OpenAI transcription method",
-                    context={"method": method}
-                )
+        if method == "openai" and not self.openai_api_key:
+            raise ValidationError(
+                "OpenAI API key required for OpenAI transcription method",
+                context={"method": method}
+            )
 
         if method == "local":
             # GPU validation will be done at runtime
@@ -394,10 +398,10 @@ class ScribeConfig(BaseSettings):
     def get_session_log_path(self, session_name: str) -> Path:
         """
         Get log file path for a session.
-        
+
         Args:
             session_name: Name of the session
-            
+
         Returns:
             Path to log file
         """

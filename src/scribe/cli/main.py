@@ -28,6 +28,7 @@ from scribe.utils.joke_generator import (
 )
 from scribe.utils.logging import console, get_logger, setup_logging
 from scribe.utils.theme import ScribeTheme
+from scribe.utils.transcript_loader import is_supported_transcript_file, load_transcript_text
 from scribe.utils.validation import sanitize_meeting_name, validate_file_path
 
 # Suppress TorchAudio MP3 warnings
@@ -75,9 +76,9 @@ class CleanGroup(typer.core.TyperGroup):
             ("batch FILES      ", "process multiple files"),
             ("rec NAME         ", "record via OBS"),
             ("music FILE       ", "extract lyrics"),
-            ("notes TXT        ", "meeting notes"),
-            ("joke TXT         ", "generate joke"),
-            ("meme TXT         ", "generate meme"),
+            ("notes TRANSCRIPT ", "meeting notes"),
+            ("joke TRANSCRIPT ", "generate joke"),
+            ("meme TRANSCRIPT ", "generate meme"),
             ("doctor           ", "diagnostics"),
             ("info             ", "configuration"),
             ("help             ", "show this help"),
@@ -156,17 +157,17 @@ def transcribe_command(
 ):
     """
     Transcribe an audio or video file.
-    
+
     Examples:
-    
+
       scribe transcribe meeting.mp4
-      
+
       scribe transcribe interview.wav --method local --model large-v3
-      
+
       scribe transcribe podcast.mp3 --method openai --language spanish
-      
+
       scribe transcribe meeting.mp4 --no-joke --no-meme
-      
+
       scribe transcribe technical.mp4 --vocabulary terms.txt
     """
     unified_progress = None
@@ -571,22 +572,27 @@ def url_command(
         "--keep-download",
         help="Keep the downloaded file after transcription"
     ),
+    cookies: str | None = typer.Option(
+        None,
+        "--cookies",
+        help="Browser to extract cookies from (chrome, firefox, edge) — fixes YouTube 403 errors"
+    ),
 ):
     """
     Download and transcribe audio/video from a URL.
-    
+
     Supports YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp.
-    
+
     Examples:
-    
+
       scribe url https://www.youtube.com/watch?v=dQw4w9WgXcQ
-      
+
       scribe url https://vimeo.com/123456789 --method local
-      
+
       scribe url https://example.com/podcast.mp3 --language es
-      
+
       scribe url https://youtu.be/abc123 --no-joke --no-meme
-      
+
       scribe url https://youtube.com/watch?v=xyz --keep-download
     """
     unified_progress = None
@@ -651,11 +657,13 @@ def url_command(
 
         # Download the media
         output_dir = config.download_folder or config.output_folder
+        cookies_browser = cookies or config.cookies_from_browser
         downloader = URLDownloader(
             output_dir=output_dir,
             audio_only=config.download_audio_only,
             timeout=config.download_timeout,
             max_file_size_gb=config.max_file_size_gb,
+            cookies_from_browser=cookies_browser,
         )
 
         with console.status(f"[{ScribeTheme.PRIMARY}]Downloading...[/{ScribeTheme.PRIMARY}]"):
@@ -986,24 +994,24 @@ def record(
 ):
     """
     Record audio/video using OBS Studio.
-    
+
     Quick start: Just run 'scribe record' and enter the meeting name when prompted.
     Recording will start immediately and auto-transcribe when done.
-    
+
     This command integrates with OBS Studio to record meetings and
     automatically transcribe them when recording stops.
-    
+
     Examples:
-    
+
       # Interactive mode (prompts for name)
       scribe record
-      
+
       # With meeting name
       scribe record --name "Board Meeting"
-      
+
       # Record without auto-transcription
       scribe record --name "Interview" --no-auto-transcribe
-      
+
       # Record without humor
       scribe record --no-joke --no-meme
     """
@@ -1332,18 +1340,18 @@ def batch_transcribe(
 ):
     """
     Batch transcribe multiple audio/video files.
-    
+
     Process multiple recordings in one command. Each file is transcribed
     independently with its own output files.
-    
+
     Examples:
-    
+
       scribe batch meeting1.mp4 meeting2.mp4 meeting3.mp4
-      
+
       scribe batch *.mp4 --method local
-      
+
       scribe batch file1.wav file2.wav --vocabulary terms.txt
-      
+
       scribe batch *.mp3 --no-joke --no-meme
     """
     try:
@@ -1573,24 +1581,24 @@ def music_transcribe(
 ):
     """
     Transcribe music/lyrics with clean formatting.
-    
+
     Supports single files, multiple files, wildcards, or folders.
-    
+
     Optimized for music transcription with:
     - Clean lyrics-only output (no timestamps)
     - Graceful handling of instrumental tracks
     - No jokes, memes, or meeting notes by default
     - Simple TXT output format
     - Lyrics files saved next to original MP3s
-    
+
     Examples:
-    
+
       scribe music song.mp3
-      
+
       scribe music album/*.flac --method local
-      
+
       scribe music folder/
-      
+
       scribe music track1.mp3 track2.mp3 track3.mp3
     """
     try:
@@ -2040,17 +2048,17 @@ def rec_shortcut(
 ):
     """
     Quick record shortcut - starts recording immediately.
-    
+
     Ultra-fast recording: 'scribe rec' or 'scribe rec "Meeting Name"'
-    
+
     This is a shortcut for 'scribe record' with auto-transcribe enabled.
     If no name is provided, you'll be prompted to enter one.
-    
+
     Examples:
-    
+
       # Fastest - prompts for name
       scribe rec
-      
+
       # With name as argument
       scribe rec "Team Standup"
       scribe rec Board-Meeting
@@ -2063,7 +2071,7 @@ def rec_shortcut(
 def joke(
     transcript_file: Path = typer.Argument(
         ...,
-        help="Path to transcript file (.txt)",
+        help="Path to transcript file (.txt, .md, .docx)",
         exists=True
     ),
     spice: int | None = typer.Option(
@@ -2089,17 +2097,17 @@ def joke(
 ):
     """
     Generate an agentic AI joke about a transcript.
-    
+
     Analyzes the transcript and generates context-aware humor using
     sophisticated comedy archetypes designed for post-meeting cognitive
     decompression.
-    
+
     Example: scribe joke transcript.txt
     """
     try:
         # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+        if not is_supported_transcript_file(transcript_file):
+            console.print("[bold red]Error:[/bold red] File must be a transcript file (.txt, .md, or .docx)")
             raise typer.Exit(1)
 
         config = ScribeConfig()
@@ -2154,7 +2162,7 @@ def joke(
                 from scribe.utils.joke_bakeoff import run_joke_bakeoff
 
                 # Read transcript
-                transcript = transcript_file.read_text(encoding='utf-8')
+                transcript = load_transcript_text(transcript_file)
 
                 try:
                     bakeoff_result = run_joke_bakeoff(transcript, humor_config)
@@ -2199,7 +2207,7 @@ def joke(
 def meme(
     transcript_file: Path = typer.Argument(
         ...,
-        help="Path to transcript file (.txt)",
+        help="Path to transcript file (.txt, .md, .docx)",
         exists=True
     ),
     output: Path | None = typer.Option(
@@ -2225,18 +2233,18 @@ def meme(
 ):
     """
     Generate a meme from a meeting transcript.
-    
+
     Uses GPT-5 to analyze the transcript and create a clever meme concept,
     then generates the meme image using OpenAI's image generation API.
-    
+
     Example: scribe meme transcript.txt
     Example: scribe meme transcript.txt --output ./memes/meeting.png
     Example: scribe meme transcript.txt --show-reasoning
     """
     try:
         # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+        if not is_supported_transcript_file(transcript_file):
+            console.print("[bold red]Error:[/bold red] File must be a transcript file (.txt, .md, or .docx)")
             raise typer.Exit(1)
 
         config = ScribeConfig()
@@ -2354,7 +2362,7 @@ def meme(
 def notes(
     transcript_file: Path = typer.Argument(
         ...,
-        help="Path to transcript file (.txt)",
+        help="Path to transcript file (.txt, .md, .docx)",
         exists=True
     ),
     output: Path | None = typer.Option(
@@ -2375,21 +2383,21 @@ def notes(
 ):
     """
     Generate structured meeting notes from a transcript.
-    
+
     Uses AI (OpenAI, XAI/Grok, etc.) to analyze the transcript and create comprehensive notes with:
     - Detailed summary
     - Current state (business & technical)
     - Drivers and blockers
     - Future state and next steps
-    
+
     Example: scribe notes transcript.txt
     Example: scribe notes transcript.txt --output ./notes/meeting.md
     Example: scribe notes transcript.txt --provider xai
     """
     try:
         # Validate file is a text file
-        if transcript_file.suffix.lower() not in ['.txt', '.md']:
-            console.print("[bold red]Error:[/bold red] File must be a text file (.txt or .md)")
+        if not is_supported_transcript_file(transcript_file):
+            console.print("[bold red]Error:[/bold red] File must be a transcript file (.txt, .md, or .docx)")
             raise typer.Exit(1)
 
         config = ScribeConfig()
@@ -2455,7 +2463,7 @@ def notes(
 def info():
     """
     Show system information and GPU capabilities.
-    
+
     Displays GPU detection results, recommended transcription method,
     and system configuration.
     """
@@ -2546,7 +2554,7 @@ def info():
 def doctor():
     """
     Run system diagnostics and health checks.
-    
+
     Validates environment, dependencies, and configuration.
     Provides actionable suggestions for fixing issues.
     """
@@ -2644,7 +2652,7 @@ def health_check(
 ):
     """
     Check health status of AI providers.
-    
+
     Validates API connectivity and response times for configured providers.
     Useful for troubleshooting provider issues.
     """
@@ -2736,18 +2744,18 @@ def support_bundle(
 ):
     """
     Generate a support bundle for troubleshooting.
-    
+
     Creates a comprehensive diagnostic package containing system information,
     environment configuration, recent run history, and diagnostic results.
-    
+
     The bundle is saved as a JSON file that can be shared with support
     or used for debugging issues.
-    
+
     Examples:
-    
+
       # Generate in current directory
       scribe support-bundle
-      
+
       # Generate in specific directory
       scribe support-bundle --output ~/Desktop
     """
@@ -2844,10 +2852,10 @@ def clean(
 ):
     """
     Remove silence from audio/video files or trim to specific duration.
-    
+
     Useful for cleaning up recordings left running overnight or with long pauses.
     Uses FFmpeg to detect and remove silent sections while preserving audio quality.
-    
+
     Example: scribe clean long_recording.mp4
     Example: scribe clean recording.mp4 --threshold -40dB --duration 3.0
     Example: scribe clean recording.mp4 --analyze (just show how much silence)
@@ -3012,3 +3020,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -20,13 +20,16 @@ from scribe.utils.terminal_ui import TerminalUIConfig, get_terminal_ui_config
 from scribe.utils.theme import ScribeTheme
 
 # ─── ASCII Wordmark ─────────────────────────────────────────────────────
-# Box-drawing "scribe" — compact 3-line design.
-# Letters: S(3) C(3) R(3) I(1) B(3) E(3) with spacing.
+# ANSI Shadow block font — bold 6-line design inspired by GitHub Copilot CLI.
+# Uses █ (full block) for fills and ╔═╗║╚╝ (double-line box-drawing) for edges.
 
 BANNER_ART = (
-    "  \u250c\u2500\u2510 \u250c\u2500\u2510 \u252c\u2500\u2510 \u252c  \u250c\u2510  \u250c\u2500\u2510\n"
-    "  \u2514\u2500\u2510 \u2502   \u251c\u252c\u2518 \u2502  \u251c\u2534\u2510 \u251c\u2524\n"
-    "  \u2514\u2500\u2518 \u2514\u2500\u2518 \u2534\u2514\u2500 \u2534  \u2514\u2500\u2518 \u2514\u2500\u2518"
+    "  ███████╗ ██████╗██████╗ ██╗██████╗ ███████╗\n"
+    "  ██╔════╝██╔════╝██╔══██╗██║██╔══██╗██╔════╝\n"
+    "  ███████╗██║     ██████╔╝██║██████╔╝█████╗  \n"
+    "  ╚════██║██║     ██╔══██╗██║██╔══██╗██╔══╝  \n"
+    "  ███████║╚██████╗██║  ██║██║██████╔╝███████╗\n"
+    "  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝"
 )
 
 # Brand hue range matching branding.py: blue (200deg) to purple (320deg)

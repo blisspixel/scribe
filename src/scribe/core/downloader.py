@@ -48,12 +48,14 @@ class URLDownloader:
         timeout: int = 600,
         max_file_size_gb: float = 25.0,
         progress_callback: Callable[[float], None] | None = None,
+        cookies_from_browser: str | None = None,
     ):
         self.output_dir = output_dir or Path(tempfile.mkdtemp(prefix="scribe_dl_"))
         self.audio_only = audio_only
         self.timeout = timeout
         self.max_file_size_gb = max_file_size_gb
         self.progress_callback = progress_callback
+        self.cookies_from_browser = cookies_from_browser
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -153,7 +155,17 @@ class URLDownloader:
                 ) from e
             if "Sign in" in error_msg or "age" in error_msg.lower():
                 raise DownloadError(
-                    "Video requires authentication or is age-restricted",
+                    "Video requires authentication or is age-restricted"
+                    "\nTry: scribe url <link> --cookies edge",
+                    context={"url": url, "detail": error_msg}
+                ) from e
+            if "403" in error_msg or "Forbidden" in error_msg:
+                hint = (
+                    "\nTry: pip install --upgrade yt-dlp"
+                    "\n  or: scribe url <link> --cookies edge"
+                )
+                raise DownloadError(
+                    f"Download blocked (HTTP 403). YouTube may require browser cookies.{hint}",
                     context={"url": url, "detail": error_msg}
                 ) from e
             raise DownloadError(
@@ -166,14 +178,25 @@ class URLDownloader:
         opts: dict = {
             "outtmpl": str(self.output_dir / "%(title).100s.%(ext)s"),
             "socket_timeout": self.timeout,
-            "retries": 3,
+            "retries": 10,
+            "fragment_retries": 10,
+            "extractor_retries": 5,
             "quiet": True,
             "no_warnings": True,
             "noprogress": True,
             "noplaylist": True,  # Single videos only
-            # Restrict filenames to safe characters
             "restrictfilenames": True,
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
+            },
         }
+
+        if self.cookies_from_browser:
+            opts["cookiesfrombrowser"] = (self.cookies_from_browser,)
 
         if self.audio_only:
             # Download best audio, let ffmpeg convert to wav/mp3 later

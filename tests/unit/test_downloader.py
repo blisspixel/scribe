@@ -46,6 +46,7 @@ class TestURLDownloader:
         assert dl.timeout == 600
         assert dl.max_file_size_gb == 25.0
         assert dl.output_dir == tmp_path
+        assert dl.cookies_from_browser is None
 
     def test_init_custom_options(self, tmp_path):
         dl = URLDownloader(
@@ -53,10 +54,12 @@ class TestURLDownloader:
             audio_only=False,
             timeout=120,
             max_file_size_gb=5.0,
+            cookies_from_browser="edge",
         )
         assert dl.audio_only is False
         assert dl.timeout == 120
         assert dl.max_file_size_gb == 5.0
+        assert dl.cookies_from_browser == "edge"
 
     def test_init_creates_output_dir(self, tmp_path):
         new_dir = tmp_path / "downloads" / "nested"
@@ -190,6 +193,21 @@ class TestURLDownloader:
             with pytest.raises(DownloadError, match="authentication or is age-restricted"):
                 dl.download("https://youtube.com/watch?v=age")
 
+    @patch("scribe.core.downloader.yt_dlp", create=True)
+    def test_download_403_forbidden(self, _mock_yt_dlp_module, tmp_path):
+        """Test HTTP 403 Forbidden gives actionable error message."""
+        mock_ydl = MagicMock()
+        mock_ydl.extract_info.side_effect = Exception(
+            "HTTP Error 403: Forbidden"
+        )
+        mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
+        mock_ydl.__exit__ = MagicMock(return_value=False)
+
+        with patch("yt_dlp.YoutubeDL", return_value=mock_ydl):
+            dl = URLDownloader(output_dir=tmp_path)
+            with pytest.raises(DownloadError, match="403.*cookies"):
+                dl.download("https://youtube.com/watch?v=blocked")
+
 
 class TestURLDownloaderOptions:
     """Test yt-dlp option building."""
@@ -227,6 +245,28 @@ class TestURLDownloaderOptions:
         dl = URLDownloader(output_dir=tmp_path)
         opts = dl._build_options()
         assert "progress_hooks" not in opts
+
+    def test_retries_increased(self, tmp_path):
+        dl = URLDownloader(output_dir=tmp_path)
+        opts = dl._build_options()
+        assert opts["retries"] == 10
+        assert opts["fragment_retries"] == 10
+
+    def test_user_agent_set(self, tmp_path):
+        dl = URLDownloader(output_dir=tmp_path)
+        opts = dl._build_options()
+        assert "User-Agent" in opts["http_headers"]
+        assert "Mozilla" in opts["http_headers"]["User-Agent"]
+
+    def test_cookies_from_browser_option(self, tmp_path):
+        dl = URLDownloader(output_dir=tmp_path, cookies_from_browser="edge")
+        opts = dl._build_options()
+        assert opts["cookiesfrombrowser"] == ("edge",)
+
+    def test_no_cookies_by_default(self, tmp_path):
+        dl = URLDownloader(output_dir=tmp_path)
+        opts = dl._build_options()
+        assert "cookiesfrombrowser" not in opts
 
 
 class TestProgressHook:

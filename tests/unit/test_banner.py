@@ -57,15 +57,15 @@ class TestBannerArt:
         assert BANNER_ART
         assert isinstance(BANNER_ART, str)
 
-    def test_art_is_three_lines(self):
+    def test_art_is_six_lines(self):
         lines = BANNER_ART.split("\n")
-        assert len(lines) == 3
+        assert len(lines) == 6
 
     def test_art_contains_box_drawing_chars(self):
-        assert "\u250c" in BANNER_ART  # ┌
-        assert "\u2518" in BANNER_ART  # ┘
-        assert "\u2500" in BANNER_ART  # ─
-        assert "\u2502" in BANNER_ART  # │
+        assert "\u2588" in BANNER_ART  # █ (full block)
+        assert "\u2554" in BANNER_ART  # ╔ (double top-left)
+        assert "\u2551" in BANNER_ART  # ║ (double vertical)
+        assert "\u2550" in BANNER_ART  # ═ (double horizontal)
 
     def test_art_lines_have_similar_width(self):
         lines = BANNER_ART.split("\n")
@@ -163,7 +163,7 @@ class TestColorizeBanner:
     def test_banner_art_colorizes_without_error(self):
         result = colorize_banner(BANNER_ART, sweep_progress=1.0)
         assert "rgb(" in result
-        assert len(result.split("\n")) == 3
+        assert len(result.split("\n")) == 6
 
     def test_sweep_progress_boundaries(self):
         for progress in [0.0, 0.25, 0.5, 0.75, 1.0]:
@@ -192,7 +192,7 @@ class TestRenderBannerStatic:
     def test_full_art_colored(self):
         result = render_banner_static(BANNER_ART)
         assert "rgb(" in result
-        assert len(result.split("\n")) == 3
+        assert len(result.split("\n")) == 6
 
 
 # ─── Banner Enabled ─────────────────────────────────────────────────────
@@ -254,8 +254,8 @@ class TestShowBanner:
             for arg in c.args:
                 all_args.append(str(arg))
         combined = " ".join(all_args)
-        # Plain art has box-drawing chars, no rgb markup
-        assert "\u250c" in combined or "\u2514" in combined
+        # Plain art has block/box-drawing chars, no rgb markup
+        assert "\u2588" in combined or "\u2554" in combined
         assert "rgb(" not in combined
 
     @patch("scribe.utils.banner._animate_sweep")
