@@ -273,6 +273,53 @@ class TestAPIKeyCheck:
             assert "Not configured" in result.message
 
 
+class TestAdditionalProviders:
+    """Test additional AI provider key validation."""
+
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_xai_valid_key(self, mock_openai_cls):
+        """Test XAI key that passes live validation."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {'XAI_API_KEY': 'xai-test-key'}, clear=True):
+            result = diagnostics.check_additional_providers()
+
+            assert result.status == "pass"
+            assert "XAI/Grok: valid" in result.details
+
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_xai_invalid_key(self, mock_openai_cls):
+        """Test XAI key rejected with 401."""
+        from openai import AuthenticationError
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = AuthenticationError(
+            message="Invalid", response=MagicMock(status_code=401), body=None,
+        )
+        mock_openai_cls.return_value = mock_client
+
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {'XAI_API_KEY': 'xai-bad-key'}, clear=True):
+            result = diagnostics.check_additional_providers()
+
+            assert result.status == "fail"
+            assert "XAI/Grok" in result.message
+
+    def test_no_providers(self):
+        """Test no additional providers configured."""
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = diagnostics.check_additional_providers()
+
+            assert result.status == "warn"
+            assert "No additional" in result.message
+
+
 class TestOutputFolderCheck:
     """Test output folder checking."""
 

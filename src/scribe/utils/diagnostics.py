@@ -705,31 +705,71 @@ class SystemDiagnostics:
         return result
 
     def check_additional_providers(self) -> DiagnosticResult:
-        """Check additional AI provider configurations."""
-        providers = {}
+        """Check additional AI provider configurations with live validation."""
+        providers: dict[str, str] = {}
+        invalid: list[str] = []
 
-        if os.getenv("XAI_API_KEY"):
-            providers["XAI/Grok"] = "configured"
-        if os.getenv("ANTHROPIC_API_KEY"):
+        # XAI/Grok — OpenAI-compatible API
+        xai_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
+        if xai_key:
+            try:
+                client = OpenAI(
+                    api_key=xai_key,
+                    base_url="https://api.x.ai/v1",
+                    timeout=10,
+                )
+                client.models.list()
+                providers["XAI/Grok"] = "valid"
+            except AuthenticationError:
+                providers["XAI/Grok"] = "invalid key (401)"
+                invalid.append("XAI/Grok")
+            except Exception:
+                providers["XAI/Grok"] = "could not verify"
+
+        # Gemini — Google genai SDK
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
+        if gemini_key:
+            try:
+                import google.genai as genai
+
+                client = genai.Client(api_key=gemini_key)
+                # List models as a lightweight validation
+                list(client.models.list(config={"page_size": 1}))
+                providers["Gemini"] = "valid"
+            except Exception as e:
+                err = str(e).lower()
+                if "401" in err or "invalid" in err or "api key" in err:
+                    providers["Gemini"] = "invalid key"
+                    invalid.append("Gemini")
+                else:
+                    providers["Gemini"] = "could not verify"
+
+        # Anthropic — just check presence (no lightweight endpoint)
+        if os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY"):
             providers["Anthropic"] = "configured"
-        if os.getenv("GEMINI_API_KEY"):
-            providers["Gemini"] = "configured"
 
-        if providers:
-            result = DiagnosticResult(
-                name="Additional Providers",
-                status="pass",
-                message=f"{len(providers)} provider(s) configured",
-                details=", ".join(f"{k}: {v}" for k, v in providers.items()),
-                fix_suggestion=None
-            )
-        else:
+        if not providers:
             result = DiagnosticResult(
                 name="Additional Providers",
                 status="warn",
                 message="No additional providers",
                 details="Only OpenAI configured",
-                fix_suggestion="Consider adding XAI (47x cheaper) or other providers for cost savings"
+                fix_suggestion="Consider adding XAI or other providers for cost savings"
+            )
+        elif invalid:
+            result = DiagnosticResult(
+                name="Additional Providers",
+                status="fail",
+                message=f"{', '.join(invalid)} key(s) invalid",
+                details=", ".join(f"{k}: {v}" for k, v in providers.items()),
+                fix_suggestion="Update your API keys in .env file"
+            )
+        else:
+            result = DiagnosticResult(
+                name="Additional Providers",
+                status="pass",
+                message=f"{len(providers)} provider(s) verified",
+                details=", ".join(f"{k}: {v}" for k, v in providers.items()),
             )
 
         self.results.append(result)
