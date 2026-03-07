@@ -135,6 +135,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from scribe.exceptions import ScribeError
 from scribe.utils.logging import get_logger
+from scribe.utils.transcript_loader import load_transcript_text
 
 logger = get_logger(__name__)
 
@@ -547,7 +548,7 @@ class NotesGenerator:
         if not path.is_file():
             raise NotesGenerationError(f"Path is not a file: {path}")
         try:
-            content = path.read_text(encoding="utf-8")
+            content = load_transcript_text(path)
         except Exception as e:
             raise NotesGenerationError(f"Failed to read transcript: {e}")
 
@@ -1024,3 +1025,4 @@ Each bullet should be a complete sentence with maximum detail density."""
             return output_path
         except Exception as e:
             raise NotesGenerationError(f"Failed to write notes file: {e}")
+

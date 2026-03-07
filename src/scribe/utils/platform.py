@@ -266,7 +266,7 @@ PlatformType = Literal["windows", "macos", "linux", "unknown"]
 def get_platform() -> PlatformType:
     """
     Get the current platform.
-    
+
     Returns:
         Platform identifier: "windows", "macos", "linux", or "unknown"
     """
@@ -300,12 +300,12 @@ def is_linux() -> bool:
 def get_ffmpeg_path() -> Path | None:
     """
     Find ffmpeg executable with platform-specific search.
-    
+
     This function searches for ffmpeg in:
     1. System PATH
     2. Common installation directories
     3. Environment variables (FFMPEG_DIR, PUEO_FFMPEG_DIR)
-    
+
     Returns:
         Path to ffmpeg executable, or None if not found
     """
@@ -359,7 +359,7 @@ def get_ffmpeg_path() -> Path | None:
 def get_ffprobe_path() -> Path | None:
     """
     Find ffprobe executable with platform-specific search.
-    
+
     Returns:
         Path to ffprobe executable, or None if not found
     """
@@ -382,7 +382,7 @@ def get_ffprobe_path() -> Path | None:
 def get_obs_executable_path() -> Path | None:
     """
     Find OBS Studio executable with platform-specific search.
-    
+
     Returns:
         Path to OBS executable, or None if not found
     """
@@ -418,10 +418,10 @@ def get_obs_executable_path() -> Path | None:
 def open_file_with_default_app(file_path: Path) -> bool:
     """
     Open a file with the system's default application.
-    
+
     Args:
         file_path: Path to file to open
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -442,7 +442,7 @@ def open_file_with_default_app(file_path: Path) -> bool:
 def get_home_directory() -> Path:
     """
     Get user's home directory in a cross-platform way.
-    
+
     Returns:
         Path to home directory
     """
@@ -452,7 +452,7 @@ def get_home_directory() -> Path:
 def get_default_output_directory() -> Path:
     """
     Get platform-appropriate default output directory.
-    
+
     Returns:
         Path to default output directory
     """
@@ -472,7 +472,7 @@ def get_default_output_directory() -> Path:
 def get_temp_directory() -> Path:
     """
     Get platform-appropriate temporary directory.
-    
+
     Returns:
         Path to temp directory
     """
@@ -483,7 +483,7 @@ def get_temp_directory() -> Path:
 def get_platform_info() -> dict:
     """
     Get comprehensive platform information.
-    
+
     Returns:
         Dictionary with platform details
     """
@@ -501,11 +501,11 @@ def get_platform_info() -> dict:
 def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
     """
     Check if sufficient disk space is available.
-    
+
     Args:
         path: Path to check
         required_gb: Required space in GB
-        
+
     Returns:
         True if sufficient space available
     """
@@ -531,7 +531,7 @@ def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
 def get_path_separator() -> str:
     """
     Get platform-specific path separator.
-    
+
     Returns:
         Path separator character
     """
@@ -541,16 +541,16 @@ def get_path_separator() -> str:
 def normalize_path(path: str) -> Path:
     """
     Normalize path for current platform.
-    
+
     This function:
     - Converts backslashes to forward slashes on Unix
     - Expands ~ to home directory
     - Resolves to absolute path
     - Handles Windows drive letters correctly
-    
+
     Args:
         path: Path string to normalize
-        
+
     Returns:
         Normalized Path object
     """

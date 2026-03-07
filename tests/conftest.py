@@ -55,7 +55,7 @@ def sample_audio(temp_dir: Path) -> Path:
 def mock_openai(monkeypatch):
     """
     Mock OpenAI API responses with proper types.
-    
+
     Returns a properly typed mock that matches the actual OpenAI API response
     structure, preventing type errors in tests.
     """
@@ -147,7 +147,7 @@ Duration: 10 minutes
 def long_audio(temp_dir: Path) -> Path:
     """
     Generate 30-minute test audio file for chunking tests.
-    
+
     Creates a longer audio file to test chunking logic, large file handling,
     and timeout scenarios.
     """
@@ -185,7 +185,7 @@ def long_audio(temp_dir: Path) -> Path:
 def test_video(temp_dir: Path) -> Path:
     """
     Generate test video file for conversion tests.
-    
+
     Creates a minimal MP4 file with audio track for testing video-to-audio
     conversion workflows.
     """
@@ -247,7 +247,7 @@ def test_video(temp_dir: Path) -> Path:
 def mock_no_gpu(monkeypatch):
     """
     Mock GPU as unavailable.
-    
+
     Simulates environment where CUDA is not available, forcing fallback
     to OpenAI API transcription.
     """
@@ -295,10 +295,10 @@ def clean_env(monkeypatch):
 def create_mock_transcription_response(text: str):
     """
     Create a properly typed mock OpenAI transcription response.
-    
+
     Args:
         text: The transcription text to return
-        
+
     Returns:
         Mock object with .text attribute matching OpenAI API response
     """
@@ -312,11 +312,11 @@ def create_mock_transcription_response(text: str):
 def create_mock_audio_file(path: Path, duration_seconds: float = 10.0) -> Path:
     """
     Create a mock audio file with proper WAV structure.
-    
+
     Args:
         path: Path where to create the file
         duration_seconds: Duration of the audio in seconds
-        
+
     Returns:
         Path to the created audio file
     """
@@ -343,7 +343,7 @@ def create_mock_audio_file(path: Path, duration_seconds: float = 10.0) -> Path:
 def mock_audio_duration(monkeypatch):
     """
     Mock audio duration detection to return proper float values.
-    
+
     Prevents Mock objects from being returned instead of actual durations.
     """
     def mock_get_duration(audio_path):
@@ -367,7 +367,7 @@ def mock_audio_duration(monkeypatch):
 def mock_file_size(monkeypatch):
     """
     Mock file size detection to return proper int values.
-    
+
     Prevents Mock objects from being returned instead of actual file sizes.
     """
     def mock_stat(self):

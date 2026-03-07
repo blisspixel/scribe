@@ -158,7 +158,7 @@ logger = get_logger(__name__)
 class VocalActivityDetector:
     """
     Detects vocal segments using Silero VAD.
-    
+
     Optimized for singing voice detection on isolated vocal tracks.
     """
 
@@ -170,7 +170,7 @@ class VocalActivityDetector:
     ):
         """
         Initialize VAD.
-        
+
         Args:
             threshold: Probability threshold for speech detection (0.35-0.4 for singing)
             min_speech_duration_ms: Minimum duration to consider as speech
@@ -236,11 +236,11 @@ class VocalActivityDetector:
     ) -> list[dict[str, float]]:
         """
         Detect vocal segments in audio.
-        
+
         Args:
             audio_path: Path to audio file (preferably isolated vocals)
             sample_rate: Sample rate for VAD (16000 recommended)
-            
+
         Returns:
             List of segments: [{"start": 10.5, "end": 14.2}, ...]
         """
@@ -306,11 +306,11 @@ class VocalActivityDetector:
     ) -> list[dict[str, float]]:
         """
         Merge segments with small gaps between them.
-        
+
         Args:
             segments: List of segments
             gap_threshold: Maximum gap in seconds to merge
-            
+
         Returns:
             Merged segments
         """
@@ -336,10 +336,10 @@ class VocalActivityDetector:
 def detect_vocal_segments(audio_path: Path) -> list[dict[str, float]]:
     """
     Convenience function for vocal segment detection.
-    
+
     Args:
         audio_path: Path to audio file
-        
+
     Returns:
         List of vocal segments
     """

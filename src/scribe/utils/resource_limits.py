@@ -20,11 +20,11 @@ def validate_file_size(
 ) -> None:
     """
     Validate file size is within limits.
-    
+
     Args:
         file_path: Path to file
         max_size_gb: Maximum allowed size in GB
-        
+
     Raises:
         ValidationError: If file exceeds size limit
     """
@@ -56,14 +56,14 @@ def validate_audio_duration(
 ) -> float | None:
     """
     Validate audio duration is within limits.
-    
+
     Args:
         file_path: Path to audio file
         max_duration_hours: Maximum allowed duration in hours
-        
+
     Returns:
         Duration in seconds, or None if duration cannot be determined
-        
+
     Raises:
         ValidationError: If audio exceeds duration limit
     """
@@ -96,15 +96,15 @@ def validate_audio_file(
 ) -> float | None:
     """
     Validate audio file meets all resource limits.
-    
+
     Args:
         file_path: Path to audio file
         max_size_gb: Maximum file size in GB
         max_duration_hours: Maximum duration in hours
-        
+
     Returns:
         Duration in seconds, or None if duration cannot be determined
-        
+
     Raises:
         ValidationError: If file exceeds any limit
     """

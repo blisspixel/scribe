@@ -263,19 +263,19 @@ def setup_logging(
 ) -> logging.Logger:
     """
     Configure dual-output logging (console + file).
-    
+
     This function sets up:
     - File handler with detailed format and DEBUG level
     - Console handler with Rich formatting and INFO level
     - No emoji in any output
     - Proper encoding for Unicode characters
-    
+
     Args:
         session_name: Name for log file
         log_dir: Directory for log files
         console_level: Console logging level
         file_level: File logging level
-        
+
     Returns:
         Configured logger instance
     """
@@ -340,10 +340,10 @@ def setup_logging(
 def get_logger(name: str = "scribe") -> logging.Logger:
     """
     Get logger instance.
-    
+
     Args:
         name: Logger name
-        
+
     Returns:
         Logger instance
     """
@@ -353,7 +353,7 @@ def get_logger(name: str = "scribe") -> logging.Logger:
 def log_system_info(logger: logging.Logger) -> None:
     """
     Log system information for debugging.
-    
+
     Args:
         logger: Logger instance
     """
@@ -382,7 +382,7 @@ def log_system_info(logger: logging.Logger) -> None:
 def log_exception(logger: logging.Logger, exc: Exception, context: dict | None = None) -> None:
     """
     Log exception with context.
-    
+
     Args:
         logger: Logger instance
         exc: Exception to log
@@ -399,7 +399,7 @@ def log_exception(logger: logging.Logger, exc: Exception, context: dict | None =
 def set_log_level(logger: logging.Logger, level: int) -> None:
     """
     Set logging level for all handlers.
-    
+
     Args:
         logger: Logger instance
         level: Logging level (logging.DEBUG, INFO, WARNING, ERROR)

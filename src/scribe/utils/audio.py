@@ -30,12 +30,12 @@ We implement a fallback chain with increasing complexity:
    → Uses Python's wave module (no dependencies)
    → Direct frame count / sample rate calculation
    → ~1ms for typical file
-   
+
 2. **Torchaudio metadata** (handles multiple formats)
    → Uses torchaudio.info() (no audio loading)
    → Supports WAV, MP3, FLAC, OGG, etc.
    → ~10ms for typical file
-   
+
 3. **FFprobe subprocess** (last resort)
    → Requires FFmpeg installation
    → Handles exotic formats
@@ -54,12 +54,12 @@ def get_audio_duration(path: Path) -> Optional[float]:
     duration = _get_duration_wave(path)
     if duration is not None:
         return duration
-    
+
     # Try medium method
     duration = _get_duration_torchaudio(path)
     if duration is not None:
         return duration
-    
+
     # Try slow but comprehensive method
     duration = _get_duration_ffprobe(path)
     return duration  # May be None if all fail
@@ -271,15 +271,15 @@ from scribe.utils.platform import get_ffprobe_path
 def get_audio_duration(path: Path) -> float | None:
     """
     Robustly determine audio file duration using multiple fallback methods.
-    
+
     Method priority:
     1. WAV native parsing (fastest, most reliable for WAV files)
     2. Torchaudio metadata extraction (handles multiple formats)
     3. FFprobe subprocess (last resort, requires ffmpeg installation)
-    
+
     Args:
         path: Path to audio file
-        
+
     Returns:
         Duration in seconds, or None if unable to determine
     """
@@ -386,16 +386,16 @@ def detect_silence_periods(
 ) -> list[tuple[float, float]]:
     """
     Analyze audio file to detect significant periods of silence.
-    
+
     This function uses sliding window analysis to identify silence periods
     in audio recordings. Useful for long recordings where silence markers
     can help users navigate to content sections.
-    
+
     Args:
         audio_path: Path to audio file
         silence_threshold: RMS energy threshold in dB below which audio is silence
         min_silence_duration: Minimum duration in seconds for significant silence
-        
+
     Returns:
         List of (start_time, end_time) tuples in seconds
     """
@@ -453,10 +453,10 @@ def detect_silence_periods(
 def validate_audio_file(path: Path) -> None:
     """
     Validate audio file for common issues.
-    
+
     Args:
         path: Path to audio file
-        
+
     Raises:
         AudioFormatError: If file has issues
     """
@@ -521,10 +521,10 @@ def validate_audio_file(path: Path) -> None:
 def format_timestamp(seconds: float) -> str:
     """
     Format seconds as HH:MM:SS timestamp.
-    
+
     Args:
         seconds: Time in seconds
-        
+
     Returns:
         Formatted timestamp string
     """
@@ -537,10 +537,10 @@ def format_timestamp(seconds: float) -> str:
 def format_duration(seconds: float) -> str:
     """
     Format duration in human-readable format.
-    
+
     Args:
         seconds: Duration in seconds
-        
+
     Returns:
         Formatted duration string (e.g., "1h 23m", "45m", "2h")
     """
@@ -558,10 +558,10 @@ def format_duration(seconds: float) -> str:
 def get_audio_info(path: Path) -> dict:
     """
     Get comprehensive audio file information.
-    
+
     Args:
         path: Path to audio file
-        
+
     Returns:
         Dictionary with audio metadata
     """
@@ -580,10 +580,8 @@ def get_audio_info(path: Path) -> dict:
         return info
 
     # File size
-    try:
+    with contextlib.suppress(Exception):
         info["size_mb"] = path.stat().st_size / (1024 * 1024)
-    except Exception:
-        pass
 
     # Duration
     duration = get_audio_duration(path)

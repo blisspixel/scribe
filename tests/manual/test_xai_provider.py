@@ -1,7 +1,7 @@
 """
 Manual test for XAI provider.
 
-Usage: 
+Usage:
     export XAI_API_KEY="your_key"
     python tests/manual/test_xai_provider.py
 """

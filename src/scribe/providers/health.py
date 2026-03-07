@@ -27,7 +27,7 @@ class ProviderHealthMonitor:
     def __init__(self, check_interval_seconds: int = 300):
         """
         Initialize health monitor.
-        
+
         Args:
             check_interval_seconds: How often to check provider health (default: 5 minutes)
         """
@@ -43,12 +43,12 @@ class ProviderHealthMonitor:
     ) -> HealthStatus:
         """
         Check health of a provider.
-        
+
         Args:
             provider_name: Name of provider ("openai", "xai", "anthropic", "gemini")
             api_key: API key for the provider
             force: Force check even if recently checked
-            
+
         Returns:
             HealthStatus object
         """
@@ -121,11 +121,11 @@ class ProviderHealthMonitor:
     ) -> list[str]:
         """
         Get list of healthy providers for a feature.
-        
+
         Args:
             feature: Feature name ("joke", "meme", "notes", "transcribe")
             api_keys: Dict of provider_name -> api_key
-            
+
         Returns:
             List of healthy provider names
         """

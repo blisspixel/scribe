@@ -37,7 +37,7 @@ class TestLoggingSetup:
         """Test logging setup creates log file."""
         log_dir = tmp_path / "logs"
 
-        logger = setup_logging("test_session", log_dir)
+        setup_logging("test_session", log_dir)
 
         # Should create log file
         log_files = list(log_dir.glob("scribe_test_session_*.log"))
@@ -310,7 +310,7 @@ class TestLoggingIntegration:
 
         try:
             # Trigger an exception
-            result = 1 / 0
+            _ = 1 / 0
         except ZeroDivisionError as e:
             log_exception(logger, e, {"operation": "division", "values": [1, 0]})
 
@@ -362,3 +362,5 @@ class TestLoggingEdgeCases:
         # Should not crash
         set_log_level(logger, logging.INFO)
         assert logger.level == logging.INFO
+
+

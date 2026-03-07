@@ -126,7 +126,7 @@ class TestWebSocketConnection:
     def test_hostname_validation_error_suppressed(self, mock_obs_reqs, recorder, mock_obs_client):
         """
         Test that hostname validation errors are caught and suppressed.
-        
+
         This is the core fix for the "ValueError: hostname is invalid" issue.
         The WebSocket library raises ValueError for invalid hostnames (especially IPv6),
         but we want to try other hosts instead of failing immediately.
@@ -147,7 +147,7 @@ class TestWebSocketConnection:
     def test_ipv6_hostname_validation_error(self, mock_obs_reqs, recorder, mock_obs_client):
         """
         Test handling of IPv6 hostname validation errors.
-        
+
         IPv6 addresses (::1) often trigger validation errors in WebSocket libraries.
         We should try IPv4 fallbacks instead of failing.
         """
@@ -250,7 +250,7 @@ class TestWebSocketConnection:
         mock_obs_reqs.ReqClient.return_value = mock_obs_client
 
         with patch.object(recorder, '_port_listening', return_value=True):
-            with recorder._connect_obs() as client:
+            with recorder._connect_obs():
                 pass
 
         mock_obs_client.close.assert_called_once()
@@ -262,7 +262,7 @@ class TestWebSocketConnection:
 
         with patch.object(recorder, '_port_listening', return_value=True):
             try:
-                with recorder._connect_obs() as client:
+                with recorder._connect_obs():
                     raise RuntimeError("Test error")
             except RuntimeError:
                 pass
@@ -708,7 +708,7 @@ class TestResourceCleanup:
 
         with patch.object(recorder, '_port_listening', return_value=True):
             try:
-                with recorder._connect_obs() as client:
+                with recorder._connect_obs():
                     pass
             except Exception:
                 pass
@@ -722,7 +722,7 @@ class TestResourceCleanup:
 
         with patch.object(recorder, '_port_listening', return_value=True):
             try:
-                with recorder._connect_obs() as client:
+                with recorder._connect_obs():
                     raise RuntimeError("Test exception")
             except RuntimeError:
                 pass

@@ -218,7 +218,7 @@ logger = get_logger(__name__)
 class MusicDetector:
     """
     Detects if audio contains music using signal analysis.
-    
+
     Analyzes:
     - Energy levels (not silence)
     - Spectral features (has frequency content)
@@ -233,10 +233,10 @@ class MusicDetector:
     def analyze_music(self, audio_path: Path) -> dict[str, Any]:
         """
         Comprehensive music analysis including metadata extraction.
-        
+
         Args:
             audio_path: Path to audio file
-            
+
         Returns:
             Dict with:
                 - is_music: bool
@@ -445,10 +445,10 @@ class MusicDetector:
     def is_music(self, audio_path: Path) -> dict[str, Any]:
         """
         Quick music validation (delegates to analyze_music).
-        
+
         Args:
             audio_path: Path to audio file
-            
+
         Returns:
             Dict with is_music, confidence, reason, features
         """
@@ -464,10 +464,10 @@ class MusicDetector:
 def is_music(audio_path: Path) -> bool:
     """
     Quick check if audio contains music.
-    
+
     Args:
         audio_path: Path to audio file
-        
+
     Returns:
         True if music detected, False otherwise
     """

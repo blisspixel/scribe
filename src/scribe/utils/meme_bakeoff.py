@@ -18,12 +18,12 @@ def run_meme_bakeoff(
 ) -> dict[str, Any]:
     """
     Run a meme concept bake-off across multiple providers.
-    
+
     Args:
         transcript: The meeting transcript text
         config: Meme generation config
         providers: List of provider names to test (default: all available)
-        
+
     Returns:
         Dict with:
         - winner: Name of winning provider
@@ -91,7 +91,7 @@ def run_meme_bakeoff(
         concepts_text += f"Bottom text: {c['bottom_text']}\n"
         concepts_text += f"Why it works: {c['judgment']}\n"
 
-    judging_prompt = f"""You are a meme expert judging a comedy competition. 
+    judging_prompt = f"""You are a meme expert judging a comedy competition.
 
 {len(concepts)} different AI models created meme concepts from the same meeting transcript. Your job is to pick the FUNNIEST one.
 

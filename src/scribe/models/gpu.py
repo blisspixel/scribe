@@ -15,10 +15,10 @@ from scribe.models.config import ModelSize
 class GPUConfig:
     """
     GPU-specific configuration with optimized settings.
-    
+
     This class stores GPU detection results and provides optimized
     transcription settings based on the detected hardware.
-    
+
     Attributes:
         has_gpu: Whether a GPU was detected
         gpu_name: Name of the GPU (e.g., "NVIDIA GeForce RTX 4090")
@@ -55,13 +55,13 @@ class GPUConfig:
     def detect(cls) -> "GPUConfig":
         """
         Detect GPU and determine optimal settings.
-        
+
         This method:
         - Detects CUDA availability
         - Identifies GPU model and VRAM
         - Selects optimal model size and parameters
         - Provides transcription method recommendation
-        
+
         Returns:
             GPUConfig with detection results and optimized settings
         """
@@ -194,7 +194,7 @@ class GPUConfig:
     def to_dict(self) -> dict[str, Any]:
         """
         Convert GPU config to dictionary.
-        
+
         Returns:
             Dictionary representation
         """
@@ -216,7 +216,7 @@ class GPUConfig:
     def get_expected_speed(self) -> str:
         """
         Get expected transcription speed description.
-        
+
         Returns:
             Speed description (e.g., "8-12x real-time")
         """
@@ -240,7 +240,7 @@ class GPUConfig:
     def is_high_end(self) -> bool:
         """
         Check if this is a high-end GPU.
-        
+
         Returns:
             True if high-end GPU (RTX 4090, A100, etc.)
         """

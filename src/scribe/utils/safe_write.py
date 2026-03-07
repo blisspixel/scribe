@@ -162,7 +162,7 @@ state, even if the process crashes or is interrupted.
 import os
 import shutil
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from scribe.utils.logging import get_logger
@@ -178,19 +178,19 @@ def atomic_write(
 ) -> Path:
     """
     Write content to a file atomically.
-    
+
     Writes to a temporary file first, then atomically renames it to the
     target path. This prevents corruption if the write is interrupted.
-    
+
     Args:
         path: Target file path
         content: Content to write (str or bytes)
         encoding: Text encoding (only used for text mode)
         mode: Write mode ('w' for text, 'wb' for binary)
-        
+
     Returns:
         Path to the written file
-        
+
     Raises:
         IOError: If write fails
     """
@@ -236,10 +236,8 @@ def atomic_write(
 
     except Exception as e:
         # Clean up temp file on error
-        try:
+        with suppress(Exception):
             temp_path.unlink()
-        except Exception:
-            pass
 
         logger.error(f"Failed to write file atomically: {path} - {e}")
         raise OSError(f"Failed to write file: {e}") from e
@@ -248,12 +246,12 @@ def atomic_write(
 def atomic_write_json(path: str | Path, data: dict, indent: int = 2) -> Path:
     """
     Write JSON data to a file atomically.
-    
+
     Args:
         path: Target file path
         data: Dictionary to serialize as JSON
         indent: JSON indentation level
-        
+
     Returns:
         Path to the written file
     """
@@ -267,19 +265,19 @@ def atomic_write_json(path: str | Path, data: dict, indent: int = 2) -> Path:
 def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8"):
     """
     Context manager for safe file writing.
-    
+
     Provides a file handle that writes to a temporary file. On successful
     exit, the temp file is atomically renamed to the target path.
-    
+
     Usage:
         with safe_write_context("output.txt") as f:
             f.write("content")
-    
+
     Args:
         path: Target file path
         mode: Write mode ('w' for text, 'wb' for binary)
         encoding: Text encoding (only used for text mode)
-        
+
     Yields:
         File handle for writing
     """
@@ -297,10 +295,7 @@ def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8
 
     try:
         # Open file handle
-        if "b" in mode:
-            f = os.fdopen(fd, mode)
-        else:
-            f = os.fdopen(fd, mode, encoding=encoding)
+        f = os.fdopen(fd, mode) if "b" in mode else os.fdopen(fd, mode, encoding=encoding)
 
         try:
             yield f
@@ -316,10 +311,8 @@ def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8
 
     except Exception as e:
         # Clean up temp file on error
-        try:
+        with suppress(Exception):
             temp_path.unlink()
-        except Exception:
-            pass
 
         logger.error(f"Failed to write file atomically: {path} - {e}")
         raise
@@ -328,13 +321,13 @@ def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8
 def safe_copy(src: str | Path, dst: str | Path) -> Path:
     """
     Copy a file safely with atomic write.
-    
+
     Copies to a temporary file first, then atomically renames it.
-    
+
     Args:
         src: Source file path
         dst: Destination file path
-        
+
     Returns:
         Path to the destination file
     """
@@ -373,10 +366,8 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
 
     except Exception as e:
         # Clean up temp file on error
-        try:
+        with suppress(Exception):
             temp_path.unlink()
-        except Exception:
-            pass
 
         logger.error(f"Failed to copy file safely: {src} -> {dst} - {e}")
         raise OSError(f"Failed to copy file: {e}") from e
@@ -385,11 +376,11 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
 def backup_file(path: str | Path, suffix: str = ".bak") -> Path | None:
     """
     Create a backup of a file before modifying it.
-    
+
     Args:
         path: File to backup
         suffix: Backup file suffix
-        
+
     Returns:
         Path to backup file, or None if source doesn't exist
     """

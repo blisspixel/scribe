@@ -29,7 +29,8 @@
   - `scribe --banner` for standalone display
   - Progressive degradation: full sweep → quick sweep → static gradient → plain text
   - Respects `SCRIBE_ANIMATIONS`, `SCRIBE_BANNER`, `NO_COLOR` env vars
-- **CLI Polish**: Cleaner branding across all commands — lowercase `scribe` headers, muted version, compact info lines
+- **CLI Polish**: Cleaner branding across all commands — lowercase scribe headers, muted version, compact info lines
+- **Transcript Input Expansion**: scribe notes|joke|meme now accept .txt, .md, and .docx transcript files
 - **Doctor**: Added yt-dlp availability check to system diagnostics
 - **Bug Fix**: Download cleanup now runs in `finally` block (no leaked temp files on transcription failure)
 - Added terminal UI controls: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
@@ -136,3 +137,4 @@
 ---
 
 **Last Updated:** 2026-02-14
+

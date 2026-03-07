@@ -20,7 +20,7 @@ Example on fast GPU:
 - Actual: 2 minutes (way off!)
 
 Example on slow CPU:
-- Estimate: "2 minutes remaining"  
+- Estimate: "2 minutes remaining"
 - Actual: 30 minutes (way off!)
 
 THE SOLUTION - ADAPTIVE LEARNING:
@@ -66,7 +66,7 @@ Test file: 28.9 minutes (1732 seconds) of audio
 
 WITHOUT API features (transcribe only):
 - Preparing: 96.8s (41.8% of total)
-- Transcribing: 135.2s (58.3% of total)  
+- Transcribing: 135.2s (58.3% of total)
 - Finishing: 0.1s (0.04% of total - just DOCX)
 - Total: 232.1s (~4 minutes)
 
@@ -85,7 +85,7 @@ The system accounts for AI provider speed differences:
 
 XAI/Grok (fast):
 - Notes: ~15s
-- Joke: ~2s  
+- Joke: ~2s
 - Meme: ~60s
 - Total: ~77s
 
@@ -136,7 +136,7 @@ from scribe.utils.terminal_ui import get_terminal_ui_config
 class UnifiedProgress:
     """
     Unified progress tracker for entire transcription workflow.
-    
+
     Shows single progress bar that updates through phases:
     - Preparing audio (0-15%)
     - Transcribing (15-85%)
@@ -147,7 +147,7 @@ class UnifiedProgress:
                  include_api_features: bool = False):
         """
         Initialize unified progress.
-        
+
         Args:
             total_duration: Audio duration in seconds (for time estimates)
             machine_id: Machine ID for adaptive performance tracking
@@ -226,7 +226,7 @@ class UnifiedProgress:
     def update_phase(self, phase: str, progress_in_phase: float = 0.0, step_description: str = None) -> None:
         """
         Update progress within a phase.
-        
+
         Args:
             phase: Phase name ("preparing", "transcribing", "finishing")
             progress_in_phase: Progress within phase (0.0 to 1.0)

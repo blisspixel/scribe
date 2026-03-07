@@ -198,7 +198,7 @@ class TestArchetypeSelection:
         }
 
         # With neutral metadata, all should be possible
-        selections = set(_select_archetype_heuristic(metadata, seed=i) for i in range(100))
+        selections = {_select_archetype_heuristic(metadata, seed=i) for i in range(100)}
 
         # Should see variety
         assert len(selections) >= 4
@@ -445,7 +445,7 @@ class TestJokeGeneration:
         mock_get_provider.return_value = mock_provider
 
         # Pass config without explicit API key to force provider path
-        result = generate_transcript_joke(transcript_path, HumorConfig(api_key=None))
+        generate_transcript_joke(transcript_path, HumorConfig(api_key=None))
 
         # Verify provider was requested
         assert mock_get_provider.called
@@ -529,7 +529,7 @@ class TestArchetypeDisplayNames:
 
     def test_all_archetypes_have_display_names(self):
         """Test all archetypes have human-readable display names."""
-        for archetype_key in COMEDY_STYLES.keys():
+        for archetype_key in COMEDY_STYLES:
             assert archetype_key in ARCHETYPE_DISPLAY_NAMES
             display_name = ARCHETYPE_DISPLAY_NAMES[archetype_key]
             assert isinstance(display_name, str)
@@ -551,13 +551,13 @@ class TestArchetypePrompts:
         """Test all archetypes have system prompts."""
         assert len(COMEDY_STYLES) == 10  # Updated for based and gen_z archetypes
 
-        for archetype_key, prompt in COMEDY_STYLES.items():
+        for _archetype_key, prompt in COMEDY_STYLES.items():
             assert isinstance(prompt, str)
             assert len(prompt) > 50  # Should be substantial
 
     def test_prompts_contain_key_elements(self):
         """Test prompts contain required elements."""
-        for archetype_key, prompt in COMEDY_STYLES.items():
+        for _archetype_key, prompt in COMEDY_STYLES.items():
             # Each prompt should mention the archetype
             assert "You are" in prompt
             # Should specify word count
@@ -567,7 +567,7 @@ class TestArchetypePrompts:
 
     def test_prompts_specify_word_limit(self):
         """Test prompts specify word limits."""
-        for archetype_key, prompt in COMEDY_STYLES.items():
+        for _archetype_key, prompt in COMEDY_STYLES.items():
             # Should mention word limit
             assert any(str(n) in prompt for n in range(10, 20))
 
@@ -617,7 +617,7 @@ class TestIntegration:
         transcript = """
         Meeting: Q4 Strategy Session
         Duration: 45 minutes
-        
+
         We need to leverage our synergy to circle back on bandwidth alignment.
         Let's touch base on the action items and move the needle on our deep dive.
         We should table this discussion and revisit the parking lot items later.

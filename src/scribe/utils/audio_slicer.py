@@ -194,12 +194,12 @@ def slice_audio_by_segments(
 ) -> list[Path]:
     """
     Slice audio file into chunks based on segment timestamps.
-    
+
     Args:
         audio_path: Path to audio file
         segments: List of segments with 'start' and 'end' timestamps
         output_dir: Optional output directory (uses temp dir if None)
-        
+
     Returns:
         List of paths to sliced audio files
     """

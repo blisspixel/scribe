@@ -112,9 +112,9 @@ logger = get_logger(__name__)
 def get_provider_speedup() -> float:
     """
     Get speedup factor based on configured AI provider.
-    
+
     XAI/Grok is typically 2-3x faster than OpenAI for jokes/notes/memes.
-    
+
     Returns:
         Speedup multiplier (1.0 = baseline OpenAI speed)
     """
@@ -160,7 +160,7 @@ class PerformanceMetrics:
     def update_from_actual(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Update metrics based on actual performance.
-        
+
         Args:
             phase: Phase name (analysis, conversion, transcription, etc.)
             audio_duration: Audio duration in seconds
@@ -188,19 +188,19 @@ class PerformanceMetrics:
     def _weighted_average(self, current: float, new: float, weight: float = 0.3) -> float:
         """
         Calculate weighted average favoring recent measurements with outlier detection.
-        
+
         Outlier detection: If new measurement is >3x or <0.33x the current average,
         it's likely an anomaly (user interrupted, system was busy, etc.) and we
         reduce its weight to prevent skewing the average.
-        
+
         Args:
             current: Current average value
             new: New measurement
             weight: Weight for new measurement (0-1)
-        
+
         Returns:
             Updated average
-        
+
         Example:
             current=10.0, new=11.0 → normal, use full weight
             current=10.0, new=50.0 → outlier (5x), reduce weight to 0.1
@@ -224,12 +224,12 @@ class PerformanceMetrics:
     ) -> float:
         """
         Estimate total processing time for given audio duration.
-        
+
         Args:
             audio_duration: Audio duration in seconds
             include_post: Include post-processing time
             provider_speedup: Speedup factor for AI provider (e.g., 3.0 for XAI being 3x faster)
-        
+
         Returns:
             Estimated total time in seconds
         """
@@ -251,11 +251,11 @@ class PerformanceMetrics:
     def get_phase_percentages(self, audio_duration: float, include_api_features: bool = True) -> dict[str, tuple]:
         """
         Calculate phase percentages based on estimated times.
-        
+
         Args:
             audio_duration: Audio duration in seconds
             include_api_features: Whether to include API features (notes, joke, meme)
-        
+
         Returns:
             Dict mapping phase names to (start%, end%, time_multiplier) tuples
         """
@@ -287,7 +287,7 @@ class PerformanceTracker:
     def __init__(self, machine_id: str, config_dir: Path | None = None):
         """
         Initialize performance tracker.
-        
+
         Args:
             machine_id: Unique machine identifier
             config_dir: Directory to store performance data (default: ~/.scribe)
@@ -326,7 +326,7 @@ class PerformanceTracker:
     def record_phase(self, phase: str, audio_duration: float, actual_time: float) -> None:
         """
         Record actual performance for a phase.
-        
+
         Args:
             phase: Phase name
             audio_duration: Audio duration in seconds
@@ -357,10 +357,10 @@ class PerformanceTracker:
 def get_performance_tracker(machine_id: str) -> PerformanceTracker:
     """
     Get or create performance tracker for machine.
-    
+
     Args:
         machine_id: Unique machine identifier
-    
+
     Returns:
         PerformanceTracker instance
     """

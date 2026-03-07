@@ -33,24 +33,24 @@ def get_provider(
 ) -> AIProvider:
     """
     Get an AI provider for a specific feature.
-    
+
     Args:
         feature: Feature name ("joke", "meme", "notes", "transcribe")
         api_key: API key (optional, will check env vars)
         model: Model name (optional, will use defaults)
         provider_name: Provider name (optional, will check env vars)
         enable_health_check: Check provider health before returning (default: False)
-        
+
     Returns:
         AIProvider instance
-        
+
     Environment Variables:
         SCRIBE_JOKE_PROVIDER: Provider for jokes (default: xai)
         SCRIBE_MEME_PROVIDER: Provider for memes (default: openai)
         SCRIBE_NOTES_PROVIDER: Provider for notes (default: openai)
         SCRIBE_TRANSCRIBE_PROVIDER: Provider for transcription (default: openai)
         SCRIBE_ENABLE_HEALTH_CHECKS: Enable automatic health checks (default: false)
-        
+
         XAI_API_KEY: XAI API key
         OPENAI_API_KEY: OpenAI API key
         ANTHROPIC_API_KEY: Anthropic API key
@@ -193,12 +193,12 @@ def _get_fallback_provider(
 ) -> str | None:
     """
     Get a fallback provider when the primary fails.
-    
+
     Args:
         feature: Feature name
         failed_provider: Provider that failed
         original_api_key: API key of failed provider
-        
+
     Returns:
         Fallback provider name or None
     """

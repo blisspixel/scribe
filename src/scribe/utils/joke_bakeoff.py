@@ -204,12 +204,12 @@ def run_joke_bakeoff(
 ) -> dict[str, Any]:
     """
     Run a joke bake-off across multiple providers.
-    
+
     Args:
         transcript: The meeting transcript text
         config: Humor generation config
         providers: List of provider names to test (default: all available)
-        
+
     Returns:
         Dict with:
         - winner: Name of winning provider

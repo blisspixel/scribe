@@ -165,7 +165,7 @@ class TestPathValidation:
         """Test paths are created if they don't exist."""
         new_dir = tmp_path / "new_directory"
 
-        config = ScribeConfig(output_folder=new_dir)
+        ScribeConfig(output_folder=new_dir)
 
         assert new_dir.exists()
         assert new_dir.is_dir()
@@ -174,7 +174,7 @@ class TestPathValidation:
         """Test nested paths are created."""
         nested_dir = tmp_path / "level1" / "level2" / "level3"
 
-        config = ScribeConfig(output_folder=nested_dir)
+        ScribeConfig(output_folder=nested_dir)
 
         assert nested_dir.exists()
 

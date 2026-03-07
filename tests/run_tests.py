@@ -25,7 +25,7 @@ def print_banner():
 def run_test_module(module_path: Path, test_name: str) -> tuple[bool, str, float]:
     """
     Run a single test module and return results.
-    
+
     Returns:
         tuple: (success, output, duration)
     """

@@ -16,10 +16,10 @@ from typing import Any
 class TranscriptionSession:
     """
     Track a complete transcription session.
-    
+
     This class maintains all metadata about a transcription session including
     input/output files, processing method, timing, and results.
-    
+
     Attributes:
         session_id: Unique identifier for this session
         meeting_name: Name of the meeting/recording
@@ -76,10 +76,10 @@ class TranscriptionSession:
     def create(cls, meeting_name: str) -> "TranscriptionSession":
         """
         Create a new session with generated ID.
-        
+
         Args:
             meeting_name: Name of the meeting/recording
-            
+
         Returns:
             New TranscriptionSession instance
         """
@@ -96,7 +96,7 @@ class TranscriptionSession:
     def complete(self, success: bool = True, error_message: str | None = None) -> None:
         """
         Mark session as complete.
-        
+
         Args:
             success: Whether the session succeeded
             error_message: Error message if failed
@@ -111,7 +111,7 @@ class TranscriptionSession:
     def add_file(self, file_path: Path, file_type: str) -> None:
         """
         Add a created file to the session.
-        
+
         Args:
             file_path: Path to the file
             file_type: Type of file (source, audio, transcript, docx, meme)
@@ -132,7 +132,7 @@ class TranscriptionSession:
     def add_cleaned_file(self, file_path: Path) -> None:
         """
         Track a file that was cleaned up.
-        
+
         Args:
             file_path: Path to the cleaned file
         """
@@ -141,7 +141,7 @@ class TranscriptionSession:
     def to_dict(self) -> dict[str, Any]:
         """
         Convert session to dictionary.
-        
+
         Returns:
             Dictionary representation of session
         """
@@ -166,7 +166,7 @@ class TranscriptionSession:
     def to_json(self) -> str:
         """
         Serialize session to JSON string.
-        
+
         Returns:
             JSON string representation
         """
@@ -175,10 +175,10 @@ class TranscriptionSession:
     def save_summary(self, output_dir: Path) -> Path:
         """
         Save session summary to JSON file using atomic write.
-        
+
         Args:
             output_dir: Directory to save summary
-            
+
         Returns:
             Path to saved summary file
         """
@@ -200,7 +200,7 @@ class TranscriptionSession:
     def get_summary_text(self) -> str:
         """
         Get human-readable summary text.
-        
+
         Returns:
             Formatted summary string
         """

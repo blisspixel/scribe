@@ -27,7 +27,7 @@ class TestProgressEstimation:
             use_fp16=True
         )
 
-        transcriber = LocalWhisperTranscriber(
+        LocalWhisperTranscriber(
             model_size="large-v3-turbo",
             language="en",
             gpu_config=gpu_config
@@ -50,7 +50,7 @@ class TestProgressEstimation:
             use_fp16=True
         )
 
-        transcriber = LocalWhisperTranscriber(
+        LocalWhisperTranscriber(
             model_size="large-v3-turbo",
             language="en",
             gpu_config=gpu_config
@@ -73,7 +73,7 @@ class TestProgressEstimation:
             use_fp16=True
         )
 
-        transcriber = LocalWhisperTranscriber(
+        LocalWhisperTranscriber(
             model_size="large-v2",
             language="en",
             gpu_config=gpu_config
@@ -96,7 +96,7 @@ class TestProgressEstimation:
             use_fp16=False
         )
 
-        transcriber = LocalWhisperTranscriber(
+        LocalWhisperTranscriber(
             model_size="base",
             language="en",
             gpu_config=gpu_config
@@ -206,24 +206,16 @@ class TestETACalculation:
         """Test that ETA waits for 10s of audio before showing."""
         # Before 10 seconds of audio processed
         segment_end = 5.0
-        elapsed = 2.0
 
         # Should show initial estimate, not calculated ETA
-        if segment_end < 10.0:
-            use_initial_estimate = True
-        else:
-            use_initial_estimate = False
+        use_initial_estimate = segment_end < 10.0
 
         assert use_initial_estimate is True
 
         # After 10 seconds of audio processed
         segment_end = 15.0
-        elapsed = 3.0
 
-        if segment_end >= 10.0:
-            use_calculated_eta = True
-        else:
-            use_calculated_eta = False
+        use_calculated_eta = segment_end >= 10.0
 
         assert use_calculated_eta is True
 
@@ -288,10 +280,7 @@ class TestDurationCorrection:
             if not original_path.exists():
                 original_path = Path(str(wav_path).replace("_16k_mono.wav", ".mp3"))
 
-            if original_path.exists():
-                corrected_duration = mp3_duration
-            else:
-                corrected_duration = wav_duration
+            corrected_duration = mp3_duration if original_path.exists() else wav_duration
         else:
             corrected_duration = wav_duration
 
@@ -437,14 +426,11 @@ class TestProgressBarUX:
             (3180, "53m"),
         ]
 
-        for seconds, expected_format in test_times:
+        for seconds, _expected_format in test_times:
             mins = seconds // 60
             secs = seconds % 60
 
-            if secs < 10 or secs == 0:
-                formatted = f"{mins}m"
-            else:
-                formatted = f"{mins}m {secs}s"
+            formatted = f"{mins}m" if secs < 10 or secs == 0 else f"{mins}m {secs}s"
 
             # Check format is consistent
             assert "m" in formatted

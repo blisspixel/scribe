@@ -15,22 +15,22 @@ from scribe.utils.platform import normalize_path
 def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = True) -> Path:
     """
     Validate and sanitize file path.
-    
+
     This function:
     - Strips quotes and whitespace
     - Expands ~ and environment variables
     - Converts to absolute path
     - Optionally checks existence
     - Optionally verifies it's a file (not directory)
-    
+
     Args:
         path: Path string to validate
         must_exist: Whether file must exist
         must_be_file: Whether path must be a file (not directory)
-        
+
     Returns:
         Validated Path object
-        
+
     Raises:
         ValidationError: If validation fails
     """
@@ -73,15 +73,15 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
 def validate_directory_path(path: str, must_exist: bool = False, create: bool = True) -> Path:
     """
     Validate and sanitize directory path.
-    
+
     Args:
         path: Directory path to validate
         must_exist: Whether directory must already exist
         create: Whether to create directory if it doesn't exist
-        
+
     Returns:
         Validated Path object
-        
+
     Raises:
         ValidationError: If validation fails
     """
@@ -126,13 +126,13 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
 def validate_audio_file(path: str | Path) -> Path:
     """
     Validate audio file format and readability.
-    
+
     Args:
         path: Path to audio file (string or Path object)
-        
+
     Returns:
         Validated Path object
-        
+
     Raises:
         ValidationError: If file is not a valid audio file
     """
@@ -183,14 +183,14 @@ def validate_audio_file(path: str | Path) -> Path:
 def validate_api_key(api_key: str | None, service: str = "OpenAI") -> str:
     """
     Validate API key format.
-    
+
     Args:
         api_key: API key to validate
         service: Service name for error messages
-        
+
     Returns:
         Validated API key
-        
+
     Raises:
         ValidationError: If API key is invalid
     """
@@ -228,19 +228,19 @@ def validate_api_key(api_key: str | None, service: str = "OpenAI") -> str:
 def sanitize_meeting_name(name: str) -> str:
     """
     Sanitize meeting name for use in filenames.
-    
+
     This function:
     - Removes invalid filename characters
     - Replaces spaces with underscores
     - Limits length
     - Ensures non-empty result
-    
+
     Args:
         name: Meeting name to sanitize
-        
+
     Returns:
         Sanitized meeting name
-        
+
     Raises:
         ValidationError: If name cannot be sanitized
     """
@@ -280,14 +280,14 @@ def sanitize_meeting_name(name: str) -> str:
 def validate_model_name(model: str, valid_models: list) -> str:
     """
     Validate model name against list of valid models.
-    
+
     Args:
         model: Model name to validate
         valid_models: List of valid model names
-        
+
     Returns:
         Validated model name
-        
+
     Raises:
         ValidationError: If model is invalid
     """
@@ -380,22 +380,22 @@ LANGUAGE_ALIASES = {
 def validate_language_code(language: str) -> str:
     """
     Validate and normalize language input to ISO 639-1 code.
-    
+
     Accepts:
         - ISO 639-1 codes: "en", "es", "fr"
         - Full names: "english", "spanish", "french"
         - Native names: "español", "français", "deutsch"
         - Common abbreviations: "eng", "spa", "jpn"
-    
+
     Args:
         language: Language code or name to validate
-        
+
     Returns:
         ISO 639-1 language code (lowercase, 2 letters)
-        
+
     Raises:
         ValidationError: If language is not recognized
-        
+
     Examples:
         >>> validate_language_code("spanish")
         'es'
@@ -430,13 +430,13 @@ def validate_language_code(language: str) -> str:
 def validate_port(port: int) -> int:
     """
     Validate port number.
-    
+
     Args:
         port: Port number to validate
-        
+
     Returns:
         Validated port number
-        
+
     Raises:
         ValidationError: If port is invalid
     """
@@ -458,15 +458,15 @@ def validate_port(port: int) -> int:
 def validate_positive_number(value: float, name: str = "value", min_value: float = 0.0) -> float:
     """
     Validate positive number.
-    
+
     Args:
         value: Number to validate
         name: Name of the value for error messages
         min_value: Minimum allowed value
-        
+
     Returns:
         Validated number
-        
+
     Raises:
         ValidationError: If number is invalid
     """
@@ -488,13 +488,13 @@ def validate_positive_number(value: float, name: str = "value", min_value: float
 def validate_email(email: str) -> str:
     """
     Validate email address format.
-    
+
     Args:
         email: Email address to validate
-        
+
     Returns:
         Validated email address
-        
+
     Raises:
         ValidationError: If email is invalid
     """
@@ -518,13 +518,13 @@ def validate_email(email: str) -> str:
 def validate_url(url: str) -> str:
     """
     Validate URL format.
-    
+
     Args:
         url: URL to validate
-        
+
     Returns:
         Validated URL
-        
+
     Raises:
         ValidationError: If URL is invalid
     """
@@ -548,16 +548,16 @@ def validate_url(url: str) -> str:
 def validate_media_url(url: str) -> str:
     """
     Validate a URL for media download (YouTube, direct links, etc.).
-    
+
     Validates format and checks that the scheme is http/https.
     Does not probe the URL — that happens at download time.
-    
+
     Args:
         url: URL to validate
-        
+
     Returns:
         Validated and cleaned URL
-        
+
     Raises:
         ValidationError: If URL format is invalid
     """

@@ -147,7 +147,7 @@ class TestAnthropicProvider:
             {"role": "user", "content": "Hello"},
         ]
 
-        result = provider.chat_completion(messages, max_tokens=100)
+        provider.chat_completion(messages, max_tokens=100)
 
         # Verify developer role was converted to user
         call_args = mock_client_instance.messages.create.call_args[1]
@@ -167,14 +167,13 @@ class TestAnthropicProviderFactory:
 
         with patch.dict(
             "os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False
-        ):
-            with patch("scribe.providers.anthropic_provider.Anthropic"):
-                provider = get_provider(
-                    feature="joke", provider_name="anthropic", api_key="test-key"
-                )
+        ), patch("scribe.providers.anthropic_provider.Anthropic"):
+            provider = get_provider(
+                feature="joke", provider_name="anthropic", api_key="test-key"
+            )
 
-                assert provider is not None
-                assert provider.model == "claude-3-5-sonnet-20241022"
+            assert provider is not None
+            assert provider.model == "claude-3-5-sonnet-20241022"
 
     def test_anthropic_provider_not_available_raises_error(self):
         """Test that missing anthropic package raises ImportError."""
@@ -182,15 +181,13 @@ class TestAnthropicProviderFactory:
 
         with patch.dict(
             "os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False
+        ), patch(
+            "scribe.providers.factory.ANTHROPIC_AVAILABLE", False
+        ), pytest.raises(
+            ImportError, match="anthropic package not installed"
         ):
-            with patch(
-                "scribe.providers.factory.ANTHROPIC_AVAILABLE", False
-            ):
-                with pytest.raises(
-                    ImportError, match="anthropic package not installed"
-                ):
-                    get_provider(
-                        feature="joke",
-                        provider_name="anthropic",
-                        api_key="test-key",
-                    )
+            get_provider(
+                feature="joke",
+                provider_name="anthropic",
+                api_key="test-key",
+            )

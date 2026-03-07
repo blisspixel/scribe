@@ -27,7 +27,7 @@ class SpinnerProgress:
 
     def __init__(self, message: str, spinner_style: str = "dots"):
         """Initialize spinner progress display.
-        
+
         Args:
             message: The message to display
             spinner_style: Spinner style (dots, line, etc.)
@@ -120,7 +120,7 @@ class SpinnerProgress:
 
     def update(self, message: str | None = None) -> None:
         """Update the spinner message.
-        
+
         Args:
             message: New message (or keep current if None)
         """
@@ -133,7 +133,7 @@ class SpinnerProgress:
 
     def success(self, message: str, extra: str | None = None) -> None:
         """Display success message and stop spinner.
-        
+
         Args:
             message: Success message
             extra: Optional extra info (like score)
@@ -152,7 +152,7 @@ class SpinnerProgress:
 
     def complete(self) -> None:
         """Stop spinner silently without printing a message.
-        
+
         Use this when the calling code will handle the success message itself.
         """
         self._stop_shimmer()
@@ -161,7 +161,7 @@ class SpinnerProgress:
 
     def error(self, message: str) -> None:
         """Display error message and stop spinner.
-        
+
         Args:
             message: Error message
         """
@@ -173,7 +173,7 @@ class SpinnerProgress:
 
     def warning(self, message: str) -> None:
         """Display warning message.
-        
+
         Args:
             message: Warning message
         """
@@ -182,17 +182,17 @@ class SpinnerProgress:
 
 def show_spinner(message: str) -> SpinnerProgress:
     """Create a spinner progress display.
-    
+
     Usage:
         with show_spinner("Generating meme") as spinner:
             # do work
             spinner.update("Generating meme (attempt 2)")
             # more work
             spinner.success("Meme generated", extra="score: 8.5/10")
-    
+
     Args:
         message: Initial message to display
-        
+
     Returns:
         SpinnerProgress context manager
     """

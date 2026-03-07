@@ -6,6 +6,7 @@ Tests audio device detection, configuration, and compatibility.
 
 import os
 import sys
+import time
 from pathlib import Path
 
 from colorama import Fore, Style, init
@@ -37,9 +38,12 @@ def test_pycaw_import():
             print_test("pycaw import", "SKIP", "Not Windows platform")
             return True
 
-        from comtypes import CLSCTX_ALL, CoCreateInstance
-        from pycaw.constants import EDataFlow, ERole
-        from pycaw.pycaw import IMMDeviceEnumerator
+        import importlib.util
+
+        if not importlib.util.find_spec('comtypes'):
+            raise ImportError('comtypes not available')
+        if not importlib.util.find_spec('pycaw'):
+            raise ImportError('pycaw not available')
 
         print_test("pycaw import", "PASS", "Audio control library available")
         return True
@@ -53,9 +57,7 @@ def test_pycaw_import():
 
 def get_audio_devices():
     """Get list of audio devices using different methods."""
-    devices = []
-
-    # Method 1: pycaw (Windows only)
+    devices = []    # Method 1: pycaw (Windows only)
     if os.name == 'nt':
         try:
             from comtypes import CLSCTX_ALL, CoCreateInstance
@@ -122,7 +124,7 @@ def test_audio_device_detection():
     print_test("Device detection", "PASS", f"Found {len(devices)} devices")
 
     # Show detected devices
-    default_devices = [d for d in devices if d.get('default', False)]
+    [d for d in devices if d.get('default', False)]
 
     for i, device in enumerate(devices[:5]):  # Show up to 5 devices
         is_default = device.get('default', False)
@@ -219,7 +221,7 @@ def test_audio_system_health():
         devices = get_audio_devices()
 
         # Check for multiple detection methods
-        methods = set(d.get('method', 'unknown') for d in devices)
+        methods = {d.get('method', 'unknown') for d in devices}
         print_test("Detection methods", "INFO", f"Available: {', '.join(methods)}")
 
         # Check for default device
@@ -250,11 +252,6 @@ def main():
     """Run all audio device tests."""
     print(f"{Fore.GREEN}{Style.BRIGHT}Scribe Audio Device Tests")
     print(f"{Fore.WHITE}Testing audio device detection and configuration...\n")
-
-    start_time = time.time() if 'time' in globals() else 0
-
-    # Import time here to avoid issues
-    import time
     start_time = time.time()
 
     # Run all test suites
@@ -290,3 +287,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+

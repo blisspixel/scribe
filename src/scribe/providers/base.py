@@ -133,7 +133,7 @@ class NewProvider(AIProvider):
     def chat_completion(self, messages, **kwargs):
         # Implementation
         pass
-    
+
     def transcribe_audio(self, audio_path, **kwargs):
         raise NotImplementedError("Transcription not supported")
 ```
@@ -184,13 +184,13 @@ class AIProvider(ABC):
     ) -> dict[str, Any]:
         """
         Create a chat completion.
-        
+
         Args:
             messages: List of message dicts with 'role' and 'content'
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             **kwargs: Provider-specific parameters
-            
+
         Returns:
             Response dict with 'content', 'usage', etc.
         """
@@ -205,12 +205,12 @@ class AIProvider(ABC):
     ) -> str:
         """
         Transcribe audio file.
-        
+
         Args:
             audio_path: Path to audio file
             language: Language code (optional)
             **kwargs: Provider-specific parameters
-            
+
         Returns:
             Transcription text
         """
@@ -225,12 +225,12 @@ class AIProvider(ABC):
     ) -> bytes:
         """
         Generate an image from a prompt.
-        
+
         Args:
             prompt: Image generation prompt
             size: Image size
             **kwargs: Provider-specific parameters
-            
+
         Returns:
             Image bytes
         """
@@ -245,12 +245,12 @@ class AIProvider(ABC):
     ) -> str:
         """
         Analyze an image with vision capabilities.
-        
+
         Args:
             image_data: Image bytes
             prompt: Analysis prompt
             **kwargs: Provider-specific parameters
-            
+
         Returns:
             Analysis text
         """
@@ -266,18 +266,18 @@ class AIProvider(ABC):
     ) -> dict[str, Any]:
         """
         Create a chat completion with JSON output.
-        
+
         This is a convenience method that adds JSON schema instructions to the prompt
         and requests JSON mode from the provider. Providers can override this for
         native structured output support.
-        
+
         Args:
             messages: List of message dicts with 'role' and 'content'
             json_schema: Optional JSON schema for structured output
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             **kwargs: Provider-specific parameters
-            
+
         Returns:
             Response dict with 'content' (JSON string), 'usage', etc.
         """

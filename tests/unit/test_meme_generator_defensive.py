@@ -40,12 +40,11 @@ class TestMemeGeneratorDefensive:
             output_path = Path("test_meme.png")
 
             # Should normalize to valid size
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 
             # Check that generate_image was called with normalized size
-            call_args = mock_provider.generate_image.call_args
             # Size should be normalized to '1024x1536' without the description
             assert result == output_path
 
@@ -68,7 +67,7 @@ class TestMemeGeneratorDefensive:
 
             output_path = Path("test_meme.png")
 
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 
@@ -169,7 +168,7 @@ class TestMemeGeneratorDefensive:
 
             output_path = Path("test_meme.png")
 
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 
@@ -195,7 +194,7 @@ class TestMemeGeneratorDefensive:
 
             output_path = Path("test_meme.png")
 
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 
@@ -220,7 +219,7 @@ class TestMemeGeneratorDefensive:
 
             output_path = Path("test_meme.png")
 
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 
@@ -285,7 +284,7 @@ class TestMemeGeneratorDefensive:
 
             output_path = Path("test_meme.png")
 
-            with patch("builtins.open", create=True) as mock_open:
+            with patch("builtins.open", create=True):
                 with patch("scribe.utils.meme_generator.Path.mkdir"):
                     result = _generate_meme_image(mock_provider, meme_concept, config, output_path)
 

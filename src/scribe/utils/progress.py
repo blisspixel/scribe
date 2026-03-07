@@ -136,7 +136,7 @@ tracker.start()
 
 with Progress() as progress:
     task = progress.add_task("Transcribing...", total=100)
-    
+
     for segment in segments:
         tracker.update(segment.end)
         progress.update(task, completed=tracker.get_progress() * 100)
@@ -239,28 +239,28 @@ class ProgressMeasurement:
 class ProgressTracker:
     """
     Track progress and estimate completion time using Kalman filter.
-    
+
     This class provides:
     - Dynamic time estimates that improve over time
     - Speed ratio calculation (e.g., 8.5x realtime)
     - Smooth progress updates
     - No emoji output
-    
+
     Example:
         tracker = ProgressTracker(total_duration=3600, operation="Transcribing")
         tracker.start()
-        
+
         for segment in segments:
             tracker.update(segment.end)
             # Progress bar updates automatically
-        
+
         tracker.complete()
     """
 
     def __init__(self, total_duration: float, operation: str = "Processing"):
         """
         Initialize progress tracker.
-        
+
         Args:
             total_duration: Total duration to process (seconds)
             operation: Operation description
@@ -284,7 +284,7 @@ class ProgressTracker:
     def update(self, current_position: float) -> None:
         """
         Update progress with new measurement.
-        
+
         Args:
             current_position: Current position in total duration
         """
@@ -327,10 +327,10 @@ class ProgressTracker:
     def get_eta(self, current_progress: float) -> float:
         """
         Get estimated time to completion.
-        
+
         Args:
             current_progress: Current progress (0.0 to 1.0)
-            
+
         Returns:
             Estimated seconds remaining
         """
@@ -343,7 +343,7 @@ class ProgressTracker:
     def get_speed_ratio(self) -> float:
         """
         Get processing speed ratio (e.g., 8.5x realtime).
-        
+
         Returns:
             Speed ratio
         """
@@ -375,10 +375,10 @@ class ProgressTracker:
 def create_progress_bar(description: str = "Processing") -> Progress:
     """
     Create a Rich progress bar with standard configuration.
-    
+
     Args:
         description: Progress bar description
-        
+
     Returns:
         Configured Progress instance
     """
@@ -403,10 +403,10 @@ def create_progress_bar(description: str = "Processing") -> Progress:
 def format_speed_ratio(ratio: float) -> str:
     """
     Format speed ratio for display.
-    
+
     Args:
         ratio: Speed ratio (e.g., 8.5)
-        
+
     Returns:
         Formatted string (e.g., "8.5x realtime")
     """
@@ -421,10 +421,10 @@ def format_speed_ratio(ratio: float) -> str:
 def format_eta(seconds: float) -> str:
     """
     Format ETA for display.
-    
+
     Args:
         seconds: Seconds remaining
-        
+
     Returns:
         Formatted string (e.g., "2m 30s", "1h 15m")
     """

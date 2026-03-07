@@ -2,6 +2,7 @@
 Unit tests for unified progress tracking.
 """
 
+import contextlib
 from unittest.mock import Mock, patch
 
 import pytest
@@ -117,7 +118,7 @@ class TestUnifiedProgress:
 
 class TestUnifiedProgressIntegration:
     """Integration tests that exercise real code paths without mocking.
-    
+
     These tests catch issues like missing imports that unit tests with
     mocks would miss.
     """
@@ -128,15 +129,13 @@ class TestUnifiedProgressIntegration:
         from scribe.utils.unified_progress import console
         # Ensure no live display is active
         if hasattr(console, '_live') and console._live is not None:
-            try:
+            with contextlib.suppress(Exception):
                 console._live.stop()
-            except Exception:
-                pass
         yield
 
     def test_full_lifecycle_no_mocks(self):
         """Test complete lifecycle without mocking to catch import errors.
-        
+
         This test catches bugs like missing imports in methods that are
         only called at runtime (e.g., ScribeTheme not imported in complete()).
         """

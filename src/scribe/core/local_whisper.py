@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 class LocalWhisperTranscriber:
     """
     Local GPU-accelerated transcription using faster-whisper.
-    
+
     Features:
     - Automatic GPU detection and optimization
     - RTX 4090 specific settings (beam_size=10, FP16)
@@ -41,7 +41,7 @@ class LocalWhisperTranscriber:
     ):
         """
         Initialize local whisper transcriber.
-        
+
         Args:
             model_size: Whisper model size
             language: ISO language code (None for auto-detection)
@@ -79,14 +79,14 @@ class LocalWhisperTranscriber:
     def detect_language(self, audio_path: Path, sample_duration: int = 30) -> tuple[str | None, float, bool]:
         """
         Detect the language of audio file with confidence scoring.
-        
+
         Uses a quick scan of the audio to detect language and determine if speech is present.
         This is more efficient than full transcription for language detection.
-        
+
         Args:
             audio_path: Path to audio file
             sample_duration: Seconds of audio to sample for detection (default: 30)
-            
+
         Returns:
             Tuple of (language_code, confidence, has_speech):
                 - language_code: ISO 639-1 code if detected, None otherwise
@@ -344,17 +344,17 @@ class LocalWhisperTranscriber:
     ) -> Path:
         """
         Transcribe audio file with GPU acceleration.
-        
+
         Args:
             audio_path: Path to audio file
             output_path: Optional output path
             detect_silence: Whether to detect silence periods
             initial_prompt: Optional prompt to guide transcription
             music_mode: If True, optimized for music/lyrics
-            
+
         Returns:
             Path to transcript file
-            
+
         Raises:
             TranscriptionError: If transcription fails
         """
@@ -430,7 +430,7 @@ class LocalWhisperTranscriber:
     ) -> None:
         """
         Write clean transcript with minimal metadata.
-        
+
         Format:
         - 3-line header: Meeting name, Date, Duration
         - Separator line
@@ -507,13 +507,13 @@ def transcribe_with_local_whisper(
 ) -> Path:
     """
     Convenience function for local GPU transcription.
-    
+
     Args:
         audio_path: Path to audio file
         model_size: Whisper model size
         language: ISO language code (None for auto-detection)
         **kwargs: Additional arguments for LocalWhisperTranscriber.transcribe()
-        
+
     Returns:
         Path to transcript file
     """

@@ -65,7 +65,7 @@ class XAIProvider(AIProvider):
     ) -> str:
         """
         Transcribe audio using Grok.
-        
+
         Note: XAI doesn't currently have a transcription API.
         This is a placeholder for future support.
         """

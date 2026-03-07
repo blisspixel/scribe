@@ -24,7 +24,7 @@ class AnthropicProvider(AIProvider):
     def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-20241022", config: ProviderConfig | None = None):
         """
         Initialize Anthropic provider.
-        
+
         Args:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
             model: Model to use (default: claude-3-5-sonnet-20241022)
@@ -64,13 +64,13 @@ class AnthropicProvider(AIProvider):
     ) -> dict[str, Any]:
         """
         Generate chat completion using Claude.
-        
+
         Args:
             messages: List of message dicts with 'role' and 'content'
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             **kwargs: Additional model-specific parameters
-        
+
         Returns:
             Dict with 'content' and 'usage' keys
         """
@@ -120,7 +120,7 @@ class AnthropicProvider(AIProvider):
     ) -> bytes:
         """
         Claude doesn't support image generation.
-        
+
         Raises:
             NotImplementedError: Always raised
         """
@@ -134,7 +134,7 @@ class AnthropicProvider(AIProvider):
     ) -> str:
         """
         Claude doesn't support audio transcription.
-        
+
         Raises:
             NotImplementedError: Always raised
         """
@@ -148,12 +148,12 @@ class AnthropicProvider(AIProvider):
     ) -> str:
         """
         Analyze an image using Claude's vision capabilities.
-        
+
         Args:
             image_data: Image bytes
             prompt: Analysis prompt
             **kwargs: Additional parameters
-        
+
         Returns:
             Analysis text
         """

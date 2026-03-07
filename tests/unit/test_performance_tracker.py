@@ -102,7 +102,7 @@ class TestPerformanceTracker:
 
         assert tracker.machine_id == "test_machine"
         assert tracker.config_dir == tmp_path
-        assert tracker.metrics_file.exists() == False  # Not created until first save
+        assert not tracker.metrics_file.exists()  # Not created until first save
 
     def test_record_phase(self, tmp_path):
         """Test recording phase performance."""

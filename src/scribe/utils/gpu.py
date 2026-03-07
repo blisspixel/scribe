@@ -14,10 +14,10 @@ from scribe.models.gpu import GPUConfig
 def detect_gpu_capability() -> dict[str, Any]:
     """
     Comprehensive GPU detection and capability assessment.
-    
+
     This function wraps GPUConfig.detect() and returns a dictionary
     for backward compatibility with existing code.
-    
+
     Returns:
         Dict with GPU info: has_gpu, gpu_name, gpu_memory_gb,
         cuda_available, recommendation, reason
@@ -29,10 +29,10 @@ def detect_gpu_capability() -> dict[str, Any]:
 def configure_gpu_optimizations(gpu_info: dict[str, Any]) -> dict[str, Any]:
     """
     Configure optimal settings for detected GPU.
-    
+
     Args:
         gpu_info: GPU detection results from detect_gpu_capability()
-        
+
     Returns:
         Dict with optimal settings: model_size, beam_size,
         batch_size, use_fp16, enable_tensor_cores
@@ -49,11 +49,11 @@ def configure_gpu_optimizations(gpu_info: dict[str, Any]) -> dict[str, Any]:
 def is_high_end_gpu(gpu_name: str, vram_gb: float) -> bool:
     """
     Check if GPU is high-end (RTX 4090, A100, etc.).
-    
+
     Args:
         gpu_name: Name of the GPU
         vram_gb: GPU memory in GB
-        
+
     Returns:
         True if high-end GPU
     """
@@ -75,7 +75,7 @@ def is_high_end_gpu(gpu_name: str, vram_gb: float) -> bool:
 def check_cuda_available() -> bool:
     """
     Check if CUDA is available.
-    
+
     Returns:
         True if CUDA is available
     """
@@ -89,7 +89,7 @@ def check_cuda_available() -> bool:
 def get_cuda_version() -> str:
     """
     Get CUDA version string.
-    
+
     Returns:
         CUDA version or "Not available"
     """
@@ -106,7 +106,7 @@ def get_cuda_version() -> str:
 def get_gpu_memory_info() -> dict[str, float]:
     """
     Get GPU memory information.
-    
+
     Returns:
         Dict with total_gb, used_gb, free_gb
     """
@@ -145,7 +145,7 @@ def clear_gpu_cache() -> None:
 def set_gpu_optimizations(enable_tensor_cores: bool = True) -> None:
     """
     Set GPU optimizations for transcription.
-    
+
     Args:
         enable_tensor_cores: Whether to enable Tensor Core acceleration
     """

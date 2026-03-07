@@ -5,6 +5,7 @@ Tests full workflows from audio input to final transcript output,
 including GPU transcription, OpenAI API, fallback scenarios, and cleanup.
 """
 
+import contextlib
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -23,7 +24,7 @@ class TestGPUTranscriptionWorkflow:
         not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
         reason="CUDA not available"
     )
-    def test_full_gpu_workflow(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_full_gpu_workflow(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu, mock_openai):
         """Test complete workflow using GPU transcription."""
         transcriber = Transcriber(temp_config)
 
@@ -49,7 +50,7 @@ class TestGPUTranscriptionWorkflow:
         not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
         reason="CUDA not available"
     )
-    def test_gpu_workflow_with_video_conversion(self, test_video: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_gpu_workflow_with_video_conversion(self, test_video: Path, temp_config: ScribeConfig, mock_gpu, mock_openai):
         """Test workflow converting video to audio then transcribing with GPU."""
         # Convert video to audio
         converter = AudioConverter()
@@ -143,7 +144,7 @@ class TestFallbackScenarios:
         # Should have used OpenAI (no GPU available)
         mock_openai.audio.transcriptions.create.assert_called()
 
-    def test_no_fallback_when_method_forced(self, sample_audio: Path, temp_config: ScribeConfig, mock_no_gpu):
+    def test_no_fallback_when_method_forced(self, sample_audio: Path, temp_config: ScribeConfig, mock_no_gpu, mock_openai):
         """Test error when forcing local method without GPU."""
         transcriber = Transcriber(temp_config)
 
@@ -184,7 +185,7 @@ class TestCleanupBehavior:
         # Intermediate files may exist (depending on implementation)
         # Just verify no error occurs
 
-    def test_cleanup_on_error(self, sample_audio: Path, temp_config: ScribeConfig):
+    def test_cleanup_on_error(self, sample_audio: Path, temp_config: ScribeConfig, mock_openai):
         """Test cleanup occurs even when transcription fails."""
         temp_config.keep_intermediate_files = False
 
@@ -227,12 +228,10 @@ class TestInterruptHandling:
             mock_local.transcribe.side_effect = KeyboardInterrupt()
             mock_local_class.return_value = mock_local
 
-            try:
+            with contextlib.suppress(KeyboardInterrupt):
                 transcriber.transcribe(sample_audio, method="local",
                     session=session
                 )
-            except KeyboardInterrupt:
-                pass
 
             # Session tracking is best-effort, just verify it exists
             assert session.start_time is not None
@@ -341,5 +340,6 @@ class TestCompleteWorkflowIntegration:
 
         content = result.read_text(encoding="utf-8")
         assert len(content) > 0
+
 
 

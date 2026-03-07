@@ -9,13 +9,15 @@ import base64
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from dotenv import find_dotenv, load_dotenv
 from openai import OpenAI
+
+from scribe.utils.transcript_loader import load_transcript_text
 
 # Load environment
 load_dotenv(find_dotenv(usecwd=True), override=False)
@@ -49,12 +51,12 @@ class MemeConfig:
     @classmethod
     def from_env(cls) -> "MemeConfig":
         """Create config from environment variables.
-        
+
         Environment variables:
             SCRIBE_MEME_QA_THRESHOLD: QA score threshold (0.0-10.0, default: 8.0)
             SCRIBE_MEME_QA_ATTEMPTS: Max generation attempts (1-10, default: 3)
             SCRIBE_HUMOR_SPICE: Humor intensity level (0-10, default: 5)
-            
+
         Returns:
             MemeConfig instance with values from environment
         """
@@ -109,7 +111,7 @@ def _analyze_transcript_for_meme(
 ) -> dict[str, Any] | None:
     """
     Use GPT-5 to analyze transcript and create meme concept.
-    
+
     Returns dict with:
         - template: Meme template description (e.g., "Distracted Boyfriend", "Drake Hotline Bling")
         - top_text: Text for top of meme
@@ -461,14 +463,14 @@ def _refine_prompt_from_feedback(
 ) -> dict[str, Any]:
     """
     Use AI to analyze QA feedback and refine the image prompt.
-    
+
     Args:
         provider: AI provider
         meme_concept: Original meme concept
         qa_feedback: QA grading results
         attempt: Current attempt number
         config: Meme generation config
-        
+
     Returns:
         Updated meme concept with refined image_prompt
     """
@@ -549,13 +551,13 @@ def _qa_grade_meme(
 ) -> tuple[float, dict[str, Any]]:
     """
     Use AI vision to grade the generated meme.
-    
+
     Args:
         provider: AI provider
         meme_path: Path to generated meme image
         meme_concept: Original meme concept
         config: Meme generation config
-        
+
     Returns:
         Tuple of (score out of 10, feedback dict)
     """
@@ -695,13 +697,13 @@ def _generate_meme_image(
 ) -> Path | None:
     """
     Generate meme image using AI provider (provider-agnostic).
-    
+
     Args:
         image_provider: AI provider instance for image generation
         meme_concept: Meme concept from analysis
         config: Meme generation config
         output_path: Where to save the meme
-        
+
     Returns:
         Path to saved meme image, or None if failed
     """
@@ -870,7 +872,7 @@ def generate_meeting_meme(
 ) -> dict[str, Any] | None:
     """
     Generate a meme from a meeting transcript.
-    
+
     Args:
         transcript_path: Path to transcript file
         output_dir: Directory to save meme (defaults to same dir as transcript)
@@ -880,7 +882,7 @@ def generate_meeting_meme(
         progress_callback: Optional callback function(attempt, max_attempts, score) for progress updates
         provider_name: AI provider to use (openai, xai, gemini) - defaults to SCRIBE_MEME_PROVIDER env var
         enable_bakeoff: If True, gets concepts from all providers and picks the funniest
-        
+
     Returns:
         Dictionary with:
         - final_path: Path to best meme
@@ -959,7 +961,7 @@ def generate_meeting_meme(
 
     # Read transcript
     try:
-        transcript = transcript_path.read_text(encoding="utf-8")
+        transcript = load_transcript_text(transcript_path)
     except Exception as e:
         logger.error(f"Failed to read transcript: {e}")
         return None
@@ -1191,13 +1193,13 @@ def generate_meme_from_text(
 ) -> Path | None:
     """
     Generate a meme from transcript text (not file).
-    
+
     Args:
         transcript_text: Transcript content as string
         output_path: Where to save the meme
         api_key: OpenAI API key (or uses OPENAI_API_KEY env var)
         config: Meme generation config
-        
+
     Returns:
         Path to generated meme, or None if failed
     """
@@ -1228,3 +1230,4 @@ def generate_meme_from_text(
         return None
 
     return meme_path
+

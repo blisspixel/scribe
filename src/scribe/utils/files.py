@@ -293,20 +293,20 @@ from scribe.utils.platform import normalize_path
 def safe_path(path: str) -> Path:
     """
     Sanitize and validate file path using pathlib.
-    
+
     This function:
     - Strips quotes and whitespace
     - Expands ~ to home directory
     - Expands environment variables
     - Converts to absolute path
     - Validates path is not empty
-    
+
     Args:
         path: Raw path string
-        
+
     Returns:
         Cleaned absolute Path object
-        
+
     Raises:
         FileOperationError: If path is invalid
     """
@@ -325,13 +325,13 @@ def safe_path(path: str) -> Path:
 def ensure_directory(path: Path) -> Path:
     """
     Create directory if it doesn't exist.
-    
+
     Args:
         path: Directory path to create
-        
+
     Returns:
         Path object (guaranteed to exist)
-        
+
     Raises:
         FileOperationError: If directory cannot be created
     """
@@ -353,16 +353,16 @@ def cleanup_files(
 ) -> list[Path]:
     """
     Clean up files matching patterns.
-    
+
     Args:
         directory: Directory to clean
         patterns: File patterns to delete (e.g., ["*.tmp", "*_temp.*"])
         keep_patterns: Patterns to preserve (e.g., ["*_final.*"])
         dry_run: If True, don't actually delete files
-        
+
     Returns:
         List of files that were (or would be) deleted
-        
+
     Raises:
         FileOperationError: If cleanup fails critically
     """
@@ -414,14 +414,14 @@ def cleanup_files(
 def verify_file_content(path: Path, min_size: int = 100) -> bool:
     """
     Verify file exists and has minimum content.
-    
+
     Args:
         path: Path to file
         min_size: Minimum file size in bytes
-        
+
     Returns:
         True if file is valid
-        
+
     Raises:
         FileOperationError: If file is invalid
     """
@@ -459,10 +459,10 @@ def verify_file_content(path: Path, min_size: int = 100) -> bool:
 def extract_date_from_filename(filename: str) -> str | None:
     """
     Extract date from filename like 'Meeting_2025-11-06_15-31-40.mp4'.
-    
+
     Args:
         filename: Filename to parse
-        
+
     Returns:
         Date string in YYYY-MM-DD format, or None if not found
     """
@@ -483,10 +483,10 @@ def extract_date_from_filename(filename: str) -> str | None:
 def format_date(date_str: str) -> str:
     """
     Convert YYYY-MM-DD to readable format like 'November 6, 2025'.
-    
+
     Args:
         date_str: Date string in YYYY-MM-DD format
-        
+
     Returns:
         Formatted date string
     """
@@ -500,10 +500,10 @@ def format_date(date_str: str) -> str:
 def format_duration_minutes(seconds: float) -> str:
     """
     Convert seconds to readable duration like '58 minutes' or '2 hours 15 minutes'.
-    
+
     Args:
         seconds: Duration in seconds
-        
+
     Returns:
         Formatted duration string
     """
@@ -523,10 +523,10 @@ def format_duration_minutes(seconds: float) -> str:
 def get_file_size_mb(path: Path) -> float:
     """
     Get file size in megabytes.
-    
+
     Args:
         path: Path to file
-        
+
     Returns:
         File size in MB
     """
@@ -539,10 +539,10 @@ def get_file_size_mb(path: Path) -> float:
 def get_file_info(path: Path) -> dict:
     """
     Get comprehensive file information.
-    
+
     Args:
         path: Path to file
-        
+
     Returns:
         Dictionary with file metadata
     """
@@ -568,12 +568,12 @@ def get_file_info(path: Path) -> dict:
 def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Path | None:
     """
     Find the most recently created file matching pattern.
-    
+
     Args:
         directory: Directory to search
         pattern: Glob pattern (e.g., "*.wav")
         min_size: Minimum file size in bytes
-        
+
     Returns:
         Path to latest file, or None if not found
     """
@@ -607,13 +607,13 @@ def wait_for_file_stable(
 ) -> bool:
     """
     Wait for file to exist and stop growing (stable size).
-    
+
     Args:
         path: Path to file
         stable_duration: How long size must be stable (seconds)
         max_wait: Maximum time to wait (seconds)
         check_interval: How often to check (seconds)
-        
+
     Returns:
         True if file is stable, False if timeout
     """
@@ -650,15 +650,15 @@ def wait_for_file_stable(
 def copy_file_safe(source: Path, destination: Path, overwrite: bool = False) -> Path:
     """
     Safely copy file with error handling.
-    
+
     Args:
         source: Source file path
         destination: Destination file path
         overwrite: Whether to overwrite existing file
-        
+
     Returns:
         Destination path
-        
+
     Raises:
         FileOperationError: If copy fails
     """
@@ -688,15 +688,15 @@ def copy_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
 def move_file_safe(source: Path, destination: Path, overwrite: bool = False) -> Path:
     """
     Safely move file with error handling.
-    
+
     Args:
         source: Source file path
         destination: Destination file path
         overwrite: Whether to overwrite existing file
-        
+
     Returns:
         Destination path
-        
+
     Raises:
         FileOperationError: If move fails
     """

@@ -29,6 +29,8 @@ from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 from openai import OpenAI
 
+from scribe.utils.transcript_loader import load_transcript_text
+
 # -----------------------------------------------------------------------------
 # .env and logging
 # -----------------------------------------------------------------------------
@@ -126,10 +128,10 @@ class HumorConfig:
     @classmethod
     def from_env(cls) -> HumorConfig:
         """Create config from environment variables.
-        
+
         Environment variables:
             SCRIBE_HUMOR_SPICE: Humor intensity level (0-10, default: 5)
-            
+
         Returns:
             HumorConfig instance with values from environment
         """
@@ -510,10 +512,7 @@ def _extract_output_text(resp) -> str:
 def _resp_to_dict_trunc(resp, n: int = 1200) -> str:
     try:
         blob = getattr(resp, "to_dict", None)
-        if callable(blob):
-            s = json.dumps(blob(), ensure_ascii=False)
-        else:
-            s = str(resp)
+        s = json.dumps(blob(), ensure_ascii=False) if callable(blob) else str(resp)
         return (s[:n] + " …[truncated]") if len(s) > n else s
     except Exception:
         return "<unserializable>"
@@ -572,20 +571,15 @@ def generate_transcript_joke(
 
     logger.info(f"Archetype override: {cfg.archetype or 'None'}")
 
-    # Read transcript with size limit (prevent loading gigabytes)
-    MAX_TRANSCRIPT_SIZE = 500_000  # 500KB max
+    # Read transcript with size cap (works for txt, md, and docx)
+    MAX_TRANSCRIPT_CHARS = 500_000  # Defensive cap for all input formats
     try:
-        file_size = transcript_path.stat().st_size
-        if file_size > MAX_TRANSCRIPT_SIZE:
-            logger.warning(f"Transcript is large ({file_size:,} bytes), truncating to {MAX_TRANSCRIPT_SIZE:,} bytes")
-            # Read first and last portions
-            with open(transcript_path, encoding='utf-8') as f:
-                start = f.read(MAX_TRANSCRIPT_SIZE // 2)
-                f.seek(max(0, file_size - MAX_TRANSCRIPT_SIZE // 2))
-                end = f.read()
-                transcript_text = start + "\n\n[...transcript truncated for size...]\n\n" + end
-        else:
-            transcript_text = _safe_read_text(transcript_path)
+        transcript_text = load_transcript_text(transcript_path)
+        if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
+            logger.warning(f"Transcript is large ({len(transcript_text):,} chars), truncating to {MAX_TRANSCRIPT_CHARS:,} chars")
+            head = transcript_text[: MAX_TRANSCRIPT_CHARS // 2]
+            tail = transcript_text[- MAX_TRANSCRIPT_CHARS // 2 :]
+            transcript_text = head + "\n\n[...transcript truncated for size...]\n\n" + tail
     except Exception as e:
         logger.error(f"Failed to read transcript: {e}")
         return None
@@ -833,3 +827,4 @@ if __name__ == "__main__":
         print(out[0])
     else:
         raise SystemExit(2)
+

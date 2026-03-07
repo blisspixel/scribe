@@ -45,13 +45,13 @@ _context_var: contextvars.ContextVar[Optional["RunContext"]] = contextvars.Conte
 def _generate_run_id() -> str:
     """
     Generate a unique run ID.
-    
+
     Format: YYYYMMDD_HHMMSS_<short-uuid>
     Example: 20251112_143022_a3f9
-    
+
     The timestamp prefix makes IDs sortable and human-readable,
     while the UUID suffix ensures uniqueness even for concurrent runs.
-    
+
     Returns:
         Unique run ID string
     """
@@ -64,11 +64,11 @@ def _generate_run_id() -> str:
 class RunContext:
     """
     Context for a single Scribe operation run.
-    
+
     Tracks metadata, timing, and status for observability.
     Automatically captures system information and provides
     structured data for logging and debugging.
-    
+
     Attributes:
         run_id: Unique identifier for this run
         operation: Operation type (e.g., "transcribe", "record")
@@ -99,11 +99,11 @@ class RunContext:
     def create(cls, operation: str, parent_run_id: str | None = None) -> "RunContext":
         """
         Create a new run context.
-        
+
         Args:
             operation: Operation type (e.g., "transcribe", "record")
             parent_run_id: Optional parent run ID for nested operations
-            
+
         Returns:
             New RunContext instance
         """
@@ -128,10 +128,10 @@ class RunContext:
     def add_metadata(self, key: str, value: Any) -> None:
         """
         Add metadata to the run context.
-        
+
         Metadata is structured data that provides context about the run.
         Examples: file paths, model names, configuration values.
-        
+
         Args:
             key: Metadata key
             value: Metadata value (must be JSON-serializable)
@@ -163,7 +163,7 @@ class RunContext:
     def mark_failure(self, error_message: str) -> None:
         """
         Mark the run as failed and record error.
-        
+
         Args:
             error_message: Description of the failure
         """
@@ -187,7 +187,7 @@ class RunContext:
     def get_duration(self) -> float | None:
         """
         Get run duration in seconds.
-        
+
         Returns:
             Duration in seconds, or None if run hasn't ended
         """
@@ -199,7 +199,7 @@ class RunContext:
     def to_dict(self) -> dict[str, Any]:
         """
         Convert context to dictionary for serialization.
-        
+
         Returns:
             Dictionary representation with ISO timestamps
         """
@@ -217,10 +217,10 @@ class RunContext:
     def get_current(cls) -> Optional["RunContext"]:
         """
         Get the current run context.
-        
+
         Uses contextvars for async/await compatibility.
         Works with both threading and asyncio.
-        
+
         Returns:
             Current RunContext, or None if no context is active
         """
@@ -230,10 +230,10 @@ class RunContext:
     def set_current(cls, context: Optional["RunContext"]) -> None:
         """
         Set the current run context.
-        
+
         Uses contextvars for async/await compatibility.
         Works with both threading and asyncio.
-        
+
         Args:
             context: RunContext to set as current, or None to clear
         """
@@ -242,7 +242,7 @@ class RunContext:
     def __enter__(self) -> "RunContext":
         """
         Enter context manager - set as current context.
-        
+
         Returns:
             Self for use in with statement
         """
@@ -254,7 +254,7 @@ class RunContext:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """
         Exit context manager - mark success/failure and restore previous context.
-        
+
         Args:
             exc_type: Exception type if an exception occurred
             exc_val: Exception value if an exception occurred
@@ -278,9 +278,9 @@ class RunContext:
 def get_current_run_id() -> str | None:
     """
     Get the current run ID from active context.
-    
+
     Convenience function for accessing run ID without full context.
-    
+
     Returns:
         Current run ID, or None if no context is active
     """
@@ -291,10 +291,10 @@ def get_current_run_id() -> str | None:
 def add_run_metadata(key: str, value: Any) -> None:
     """
     Add metadata to the current run context.
-    
+
     Convenience function for adding metadata without accessing context directly.
     No-op if no context is active.
-    
+
     Args:
         key: Metadata key
         value: Metadata value
@@ -308,13 +308,13 @@ def add_run_metadata(key: str, value: Any) -> None:
 def nested_operation(operation: str):
     """
     Create a nested operation within the current run.
-    
+
     Useful for tracking sub-operations (e.g., "convert" within "transcribe").
     Automatically links to parent run via parent_run_id.
-    
+
     Args:
         operation: Sub-operation name
-        
+
     Yields:
         RunContext for the nested operation
     """
@@ -328,17 +328,17 @@ def nested_operation(operation: str):
 class RunHistory:
     """
     Maintains history of recent runs for debugging and support.
-    
+
     Stores run contexts in memory with a configurable limit.
     Useful for generating support bundles and debugging issues.
-    
+
     Thread-safe for concurrent access.
     """
 
     def __init__(self, max_size: int = 100):
         """
         Initialize run history.
-        
+
         Args:
             max_size: Maximum number of runs to keep in history
         """
@@ -349,7 +349,7 @@ class RunHistory:
     def add(self, context: RunContext) -> None:
         """
         Add a run context to history.
-        
+
         Args:
             context: RunContext to add
         """
@@ -363,10 +363,10 @@ class RunHistory:
     def get_recent(self, count: int = 10) -> list[RunContext]:
         """
         Get most recent runs.
-        
+
         Args:
             count: Number of recent runs to return
-            
+
         Returns:
             List of recent RunContext objects (newest first)
         """
@@ -376,10 +376,10 @@ class RunHistory:
     def get_by_id(self, run_id: str) -> RunContext | None:
         """
         Get a specific run by ID.
-        
+
         Args:
             run_id: Run ID to search for
-            
+
         Returns:
             RunContext if found, None otherwise
         """
@@ -392,10 +392,10 @@ class RunHistory:
     def get_failed_runs(self, count: int = 10) -> list[RunContext]:
         """
         Get recent failed runs.
-        
+
         Args:
             count: Maximum number of failed runs to return
-            
+
         Returns:
             List of failed RunContext objects (newest first)
         """
@@ -416,7 +416,7 @@ _run_history = RunHistory(max_size=100)
 def get_run_history() -> RunHistory:
     """
     Get the global run history instance.
-    
+
     Returns:
         Global RunHistory instance
     """

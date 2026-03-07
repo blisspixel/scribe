@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 class OpenAITranscriber:
     """
     OpenAI API-based transcription with chunking for large files.
-    
+
     This class handles:
     - Audio standardization to optimal format
     - Chunking large files to stay under API limits
@@ -49,7 +49,7 @@ class OpenAITranscriber:
     ):
         """
         Initialize OpenAI transcriber.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model to use (default: gpt-4o-transcribe)
@@ -70,15 +70,15 @@ class OpenAITranscriber:
     ) -> Path:
         """
         Transcribe using OpenAI's server-side chunking (2025 best practice).
-        
+
         This method uses chunking_strategy="auto" to let OpenAI handle
         long audio files server-side using Voice Activity Detection.
-        
+
         Args:
             audio_path: Path to audio file
             output_path: Path for output transcript
             prompt: Optional glossary/prompt
-            
+
         Returns:
             Path to transcript file
         """
@@ -163,11 +163,11 @@ class OpenAITranscriber:
     ) -> str:
         """
         Format transcription response with header and speaker labels.
-        
+
         Args:
             response: OpenAI API response (string if response_format="text", object if "json")
             audio_path: Original audio file path
-            
+
         Returns:
             Formatted transcript text
         """
@@ -253,13 +253,13 @@ class OpenAITranscriber:
     ) -> Path:
         """
         Convert audio to stable format for ASR.
-        
+
         Creates phase-safe mono 16kHz MP3 at target bitrate.
-        
+
         Args:
             input_path: Original audio file
             target_bitrate_kbps: Target MP3 bitrate
-            
+
         Returns:
             Path to standardized audio file
         """
@@ -343,7 +343,7 @@ class OpenAITranscriber:
     ) -> list[Path]:
         """
         Split audio on silence with duration cap.
-        
+
         Args:
             file_path: Path to audio file
             max_chunk_minutes: Maximum chunk duration
@@ -351,7 +351,7 @@ class OpenAITranscriber:
             silence_thresh_delta_db: Silence threshold relative to average
             keep_silence_ms: Silence to keep at boundaries
             export_bitrate_kbps: Export bitrate for chunks
-            
+
         Returns:
             List of chunk file paths
         """
@@ -407,12 +407,12 @@ class OpenAITranscriber:
     ) -> tuple[bool, str | None]:
         """
         Transcribe a single chunk with retry logic.
-        
+
         Args:
             chunk_path: Path to audio chunk
             prompt: Optional glossary/prompt
             retries: Number of retry attempts
-            
+
         Returns:
             Tuple of (success, text)
         """
@@ -431,10 +431,7 @@ class OpenAITranscriber:
                     response = self.client.audio.transcriptions.create(**kwargs)
 
                     # Extract text
-                    if hasattr(response, "text"):
-                        text = response.text
-                    else:
-                        text = str(response)
+                    text = response.text if hasattr(response, "text") else str(response)
 
                     return True, text
 
@@ -464,19 +461,19 @@ class OpenAITranscriber:
     ) -> Path:
         """
         Transcribe audio file with chunking.
-        
+
         CRITICAL: This method includes the fix for blank output files.
-        
+
         Args:
             audio_path: Path to audio file
             output_path: Optional output path
             prompt: Optional glossary/prompt (deprecated, use initial_prompt)
             cleanup_temp: Whether to clean up temporary files
             initial_prompt: Optional prompt to guide transcription (for custom vocabulary)
-            
+
         Returns:
             Path to transcript file
-            
+
         Raises:
             TranscriptionError: If transcription fails
         """
@@ -627,13 +624,13 @@ def transcribe_with_openai(
 ) -> Path:
     """
     Convenience function for OpenAI transcription.
-    
+
     Args:
         audio_path: Path to audio file
         api_key: OpenAI API key
         model: Model to use
         **kwargs: Additional arguments for OpenAITranscriber.transcribe()
-        
+
     Returns:
         Path to transcript file
     """

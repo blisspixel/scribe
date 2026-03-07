@@ -161,10 +161,11 @@ class TestTorchaudioDurationMethod:
     def test_torchaudio_method_gets_duration(self, tmp_path):
         """Test _get_duration_torchaudio extracts duration."""
         try:
-            import torchaudio
+            import torchaudio as _torchaudio
         except ImportError:
             pytest.skip("torchaudio not available")
 
+        assert _torchaudio is not None
         wav_path = tmp_path / "test.wav"
         sample_rate = 16000
         duration_seconds = 5.0
@@ -382,3 +383,6 @@ class TestEdgeCases:
 
         assert duration is not None
         assert duration == 0.0
+
+
+

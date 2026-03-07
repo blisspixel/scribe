@@ -24,15 +24,15 @@ console = Console()
 def find_wav_file(input_file: Path) -> Path:
     """
     Locate the converted WAV file for a given input.
-    
+
     This function fixes the missing find_wav_file bug in scribemobile.py.
-    
+
     Args:
         input_file: Original input file path
-        
+
     Returns:
         Path to converted WAV file
-        
+
     Raises:
         FileNotFoundError: If WAV file doesn't exist
     """
@@ -56,13 +56,13 @@ def find_wav_file(input_file: Path) -> Path:
 def mobile_transcribe(input_file: str) -> None:
     """
     Run simplified mobile transcription workflow.
-    
+
     Pipeline:
     1. Validate input file
     2. Convert to MP3 (optimized for OpenAI)
     3. Transcribe with OpenAI API
     4. Open transcript
-    
+
     Args:
         input_file: Path to input file
     """

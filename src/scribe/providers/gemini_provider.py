@@ -56,7 +56,7 @@ class GeminiProvider(AIProvider):
     ) -> dict[str, Any]:
         """
         Create a chat completion using Gemini.
-        
+
         Supports both Gemini 2.5 and Gemini 3 models with automatic parameter adaptation.
         """
 
@@ -111,10 +111,7 @@ class GeminiProvider(AIProvider):
             thinking_level = kwargs.get("thinking_level", "high")
             if kwargs.get("disable_thinking", False):
                 # Use "low" for Pro, "minimal" for Flash
-                if "flash" in self.config.model.lower():
-                    thinking_level = "minimal"
-                else:
-                    thinking_level = "low"
+                thinking_level = "minimal" if "flash" in self.config.model.lower() else "low"
 
             config_params["thinking_config"] = self.types.ThinkingConfig(
                 thinking_level=thinking_level
@@ -177,7 +174,7 @@ class GeminiProvider(AIProvider):
     ) -> str:
         """
         Transcribe audio using Gemini.
-        
+
         Note: Gemini supports audio understanding but not dedicated transcription.
         This is a placeholder for future support.
         """
@@ -269,7 +266,7 @@ class GeminiProvider(AIProvider):
     def _size_to_aspect_ratio(self, size: str) -> str:
         """
         Convert size string to Imagen aspect ratio.
-        
+
         Supported aspect ratios: "1:1", "3:4", "4:3", "9:16", "16:9"
         """
         size_map = {

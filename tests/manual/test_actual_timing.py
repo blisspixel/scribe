@@ -91,7 +91,7 @@ def main():
 
     # DOCX
     start = time.time()
-    docx_path = txt_to_docx(transcript_path)
+    txt_to_docx(transcript_path)
     docx_time = time.time() - start
     print(f"✓ DOCX: {docx_time:.1f}s")
 
@@ -99,7 +99,7 @@ def main():
     if config.openai_api_key and config.enable_notes:
         start = time.time()
         notes_gen = NotesGenerator(api_key=config.openai_api_key)
-        notes_path = notes_gen.generate_notes(transcript_path)
+        notes_gen.generate_notes(transcript_path)
         notes_time = time.time() - start
         print(f"✓ Notes: {notes_time:.1f}s")
     else:
@@ -109,7 +109,7 @@ def main():
     # Joke
     if config.openai_api_key:
         start = time.time()
-        joke_result = generate_transcript_joke(transcript_path, config.openai_api_key)
+        generate_transcript_joke(transcript_path, config.openai_api_key)
         joke_time = time.time() - start
         print(f"✓ Joke: {joke_time:.1f}s")
     else:
@@ -119,7 +119,7 @@ def main():
     # Meme
     if config.openai_api_key:
         start = time.time()
-        meme_result = generate_meeting_meme(transcript_path, api_key=config.openai_api_key)
+        generate_meeting_meme(transcript_path, api_key=config.openai_api_key)
         meme_time = time.time() - start
         print(f"✓ Meme: {meme_time:.1f}s")
     else:

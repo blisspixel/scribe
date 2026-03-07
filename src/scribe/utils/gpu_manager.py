@@ -134,10 +134,10 @@ logger = get_logger(__name__)
 class GPUResourceManager:
     """
     Singleton GPU resource manager.
-    
+
     Ensures only one model is loaded at a time and handles
     GPU memory cleanup between operations.
-    
+
     Thread-safe for concurrent access.
     """
 
@@ -169,17 +169,17 @@ class GPUResourceManager:
     def acquire_gpu(self, model_name: str, model_obj: Any | None = None):
         """
         Acquire GPU for model loading.
-        
+
         If a different model is currently loaded, it will be unloaded
         and GPU memory will be cleared.
-        
+
         Args:
             model_name: Name/identifier of the model
             model_obj: Optional model object to track
-            
+
         Yields:
             None
-            
+
         Example:
             with gpu_manager.acquire_gpu("large-v3", model):
                 # GPU is reserved for this model
@@ -222,7 +222,7 @@ class GPUResourceManager:
     def unload_current_model(self) -> None:
         """
         Explicitly unload current model and free GPU memory.
-        
+
         Useful for long-running processes that need to free GPU memory
         between operations.
         """
@@ -244,7 +244,7 @@ class GPUResourceManager:
     def get_current_model(self) -> str | None:
         """
         Get name of currently loaded model.
-        
+
         Returns:
             Model name, or None if no model is loaded
         """
@@ -255,7 +255,7 @@ class GPUResourceManager:
     def get_instance(cls) -> "GPUResourceManager":
         """
         Get the singleton GPU resource manager instance.
-        
+
         Returns:
             GPUResourceManager instance
         """
@@ -266,7 +266,7 @@ class GPUResourceManager:
 def get_gpu_manager() -> GPUResourceManager:
     """
     Get the global GPU resource manager instance.
-    
+
     Returns:
         GPUResourceManager singleton
     """

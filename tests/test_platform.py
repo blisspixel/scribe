@@ -131,7 +131,7 @@ class TestFFmpegDetection:
     @windows_only
     def test_windows_ffmpeg_common_locations(self):
         """Test Windows checks common ffmpeg locations."""
-        common_locations = [
+        [
             Path("C:/ffmpeg/bin/ffmpeg.exe"),
             Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
         ]
@@ -155,7 +155,7 @@ class TestFFmpegDetection:
     def test_macos_homebrew_paths(self):
         """Test macOS checks Homebrew paths."""
         # Homebrew can be in different locations on Intel vs Apple Silicon
-        homebrew_paths = [
+        [
             Path("/usr/local/bin/ffmpeg"),
             Path("/opt/homebrew/bin/ffmpeg"),
         ]
@@ -176,7 +176,7 @@ class TestFFmpegDetection:
     @linux_only
     def test_linux_system_paths(self):
         """Test Linux checks system paths."""
-        system_paths = [
+        [
             Path("/usr/bin/ffmpeg"),
             Path("/usr/local/bin/ffmpeg"),
         ]
@@ -299,7 +299,7 @@ class TestPlatformSpecificErrors:
     def test_windows_permission_error(self):
         """Test Windows permission error handling."""
         # Test accessing system file
-        system_file = Path("C:\\Windows\\System32\\config\\SAM")
+        Path("C:\\Windows\\System32\\config\\SAM")
 
         # Should handle permission errors gracefully
         # (Don't actually try to access it)
@@ -308,7 +308,7 @@ class TestPlatformSpecificErrors:
     def test_unix_permission_error(self):
         """Test Unix permission error handling."""
         # Test accessing root-only file
-        root_file = Path("/etc/shadow")
+        Path("/etc/shadow")
 
         # Should handle permission errors gracefully
         # (Don't actually try to access it)

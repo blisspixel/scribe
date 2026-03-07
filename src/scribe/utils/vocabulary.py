@@ -228,13 +228,13 @@ logger = get_logger(__name__)
 class CustomVocabulary:
     """
     Manages custom vocabulary for improved transcription accuracy.
-    
+
     This class handles loading vocabulary from files and converting it
     to the format expected by Whisper's initial_prompt parameter.
-    
+
     Attributes:
         words: List of vocabulary terms to recognize
-    
+
     Example:
         >>> vocab = CustomVocabulary(["Kubernetes", "PostgreSQL"])
         >>> len(vocab)
@@ -242,7 +242,7 @@ class CustomVocabulary:
         >>> prompt = vocab.to_whisper_format()
         >>> print(prompt)
         Kubernetes, PostgreSQL
-    
+
     Notes:
         - Vocabulary is case-sensitive and preserves capitalization
         - Empty vocabulary is valid and returns empty string
@@ -252,11 +252,11 @@ class CustomVocabulary:
     def __init__(self, words: list[str] | None = None):
         """
         Initialize custom vocabulary.
-        
+
         Args:
             words: List of custom words/phrases to recognize.
                    Defaults to empty list if not provided.
-        
+
         Example:
             >>> vocab = CustomVocabulary()
             >>> len(vocab)
@@ -272,27 +272,27 @@ class CustomVocabulary:
     def from_file(cls, vocab_file: Path) -> "CustomVocabulary":
         """
         Load vocabulary from a file.
-        
+
         Supports two file formats:
         - Plain text (.txt): One term per line, lines starting with # are comments
         - JSON (.json): Array of strings for programmatic generation
-        
+
         Args:
             vocab_file: Path to vocabulary file (.txt or .json)
-            
+
         Returns:
             CustomVocabulary instance with loaded terms
-        
+
         Raises:
             FileNotFoundError: If vocabulary file doesn't exist
             ValueError: If file format is unsupported or JSON is invalid
             json.JSONDecodeError: If JSON file is malformed
-        
+
         Example:
             >>> vocab = CustomVocabulary.from_file(Path("terms.txt"))
             >>> print(f"Loaded {len(vocab)} terms")
             Loaded 42 terms
-        
+
         Notes:
             - Text files: Empty lines and comments (# prefix) are ignored
             - JSON files: Must contain array of strings at root level
@@ -339,21 +339,21 @@ class CustomVocabulary:
     def to_whisper_format(self) -> str:
         """
         Convert vocabulary to Whisper prompt format.
-        
+
         Whisper uses the initial_prompt parameter to guide transcription.
         The vocabulary is formatted as a comma-separated list, which Whisper
         interprets as a natural language context for recognition.
-        
+
         Returns:
             Formatted prompt string (comma-separated terms), or empty string
             if vocabulary is empty
-        
+
         Example:
             >>> vocab = CustomVocabulary(["Kubernetes", "PostgreSQL", "GraphQL"])
             >>> prompt = vocab.to_whisper_format()
             >>> print(prompt)
             Kubernetes, PostgreSQL, GraphQL
-        
+
         Notes:
             - Empty vocabulary returns empty string (safe for Whisper)
             - Comma-separated format works better than newline-separated
@@ -373,10 +373,10 @@ class CustomVocabulary:
     def __len__(self) -> int:
         """
         Return number of vocabulary terms.
-        
+
         Returns:
             Number of terms in vocabulary
-        
+
         Example:
             >>> vocab = CustomVocabulary(["term1", "term2"])
             >>> len(vocab)
@@ -387,10 +387,10 @@ class CustomVocabulary:
     def __bool__(self) -> bool:
         """
         Return True if vocabulary is not empty.
-        
+
         Returns:
             True if vocabulary contains terms, False otherwise
-        
+
         Example:
             >>> vocab = CustomVocabulary()
             >>> bool(vocab)

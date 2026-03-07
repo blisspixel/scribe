@@ -146,9 +146,8 @@ class TestContextManager:
 
     def test_context_manager_exception(self):
         """Test context manager with exception."""
-        with pytest.raises(ValueError):
-            with RunContext.create("test") as ctx:
-                raise ValueError("Test error")
+        with pytest.raises(ValueError), RunContext.create("test") as ctx:
+            raise ValueError("Test error")
 
         assert ctx.success is False
         assert "ValueError" in ctx.error_message
@@ -199,7 +198,7 @@ class TestThreadLocalStorage:
 
     def test_nested_contexts(self):
         """Test nested context managers."""
-        with RunContext.create("outer") as outer_ctx:
+        with RunContext.create("outer"):
             outer_id = get_current_run_id()
 
             with RunContext.create("inner") as inner_ctx:
@@ -362,7 +361,7 @@ class TestRunHistory:
         history = RunHistory(max_size=100)
 
         def worker():
-            for i in range(10):
+            for _i in range(10):
                 ctx = RunContext.create("test")
                 ctx.mark_success()
                 history.add(ctx)

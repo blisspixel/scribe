@@ -3,6 +3,7 @@
 Audio processing and device tests for Scribe transcription system.
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -94,10 +95,8 @@ def test_audio_file_handling():
     finally:
         # Cleanup test files
         for test_file in test_files:
-            try:
+            with contextlib.suppress(BaseException):
                 os.unlink(test_file)
-            except:
-                pass
 
 def test_audio_device_detection():
     """Test audio device detection and configuration."""
@@ -183,10 +182,8 @@ def test_path_normalization():
         return all_passed
 
     finally:
-        try:
+        with contextlib.suppress(BaseException):
             os.unlink(temp_path)
-        except:
-            pass
 
 def test_audio_format_validation():
     """Test audio format validation and error handling."""
@@ -197,7 +194,7 @@ def test_audio_format_validation():
         valid_wav = create_test_wav_file(2.0)
 
         try:
-            with wave.open(valid_wav, 'rb') as wav:
+            with wave.open(valid_wav, 'rb'):
                 print_test("Valid WAV file", "PASS", "Opened successfully")
         except Exception as e:
             print_test("Valid WAV file", "FAIL", str(e))
@@ -213,7 +210,7 @@ def test_audio_format_validation():
 
         try:
             try:
-                with wave.open(invalid_path, 'rb') as wav:
+                with wave.open(invalid_path, 'rb'):
                     print_test("Invalid WAV handling", "FAIL", "Should have failed")
                     return False
             except wave.Error:
@@ -226,7 +223,7 @@ def test_audio_format_validation():
         # Test non-existent file
         non_existent = "this_file_does_not_exist.wav"
         try:
-            with wave.open(non_existent, 'rb') as wav:
+            with wave.open(non_existent, 'rb'):
                 print_test("Non-existent file handling", "FAIL", "Should have failed")
                 return False
         except FileNotFoundError:

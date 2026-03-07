@@ -3,6 +3,7 @@
 Improved startup and system health tests for Scribe transcription system.
 """
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -100,10 +101,8 @@ def test_path_handling():
 
     finally:
         # Clean up temp file
-        try:
+        with contextlib.suppress(BaseException):
             os.unlink(tmp_path)
-        except:
-            pass
 
 def test_script_syntax():
     """Test that all main scripts have valid syntax."""

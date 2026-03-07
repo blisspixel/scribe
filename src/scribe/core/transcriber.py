@@ -154,15 +154,15 @@ logger = get_logger(__name__)
 class Transcriber:
     """
     Orchestrates transcription with intelligent method selection and fallback.
-    
+
     This class provides the main interface for transcription operations,
     handling method selection, format conversion, and error recovery.
-    
+
     Attributes:
         config: System configuration (models, paths, API keys)
         gpu_config: GPU detection and capability information
         converter: Audio format converter instance
-    
+
     Features:
         - Automatic method selection based on GPU availability
         - Graceful fallback between local and API methods
@@ -170,18 +170,18 @@ class Transcriber:
         - Resource limit validation to prevent OOM
         - Session tracking for metadata and debugging
         - Cleanup of intermediate files
-    
+
     Example:
         >>> from scribe.core.transcriber import Transcriber
         >>> from scribe.models.config import ScribeConfig
-        >>> 
+        >>>
         >>> config = ScribeConfig()
         >>> transcriber = Transcriber(config)
-        >>> 
+        >>>
         >>> # Transcribe with automatic method selection
         >>> transcript = transcriber.transcribe(audio_path)
         >>> print(f"Transcript: {transcript}")
-    
+
     Notes:
         - GPU detection happens once at initialization
         - Converter is reused across multiple transcriptions
@@ -192,22 +192,22 @@ class Transcriber:
     def __init__(self, config: ScribeConfig):
         """
         Initialize transcriber with configuration and detect GPU.
-        
+
         Performs GPU detection and initializes the audio converter.
         GPU detection results are cached for the lifetime of the instance.
-        
+
         Args:
             config: System configuration containing:
                 - Model settings (default_model, openai_model)
                 - API keys (openai_api_key)
                 - File paths (output_folder, log_folder)
                 - Processing options (keep_intermediate_files)
-        
+
         Example:
             >>> config = ScribeConfig()
             >>> transcriber = Transcriber(config)
             >>> print(f"GPU available: {transcriber.gpu_config.has_gpu}")
-        
+
         Notes:
             - GPU detection is performed immediately
             - Converter is initialized but doesn't load models yet
@@ -238,28 +238,28 @@ class Transcriber:
     ) -> Literal["local", "openai"]:
         """
         Choose transcription method based on preference and system capabilities.
-        
+
         Implements intelligent method selection considering:
         - User preference (explicit choice or auto)
         - GPU availability and capabilities
         - API key configuration
         - System recommendations
-        
+
         Args:
             preference: User preference for transcription method:
                 - "auto": Automatic selection based on capabilities
                 - "local": Force local GPU transcription
                 - "openai": Force OpenAI API transcription
-        
+
         Returns:
             Chosen method: "local" or "openai"
-        
+
         Example:
             >>> transcriber = Transcriber(config)
             >>> method = transcriber.choose_method("auto")
             >>> print(f"Selected method: {method}")
             Selected method: local
-        
+
         Notes:
             - "local" without GPU will still return "local" (will fail later)
             - "openai" without API key falls back to "local"
@@ -412,17 +412,17 @@ class Transcriber:
     ) -> Path:
         """
         Transcribe audio file with automatic method selection and fallback.
-        
+
         Args:
             audio_path: Path to audio file
             method: Transcription method preference
             session: Optional session for tracking
             custom_vocabulary: Optional custom vocabulary for improved accuracy
             music_mode: If True, optimized for music/lyrics transcription
-            
+
         Returns:
             Path to transcript file
-            
+
         Raises:
             TranscriptionError: If all methods fail
             ValidationError: If file exceeds resource limits
@@ -583,22 +583,22 @@ class Transcriber:
     ) -> list[Path]:
         """
         Clean up intermediate files.
-        
+
         Keeps:
         - Source file (MP4, MKV)
         - One audio file (16k_mono.wav or .mp3)
         - Transcript (.txt)
         - Document (.docx)
-        
+
         Deletes:
         - Temporary conversions
         - Chunks
         - Standardized files
-        
+
         Args:
             directory: Directory to clean
             keep_patterns: Additional patterns to keep
-            
+
         Returns:
             List of deleted files
         """

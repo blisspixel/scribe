@@ -147,10 +147,9 @@ class TestSafeWriteContext:
         """Test that temp files are cleaned up on error."""
         target = tmp_path / "test.txt"
 
-        with pytest.raises(ValueError):
-            with safe_write_context(target) as f:
-                f.write("Partial")
-                raise ValueError("Simulated error")
+        with pytest.raises(ValueError), safe_write_context(target) as f:
+            f.write("Partial")
+            raise ValueError("Simulated error")
 
         # Target should not exist
         assert not target.exists()

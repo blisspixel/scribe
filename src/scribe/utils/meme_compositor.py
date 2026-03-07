@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from PIL import Image as PILImage
-    from PIL import ImageDraw as PILImageDraw
-    from PIL import ImageFont as PILImageFont
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -30,14 +28,14 @@ logger = logging.getLogger(__name__)
 class MemeCompositor:
     """
     Compositor for applying Impact-font captions to meme images.
-    
+
     Handles dynamic font sizing, text wrapping, and stroke rendering.
     """
 
     def __init__(self, font_path: str | None = None):
         """
         Initialize compositor with Impact font.
-        
+
         Args:
             font_path: Path to Impact.ttf font file (optional)
         """
@@ -76,13 +74,13 @@ class MemeCompositor:
     ) -> PILImage.Image:
         """
         Overlay meme text on image with Impact font styling.
-        
+
         Args:
             image: PIL Image to overlay text on
             top_text: Text for top of image
             bottom_text: Text for bottom of image
             font_size_ratio: Font size as ratio of image height (default: 0.08)
-            
+
         Returns:
             Image with text overlaid
         """

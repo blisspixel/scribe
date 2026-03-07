@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from scribe.exceptions import ProcessError
@@ -38,7 +38,7 @@ except ImportError:
 class OBSRecorder:
     """
     OBS Studio recording integration with WebSocket and CLI fallback.
-    
+
     This class handles:
     - OBS WebSocket connection with retry
     - Automatic OBS launch if not running
@@ -50,7 +50,7 @@ class OBSRecorder:
     def __init__(self, config: ScribeConfig):
         """
         Initialize OBS recorder.
-        
+
         Args:
             config: System configuration
         """
@@ -63,13 +63,13 @@ class OBSRecorder:
     def record(self, meeting_name: str) -> Path:
         """
         Start OBS recording and wait for completion.
-        
+
         Args:
             meeting_name: Name of the meeting/recording
-            
+
         Returns:
             Path to recorded file
-            
+
         Raises:
             ProcessError: If recording fails
         """
@@ -139,7 +139,7 @@ class OBSRecorder:
     ) -> Path:
         """
         Record using CLI fallback.
-        
+
         This method handles the case where WebSocket connection fails.
         It tries to launch OBS with recording, but provides clear feedback
         if recording doesn't actually start.
@@ -253,7 +253,7 @@ class OBSRecorder:
     def _try_connect_to_running_obs(self, hosts: list, ports: list) -> object | None:
         """
         Attempt to connect to already-running OBS instance.
-        
+
         Returns client if successful, None otherwise.
         Handles the case where OBS is starting up and not yet ready.
         """
@@ -287,42 +287,34 @@ class OBSRecorder:
                         # Exhausted retries - OBS still not ready
                         logger.debug(f"OBS at {h}:{p} not ready after retries")
                         if client:
-                            try:
+                            with suppress(Exception):
                                 client.close()
-                            except Exception:
-                                pass
                     except ValueError as e:
                         if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
                             logger.debug(f"Hostname validation failed for {h}:{p}")
                         else:
                             logger.debug(f"ValueError during connection to {h}:{p}")
                         if client:
-                            try:
+                            with suppress(Exception):
                                 client.close()
-                            except Exception:
-                                pass
                     except obs_error.OBSSDKRequestError:
                         # Handle OBS SDK errors gracefully - don't log full traceback
                         logger.debug(f"OBS SDK error at {h}:{p}")
                         if client:
-                            try:
+                            with suppress(Exception):
                                 client.close()
-                            except Exception:
-                                pass
                     except Exception:
                         # Connection failed - try next host/port
                         logger.debug(f"Connection to {h}:{p} failed")
                         if client:
-                            try:
+                            with suppress(Exception):
                                 client.close()
-                            except Exception:
-                                pass
         return None
 
     def _wait_for_obs_startup(self, hosts: list, ports: list, max_wait_seconds: int) -> object | None:
         """
         Wait for OBS to start and attempt connection with retry.
-        
+
         Returns client if successful, None otherwise.
         """
         # Wait a bit before first connection attempt to let OBS initialize
@@ -350,10 +342,8 @@ class OBSRecorder:
                                 if "not ready" in str(e).lower():
                                     logger.debug(f"OBS not ready yet (attempt {attempt + 1})")
                                     if client:
-                                        try:
+                                        with suppress(Exception):
                                             client.close()
-                                        except Exception:
-                                            pass
                                     # Don't continue inner loops, wait and retry
                                     break
                                 raise
@@ -362,24 +352,18 @@ class OBSRecorder:
                             if "hostname is invalid" in str(e).lower() or "invalid" in str(e).lower():
                                 logger.debug(f"Hostname validation failed for {h}:{p}")
                             if client:
-                                try:
+                                with suppress(Exception):
                                     client.close()
-                                except Exception:
-                                    pass
                         except obs_error.OBSSDKRequestError:
                             logger.debug(f"OBS SDK error during startup at {h}:{p}")
                             if client:
-                                try:
+                                with suppress(Exception):
                                     client.close()
-                                except Exception:
-                                    pass
                         except Exception:
                             logger.debug(f"Connection to {h}:{p} failed")
                             if client:
-                                try:
+                                with suppress(Exception):
                                     client.close()
-                                except Exception:
-                                    pass
             time.sleep(0.5)
         return None
 
@@ -387,7 +371,7 @@ class OBSRecorder:
     def _connect_obs(self, max_wait_seconds: int = 15):
         """
         Connect to OBS WebSocket with retry.
-        
+
         Attempts connection with multiple fallback strategies:
         1. Try configured host/port if OBS already running
         2. Launch OBS if not running
@@ -413,10 +397,8 @@ class OBSRecorder:
             try:
                 yield client
             finally:
-                try:
+                with suppress(Exception):
                     client.close()
-                except Exception:
-                    pass
             return
 
         # Try launching OBS
@@ -442,10 +424,8 @@ class OBSRecorder:
                 try:
                     yield client
                 finally:
-                    try:
+                    with suppress(Exception):
                         client.close()
-                    except Exception:
-                        pass
                 return
 
         raise ConnectionError("Could not connect to OBS WebSocket")
@@ -816,10 +796,8 @@ class OBSRecorder:
                 os.replace(src_path, str(final_path))
             except Exception:
                 shutil.copy2(src_path, str(final_path))
-                try:
+                with suppress(Exception):
                     os.remove(src_path)
-                except Exception:
-                    pass
         except Exception as e:
             raise ProcessError(f"Failed to place final file: {e}")
 

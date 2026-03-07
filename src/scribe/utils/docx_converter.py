@@ -24,22 +24,22 @@ def txt_to_docx(
 ) -> Path:
     """
     Convert TXT transcript to formatted DOCX document.
-    
+
     This creates a clean, professional document with:
     - Centered title (bold, 16pt)
     - Centered date/duration (12pt)
     - Body text (11pt, 1.15 line spacing)
     - Gray timestamps
     - Page numbers
-    
+
     Args:
         txt_path: Path to input TXT file
         docx_path: Optional output path (auto-generated if None)
         title: Optional custom title (extracted from TXT if None)
-        
+
     Returns:
         Path to created DOCX file
-        
+
     Raises:
         FileOperationError: If conversion fails
     """

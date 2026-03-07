@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 class Converter:
     """
     Audio/video format converter with progress tracking.
-    
+
     This class handles conversion of various audio/video formats to
     optimized formats for transcription using ffmpeg.
     """
@@ -50,7 +50,7 @@ class Converter:
     ) -> dict:
         """
         Analyze audio for optimal loudness normalization parameters.
-        
+
         Returns dict with measured_i, measured_tp, measured_lra, measured_thresh.
         """
         logger.info("Analyzing audio for optimal normalization...")
@@ -93,8 +93,7 @@ class Converter:
 
             result = subprocess.run(
                 analyze_command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=max(60, duration * 2) if duration else 300
             )
@@ -279,10 +278,10 @@ class Converter:
     ) -> Path:
         """
         Convert audio/video to optimized WAV for transcription.
-        
+
         Creates a 16kHz mono PCM WAV file optimized for Whisper models with
         two-pass loudness normalization for maximum quality.
-        
+
         Args:
             input_file: Path to input file (MP4, MP3, etc.)
             output_file: Optional output path (auto-generated if None)
@@ -290,10 +289,10 @@ class Converter:
             channels: Number of channels (default: 1 for mono)
             show_progress: Show progress indicators
             progress_callback: Optional callback for progress updates
-            
+
         Returns:
             Path to converted WAV file
-            
+
         Raises:
             ProcessError: If conversion fails
             AudioFormatError: If input file is invalid
@@ -437,18 +436,18 @@ class Converter:
     ) -> Path:
         """
         Convert audio to optimized MP3 for OpenAI API.
-        
+
         Creates a mono 16kHz MP3 at specified bitrate, optimized
         for API upload size limits.
-        
+
         Args:
             input_file: Path to input file
             output_file: Optional output path
             bitrate: Target bitrate in kbps (default: 48)
-            
+
         Returns:
             Path to converted MP3 file
-            
+
         Raises:
             ProcessError: If conversion fails
         """
@@ -514,11 +513,11 @@ class Converter:
 def convert_to_wav(input_file: Path, **kwargs) -> Path:
     """
     Convenience function for WAV conversion.
-    
+
     Args:
         input_file: Path to input file
         **kwargs: Additional arguments for Converter.convert_to_wav()
-        
+
     Returns:
         Path to converted WAV file
     """
@@ -529,11 +528,11 @@ def convert_to_wav(input_file: Path, **kwargs) -> Path:
 def convert_to_mp3(input_file: Path, **kwargs) -> Path:
     """
     Convenience function for MP3 conversion.
-    
+
     Args:
         input_file: Path to input file
         **kwargs: Additional arguments for Converter.convert_to_mp3()
-        
+
     Returns:
         Path to converted MP3 file
     """

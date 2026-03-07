@@ -20,28 +20,28 @@ def remove_silence(
 ) -> Path:
     """
     Remove silence from audio/video file using FFmpeg.
-    
+
     This uses a simple but effective approach: the silenceremove filter
     which reduces silent sections. While it doesn't physically cut out
     the silence (file duration stays the same), it makes silent sections
     nearly inaudible, which is perfect for transcription since Whisper
     will skip over the silent parts anyway.
-    
+
     Args:
         input_path: Path to input audio/video file
         output_path: Path for output file (default: input_cleaned.ext)
         silence_threshold: Volume threshold for silence (default: -50dB)
         silence_duration: Minimum duration of silence to remove in seconds (default: 2.0)
         keep_silence: Amount of silence to keep at cuts in seconds (default: 0.5)
-    
+
     Returns:
         Path to cleaned file
-    
+
     Note:
         The output file will have the same duration as the input, but silent
         sections will be reduced to near-silence. This is ideal for transcription
         as Whisper will process it much faster by skipping the silent parts.
-    
+
     Example:
         >>> clean_file = remove_silence(Path("long_recording.mp4"))
         >>> print(f"Cleaned file: {clean_file}")
@@ -113,12 +113,12 @@ def analyze_silence(
 ) -> dict:
     """
     Analyze how much silence is in a file without removing it.
-    
+
     Args:
         input_path: Path to audio/video file
         silence_threshold: Volume threshold for silence
         silence_duration: Minimum duration to count as silence
-    
+
     Returns:
         Dictionary with analysis results
     """
@@ -195,16 +195,16 @@ def trim_file(
 ) -> Path:
     """
     Trim audio/video file to a specific time range.
-    
+
     Args:
         input_path: Path to input audio/video file
         output_path: Path for output file (default: input_trimmed.ext)
         end_time: End time in format HH:MM:SS or seconds (e.g., "01:42:00" or "6120")
         start_time: Start time in format HH:MM:SS (default: "00:00:00")
-    
+
     Returns:
         Path to trimmed file
-    
+
     Example:
         >>> # Trim to first 1.7 hours
         >>> trimmed = trim_file(Path("long.mp4"), end_time="01:42:00")

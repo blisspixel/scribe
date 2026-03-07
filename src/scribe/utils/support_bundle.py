@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 def get_system_info() -> dict[str, Any]:
     """
     Collect comprehensive system information.
-    
+
     Returns:
         Dictionary with system details
     """
@@ -95,9 +95,9 @@ def get_system_info() -> dict[str, Any]:
 def get_environment_config() -> dict[str, Any]:
     """
     Collect Scribe-specific environment configuration.
-    
+
     Sanitizes sensitive values like API keys.
-    
+
     Returns:
         Dictionary with configuration
     """
@@ -136,7 +136,7 @@ def get_environment_config() -> dict[str, Any]:
 def get_diagnostics_results() -> dict[str, Any]:
     """
     Run system diagnostics and collect results.
-    
+
     Returns:
         Dictionary with diagnostic results
     """
@@ -166,10 +166,10 @@ def get_diagnostics_results() -> dict[str, Any]:
 def get_run_history_summary(max_runs: int = 20) -> dict[str, Any]:
     """
     Get summary of recent runs.
-    
+
     Args:
         max_runs: Maximum number of runs to include
-        
+
     Returns:
         Dictionary with run history
     """
@@ -195,11 +195,11 @@ def create_support_bundle(
 ) -> dict[str, Any]:
     """
     Create a comprehensive support bundle.
-    
+
     Args:
         include_run_history: Whether to include run history
         max_runs: Maximum number of runs to include in history
-        
+
     Returns:
         Dictionary containing all support information
     """
@@ -227,12 +227,12 @@ def save_support_bundle(
 ) -> Path:
     """
     Save support bundle to a JSON file.
-    
+
     Args:
         bundle: Support bundle dictionary
         output_path: Path to save the bundle
         pretty: Whether to pretty-print JSON
-        
+
     Returns:
         Path to saved bundle file
     """
@@ -255,10 +255,10 @@ def save_support_bundle(
 def generate_support_bundle_cli(output_dir: Path | None = None) -> Path:
     """
     Generate support bundle for CLI command.
-    
+
     Args:
         output_dir: Directory to save bundle (defaults to current directory)
-        
+
     Returns:
         Path to generated bundle file
     """

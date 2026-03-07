@@ -29,7 +29,7 @@ from rich.theme import Theme
 class ScribeTheme:
     """
     Scribe's visual design system.
-    
+
     Minimal, monochromatic with a single accent color.
     """
 
@@ -149,11 +149,11 @@ def status_line(status: str, message: str, detail: str | None = None) -> str:
 
 def file_link(label: str, path: str) -> str:
     """Format a clickable file link with consistent styling.
-    
+
     Args:
         label: Label text (e.g., "Meme:", "Transcript:")
         path: File path
-        
+
     Returns:
         Rich-formatted string with clickable link
     """

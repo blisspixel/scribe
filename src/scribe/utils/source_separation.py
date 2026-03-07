@@ -214,7 +214,7 @@ logger = get_logger(__name__)
 class VocalSeparator:
     """
     Separates vocals from music using Hybrid Transformer Demucs.
-    
+
     This is the key to accurate music transcription - by isolating vocals
     before transcription, we eliminate hallucinations caused by instruments.
     """
@@ -222,7 +222,7 @@ class VocalSeparator:
     def __init__(self, model_name: str = "htdemucs", device: str = "cuda"):
         """
         Initialize vocal separator.
-        
+
         Args:
             model_name: Demucs model to use (htdemucs recommended)
             device: Device for processing (cuda or cpu)
@@ -261,11 +261,11 @@ class VocalSeparator:
     ) -> Path:
         """
         Separate vocals from music track.
-        
+
         Args:
             audio_path: Path to music file
             output_dir: Optional output directory (defaults to same as input)
-            
+
         Returns:
             Path to isolated vocals file
         """
@@ -353,11 +353,11 @@ class VocalSeparator:
 def separate_vocals(audio_path: Path, output_dir: Path | None = None) -> Path:
     """
     Convenience function for vocal separation.
-    
+
     Args:
         audio_path: Path to music file
         output_dir: Optional output directory
-        
+
     Returns:
         Path to isolated vocals
     """
