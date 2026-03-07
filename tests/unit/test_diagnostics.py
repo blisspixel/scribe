@@ -285,10 +285,11 @@ class TestAdditionalProviders:
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {'XAI_API_KEY': 'xai-test-key'}, clear=True):
-            result = diagnostics.check_additional_providers()
+            results = diagnostics.check_additional_providers()
 
-            assert result.status == "pass"
-            assert "XAI/Grok: valid" in result.details
+            xai = [r for r in results if "XAI" in r.name][0]
+            assert xai.status == "pass"
+            assert "Valid" in xai.message
 
     @patch("scribe.utils.diagnostics.OpenAI")
     def test_xai_invalid_key(self, mock_openai_cls):
@@ -304,20 +305,22 @@ class TestAdditionalProviders:
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {'XAI_API_KEY': 'xai-bad-key'}, clear=True):
-            result = diagnostics.check_additional_providers()
+            results = diagnostics.check_additional_providers()
 
-            assert result.status == "fail"
-            assert "XAI/Grok" in result.message
+            xai = [r for r in results if "XAI" in r.name][0]
+            assert xai.status == "fail"
+            assert "401" in xai.message
 
     def test_no_providers(self):
         """Test no additional providers configured."""
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {}, clear=True):
-            result = diagnostics.check_additional_providers()
+            results = diagnostics.check_additional_providers()
 
-            assert result.status == "warn"
-            assert "No additional" in result.message
+            assert len(results) == 1
+            assert results[0].status == "warn"
+            assert "No additional" in results[0].message
 
 
 class TestOutputFolderCheck:

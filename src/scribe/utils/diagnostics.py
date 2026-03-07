@@ -704,10 +704,9 @@ class SystemDiagnostics:
         self.results.append(result)
         return result
 
-    def check_additional_providers(self) -> DiagnosticResult:
+    def check_additional_providers(self) -> list[DiagnosticResult]:
         """Check additional AI provider configurations with live validation."""
-        providers: dict[str, str] = {}
-        invalid: list[str] = []
+        results: list[DiagnosticResult] = []
 
         # XAI/Grok — OpenAI-compatible API
         xai_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
@@ -719,12 +718,28 @@ class SystemDiagnostics:
                     timeout=10,
                 )
                 client.models.list()
-                providers["XAI/Grok"] = "valid"
+                results.append(DiagnosticResult(
+                    name="XAI/Grok API Key",
+                    status="pass",
+                    message="Valid",
+                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                ))
             except AuthenticationError:
-                providers["XAI/Grok"] = "invalid key (401)"
-                invalid.append("XAI/Grok")
-            except Exception:
-                providers["XAI/Grok"] = "could not verify"
+                results.append(DiagnosticResult(
+                    name="XAI/Grok API Key",
+                    status="fail",
+                    message="Invalid key (401 Unauthorized)",
+                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                    fix_suggestion="Update XAI_API_KEY in your .env file",
+                ))
+            except Exception as e:
+                results.append(DiagnosticResult(
+                    name="XAI/Grok API Key",
+                    status="warn",
+                    message="Could not verify",
+                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]} | Error: {e}",
+                    fix_suggestion="Check your internet connection",
+                ))
 
         # Gemini — Google genai SDK
         gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
@@ -733,47 +748,53 @@ class SystemDiagnostics:
                 import google.genai as genai
 
                 client = genai.Client(api_key=gemini_key)
-                # List models as a lightweight validation
                 list(client.models.list(config={"page_size": 1}))
-                providers["Gemini"] = "valid"
+                results.append(DiagnosticResult(
+                    name="Gemini API Key",
+                    status="pass",
+                    message="Valid",
+                    details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                ))
             except Exception as e:
                 err = str(e).lower()
                 if "401" in err or "invalid" in err or "api key" in err:
-                    providers["Gemini"] = "invalid key"
-                    invalid.append("Gemini")
+                    results.append(DiagnosticResult(
+                        name="Gemini API Key",
+                        status="fail",
+                        message="Invalid key",
+                        details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                        fix_suggestion="Update GEMINI_API_KEY in your .env file",
+                    ))
                 else:
-                    providers["Gemini"] = "could not verify"
+                    results.append(DiagnosticResult(
+                        name="Gemini API Key",
+                        status="warn",
+                        message="Could not verify",
+                        details=f"Error: {e}",
+                        fix_suggestion="Check your internet connection",
+                    ))
 
         # Anthropic — just check presence (no lightweight endpoint)
-        if os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY"):
-            providers["Anthropic"] = "configured"
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
+        if anthropic_key:
+            results.append(DiagnosticResult(
+                name="Anthropic API Key",
+                status="pass",
+                message="Configured",
+                details=f"Key: {anthropic_key[:8]}...{anthropic_key[-4:]}",
+            ))
 
-        if not providers:
-            result = DiagnosticResult(
+        if not results:
+            results.append(DiagnosticResult(
                 name="Additional Providers",
                 status="warn",
                 message="No additional providers",
                 details="Only OpenAI configured",
-                fix_suggestion="Consider adding XAI or other providers for cost savings"
-            )
-        elif invalid:
-            result = DiagnosticResult(
-                name="Additional Providers",
-                status="fail",
-                message=f"{', '.join(invalid)} key(s) invalid",
-                details=", ".join(f"{k}: {v}" for k, v in providers.items()),
-                fix_suggestion="Update your API keys in .env file"
-            )
-        else:
-            result = DiagnosticResult(
-                name="Additional Providers",
-                status="pass",
-                message=f"{len(providers)} provider(s) verified",
-                details=", ".join(f"{k}: {v}" for k, v in providers.items()),
-            )
+                fix_suggestion="Consider adding XAI or other providers for cost savings",
+            ))
 
-        self.results.append(result)
-        return result
+        self.results.extend(results)
+        return results
 
     def check_temp_space(self) -> DiagnosticResult:
         """Check temporary directory space."""

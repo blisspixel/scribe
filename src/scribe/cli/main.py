@@ -2570,9 +2570,13 @@ def doctor():
     console.print(doctor_header)
     console.print()
 
-    # Run diagnostics
+    # Run diagnostics with progress spinner
     diagnostics = SystemDiagnostics()
-    results = diagnostics.run_all_checks()
+    with console.status(
+        f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",
+        spinner="dots",
+    ):
+        results = diagnostics.run_all_checks()
 
     # Group results by status for cleaner display
     passed = [r for r in results if r.status == "pass"]
