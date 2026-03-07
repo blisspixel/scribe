@@ -41,6 +41,23 @@ logger = get_logger(__name__)
 # Using ScribeTheme colors for a modern, cohesive look
 
 
+def _show_command_banner(console) -> None:
+    """Show animated banner + version before a command runs."""
+    from scribe.utils.banner import show_banner
+
+    if show_banner(console):
+        console.print(
+            f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+    else:
+        console.print()
+        console.print(
+            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
+            f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+    console.print()
+
+
 # Custom help formatter that's minimal and clean
 class CleanGroup(typer.core.TyperGroup):
     """Custom group with minimal, elite-tier help formatting."""
@@ -49,23 +66,9 @@ class CleanGroup(typer.core.TyperGroup):
         """Override to provide clean, minimal help."""
         from rich.console import Console
 
-        from scribe.utils.banner import show_banner
-        from scribe.utils.branding import brand_header_markup
-
         console = Console()
 
-        # Animated banner, falling back to simple text header
-        if show_banner(console):
-            console.print(
-                f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        else:
-            console.print()
-            header = (
-                f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
-                f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            console.print(header)
+        _show_command_banner(console)
 
         console.print()
 
@@ -234,8 +237,8 @@ def transcribe_command(
             outputs.append("meme")
 
         # Build panel content
-        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
-        panel_lines.append(f"[{ScribeTheme.TEXT_PRIMARY}]{audio_file.name}[/{ScribeTheme.TEXT_PRIMARY}]")
+        _show_command_banner(console)
+        panel_lines = [f"[{ScribeTheme.TEXT_PRIMARY}]{audio_file.name}[/{ScribeTheme.TEXT_PRIMARY}]"]
 
         details = []
         if duration_mins:
@@ -644,9 +647,9 @@ def url_command(
         setup_logging("url_download", config.log_folder)
 
         # Show download panel
+        _show_command_banner(console)
         console.print(Panel.fit(
             "\n".join([
-                brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]",
                 f"[{ScribeTheme.TEXT_PRIMARY}]downloading...[/{ScribeTheme.TEXT_PRIMARY}]",
                 f"[{ScribeTheme.TEXT_MUTED}]{validated_url}[/{ScribeTheme.TEXT_MUTED}]",
             ]),
@@ -1020,10 +1023,7 @@ def record(
         config = ScribeConfig()
 
         # Display header first
-        console.print(Panel.fit(
-            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]",
-            border_style=ScribeTheme.PRIMARY_DIM
-        ))
+        _show_command_banner(console)
 
         # Show configuration settings
         settings_table = Table(title="Recording Settings", show_header=False, box=None)
@@ -1397,9 +1397,8 @@ def batch_transcribe(
             raise typer.Exit(1)
 
         # Display batch header
-        console.print()
+        _show_command_banner(console)
         console.print(Panel.fit(
-            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]\n"
             f"[white]{len(valid_files)} file(s)[/white]",
             border_style="cyan",
             padding=(0, 1)
@@ -2118,8 +2117,8 @@ def joke(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
-        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        _show_command_banner(console)
+        panel_lines = [f"[white]{transcript_file.name}[/white]"]
         panel_lines.append("[dim]joke[/dim]")
 
         console.print(Panel.fit(
@@ -2255,8 +2254,8 @@ def meme(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
-        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        _show_command_banner(console)
+        panel_lines = [f"[white]{transcript_file.name}[/white]"]
         panel_lines.append("[dim]meme[/dim]")
 
         console.print(Panel.fit(
@@ -2408,8 +2407,8 @@ def notes(
             raise typer.Exit(1)
 
         # Display header
-        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
-        panel_lines.append(f"[white]{transcript_file.name}[/white]")
+        _show_command_banner(console)
+        panel_lines = [f"[white]{transcript_file.name}[/white]"]
         panel_lines.append("[dim]notes[/dim]")
 
         console.print(Panel.fit(
@@ -2866,8 +2865,8 @@ def clean(
         from scribe.utils.silence_remover import analyze_silence, remove_silence, trim_file
 
         # Display header
-        panel_lines = [brand_header_markup("scribe", fallback_color=ScribeTheme.PRIMARY_BRIGHT) + f" [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"]
-        panel_lines.append(f"[white]{input_file.name}[/white]")
+        _show_command_banner(console)
+        panel_lines = [f"[white]{input_file.name}[/white]"]
 
         # Get original duration
         original_duration = get_audio_duration(input_file)
@@ -2990,14 +2989,8 @@ def main():
     if '--banner' in sys.argv:
         from rich.console import Console as BannerConsole
 
-        from scribe.utils.banner import show_banner
-
         c = BannerConsole()
-        show_banner(c)
-        c.print(
-            f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        c.print()
+        _show_command_banner(c)
         return
 
     # If first argument looks like a file path, inject 'transcribe' command
