@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI
 
 from scribe.utils.transcript_loader import load_transcript_text
 
@@ -320,6 +320,9 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
             logger.debug(f"AI returned invalid archetype '{selected}', using heuristic")
             return _select_archetype_heuristic({}, None)
 
+    except AuthenticationError as e:
+        logger.error(f"Invalid API key: {e}")
+        raise
     except Exception as e:
         logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
         return _select_archetype_heuristic({}, None)
@@ -371,6 +374,9 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
             logger.warning(f"AI returned invalid archetype '{selected}', falling back to heuristic")
             return _select_archetype_heuristic({}, None)
 
+    except AuthenticationError as e:
+        logger.error(f"Invalid API key: {e}")
+        raise
     except Exception as e:
         logger.warning(f"AI archetype selection failed: {e}, falling back to heuristic")
         return _select_archetype_heuristic({}, None)
@@ -623,10 +629,18 @@ def generate_transcript_joke(
         logger.info(f"Using forced archetype: {archetype_key}")
     else:
         # Use AI to intelligently select archetype based on meeting content
-        if use_provider:
-            archetype_key = _select_archetype_ai_provider(provider, transcript_text)
-        else:
-            archetype_key = _select_archetype_ai(client, transcript_text)
+        try:
+            if use_provider:
+                archetype_key = _select_archetype_ai_provider(provider, transcript_text)
+            else:
+                archetype_key = _select_archetype_ai(client, transcript_text)
+        except AuthenticationError:
+            logger.error(
+                "Invalid OpenAI API key. Update your key via "
+                "OPENAI_API_KEY env var or .env file. "
+                "Get your key at https://platform.openai.com/api-keys"
+            )
+            return None
 
     system_prompt = COMEDY_STYLES[archetype_key]
     display_name = ARCHETYPE_DISPLAY_NAMES.get(archetype_key, archetype_key)
@@ -774,6 +788,14 @@ def generate_transcript_joke(
                 text = _clip_to_words(text, cfg.max_words)
 
             return text, display_name
+
+        except AuthenticationError:
+            logger.error(
+                "Invalid OpenAI API key. Update your key via "
+                "OPENAI_API_KEY env var or .env file. "
+                "Get your key at https://platform.openai.com/api-keys"
+            )
+            return None
 
         except Exception as e:
             # Network/provider connectivity can fail even when a direct OpenAI key path exists.

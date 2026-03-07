@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import find_dotenv, load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI
 
 from scribe.utils.transcript_loader import load_transcript_text
 
@@ -1002,7 +1002,15 @@ def generate_meeting_meme(
 
     if not enable_bakeoff:
         # Standard single-provider approach
-        meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
+        try:
+            meme_concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning)
+        except AuthenticationError:
+            logger.error(
+                "Invalid OpenAI API key. Update your key via "
+                "OPENAI_API_KEY env var or .env file. "
+                "Get your key at https://platform.openai.com/api-keys"
+            )
+            return None
 
     if not meme_concept:
         logger.error("Failed to create meme concept")

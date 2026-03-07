@@ -200,15 +200,57 @@ class TestGPUCheck:
 class TestAPIKeyCheck:
     """Test OpenAI API key checking."""
 
-    def test_valid_api_key(self):
-        """Test valid API key."""
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_valid_api_key(self, mock_openai_cls):
+        """Test valid API key that passes live validation."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
             result = diagnostics.check_openai_api_key()
 
             assert result.status == "pass"
-            assert "Configured" in result.message
+            assert "Valid" in result.message
+            mock_client.models.list.assert_called_once()
+
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_invalid_api_key_rejected(self, mock_openai_cls):
+        """Test API key that is rejected by OpenAI (401)."""
+        from openai import AuthenticationError
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = AuthenticationError(
+            message="Invalid API key",
+            response=MagicMock(status_code=401),
+            body=None,
+        )
+        mock_openai_cls.return_value = mock_client
+
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
+            result = diagnostics.check_openai_api_key()
+
+            assert result.status == "fail"
+            assert "401" in result.message
+            assert result.fix_suggestion is not None
+
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_valid_key_network_error(self, mock_openai_cls):
+        """Test valid key format but network error during verification."""
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = ConnectionError("No internet")
+        mock_openai_cls.return_value = mock_client
+
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
+            result = diagnostics.check_openai_api_key()
+
+            assert result.status == "warn"
+            assert "verify" in result.message.lower()
 
     def test_invalid_api_key_format(self):
         """Test invalid API key format."""

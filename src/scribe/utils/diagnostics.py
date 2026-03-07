@@ -170,6 +170,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from openai import AuthenticationError, OpenAI
+
 from scribe.utils.platform import get_platform, is_windows
 
 
@@ -423,33 +425,61 @@ class SystemDiagnostics:
         return result
 
     def check_openai_api_key(self) -> DiagnosticResult:
-        """Check OpenAI API key."""
+        """Check OpenAI API key existence and validity."""
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
 
-        if api_key:
-            # Basic validation
-            if api_key.startswith("sk-") and len(api_key) > 20:
-                result = DiagnosticResult(
-                    name="OpenAI API Key",
-                    status="pass",
-                    message="Configured",
-                    details=f"Key: {api_key[:10]}...{api_key[-4:]}"
-                )
-            else:
-                result = DiagnosticResult(
-                    name="OpenAI API Key",
-                    status="warn",
-                    message="Invalid format",
-                    details="API key doesn't match expected format",
-                    fix_suggestion="Get a valid API key from https://platform.openai.com/api-keys"
-                )
-        else:
+        if not api_key:
             result = DiagnosticResult(
                 name="OpenAI API Key",
                 status="fail",
                 message="Not configured",
                 details="Required for API transcription, notes, jokes, and memes",
                 fix_suggestion="Set OPENAI_API_KEY in your .env file"
+            )
+            self.results.append(result)
+            return result
+
+        # Basic format check
+        if not (api_key.startswith("sk-") and len(api_key) > 20):
+            result = DiagnosticResult(
+                name="OpenAI API Key",
+                status="warn",
+                message="Invalid format",
+                details="API key doesn't match expected format",
+                fix_suggestion="Get a valid API key from https://platform.openai.com/api-keys"
+            )
+            self.results.append(result)
+            return result
+
+        # Live validation — actually call the API to verify the key works
+        try:
+            client = OpenAI(api_key=api_key, timeout=10)
+            client.models.list()
+            result = DiagnosticResult(
+                name="OpenAI API Key",
+                status="pass",
+                message="Valid",
+                details=f"Key: {api_key[:10]}...{api_key[-4:]}"
+            )
+        except AuthenticationError:
+            result = DiagnosticResult(
+                name="OpenAI API Key",
+                status="fail",
+                message="Invalid key (401 Unauthorized)",
+                details=f"Key: {api_key[:10]}...{api_key[-4:]}",
+                fix_suggestion=(
+                    "Your API key is rejected by OpenAI. "
+                    "Get a new key at https://platform.openai.com/api-keys"
+                )
+            )
+        except Exception as e:
+            # Network error, timeout, etc. — key format is fine, can't verify
+            result = DiagnosticResult(
+                name="OpenAI API Key",
+                status="warn",
+                message="Could not verify",
+                details=f"Key: {api_key[:10]}...{api_key[-4:]} | Error: {e}",
+                fix_suggestion="Check your internet connection"
             )
 
         self.results.append(result)
