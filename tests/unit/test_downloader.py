@@ -216,7 +216,7 @@ class TestURLDownloaderOptions:
         dl = URLDownloader(output_dir=tmp_path, audio_only=True)
         opts = dl._build_options()
         assert opts["format"] == "bestaudio/best"
-        assert any(pp["key"] == "FFmpegExtractAudio" for pp in opts["postprocessors"])
+        assert "postprocessors" not in opts
 
     def test_video_options(self, tmp_path):
         dl = URLDownloader(output_dir=tmp_path, audio_only=False)
@@ -405,3 +405,4 @@ class TestMediaUrlValidation:
         from scribe.utils.validation import validate_media_url
         url = validate_media_url("http://example.com/video.mp4")
         assert url.startswith("http://")
+

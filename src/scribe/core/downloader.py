@@ -199,13 +199,10 @@ class URLDownloader:
             opts["cookiesfrombrowser"] = (self.cookies_from_browser,)
 
         if self.audio_only:
-            # Download best audio, let ffmpeg convert to wav/mp3 later
+            # Download best audio only and let Scribe's converter normalize format later.
+            # Avoiding yt-dlp FFmpegExtractAudio here prevents Windows postprocess
+            # path edge cases ("Error opening output files").
             opts["format"] = "bestaudio/best"
-            opts["postprocessors"] = [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "0",
-            }]
         else:
             # Download best quality with audio
             opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
