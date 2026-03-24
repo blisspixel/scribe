@@ -125,10 +125,11 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Rate limiting and retry
 
 **recorder.py** - OBS integration
-- WebSocket v5 protocol
-- Recording lifecycle management
+- WebSocket v5 protocol with auto-reconnect
+- Self-healing OBS lifecycle (kill stale → clean crash sentinels → launch → connect)
+- Recording lifecycle management (stop stale → start fresh → deadman timer on stop)
 - Auto-transcription trigger
-- Error recovery
+- Defensive error recovery with actionable user messages
 
 ### Models Layer (`src/scribe/models/`)
 

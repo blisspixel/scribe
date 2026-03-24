@@ -39,6 +39,7 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 
 ## Unreleased (Current Workspace)
 
+- **OBS Self-Healing**: Complete overhaul of OBS recording lifecycle — automatic process cleanup, crash sentinel removal, safe-mode bypass, stale recording detection, WebSocket reconnect mid-recording, deadman timers, auth mismatch detection, and actionable error messages for every failure path
 - **URL Transcription**: New `scribe url <link>` command — download and transcribe from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
 - **YouTube 403 Fix**: Upgraded yt-dlp, added browser cookie support (`--cookies`), hardened retries and User-Agent
 - **Animated Banner**: Bold ANSI Shadow block font with animated gradient sweep (blue→purple), cross-platform (Windows, macOS, Linux)
@@ -396,8 +397,13 @@ scribe batch *.mp4 --vocabulary company-names.json
 **Features:**
 - WebSocket v5 integration (preferred)
 - CLI fallback if WebSocket unavailable
-- Monitors for new recording files
-- Real-time feedback every 5 seconds
+- Automatic OBS launch with safe-mode bypass
+- Stale process cleanup before fresh launch
+- Stops leftover recordings before starting new ones
+- WebSocket auto-reconnect if connection drops mid-recording
+- Deadman timer prevents infinite hangs on stop
+- Ctrl-C works even without interactive terminal (piped stdin, CI)
+- Auth mismatch detection with actionable error messages
 - Verifies recording actually started
 - Auto-transcription after recording
 
@@ -662,14 +668,23 @@ Scribe automatically sets a browser User-Agent and retries with exponential back
 
 ### OBS Recording Issues
 
+**"Could not connect to OBS WebSocket":**
+
+1. Ensure OBS WebSocket server is enabled: Tools → WebSocket Server Settings
+2. Check `SCRIBE_OBS_PASSWORD` in `.env` matches the OBS WebSocket password
+3. Scribe auto-launches OBS if not running — no need to start it manually
+
 **"No recording file detected" error:**
 
-1. Check OBS is actually recording (red indicator showing?)
-2. Check recording folder (OBS might use different folder)
-3. WebSocket connection (falls back to CLI if unavailable)
-4. Manual start (click "Start Recording" in OBS if automatic fails)
+1. Check OBS Settings → Output → Recording Path matches your `SCRIBE_OUTPUT_FOLDER`
+2. Scribe searches the OBS recording directory for 15 seconds after stop
+3. If OBS records to a different folder, Scribe will tell you where it looked
 
-**To fix permanently:**
+**OBS keeps asking about safe mode:**
+
+Scribe now handles this automatically — it kills stale OBS processes, cleans crash sentinel files, and launches with `--disable-shutdown-check`. If you still see the safe mode dialog, delete `%APPDATA%/obs-studio/global.ini` manually.
+
+**To configure OBS WebSocket:**
 1. Open OBS Studio
 2. Go to Tools > WebSocket Server Settings
 3. Enable WebSocket server on port 4455
@@ -737,9 +752,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.3  
-**Build Status:** Refer to local CI/test runs  
-**Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)  
-**Last Updated:** 2026-02-14
+**Current Version:** 2.4.3
+**Build Status:** Refer to local CI/test runs
+**Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
+**Last Updated:** 2026-03-23
 
 

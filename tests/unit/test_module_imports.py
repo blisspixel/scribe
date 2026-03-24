@@ -131,9 +131,12 @@ class TestRecorderClass:
 
     def test_stop_listener_creation(self, recorder):
         """Test stop listener thread creation."""
-        ev = recorder._start_stop_listener()
-        assert ev is not None
-        ev.set()  # Stop it
+        ev, restore = recorder._start_stop_listener()
+        try:
+            assert ev is not None
+            ev.set()  # Stop it
+        finally:
+            restore()
 
     def test_safe_filename(self, recorder):
         """Test safe filename generation."""

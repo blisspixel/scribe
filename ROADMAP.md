@@ -19,8 +19,32 @@
 
 ## Unreleased (Current Workspace)
 
-**Focus: URL Transcription + CLI Polish + Animated Banner**
+**Focus: OBS Self-Healing + URL Transcription + CLI Polish + Animated Banner**
 
+- **OBS Self-Healing Recording**: Complete overhaul of OBS recording lifecycle
+  - Kills stale OBS processes before launching fresh (prevents safe-mode dialog)
+  - Cleans OBS crash sentinel files (`global.ini` flags) that trigger safe-mode
+  - Launches with `--disable-shutdown-check` to bypass crash recovery prompt
+  - Verifies process is actually dead after kill (retries with `/T` tree kill)
+  - Stops leftover recordings before starting a new one (with verification)
+  - Auto-reconnects WebSocket if connection drops mid-recording
+  - Deadman timer (30s) prevents infinite hang if OBS never confirms stop
+  - Ctrl-C handler works even without interactive terminal (piped stdin, CI)
+  - SIGINT handler properly restored after recording completes
+  - Retries full kill→clean→launch cycle up to 2 times
+  - File search retries for 15s after recording stops (OBS may still be flushing)
+  - Waits for file to stabilize before finalizing (was missing in WebSocket path)
+  - Auth mismatch detection with specific warning about SCRIBE_OBS_PASSWORD
+  - Connection error messages include actionable WebSocket setup guidance
+  - `start_record` failures wrapped in user-friendly messages
+  - Directory set failures surfaced to user (warns OBS may record elsewhere)
+  - File finalization timeout now warns instead of silently continuing
+  - CLI stop signal verified (checks exit code, handles timeout)
+  - FFmpeg remux failures logged with actual stderr output
+  - Fixed `os.path.getctime` → `getmtime` (reliable cross-platform)
+  - Fixed ProcessError double-wrapping in `record()`
+  - Fixed duplicate hosts in connection list (wasted double timeouts)
+  - 89% test coverage (126 tests), all ruff clean
 - **URL Transcription**: New `scribe url <link>` command for downloading and transcribing from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
   - Audio-only download by default (saves bandwidth)
   - Progress tracking, size/duration limits, automatic cleanup

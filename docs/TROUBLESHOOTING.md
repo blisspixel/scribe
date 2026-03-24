@@ -317,16 +317,27 @@ notepad $PROFILE
 ### OBS Recording Issues
 
 **Symptoms:**
-- "Cannot connect to OBS"
+- "Could not connect to OBS WebSocket"
 - "OBS WebSocket error"
 - Recording doesn't start
+- OBS asks about safe mode on launch
 
 **Diagnosis:**
 ```bash
 scribe info  # Check OBS configuration
 ```
 
-**Solutions:**
+**How Scribe manages OBS (automatic):**
+
+Scribe now handles most OBS issues automatically:
+- Kills stale OBS processes before launching fresh
+- Cleans crash sentinel files that trigger the safe-mode dialog
+- Launches with `--disable-shutdown-check` to bypass crash recovery
+- Stops leftover recordings before starting a new one
+- Reconnects WebSocket if connection drops mid-recording
+- Retries the full kill→launch cycle if the first attempt fails
+
+**Solutions if automatic recovery fails:**
 
 1. **Enable OBS WebSocket:**
 - Open OBS Studio
@@ -342,20 +353,26 @@ SCRIBE_OBS_PORT=4455
 SCRIBE_OBS_PASSWORD=your_password
 ```
 
-3. **Check OBS is running:**
-```bash
-# Windows
-tasklist | findstr obs64.exe
+3. **Authentication mismatch:**
+- Scribe will warn: "OBS authentication failed — check SCRIBE_OBS_PASSWORD"
+- Ensure the password in `.env` matches OBS WebSocket Server Settings
+- Leave `SCRIBE_OBS_PASSWORD` empty if OBS has no password set
 
-# macOS/Linux
-ps aux | grep obs
-```
+4. **OBS keeps asking about safe mode:**
+- Scribe handles this automatically, but if it persists:
+- Delete `%APPDATA%\obs-studio\global.ini` (Windows) or `~/.config/obs-studio/global.ini` (Linux)
+- Or launch OBS once manually, dismiss the dialog, and close cleanly
 
-4. **Verify WebSocket version:**
+5. **"No recording file detected":**
+- Check OBS Settings → Output → Recording Path
+- Scribe will tell you where it searched and for how long
+- Ensure the recording path is writable
+
+6. **Verify WebSocket version:**
 - Scribe requires WebSocket v5
 - Update OBS if needed
 
-5. **Firewall issues:**
+7. **Firewall issues:**
 - Allow OBS through firewall
 - Check port 4455 is not blocked
 
