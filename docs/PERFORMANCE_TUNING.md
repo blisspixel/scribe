@@ -203,14 +203,15 @@ export SCRIBE_NOTES_PROVIDER=xai
 ```
 
 **Cost comparison (per 1M tokens):**
-- Grok 4 Fast: $0.20 input / $0.50 output
+- Grok 4.3: $1.25 input / $2.50 output
 - GPT-5: $3.00 input / $15.00 output
-- Savings: 47x cheaper
+- Verify current provider pricing before high-volume runs
+- Scribe records exact xAI request cost when the API returns `cost_in_usd_ticks`; otherwise it uses local estimates for known xAI defaults
 
 **Image generation:**
-- Grok 2 Image: $0.10 per image
+- Grok Imagine Image: priced per image by xAI
 - GPT-Image-1: $0.40 per image
-- Savings: 4x cheaper
+- Verify current provider pricing before high-volume runs
 
 ### Network Optimization
 

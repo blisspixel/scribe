@@ -302,7 +302,7 @@ class TestXAIImageProviderDefensive:
         config = ProviderConfig(
             provider_name="xai",
             api_key="test-key",
-            model="grok-2-image"
+            model="grok-imagine-image"
         )
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
@@ -326,7 +326,7 @@ class TestXAIImageProviderDefensive:
         config = ProviderConfig(
             provider_name="xai",
             api_key="test-key",
-            model="grok-2-image"
+            model="grok-imagine-image"
         )
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
@@ -355,7 +355,7 @@ class TestXAIImageProviderDefensive:
         config = ProviderConfig(
             provider_name="xai",
             api_key="test-key",
-            model="grok-2-image"
+            model="grok-imagine-image"
         )
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:

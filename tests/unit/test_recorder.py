@@ -50,6 +50,8 @@ def mock_config(tmp_path):
     config.obs_password = ""
     config.output_folder = tmp_path / "output"
     config.output_folder.mkdir(parents=True, exist_ok=True)
+    config.max_recording_hours = 9.0
+    config.recording_warning_fraction = 0.9
     return config
 
 
@@ -1149,9 +1151,54 @@ class TestWaitForStopWithInput:
             with patch('sys.stdout'):
                 recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
 
+    @patch('scribe.core.recorder.time.sleep')
+    def test_auto_stop_at_max_duration(self, mock_sleep, recorder, mock_obs_client):
+        """Recording auto-stops when the configured max duration is reached."""
+        recorder.max_recording_hours = 0.001  # 3.6 seconds
+        recorder.recording_warning_fraction = 0.5
+
+        mock_obs_client.get_record_status.side_effect = [
+            Mock(output_active=True),
+            Mock(output_active=False),
+        ]
+
+        stop_event = threading.Event()
+
+        time_values = iter([100.0, 104.0, 104.0, 104.0, 104.0])
+
+        with patch('scribe.core.recorder.time.time', side_effect=lambda: next(time_values, 104.0)):
+            with patch('sys.stdin', Mock(isatty=Mock(return_value=False))):
+                with patch('sys.stdout'):
+                    recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+
+        assert stop_event.is_set()
+        mock_obs_client.stop_record.assert_called_once()
+
 
 class TestWaitForStopCli:
     """Test _wait_for_stop_cli."""
+
+    @patch('scribe.core.recorder.time.sleep')
+    @patch('scribe.core.recorder.subprocess.run')
+    @patch('scribe.core.recorder.get_obs_executable_path')
+    def test_cli_auto_stop_at_max_duration(self, mock_exe, mock_run, mock_sleep, recorder, tmp_path):
+        """CLI fallback also auto-stops at the configured max duration."""
+        recorder.max_recording_hours = 0.001  # 3.6 seconds
+        recorder.recording_warning_fraction = 0.5
+
+        obs_exe = tmp_path / "obs.exe"
+        obs_exe.touch()
+        mock_exe.return_value = obs_exe
+        mock_run.return_value = Mock(returncode=0)
+
+        time_values = iter([100.0, 104.0, 104.0, 104.0])
+
+        with patch('scribe.core.recorder.time.time', side_effect=lambda: next(time_values, 104.0)):
+            with patch('sys.stdin', Mock(isatty=Mock(return_value=False))):
+                with patch('sys.stdout'):
+                    recorder._wait_for_stop_cli(threading.Event())
+
+        mock_run.assert_called_once()
 
     @patch('scribe.core.recorder.time.sleep')
     @patch('scribe.core.recorder.subprocess.run')

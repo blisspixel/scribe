@@ -72,15 +72,15 @@ With OpenAI GPT-5:
 - Step 3 (Refine): ~5 seconds
 - Total: ~30 seconds
 
-With XAI Grok 4 Fast:
+With XAI Grok 4.3:
 - Step 1 (Summary): ~8 seconds
 - Step 2 (Breakdown): ~5 seconds
 - Step 3 (Refine): ~2 seconds
 - Total: ~15 seconds (2x faster!)
 
 Cost comparison:
-- OpenAI: ~$0.05 per transcript
-- XAI: ~$0.002 per transcript (25x cheaper!)
+- Costs vary by provider and model generation
+- Verify live pricing before high-volume runs
 
 THE CLEVER PARTS:
 ─────────────────
@@ -198,7 +198,7 @@ class NotesGenerator:
 
         Args:
             api_key: API key (defaults to provider-specific env var)
-            model: Model to use (default: gpt-5 for OpenAI, grok-4-fast-reasoning for XAI)
+            model: Model to use (default: gpt-5 for OpenAI, grok-4.3 for XAI)
             max_retries: Maximum retry attempts for API calls
             provider_name: AI provider to use (openai, xai) - defaults to SCRIBE_NOTES_PROVIDER env var
 
@@ -484,7 +484,10 @@ class NotesGenerator:
                 )
 
                 content = response["content"]
-                tokens_used = response.get("usage", {}).get("total_tokens", 0)
+                usage_info = response.get("usage", {})
+                tokens_used = usage_info.get("total_tokens", 0)
+                cost_usd = usage_info.get("cost_usd", usage_info.get("estimated_cost_usd"))
+                cost_source = usage_info.get("cost_source")
 
             else:
                 # OpenAI Responses API path (legacy)
@@ -521,6 +524,8 @@ class NotesGenerator:
 
                 usage = getattr(resp, "usage", None)
                 tokens_used = getattr(usage, "total_tokens", 0) if usage else 0
+                cost_usd = None
+                cost_source = None
 
             if not content:
                 raise APIError("Empty response from AI provider")
@@ -533,6 +538,9 @@ class NotesGenerator:
                 "model": self.config.model,
                 "structured_output": json_schema is not None,
             }
+            if cost_usd is not None:
+                metrics["cost_usd"] = round(float(cost_usd), 8)
+                metrics["cost_source"] = cost_source or "unknown"
             logger.info(f"AI API metrics: {json.dumps(metrics)}")
             return content.strip(), metrics
 

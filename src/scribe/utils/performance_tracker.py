@@ -56,6 +56,8 @@ Provider-aware:
 - Detects XAI vs OpenAI
 - Applies 2.5x speedup for XAI
 - Adjusts estimates accordingly
+- Cost helpers use exact provider-returned billing when available and local
+  estimates for known model defaults
 
 STORAGE:
 ────────

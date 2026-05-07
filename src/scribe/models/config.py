@@ -167,6 +167,20 @@ class ScribeConfig(BaseSettings):
         description="Maximum time to wait for files in seconds"
     )
 
+    max_recording_hours: float = Field(
+        default=9.0,
+        ge=0.1,
+        le=24.0,
+        description="Maximum recording duration in hours before Scribe auto-stops OBS"
+    )
+
+    recording_warning_fraction: float = Field(
+        default=0.9,
+        ge=0.1,
+        le=1.0,
+        description="Fraction of max recording duration at which to show a warning"
+    )
+
     # Resource limits (prevent OOM and runaway processes)
     max_audio_duration_hours: float = Field(
         default=12.0,

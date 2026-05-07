@@ -286,7 +286,7 @@ def get_audio_duration(path: Path) -> float | None:
     # Method 1: Native WAV parsing
     duration = _get_duration_wave(path)
     if duration is not None:
-        return duration
+        return _correct_suspicious_wav_duration(path, duration)
 
     # Method 2: Torchaudio metadata
     duration = _get_duration_torchaudio(path)
@@ -296,6 +296,76 @@ def get_audio_duration(path: Path) -> float | None:
     # Method 3: FFprobe subprocess
     duration = _get_duration_ffprobe(path)
     return duration
+
+
+def _correct_suspicious_wav_duration(path: Path, duration: float) -> float:
+    """
+    Correct clearly wrong WAV durations when the header disagrees with reality.
+
+    Converted intermediate WAV files occasionally carry a bad frame count and can
+    report absurd durations (for example, many hours for a short meeting). When a
+    WAV claims to be longer than two hours, cross-check with alternate metadata
+    sources and with the original source media if this is an intermediate file.
+    """
+    if path.suffix.lower() != ".wav" or duration <= 7200:
+        return duration
+
+    from scribe.utils.logging import get_logger
+    logger = get_logger(__name__)
+
+    logger.debug(
+        f"Suspicious WAV duration detected for {path.name}: {duration:.1f}s. "
+        "Cross-checking alternate metadata sources."
+    )
+
+    candidates: list[tuple[str, float]] = []
+
+    for source_name, candidate in (
+        ("torchaudio", _get_duration_torchaudio(path)),
+        ("ffprobe", _get_duration_ffprobe(path)),
+    ):
+        if candidate is not None and 0 < candidate < duration:
+            candidates.append((source_name, candidate))
+
+    original_path = _find_original_media_path(path)
+    if original_path is not None:
+        original_duration = (
+            _get_duration_wave(original_path)
+            or _get_duration_torchaudio(original_path)
+            or _get_duration_ffprobe(original_path)
+        )
+        if original_duration is not None and 0 < original_duration < duration:
+            candidates.append((f"original:{original_path.name}", original_duration))
+
+    if not candidates:
+        return duration
+
+    best_source, best_duration = min(candidates, key=lambda item: item[1])
+    logger.warning(
+        f"Corrected suspicious WAV duration for {path.name}: "
+        f"{duration:.1f}s -> {best_duration:.1f}s using {best_source}"
+    )
+    return best_duration
+
+
+def _find_original_media_path(path: Path) -> Path | None:
+    """Find the original source file for an intermediate converted audio file."""
+    stem = path.stem
+    original_stem = stem
+    for suffix in ("_16k_mono", "_standardized", "_converted"):
+        if original_stem.endswith(suffix):
+            original_stem = original_stem[: -len(suffix)]
+            break
+
+    if original_stem == stem:
+        return None
+
+    for ext in (".mp4", ".mp3", ".m4a", ".wav", ".mkv", ".webm", ".flac", ".ogg", ".mov"):
+        candidate = path.with_name(f"{original_stem}{ext}")
+        if candidate.exists() and candidate != path:
+            return candidate
+
+    return None
 
 
 def _get_duration_wave(path: Path) -> float | None:

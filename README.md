@@ -202,7 +202,7 @@ pip install -e .
 
 **Optional: Additional AI Providers**
 ```bash
-# XAI/Grok (lower cost for jokes/notes/memes in many workloads)
+# XAI/Grok (current Grok 4.20/4.3 defaults for jokes/notes/memes)
 pip install openai
 
 # Anthropic Claude
@@ -223,7 +223,7 @@ Edit `.env`:
 # Required for API transcription
 OPENAI_API_KEY=sk-proj-...
 
-# Optional: XAI/Grok (recommended for cost savings)
+# Optional: XAI/Grok
 XAI_API_KEY=xai-...
 
 # Optional: Anthropic Claude
@@ -253,6 +253,9 @@ SCRIBE_BANNER=on
 SCRIBE_OBS_HOST=localhost
 SCRIBE_OBS_PORT=4455
 SCRIBE_OBS_PASSWORD=your_password
+# Optional runaway-recording protection
+SCRIBE_MAX_RECORDING_HOURS=9
+SCRIBE_RECORDING_WARNING_FRACTION=0.9
 ```
 
 ---
@@ -340,7 +343,7 @@ Mix and match AI providers based on cost, performance, and features.
 
 **Supported Providers:**
 - **OpenAI:** GPT-5.2, GPT-5, GPT-5 mini, GPT-Image-1, DALL-E, Whisper
-- **XAI/Grok:** Grok 4.1 Fast (reasoning), Grok 2 Image
+- **XAI/Grok:** Grok 4.3, Grok 4.20 non-reasoning, Grok Imagine Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
 - **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 (images)
 
@@ -357,14 +360,17 @@ export SCRIBE_ENABLE_MEME_BAKEOFF=true
 ```
 
 **Cost Comparison (per 1M tokens):**
-- Grok 4.1 Fast: $0.20 input / $0.50 output
+- Grok 4.3: $1.25 input / $2.50 output
 - GPT-5.2: $1.75 input / $14.00 output
 - GPT-5: $1.25 input
 - Claude 3.5 Sonnet: $3.00 input / $15.00 output
 
 **Images:**
-- Grok 2 Image: $0.07 per image
+- Grok Imagine Image: priced per image by xAI
 - GPT-Image-1: $0.40 per image
+
+**xAI lifecycle note:** Scribe defaults avoid the Grok 4/4.1 Fast model IDs retired by xAI on 2026-05-15.
+When xAI returns exact `cost_in_usd_ticks`, Scribe records the converted request cost in AI metrics; otherwise it falls back to local estimates for known xAI defaults.
 
 ### Custom Vocabulary
 

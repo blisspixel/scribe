@@ -15,6 +15,7 @@ from scribe.utils.audio import (
     _get_duration_wave,
     get_audio_duration,
 )
+from scribe.utils.resource_limits import validate_audio_duration
 
 
 class TestAudioDurationDetection:
@@ -256,26 +257,45 @@ class TestFFprobeDurationMethod:
 class TestDurationValidation:
     """Test duration validation and correction logic."""
 
-    def test_detects_incorrect_wav_duration(self, tmp_path):
-        """Test detection of incorrect WAV duration from corrupted header."""
-        # Create a WAV file that reports wrong duration
-        wav_path = tmp_path / "wrong_duration.wav"
+    def test_corrects_suspicious_converted_wav_duration_from_original_media(self, tmp_path):
+        """Test converted WAV duration is corrected using the original media file."""
+        wav_path = tmp_path / "meeting_16k_mono.wav"
+        mp4_path = tmp_path / "meeting.mp4"
 
         with wave.open(str(wav_path), 'wb') as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            # Write 5 seconds of audio
             wav.writeframes(b'\x00' * (16000 * 5 * 2))
 
-        # Mock to return incorrect duration
-        with patch('scribe.utils.audio._get_duration_wave', return_value=134220.0):  # 2237 minutes
-            with patch('scribe.utils.audio._get_duration_torchaudio', return_value=None):
+        mp4_path.write_bytes(b'fake mp4')
+
+        with patch('scribe.utils.audio._get_duration_wave', side_effect=[64801.6, None]):
+            with patch('scribe.utils.audio._get_duration_torchaudio', side_effect=[None, 1800.0]):
                 with patch('scribe.utils.audio._get_duration_ffprobe', return_value=None):
                     duration = get_audio_duration(wav_path)
 
-                    # Should return the incorrect duration (will be corrected by caller)
-                    assert duration == 134220.0
+        assert duration == 1800.0
+
+    def test_validate_audio_duration_uses_corrected_wav_duration(self, tmp_path):
+        """Test resource validation accepts corrected converted WAV duration."""
+        wav_path = tmp_path / "meeting_16k_mono.wav"
+        mp4_path = tmp_path / "meeting.mp4"
+
+        with wave.open(str(wav_path), 'wb') as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b'\x00' * (16000 * 5 * 2))
+
+        mp4_path.write_bytes(b'fake mp4')
+
+        with patch('scribe.utils.audio._get_duration_wave', side_effect=[64801.6, None]):
+            with patch('scribe.utils.audio._get_duration_torchaudio', side_effect=[None, 1800.0]):
+                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=None):
+                    duration = validate_audio_duration(wav_path, max_duration_hours=12.0)
+
+        assert duration == 1800.0
 
     def test_prefers_wav_method_over_others(self, tmp_path):
         """Test that WAV method is preferred when available."""

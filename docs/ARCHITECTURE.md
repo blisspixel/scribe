@@ -165,8 +165,9 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Structured output support
 
 **xai_provider.py** - XAI/Grok integration
-- Grok 4 Fast (reasoning)
-- Grok 2 Image
+- Grok 4.3
+- Grok 4.20 non-reasoning
+- Grok Imagine Image
 - Cost optimization
 
 **anthropic_provider.py** - Anthropic integration

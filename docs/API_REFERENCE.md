@@ -326,7 +326,7 @@ from scribe.providers.xai_provider import XAIProvider
 config = ProviderConfig(
     provider_name="xai",
     api_key="xai-...",
-    model="grok-4-fast"
+    model="grok-4.3"
 )
 
 provider = XAIProvider(config)

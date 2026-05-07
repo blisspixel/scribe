@@ -9,6 +9,7 @@ from typing import Any
 from openai import OpenAI  # XAI API is OpenAI-compatible
 
 from scribe.providers.base import AIProvider, ProviderConfig
+from scribe.utils.costs import add_cost_fields, numeric_attr, usd_from_ticks
 
 
 class XAIProvider(AIProvider):
@@ -38,7 +39,7 @@ class XAIProvider(AIProvider):
             "messages": messages,
         }
 
-        # Grok 4 Fast uses max_completion_tokens and doesn't support temperature
+        # xAI chat models use max_completion_tokens through the OpenAI-compatible API.
         if max_tokens:
             params["max_completion_tokens"] = max_tokens
 
@@ -47,13 +48,20 @@ class XAIProvider(AIProvider):
 
         response = self.client.chat.completions.create(**params)
 
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens,
+        }
+        usage = add_cost_fields(
+            self.config.model,
+            usage,
+            cost_in_usd_ticks=numeric_attr(response.usage, "cost_in_usd_ticks"),
+        )
+
         return {
             "content": response.choices[0].message.content,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            },
+            "usage": usage,
             "model": response.model,
         }
 
@@ -84,9 +92,7 @@ class XAIProvider(AIProvider):
         import logging
         logger = logging.getLogger(__name__)
 
-        # XAI uses grok-2-image-1212 model
-        # Default to grok-2-image-1212, ignore any other model passed in kwargs
-        model = "grok-2-image-1212"
+        model = self.config.model or "grok-imagine-image"
 
         # Try b64_json format first (more reliable than URL)
         try:
@@ -110,6 +116,7 @@ class XAIProvider(AIProvider):
             if not b64_data:
                 raise ValueError("XAI API returned empty base64 data")
 
+            self._log_response_cost(response, logger)
             logger.info("Successfully generated image with XAI b64_json format")
             return base64.b64decode(b64_data)
 
@@ -142,6 +149,7 @@ class XAIProvider(AIProvider):
                 # Download the image
                 logger.debug(f"Downloading image from: {image_url}")
                 image_data = self._download_image_url(image_url, timeout=30)
+                self._log_response_cost(response, logger)
                 logger.info("Successfully generated image with XAI URL format")
                 return image_data
 
@@ -160,6 +168,14 @@ class XAIProvider(AIProvider):
         except ImportError:
             with urllib.request.urlopen(image_url, timeout=timeout) as response:
                 return response.read()
+
+    def _log_response_cost(self, response: Any, logger: Any) -> None:
+        """Log xAI exact response cost when the API provides it."""
+        usage = getattr(response, "usage", None)
+        cost_ticks = numeric_attr(usage, "cost_in_usd_ticks") if usage else None
+        cost_usd = usd_from_ticks(cost_ticks)
+        if cost_usd is not None:
+            logger.info(f"XAI request cost: ${cost_usd:.6f}")
 
     def analyze_image(
         self,

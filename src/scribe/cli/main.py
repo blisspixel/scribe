@@ -1032,6 +1032,7 @@ def record(
 
         settings_table.add_row("Output Folder", str(config.output_folder))
         settings_table.add_row("Transcription", "Enabled (auto)" if auto_transcribe else "Disabled")
+        settings_table.add_row("Max Recording", f"{config.max_recording_hours:.1f}h")
         if auto_transcribe:
             settings_table.add_row("Method", method.upper())
             settings_table.add_row("Model", config.default_model)

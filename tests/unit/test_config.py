@@ -221,6 +221,22 @@ class TestProcessingSettings:
         with pytest.raises(Exception):  # Pydantic validation
             ScribeConfig(file_wait_timeout=5)
 
+    def test_recording_limit_defaults_and_validation(self):
+        """Test recording limit settings."""
+        config = ScribeConfig()
+        assert config.max_recording_hours == 9.0
+        assert config.recording_warning_fraction == 0.9
+
+        custom = ScribeConfig(max_recording_hours=6.5, recording_warning_fraction=0.8)
+        assert custom.max_recording_hours == 6.5
+        assert custom.recording_warning_fraction == 0.8
+
+        with pytest.raises(Exception):
+            ScribeConfig(max_recording_hours=0.0)
+
+        with pytest.raises(Exception):
+            ScribeConfig(recording_warning_fraction=1.1)
+
 
 class TestFeatureFlags:
     """Test feature flag settings."""

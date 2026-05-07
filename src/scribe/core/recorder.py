@@ -59,6 +59,8 @@ class OBSRecorder:
         self.obs_port = config.obs_port
         self.obs_password = config.obs_password
         self.output_folder = config.output_folder
+        self.max_recording_hours = config.max_recording_hours
+        self.recording_warning_fraction = config.recording_warning_fraction
 
     def record(self, meeting_name: str) -> Path:
         """
@@ -733,6 +735,69 @@ class OBSRecorder:
                         pass
         return None
 
+    def _recording_limit_seconds(self) -> float:
+        """Return the hard auto-stop limit in seconds."""
+        return max(0.0, float(self.max_recording_hours) * 3600.0)
+
+    def _recording_warning_seconds(self) -> float:
+        """Return the warning threshold in seconds."""
+        limit_seconds = self._recording_limit_seconds()
+        warning_fraction = min(1.0, max(0.1, float(self.recording_warning_fraction)))
+        return limit_seconds * warning_fraction
+
+    def _format_elapsed(self, elapsed_seconds: float) -> str:
+        """Format elapsed seconds for recorder warnings."""
+        total_seconds = max(0, int(elapsed_seconds))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        if hours:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+
+    def _check_recording_duration_limit(
+        self,
+        elapsed_seconds: float,
+        stop_event: threading.Event,
+        warning_issued: bool,
+        auto_stop_announced: bool,
+    ) -> tuple[bool, bool]:
+        """Warn near the cap and auto-stop when the recording limit is reached."""
+        from scribe.utils.logging import console
+
+        warning_seconds = self._recording_warning_seconds()
+        limit_seconds = self._recording_limit_seconds()
+
+        if (
+            not warning_issued
+            and warning_seconds > 0
+            and elapsed_seconds >= warning_seconds
+            and elapsed_seconds < limit_seconds
+        ):
+            console.print(
+                "[yellow]Recording is nearing the configured limit "
+                f"({self._format_elapsed(elapsed_seconds)} elapsed, "
+                f"max {self.max_recording_hours:.1f}h)[/yellow]"
+            )
+            logger.warning(
+                "Recording nearing configured limit: "
+                f"elapsed={elapsed_seconds:.1f}s, max={limit_seconds:.1f}s"
+            )
+            warning_issued = True
+
+        if not auto_stop_announced and limit_seconds > 0 and elapsed_seconds >= limit_seconds:
+            stop_event.set()
+            console.print(
+                "[yellow]Maximum recording duration reached "
+                f"({self.max_recording_hours:.1f}h) - stopping automatically[/yellow]"
+            )
+            logger.warning(
+                "Auto-stopping recording at configured limit: "
+                f"elapsed={elapsed_seconds:.1f}s, max={limit_seconds:.1f}s"
+            )
+            auto_stop_announced = True
+
+        return warning_issued, auto_stop_announced
+
     def _wait_for_stop_with_input(self, client, stop_event: threading.Event) -> None:
         """Wait for user to stop recording, with automatic reconnect.
 
@@ -760,13 +825,15 @@ class OBSRecorder:
         else:
             console.print("[yellow]No interactive terminal — press Ctrl-C to stop recording[/yellow]")
 
+        start_time = time.time()
         last_active = True
-        recording_time = 0
-        last_update = 0
+        last_update = -1
         consecutive_errors = 0
         max_consecutive_errors = 10  # ~5 seconds of failures before reconnect
         stop_requested_at = None  # timestamp when stop was sent
         deadman_seconds = 30  # max time to wait for OBS to confirm stop
+        warning_issued = False
+        auto_stop_announced = False
 
         # Print initial status line using raw stdout for proper \r handling
         sys.stdout.write("Recording: 00:00")
@@ -847,14 +914,43 @@ class OBSRecorder:
                 logger.info("Recording stopped")
                 return
 
+            elapsed_seconds = max(0.0, time.time() - start_time)
+            warning_issued, auto_stop_announced = self._check_recording_duration_limit(
+                elapsed_seconds,
+                stop_event,
+                warning_issued,
+                auto_stop_announced,
+            )
+
+            # Auto-stop can set stop_event after the earlier branch; honor it immediately.
+            if stop_event.is_set() and active and not stop_requested:
+                sys.stdout.write("\r" + " " * 50 + "\r")
+                sys.stdout.flush()
+                console.print("[cyan]Stopping recording...[/cyan]")
+                logger.info("Stopping recording...")
+                stop_requested = True
+                stop_requested_at = time.time()
+                try:
+                    client.stop_record()
+                except Exception as e:
+                    logger.warning(f"Stop command failed: {e}")
+                    new_client = self._reconnect_client()
+                    if new_client:
+                        with suppress(Exception):
+                            client.close()
+                        client = new_client
+                        try:
+                            client.stop_record()
+                        except Exception:
+                            logger.warning("Stop failed after reconnect too")
+
             # Update recording time every second
             if active:
-                recording_time += 0.5
                 # Only update display every second to reduce flicker
-                if int(recording_time) > last_update:
-                    last_update = int(recording_time)
-                    mins = int(recording_time // 60)
-                    secs = int(recording_time % 60)
+                if int(elapsed_seconds) > last_update:
+                    last_update = int(elapsed_seconds)
+                    mins = int(elapsed_seconds // 60)
+                    secs = int(elapsed_seconds % 60)
                     # Use raw stdout with \r for proper overwriting
                     sys.stdout.write(f"\rRecording: {mins:02d}:{secs:02d}")
                     sys.stdout.flush()
@@ -881,14 +977,22 @@ class OBSRecorder:
 
         # Show elapsed time timer
         start_time = time.time()
-        last_update = 0
+        last_update = -1
+        warning_issued = False
+        auto_stop_announced = False
 
         # Print initial timer using raw stdout for proper \r handling
         sys.stdout.write("Recording: 00:00")
         sys.stdout.flush()
 
         while not stop_event.is_set():
-            elapsed = time.time() - start_time
+            elapsed = max(0.0, time.time() - start_time)
+            warning_issued, auto_stop_announced = self._check_recording_duration_limit(
+                elapsed,
+                stop_event,
+                warning_issued,
+                auto_stop_announced,
+            )
             # Update display every second
             if int(elapsed) > last_update:
                 last_update = int(elapsed)

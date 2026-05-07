@@ -19,7 +19,7 @@
 
 ## Unreleased (Current Workspace)
 
-**Focus: OBS Self-Healing + URL Transcription + CLI Polish + Animated Banner**
+**Focus: OBS Self-Healing + URL Transcription + CLI Polish + Animated Banner + Provider Lifecycle**
 
 - **OBS Self-Healing Recording**: Complete overhaul of OBS recording lifecycle
   - Kills stale OBS processes before launching fresh (prevents safe-mode dialog)
@@ -62,6 +62,12 @@
 - Added optional gradient branding for command headers in `full` mode
 - Added UI diagnostics output in `scribe info`
 - Added tests for terminal UI config, shimmer, spinner, branding, banner, and downloader
+- **xAI Model Retirement Mitigation**:
+  - Migrate xAI text defaults off retired Grok 4/4.1 Fast API model IDs before 2026-05-15
+  - Use `grok-4.3` for reasoning-heavy notes and `grok-4.20-non-reasoning` for joke/meme concept generation
+  - Use `grok-imagine-image` for xAI image generation defaults
+  - Capture xAI `cost_in_usd_ticks` when available and fall back to local budget estimates for known defaults
+  - Refresh README/API/performance docs and tests so stale model IDs do not re-enter defaults
 
 ---
 
