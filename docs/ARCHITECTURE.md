@@ -160,23 +160,22 @@ Scribe is a modular transcription and analysis pipeline built on a provider-agno
 - Rate limiting support
 
 **openai_provider.py** - OpenAI integration
-- GPT-5, GPT-4, GPT-Image-1
+- GPT-5.5 (default), GPT-5.4, GPT-5, GPT-Image-1
 - Whisper API
 - Structured output support
 
 **xai_provider.py** - XAI/Grok integration
-- Grok 4.3
-- Grok 4.20 non-reasoning
+- Grok 4.3 (default for joke, meme, notes)
 - Grok Imagine Image
-- Cost optimization
+- Cost optimization (request cost via `cost_in_usd_ticks`)
 
 **anthropic_provider.py** - Anthropic integration
 - Claude 3.5 Sonnet
 - Text-only (no images)
 - JSON repair logic
 
-**gemini_provider.py** - Google Gemini integration
-- Gemini 2.5 Flash/Pro
+**gemini_provider.py** - Google Gemini integration (optional, not in default fallback chain)
+- Gemini 3 Pro / Flash, Imagen 4
 - Imagen 4
 - Aspect ratio handling
 

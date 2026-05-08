@@ -225,8 +225,8 @@ def transcribe_command(
         # Check what features are actually enabled
         has_api_key = bool(config.openai_api_key)
         will_generate_notes = not no_notes and config.enable_notes and has_api_key
-        will_generate_joke = not no_joke and has_api_key
-        will_generate_meme = not no_meme and has_api_key
+        will_generate_joke = not no_joke and config.enable_joke and has_api_key
+        will_generate_meme = not no_meme and config.enable_meme and has_api_key
         include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
 
         # Build feature list for display
@@ -427,7 +427,7 @@ def transcribe_command(
                 logger.error(f"Notes generation failed: {e}")
 
         # Generate joke if enabled
-        if not no_joke and config.openai_api_key:
+        if not no_joke and config.enable_joke and config.openai_api_key:
             unified_progress.update_phase("finishing", 0.6, "Generating joke")
             result = generate_transcript_joke(transcript_path, config.openai_api_key)
             if result:
@@ -437,7 +437,7 @@ def transcribe_command(
                 session.joke_data = {"text": joke_text, "style": comedy_style}
 
         # Generate meme from transcript (enabled by default)
-        if not no_meme and config.openai_api_key:
+        if not no_meme and config.enable_meme and config.openai_api_key:
             from scribe.utils.meme_generator import generate_meeting_meme
 
             def meme_progress(attempt: int, max_attempts: int, score: float | None) -> None:
@@ -728,8 +728,8 @@ def url_command(
         # Check what features are enabled
         has_api_key = bool(config.openai_api_key)
         will_generate_notes = not no_notes and config.enable_notes and has_api_key
-        will_generate_joke = not no_joke and has_api_key
-        will_generate_meme = not no_meme and has_api_key
+        will_generate_joke = not no_joke and config.enable_joke and has_api_key
+        will_generate_meme = not no_meme and config.enable_meme and has_api_key
         include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
 
         outputs = ["transcript"]
@@ -887,14 +887,14 @@ def url_command(
             except Exception as e:
                 logger.error(f"Notes generation failed: {e}")
 
-        if not no_joke and config.openai_api_key:
+        if not no_joke and config.enable_joke and config.openai_api_key:
             unified_progress.update_phase("finishing", 0.6, "Generating joke")
             result_joke = generate_transcript_joke(transcript_path, config.openai_api_key)
             if result_joke:
                 joke_text, comedy_style = result_joke
                 session.joke_data = {"text": joke_text, "style": comedy_style}
 
-        if not no_meme and config.openai_api_key:
+        if not no_meme and config.enable_meme and config.openai_api_key:
             from scribe.utils.meme_generator import generate_meeting_meme
 
             def meme_progress(attempt: int, max_attempts: int, score: float | None) -> None:
@@ -1235,7 +1235,7 @@ def record(
             )
 
             # Generate joke (enabled by default)
-            if not no_joke:
+            if not no_joke and config.enable_joke:
                 if config.openai_api_key:
                     try:
                         # Quiet spinner for joke generation
@@ -1283,7 +1283,7 @@ def record(
                     logger.info("Skipping joke generation - OpenAI API key not configured")
 
             # Generate meme from transcript (enabled by default)
-            if not no_meme:
+            if not no_meme and config.enable_meme:
                 if config.openai_api_key:
                     try:
                         # Quiet spinner for meme generation
@@ -1506,7 +1506,7 @@ def batch_transcribe(
                         logger.error(f"Notes generation failed: {e}")
 
                 # Generate joke
-                if not no_joke and config.openai_api_key:
+                if not no_joke and config.enable_joke and config.openai_api_key:
                     try:
                         joke_result = generate_transcript_joke(
                             transcript_path, config.openai_api_key
@@ -1518,7 +1518,7 @@ def batch_transcribe(
                         logger.error(f"Joke generation failed: {e}")
 
                 # Generate meme
-                if not no_meme and config.openai_api_key:
+                if not no_meme and config.enable_meme and config.openai_api_key:
                     try:
                         from scribe.utils.meme_generator import generate_meeting_meme
 
@@ -3114,6 +3114,24 @@ def clean(
         raise typer.Exit(1)
 
 
+@app.command(name="init")
+def init_command(
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Overwrite existing config without prompting"
+    ),
+) -> None:
+    """
+    Run the first-run setup wizard.
+
+    Writes ~/.scribe/config.toml with your output folder, transcription method,
+    default features (notes/joke/meme), and AI vendor preference. Env vars and
+    CLI flags continue to override these values.
+    """
+    from scribe.cli.init import run_wizard
+
+    run_wizard(console=console, force=force)
+
+
 def main() -> None:
     """Main entry point with smart command detection."""
     import sys
@@ -3139,6 +3157,7 @@ def main() -> None:
             "notes",
             "clean",
             "info",
+            "init",
             "version",
             "doctor",
             "support-bundle",
@@ -3158,6 +3177,17 @@ def main() -> None:
             ):
                 # Insert 'transcribe' command
                 sys.argv.insert(1, "transcribe")
+
+    # First-run setup: prompt to create ~/.scribe/config.toml if missing.
+    # Skipped for init/version/help/banner and when stdin is not a TTY.
+    skip_for = {"init", "version", "--help", "-h", "--version", "--banner", "help"}
+    if len(sys.argv) <= 1 or sys.argv[1] not in skip_for:
+        try:
+            from scribe.cli.init import maybe_prompt_first_run
+
+            maybe_prompt_first_run(console=console)
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Setup skipped.[/dim]")
 
     app()
 

@@ -170,14 +170,14 @@ if vocab:
 
 ### NotesGenerator
 
-GPT-5 meeting notes generation.
+GPT-5.5 meeting notes generation.
 
 ```python
 from scribe.utils.notes_generator import NotesGenerator, NotesConfig
 
 config = NotesConfig(
     api_key="sk-...",
-    model="gpt-5",
+    model="gpt-5.5",
     provider_name="openai"
 )
 
@@ -192,7 +192,7 @@ notes_path = generator.generate_notes(
 **Methods:**
 
 `generate_notes(transcript_path, output_path=None) -> Path`
-- Analyzes transcript with GPT-5
+- Analyzes transcript with GPT-5.5 (or `grok-4.3` when `provider_name="xai"`)
 - Generates structured notes
 - Returns path to Markdown file
 
@@ -228,7 +228,7 @@ Meme generation with QA loop.
 from scribe.utils.meme_generator import generate_meeting_meme, MemeConfig
 
 config = MemeConfig(
-    model="gpt-5",
+    model="gpt-5.5",
     image_model="gpt-image-1",
     size="1024x1024",
     quality="hd",
@@ -295,7 +295,7 @@ from scribe.providers.base import ProviderConfig
 config = ProviderConfig(
     provider_name="openai",
     api_key="sk-...",
-    model="gpt-5"
+    model="gpt-5.5"
 )
 
 provider = OpenAIProvider(config)

@@ -281,6 +281,12 @@ class UnifiedProgress:
         phase_range = end_pct - start_pct
         overall_progress = start_pct + (progress_in_phase * phase_range)
 
+        # Cap mid-flight progress so 100% only appears when complete() is called.
+        # Without this the time-based extrapolator inside the short "finishing"
+        # phase rounds 99.98% to "100%" while DOCX/cleanup is still running.
+        if overall_progress > 99.0:
+            overall_progress = 99.0
+
         # Build description with step if provided
         if step_description:
             description = step_description
@@ -289,7 +295,7 @@ class UnifiedProgress:
             descriptions = {
                 "preparing": "Preparing audio",
                 "transcribing": "Transcribing",
-                "finishing": "Finishing",
+                "finishing": "Finalizing",
             }
             description = descriptions.get(phase, "Processing")
 

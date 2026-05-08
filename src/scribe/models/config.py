@@ -6,12 +6,31 @@ environment variable loading, and self-healing for common configuration issues.
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from scribe.exceptions import ValidationError
+
+
+class _ScribeUserConfigSource(PydanticBaseSettingsSource):
+    """Pydantic-settings source that reads ~/.scribe/config.toml."""
+
+    def __init__(self, settings_cls: type[BaseSettings]) -> None:
+        super().__init__(settings_cls)
+        from scribe.config_file import flatten_for_settings, load_config_file
+
+        self._data: dict[str, Any] = flatten_for_settings(load_config_file())
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        if field_name in self._data:
+            return self._data[field_name], field_name, False
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return dict(self._data)
 
 TranscriptionMethod = Literal["auto", "local", "openai"]
 ModelSize = Literal[
@@ -49,11 +68,13 @@ def _find_env_file() -> str | None:
     if home_env.exists():
         return str(home_env)
 
-    # Try package directory (where scribe is installed)
-    package_dir = Path(__file__).parent.parent.parent
-    package_env = package_dir / ".env"
-    if package_env.exists():
-        return str(package_env)
+    # Try package directory and one level up (project root in editable installs).
+    # __file__ = src/scribe/models/config.py → walk up looking for .env.
+    here = Path(__file__).resolve()
+    for parent in (here.parent.parent.parent, here.parent.parent.parent.parent):
+        candidate = parent / ".env"
+        if candidate.exists():
+            return str(candidate)
 
     # Return None to use default behavior (environment variables only)
     return None
@@ -198,7 +219,15 @@ class ScribeConfig(BaseSettings):
         default=True, description="Enable automatic meeting notes generation"
     )
 
-    notes_model: str = Field(default="gpt-5", description="GPT model to use for notes generation")
+    enable_joke: bool = Field(
+        default=True, description="Enable automatic joke generation"
+    )
+
+    enable_meme: bool = Field(
+        default=True, description="Enable automatic meme generation"
+    )
+
+    notes_model: str = Field(default="gpt-5.5", description="GPT model to use for notes generation")
 
     # URL download settings
     download_timeout: int = Field(
@@ -375,6 +404,30 @@ class ScribeConfig(BaseSettings):
         if method == "local":
             # GPU validation will be done at runtime
             pass
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """
+        Inject ~/.scribe/config.toml between dotenv and file_secret sources.
+
+        Precedence (highest to lowest): init kwargs > env vars > .env file >
+        ~/.scribe/config.toml > built-in defaults. Lets the wizard persist
+        preferences while keeping env vars and CLI flags as overrides.
+        """
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            _ScribeUserConfigSource(settings_cls),
+            file_secret_settings,
+        )
 
     def get_session_log_path(self, session_name: str) -> Path:
         """

@@ -151,15 +151,15 @@ def _get_default_model(provider_name: str, feature: str) -> str:
 
     defaults: dict[str, dict[str, str | None]] = {
         "openai": {
-            "joke": "gpt-5.2",
-            "meme": "gpt-5.2",
+            "joke": "gpt-5.5",
+            "meme": "gpt-5.5",
             "meme_image": "gpt-image-1",
-            "notes": "gpt-5.2",
+            "notes": "gpt-5.5",
             "transcribe": "whisper-1",
         },
         "xai": {
-            "joke": "grok-4.20-non-reasoning",
-            "meme": "grok-4.20-non-reasoning",
+            "joke": "grok-4.3",
+            "meme": "grok-4.3",
             "meme_image": "grok-imagine-image",  # Note: XAI image gen can add watermarks, consider using OpenAI for images
             "notes": "grok-4.3",
             "transcribe": None,  # XAI doesn't support transcription yet

@@ -116,7 +116,7 @@ COMEDY_STYLES: dict[str, str] = {
 # -----------------------------------------------------------------------------
 @dataclass
 class HumorConfig:
-    model: str = "gpt-5.2"  # Default model for joke generation
+    model: str = "gpt-5.5"  # Default model for joke generation
     spice_level: int = 5  # Humor intensity 0-10 (0=off, 5=default, 10=spicy)
     min_words: int = 10
     max_words: int = 18
@@ -610,7 +610,7 @@ def generate_transcript_joke(
 
             # Don't pass OpenAI-specific models to the provider factory
             # Let factory choose default if model is empty or OpenAI-specific
-            openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o", ""]
+            openai_models = ["gpt-5", "gpt-5.2", "gpt-5.4", "gpt-5.5", "gpt-4", "gpt-4o", ""]
             provider = get_provider(
                 feature="joke",
                 api_key=None,  # Let factory get the right key for the provider

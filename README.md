@@ -19,6 +19,9 @@ pip install -e .
 cp .env.example .env
 # Add OPENAI_API_KEY only for API transcription, notes, jokes, or memes
 
+# First run prompts a wizard that writes ~/.scribe/config.toml.
+# Run anytime with: scribe init  (env vars and CLI flags still override)
+
 # Verify local GPU detection
 scribe info
 
@@ -38,6 +41,14 @@ scribe doctor                         # System diagnostics
 - **OBS Recording Reliability**: Fixed "OBS not ready" error (code 207) when OBS is starting up - now properly retries connection
 - **Windows Input Fix**: Fixed stop commands (stop, q, quit) not working during recording on Windows
 - **Better Error Handling**: Improved client cleanup and retry logic for OBS WebSocket connections
+
+## Unreleased — Setup Wizard, Model Bumps
+
+- **First-run config wizard** (`scribe init`) writes `~/.scribe/config.toml` with output folder, transcription method, default features (notes/joke/meme), and AI vendor preference. Auto-prompts on first run; env vars and CLI flags continue to override.
+- **OpenAI default → GPT-5.5** (was GPT-5.2). The April 2026 release supersedes 5.4 and 5.2.
+- **xAI default → Grok 4.3 across the board** (notes, joke, meme). Drops `grok-4.20-non-reasoning` ahead of its 2026-05-15 retirement.
+- **Progress bar fix**: caps mid-flight progress at 99% so the bar no longer rounds 99.98% to "100%" while finalization is still running.
+- **`.env` discovery**: walks up to project root in editable installs (was stuck at `src/`). Wizard sees existing API keys when invoked from outside the project directory.
 
 See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
 
@@ -135,12 +146,16 @@ Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md
 
 ### Utilities
 ```bash
+# First-run setup wizard (auto-prompts on first run; rerun anytime)
+scribe init
+scribe init --force                # Overwrite existing ~/.scribe/config.toml
+
 # System diagnostics
 scribe doctor
 
 # Provider health check
 scribe health
-scribe health --provider gemini
+scribe health --provider xai
 
 # System info
 scribe info
@@ -222,7 +237,7 @@ pip install -e .
 
 **Optional: Additional AI Providers**
 ```bash
-# XAI/Grok (current Grok 4.20/4.3 defaults for jokes/notes/memes)
+# XAI/Grok (Grok 4.3 default for jokes/notes/memes)
 pip install openai
 
 # Anthropic Claude
@@ -233,6 +248,22 @@ pip install google-genai Pillow
 ```
 
 ### Configuration
+
+Scribe reads from three layers, highest precedence first:
+
+1. **CLI flags** (`--no-joke`, `--method local`, etc.) — per-run override
+2. **Env vars / `.env` file** (`SCRIBE_*`, `OPENAI_API_KEY`, etc.) — per-machine secrets and overrides
+3. **`~/.scribe/config.toml`** — written by the first-run wizard (`scribe init`)
+
+**First-run wizard:**
+
+```bash
+scribe init   # auto-prompts on first run; rerun anytime
+```
+
+The wizard asks for output folder, transcription method (auto/local/openai), which features to enable by default (notes/joke/meme), and your AI vendor preference. It also detects conflicting `SCRIBE_ENABLE_*` lines in your `.env` and offers to comment them out so the wizard's choices actually take effect.
+
+**`.env` setup:**
 
 ```bash
 cp .env.example .env
@@ -335,7 +366,7 @@ See [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) for tech
 
 ### Meeting Notes
 
-GPT-5.2 analyzes transcripts and generates structured notes:
+GPT-5.5 analyzes transcripts and generates structured notes:
 - **Current State:** What's happening now
 - **Drivers:** What's pushing things forward
 - **Blockers:** What's in the way
@@ -345,7 +376,7 @@ GPT-5.2 analyzes transcripts and generates structured notes:
 ### Humor Pipeline
 
 **Jokes:**
-- GPT-5.2 analyzes tone, rhythm, and intent
+- GPT-5.5 analyzes tone, rhythm, and intent
 - Selects from 10 comedy archetypes
 - Generates context-aware observations
 - Optional bake-off mode (all providers compete)
@@ -362,10 +393,10 @@ GPT-5.2 analyzes transcripts and generates structured notes:
 Mix and match AI providers based on cost, performance, and features.
 
 **Supported Providers:**
-- **OpenAI:** GPT-5.2, GPT-5, GPT-5 mini, GPT-Image-1, DALL-E, Whisper
-- **XAI/Grok:** Grok 4.3, Grok 4.20 non-reasoning, Grok Imagine Image
+- **OpenAI:** GPT-5.5 (default), GPT-5.4, GPT-5, GPT-Image-1, Whisper
+- **XAI/Grok:** Grok 4.3 (default for joke/meme/notes), Grok Imagine Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
-- **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 (images)
+- **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 — optional, not part of fallback chain by default
 
 **Configuration:**
 ```bash
@@ -379,18 +410,21 @@ export SCRIBE_ENABLE_JOKE_BAKEOFF=true
 export SCRIBE_ENABLE_MEME_BAKEOFF=true
 ```
 
-**Cost Comparison (per 1M tokens):**
+**Cost Comparison (per 1M tokens, May 2026):**
 - Grok 4.3: $1.25 input / $2.50 output
-- GPT-5.2: $1.75 input / $14.00 output
-- GPT-5: $1.25 input
+- GPT-5.5: see [OpenAI pricing](https://openai.com/api/pricing) (varies by tier)
+- GPT-5.4: $1.25 input
 - Claude 3.5 Sonnet: $3.00 input / $15.00 output
 
 **Images:**
-- Grok Imagine Image: priced per image by xAI
-- GPT-Image-1: $0.40 per image
+- Grok Imagine Image: priced per image by xAI; cost returned via `cost_in_usd_ticks`
+- GPT-Image-1: ~$0.04–$0.07 medium quality, ~$0.17–$0.25 high quality
 
-**xAI lifecycle note:** Scribe defaults avoid the Grok 4/4.1 Fast model IDs retired by xAI on 2026-05-15.
-When xAI returns exact `cost_in_usd_ticks`, Scribe records the converted request cost in AI metrics; otherwise it falls back to local estimates for known xAI defaults.
+**Per-meme cost (default config, up to 3 QA attempts):**
+- gpt-image-1 medium: typically $0.05–$0.20
+- grok-imagine-image: typically $0.05–$0.15 (note: watermarked)
+
+**xAI lifecycle note:** Scribe defaults to `grok-4.3` for joke/meme/notes. Older IDs retired by xAI on 2026-05-15 (`grok-4-fast`, `grok-4-1-fast`, `grok-4`, `grok-4.20-non-reasoning`, `grok-imagine-image-pro`) are no longer used. When xAI returns exact `cost_in_usd_ticks`, Scribe records the converted request cost in AI metrics.
 
 ### Custom Vocabulary
 
@@ -510,7 +544,7 @@ scribe batch *.mp4 --vocabulary company-names.json
      ▼              ▼
 ┌──────────┐   ┌──────────┐
 │  Notes   │   │  Humor   │
-│(GPT-5.2) │   │ (Jokes/  │
+│(GPT-5.5) │   │ (Jokes/  │
 │          │   │  Memes)  │
 └──────────┘   └──────────┘
 ```
@@ -545,7 +579,7 @@ scribe/
 - `recorder.py` - OBS Studio integration
 
 **Intelligence:**
-- `notes_generator.py` - GPT-5.2 meeting analysis
+- `notes_generator.py` - GPT-5.5 meeting analysis
 - `joke_generator.py` - Context-aware humor
 - `meme_generator.py` - Meme creation with QA loop
 - `meme_compositor.py` - Text overlay rendering
@@ -791,9 +825,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.3
+**Current Version:** 2.4.3 (workspace ahead of release: setup wizard, gpt-5.5 / grok-4.3 defaults, progress-bar fix)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-05-08
 
 

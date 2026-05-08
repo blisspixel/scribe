@@ -447,7 +447,7 @@ scribe meme transcript.md --show-reasoning
 ```bash
 # Try different provider
 scribe meme transcript.docx --provider openai
-scribe meme transcript.md --provider gemini
+scribe meme transcript.md --provider xai
 ```
 
 4. **Image generation errors:**

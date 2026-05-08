@@ -62,12 +62,24 @@
 - Added optional gradient branding for command headers in `full` mode
 - Added UI diagnostics output in `scribe info`
 - Added tests for terminal UI config, shimmer, spinner, branding, banner, and downloader
-- **xAI Model Retirement Mitigation**:
-  - Migrate xAI text defaults off retired Grok 4/4.1 Fast API model IDs before 2026-05-15
-  - Use `grok-4.3` for reasoning-heavy notes and `grok-4.20-non-reasoning` for joke/meme concept generation
+- **xAI Model Retirement Mitigation** (completed before 2026-05-15):
+  - Migrated all xAI text defaults to `grok-4.3` for joke, meme, and notes
+  - Dropped `grok-4.20-non-reasoning`, `grok-4-fast`, `grok-4-1-fast`, `grok-4`, `grok-imagine-image-pro` from defaults
   - Use `grok-imagine-image` for xAI image generation defaults
   - Capture xAI `cost_in_usd_ticks` when available and fall back to local budget estimates for known defaults
-  - Refresh README/API/performance docs and tests so stale model IDs do not re-enter defaults
+  - Refreshed README/Architecture/CLI module headers so stale model IDs do not re-enter defaults
+- **OpenAI Model Bump** (2026-05):
+  - Defaulted `joke`, `meme`, `notes` to `gpt-5.5` (April 2026 release)
+  - Updated `openai_models` filter lists in `joke_generator.py` and `meme_generator.py` so `gpt-5.4` and `gpt-5.5` are recognized as OpenAI-specific
+- **First-Run Config Wizard** (2026-05):
+  - Added `scribe init` and auto-prompt on first run
+  - Writes `~/.scribe/config.toml` (output folder, transcription method, default features, AI vendor)
+  - Inserted as a Pydantic settings source between dotenv and built-in defaults
+  - Wizard detects conflicting `SCRIBE_ENABLE_*` lines in `.env` and offers to comment them out
+  - Fixed `_find_env_file()` to walk up to project root in editable installs
+- **Progress Bar Honesty** (2026-05):
+  - Capped mid-flight progress at 99% so 100% only appears on actual completion
+  - Renamed default post-transcription label from "Finishing" to "Finalizing" for clearer phase transitions
 
 ---
 
