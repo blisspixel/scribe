@@ -15,12 +15,16 @@ cd scribe
 pip install -r requirements.txt
 pip install -e .
 
-# Configure
+# Configure (optional for transcript-only local GPU)
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+# Add OPENAI_API_KEY only for API transcription, notes, jokes, or memes
+
+# Verify local GPU detection
+scribe info
 
 # Use
 scribe meeting.mp4                    # Transcribe single file
+scribe transcribe meeting.mp4 --method local
 scribe batch *.mp4                    # Process multiple files
 scribe music song.mp3                 # Extract lyrics
 scribe rec "Team Meeting"             # Record and transcribe
@@ -64,6 +68,7 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 
 **Key Features:**
 - GPU-accelerated local processing (11x real-time on RTX 4090)
+- Quality-first auto model selection based on detected VRAM
 - Automatic fallback to OpenAI API when GPU unavailable
 - Music transcription with vocal separation
 - Batch processing for multiple files
@@ -149,7 +154,7 @@ scribe --banner
 
 ### Common Options
 - `--method auto|local|openai` - Transcription method
-- `--model large-v3|large-v2|medium` - Whisper model
+- `--model large-v3|large-v2|medium|small|base|turbo` - Whisper model
 - `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
 - `--vocabulary FILE` - Custom vocabulary
 - `--provider openai|xai|anthropic|gemini` - AI provider
@@ -170,7 +175,8 @@ scribe --banner
 **For GPU Transcription (Optional):**
 - NVIDIA GPU with CUDA support (RTX 4090 optimized)
 - 8GB VRAM minimum, 24GB recommended
-- CUDA 12.4 or newer
+- NVIDIA driver with CUDA support for your card
+- `faster-whisper` / CTranslate2 must be able to see the GPU
 
 **For API Transcription (Automatic Fallback):**
 - OpenAI API key
@@ -191,11 +197,25 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-**Option B: Full GPU Acceleration**
+**Option B: Local GPU Transcription**
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install -r requirements.txt
+pip install -e .
+scribe info
+```
+
+If `scribe info` does not show your GPU, verify that CTranslate2 can see CUDA:
+```bash
+python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
+```
+
+**Option C: PyTorch-backed GPU Features (music/source separation, extra tooling)**
+```bash
+git clone https://github.com/blisspixel/scribe.git
+cd scribe
+pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -220,7 +240,7 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-# Required for API transcription
+# Optional unless you want API transcription or AI-generated extras
 OPENAI_API_KEY=sk-proj-...
 
 # Optional: XAI/Grok
@@ -565,6 +585,8 @@ pytest tests/unit/
 
 # With coverage
 pytest --cov=scribe --cov-report=term-missing
+# Coverage must stay at or above 80%
+pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
 
 # Quick check
 pytest tests/unit/ --tb=no -q
@@ -609,11 +631,22 @@ See [Development Guide](docs/DEVELOPMENT.md) for detailed guidelines.
 
 ### GPU Not Detected
 ```bash
-python -c "import torch; print(torch.cuda.is_available())"
+scribe info
+python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
 ```
-If False, install CUDA-capable PyTorch:
+
+If `ctranslate2.get_cuda_device_count()` returns `0`, Scribe will not use local faster-whisper. Check your NVIDIA driver and CUDA runtime first.
+
+When local transcription runs for the first time, faster-whisper automatically downloads the selected model and caches it for later runs.
+
+If you also want PyTorch-backed GPU features, verify PyTorch separately:
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -c "import torch; print(torch.cuda.is_available(), torch.__version__, torch.version.cuda)"
+```
+
+If PyTorch reports `False`, install CUDA-capable PyTorch:
+```bash
+pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ### FFmpeg Not Found

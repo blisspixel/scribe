@@ -9,7 +9,8 @@ Tests the meeting notes generation functionality including:
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -153,13 +154,19 @@ class TestValidateOutput:
         generator = NotesGenerator(api_key="sk-test123")
 
         breakdown = {
-            "current_state_business": ["Business context with specific details about Q4 revenue of $5M"],
+            "current_state_business": [
+                "Business context with specific details about Q4 revenue of $5M"
+            ],
             "current_state_technical": ["Technical architecture using AWS Lambda and DynamoDB"],
             "drivers": ["Customer feedback requesting faster API response times under 100ms"],
             "blockers": ["Database performance bottleneck at 1000 queries per second"],
-            "future_state_business": ["Target revenue of $10M by Q2 2026 with new enterprise clients"],
-            "future_state_technical": ["Migrate to Kubernetes for better scalability and auto-scaling"],
-            "next_steps": ["John to implement caching layer by November 20, 2025"]
+            "future_state_business": [
+                "Target revenue of $10M by Q2 2026 with new enterprise clients"
+            ],
+            "future_state_technical": [
+                "Migrate to Kubernetes for better scalability and auto-scaling"
+            ],
+            "next_steps": ["John to implement caching layer by November 20, 2025"],
         }
 
         confidence = generator._validate_output(breakdown)
@@ -171,10 +178,7 @@ class TestValidateOutput:
         """Test validation with missing sections."""
         generator = NotesGenerator(api_key="sk-test123")
 
-        breakdown = {
-            "current_state_business": ["Some content"],
-            "drivers": ["Some drivers"]
-        }
+        breakdown = {"current_state_business": ["Some content"], "drivers": ["Some drivers"]}
 
         confidence = generator._validate_output(breakdown)
 
@@ -192,7 +196,7 @@ class TestValidateOutput:
             "blockers": ["Technical challenges"],
             "future_state_business": ["Better outcomes"],
             "future_state_technical": ["Enhanced system"],
-            "next_steps": ["Follow up"]
+            "next_steps": ["Follow up"],
         }
 
         confidence = generator._validate_output(breakdown)
@@ -216,12 +220,12 @@ class TestMarkdownFormatting:
             "blockers": ["Blocker 1"],
             "future_state_business": ["Future business 1"],
             "future_state_technical": ["Future technical 1"],
-            "next_steps": ["Next step 1"]
+            "next_steps": ["Next step 1"],
         }
         metadata = {
             "meeting_name": "Test Meeting",
             "date": "November 11, 2025",
-            "duration": "30 minutes"
+            "duration": "30 minutes",
         }
 
         markdown = generator._format_markdown(summary, breakdown, metadata)
@@ -260,6 +264,154 @@ class TestFileWriting:
         assert output_path.exists()
         assert output_path.read_text(encoding="utf-8") == content
 
+
+class TestNotesGeneratorPipeline:
+    """Test the higher-level orchestration paths."""
+
+    def _make_generator(self) -> NotesGenerator:
+        with patch(
+            "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
+        ):
+            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+                return NotesGenerator(api_key="sk-test123")
+
+    def test_generate_notes_single_pass(self, tmp_path):
+        generator = self._make_generator()
+        transcript_path = tmp_path / "meeting.txt"
+        transcript_path.write_text("content")
+        output_path = tmp_path / "meeting_notes.md"
+
+        with (
+            patch.object(
+                generator,
+                "_read_transcript",
+                return_value={
+                    "content": "word " * 150,
+                    "meeting_name": "Meeting",
+                    "date": "Today",
+                    "duration": "30 minutes",
+                },
+            ),
+            patch.object(generator, "_validate_transcript"),
+            patch.object(generator, "_segment_for_full_coverage", return_value=None),
+            patch.object(generator, "_generate_detailed_summary", return_value="summary"),
+            patch.object(
+                generator,
+                "_generate_analytical_breakdown",
+                return_value={"current_state_business": ["A"]},
+            ),
+            patch.object(
+                generator,
+                "_refine_and_polish",
+                return_value={"current_state_business": ["A"], "next_steps": ["Do thing"]},
+            ),
+            patch.object(generator, "_validate_output", return_value=0.91),
+            patch.object(generator, "_format_markdown", return_value="# Notes"),
+            patch.object(generator, "_write_notes", return_value=output_path) as mock_write,
+        ):
+            result = generator.generate_notes(transcript_path, output_path)
+
+        assert result == output_path
+        mock_write.assert_called_once_with("# Notes", output_path)
+
+    def test_generate_notes_segmented_path(self, tmp_path):
+        generator = self._make_generator()
+        transcript_path = tmp_path / "meeting.txt"
+        transcript_path.write_text("content")
+        output_path = tmp_path / "meeting_notes.md"
+
+        with (
+            patch.object(
+                generator,
+                "_read_transcript",
+                return_value={
+                    "content": "word " * 500,
+                    "meeting_name": "Meeting",
+                    "date": "Today",
+                    "duration": "30 minutes",
+                },
+            ),
+            patch.object(generator, "_validate_transcript"),
+            patch.object(generator, "_segment_for_full_coverage", return_value=["seg1", "seg2"]),
+            patch.object(
+                generator, "_generate_detailed_summary", side_effect=["summary1", "summary2"]
+            ),
+            patch.object(
+                generator,
+                "_generate_analytical_breakdown",
+                side_effect=[
+                    {"current_state_business": ["A"]},
+                    {"current_state_business": ["B"]},
+                ],
+            ),
+            patch.object(
+                generator,
+                "_merge_breakdowns",
+                return_value={"current_state_business": ["A", "B"]},
+            ) as mock_merge,
+            patch.object(
+                generator,
+                "_refine_and_polish",
+                return_value={"current_state_business": ["A", "B"], "next_steps": ["Ship it"]},
+            ),
+            patch.object(generator, "_validate_output", return_value=0.87),
+            patch.object(generator, "_format_markdown", return_value="# Notes"),
+            patch.object(generator, "_write_notes", return_value=output_path),
+        ):
+            result = generator.generate_notes(transcript_path, output_path)
+
+        assert result == output_path
+        mock_merge.assert_called_once()
+
+    def test_call_gpt5_api_provider_mode(self):
+        provider = Mock()
+        provider.config = SimpleNamespace(
+            provider_name="xai", model="grok-4.3", api_key="xai-test-key"
+        )
+        provider.chat_completion_with_json.return_value = {
+            "content": '{"ok": true}',
+            "usage": {"total_tokens": 321, "cost_usd": 0.12, "cost_source": "estimated"},
+        }
+
+        with patch("scribe.providers.get_provider", return_value=provider):
+            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+                generator = NotesGenerator(api_key="sk-test123", provider_name="xai")
+
+        content, metrics = generator._call_gpt5_api(
+            "hello", phase="summary", json_schema={"type": "object"}
+        )
+
+        assert content == '{"ok": true}'
+        assert metrics["provider"] == "xai"
+        assert metrics["tokens"] == 321
+
+    def test_call_gpt5_api_openai_retry_on_incomplete(self):
+        with patch(
+            "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
+        ):
+            with patch("src.scribe.utils.notes_generator.OpenAI") as mock_openai:
+                first_response = SimpleNamespace(
+                    status="incomplete",
+                    incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+                    output_text="",
+                    usage=None,
+                )
+                second_response = SimpleNamespace(
+                    status="completed",
+                    incomplete_details=None,
+                    output_text="Final answer",
+                    usage=SimpleNamespace(total_tokens=42),
+                )
+                client = Mock()
+                client.responses.create.side_effect = [first_response, second_response]
+                mock_openai.return_value = client
+                generator = NotesGenerator(api_key="sk-test123")
+
+        content, metrics = generator._call_gpt5_api("hello", phase="summary")
+
+        assert content == "Final answer"
+        assert metrics["tokens"] == 42
+
     def test_write_notes_creates_parent_dirs(self, tmp_path):
         """Test that parent directories are created."""
         generator = NotesGenerator(api_key="sk-test123")
@@ -273,10 +425,160 @@ class TestFileWriting:
         assert result_path.read_text(encoding="utf-8") == content
 
 
+class TestNotesGeneratorHelpers:
+    def _make_generator(self) -> NotesGenerator:
+        with patch(
+            "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
+        ):
+            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+                return NotesGenerator(api_key="sk-test123")
+
+    def test_extract_output_text_and_repair_json_helpers(self):
+        generator = self._make_generator()
+        response = SimpleNamespace(
+            output=[
+                {"type": "message", "content": [{"type": "output_text", "text": "First"}]},
+                SimpleNamespace(type="output_text", content="Second"),
+            ]
+        )
+
+        assert generator._extract_output_text(response) == "First\nSecond"
+
+        repaired = generator._repair_json_lenient(
+            '```json\n{"items": ["alpha" "beta"], "count": 2,}\n``` trailing text'
+        )
+        assert '"alpha", "beta"' in repaired
+        assert repaired.endswith("}")
+
+    def test_read_transcript_and_summary_errors_are_wrapped(self, tmp_path):
+        generator = self._make_generator()
+        directory = tmp_path / "folder"
+        directory.mkdir()
+
+        with pytest.raises(NotesGenerationError, match="Path is not a file"):
+            generator._read_transcript(directory)
+
+        transcript_path = tmp_path / "meeting.txt"
+        transcript_path.write_text("content", encoding="utf-8")
+        with patch(
+            "src.scribe.utils.notes_generator.load_transcript_text",
+            side_effect=OSError("decode failed"),
+        ):
+            with pytest.raises(NotesGenerationError, match="Failed to read transcript"):
+                generator._read_transcript(transcript_path)
+
+        with patch.object(generator, "_call_gpt5_api", side_effect=RuntimeError("api down")):
+            with pytest.raises(NotesGenerationError, match="Failed to generate summary"):
+                generator._generate_detailed_summary("word " * 200)
+
+    def test_breakdown_generation_and_refinement_cover_repair_paths(self, tmp_path):
+        generator = self._make_generator()
+        repaired_breakdown = {
+            "current_state_business": ["Alpha", "Beta"],
+            "current_state_technical": [],
+            "drivers": [],
+            "blockers": [],
+            "future_state_business": [],
+            "future_state_technical": [],
+            "next_steps": [],
+        }
+
+        response_text = (
+            '{"current_state_business": ["Alpha" "Beta"], '
+            '"current_state_technical": [], "drivers": [], "blockers": [], '
+            '"future_state_business": [], "future_state_technical": [], "next_steps": []}'
+        )
+        with patch.object(generator, "_call_gpt5_api", return_value=(response_text, {})):
+            breakdown = generator._generate_analytical_breakdown("transcript", "summary")
+
+        assert breakdown == repaired_breakdown
+
+        monkeypatch_dir = tmp_path / "debug"
+        monkeypatch_dir.mkdir()
+        current_dir = os.getcwd()
+        os.chdir(monkeypatch_dir)
+        try:
+            with patch.object(generator, "_call_gpt5_api", return_value=("{bad json", {})):
+                with pytest.raises(
+                    NotesGenerationError, match="Failed to generate analytical breakdown"
+                ):
+                    generator._generate_analytical_breakdown("transcript", "summary")
+            assert (monkeypatch_dir / "debug_json_response.txt").exists()
+        finally:
+            os.chdir(current_dir)
+
+        original_breakdown = {
+            "current_state_business": ["Business"],
+            "current_state_technical": ["Technical"],
+            "drivers": ["Driver"],
+            "blockers": ["Blocker"],
+            "future_state_business": ["Future business"],
+            "future_state_technical": ["Future technical"],
+            "next_steps": ["Next step"],
+        }
+        refined_json = '{"current_state_business": ["Refined business"]}'
+        with patch.object(generator, "_call_gpt5_api", return_value=(refined_json, {})):
+            refined = generator._refine_and_polish("transcript", original_breakdown)
+
+        assert refined["current_state_business"] == ["Refined business"]
+        assert refined["blockers"] == ["Blocker"]
+
+        with patch.object(generator, "_call_gpt5_api", return_value=("{bad json", {})):
+            assert (
+                generator._refine_and_polish("transcript", original_breakdown) == original_breakdown
+            )
+
+    def test_segmentation_merge_and_breakdown_validation(self):
+        generator = self._make_generator()
+        short_text = "word " * 100
+        long_text = "A" * (220_000 * 4 + 100)
+
+        assert generator._segment_for_full_coverage(short_text) is None
+        chunks = generator._segment_for_full_coverage(long_text)
+        assert chunks is not None
+        assert len(chunks) >= 2
+
+        merged = generator._merge_breakdowns(
+            [
+                {"drivers": ["Alpha"], "next_steps": ["Ship"], "blockers": ["Risk"]},
+                {"drivers": ["Alpha", "Beta"], "next_steps": ["Ship"], "blockers": ["Risk 2"]},
+            ]
+        )
+        assert merged["drivers"] == ["Alpha", "Beta"]
+        assert merged["blockers"] == ["Risk", "Risk 2"]
+
+        generator._validate_breakdown_keys(
+            {
+                "current_state_business": [],
+                "current_state_technical": [],
+                "drivers": [],
+                "blockers": [],
+                "future_state_business": [],
+                "future_state_technical": [],
+                "next_steps": [],
+            }
+        )
+
+        with pytest.raises(Exception, match="Missing required section"):
+            generator._validate_breakdown_keys({"drivers": []})
+
+        with pytest.raises(Exception, match="must be a list of strings"):
+            generator._validate_breakdown_keys(
+                {
+                    "current_state_business": "bad",
+                    "current_state_technical": [],
+                    "drivers": [],
+                    "blockers": [],
+                    "future_state_business": [],
+                    "future_state_technical": [],
+                    "next_steps": [],
+                }
+            )
+
+
 # Integration test (requires API key)
 @pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="Requires OPENAI_API_KEY environment variable"
+    not os.getenv("OPENAI_API_KEY"), reason="Requires OPENAI_API_KEY environment variable"
 )
 class TestNotesGeneratorIntegration:
     """Integration tests with real API calls."""
@@ -286,7 +588,9 @@ class TestNotesGeneratorIntegration:
     def test_generate_notes_from_real_transcript(self, tmp_path):
         """Test generating notes from a real transcript file (slow, makes real API call)."""
         # Find a real transcript
-        transcript_path = Path("output/Rawlings_Internal_11-11_2025-11-11_07-33-07_transcription.txt")
+        transcript_path = Path(
+            "output/Rawlings_Internal_11-11_2025-11-11_07-33-07_transcription.txt"
+        )
 
         if not transcript_path.exists():
             pytest.skip("Test transcript not found")
@@ -297,10 +601,7 @@ class TestNotesGeneratorIntegration:
             pytest.skip("No valid API key available for integration test")
 
         # Initialize generator
-        generator = NotesGenerator(
-            api_key=api_key,
-            model="gpt-5"
-        )
+        generator = NotesGenerator(api_key=api_key, model="gpt-5")
 
         # Generate notes
         output_path = tmp_path / "test_notes.md"

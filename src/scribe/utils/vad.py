@@ -147,6 +147,7 @@ providing precise vocal timestamps that enable complete, accurate lyric extracti
 """
 
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 
@@ -163,11 +164,8 @@ class VocalActivityDetector:
     """
 
     def __init__(
-        self,
-        threshold: float = 0.35,
-        min_speech_duration_ms: int = 250,
-        speech_pad_ms: int = 200
-    ):
+        self, threshold: float = 0.35, min_speech_duration_ms: int = 250, speech_pad_ms: int = 200
+    ) -> None:
         """
         Initialize VAD.
 
@@ -179,10 +177,10 @@ class VocalActivityDetector:
         self.threshold = threshold
         self.min_speech_duration_ms = min_speech_duration_ms
         self.speech_pad_ms = speech_pad_ms
-        self.model = None
-        self.utils = None
+        self.model: Any | None = None
+        self.utils: Any | None = None
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Load Silero VAD model from torch hub."""
         if self.model is not None:
             return
@@ -200,21 +198,22 @@ class VocalActivityDetector:
 
             try:
                 # Redirect stdout/stderr to suppress cache messages
-                sys.stdout = open(os.devnull, 'w')
-                sys.stderr = open(os.devnull, 'w')
+                sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
 
                 # Suppress warnings
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=UserWarning)
 
                     # Load from torch hub
-                    self.model, self.utils = torch.hub.load(
-                        repo_or_dir='snakers4/silero-vad',
-                        model='silero_vad',
+                    hub_load = cast(Any, torch.hub.load)
+                    self.model, self.utils = hub_load(
+                        repo_or_dir="snakers4/silero-vad",
+                        model="silero_vad",
                         force_reload=False,
                         onnx=False,
                         trust_repo=True,  # Silero VAD is trusted
-                        verbose=False
+                        verbose=False,
                     )
             finally:
                 # Restore stdout/stderr
@@ -230,9 +229,7 @@ class VocalActivityDetector:
             raise
 
     def detect_vocal_segments(
-        self,
-        audio_path: Path,
-        sample_rate: int = 16000
+        self, audio_path: Path, sample_rate: int = 16000
     ) -> list[dict[str, float]]:
         """
         Detect vocal segments in audio.
@@ -245,6 +242,10 @@ class VocalActivityDetector:
             List of segments: [{"start": 10.5, "end": 14.2}, ...]
         """
         self._load_model()
+        model = self.model
+        utils = self.utils
+        if model is None or utils is None:
+            raise RuntimeError("Silero VAD model failed to load")
 
         try:
             import torchaudio
@@ -267,26 +268,20 @@ class VocalActivityDetector:
             wav = wav.squeeze()
 
             # Get timestamps using Silero VAD
-            (get_speech_timestamps, _, read_audio, _, _) = self.utils
+            get_speech_timestamps, _, _, _, _ = utils
 
             speech_timestamps = get_speech_timestamps(
                 wav,
-                self.model,
+                model,
                 threshold=self.threshold,
                 sampling_rate=sample_rate,
                 min_speech_duration_ms=self.min_speech_duration_ms,
                 speech_pad_ms=self.speech_pad_ms,
-                return_seconds=True
+                return_seconds=True,
             )
 
             # Convert to our format
-            segments = [
-                {
-                    "start": ts["start"],
-                    "end": ts["end"]
-                }
-                for ts in speech_timestamps
-            ]
+            segments = [{"start": ts["start"], "end": ts["end"]} for ts in speech_timestamps]
 
             # Merge segments that are very close together (< 500ms gap)
             merged_segments = self._merge_close_segments(segments, gap_threshold=0.5)
@@ -300,9 +295,7 @@ class VocalActivityDetector:
             raise
 
     def _merge_close_segments(
-        self,
-        segments: list[dict[str, float]],
-        gap_threshold: float = 0.5
+        self, segments: list[dict[str, float]], gap_threshold: float = 0.5
     ) -> list[dict[str, float]]:
         """
         Merge segments with small gaps between them.

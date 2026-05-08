@@ -188,9 +188,7 @@ logger = get_logger(__name__)
 
 
 def slice_audio_by_segments(
-    audio_path: Path,
-    segments: list[dict[str, float]],
-    output_dir: Path = None
+    audio_path: Path, segments: list[dict[str, float]], output_dir: Path | None = None
 ) -> list[Path]:
     """
     Slice audio file into chunks based on segment timestamps.
@@ -207,9 +205,10 @@ def slice_audio_by_segments(
         import torchaudio
 
         if output_dir is None:
-            output_dir = Path(tempfile.mkdtemp(prefix="audio_slices_"))
+            output_dir_path = Path(tempfile.mkdtemp(prefix="audio_slices_"))
         else:
-            output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir_path = output_dir
+            output_dir_path.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Slicing audio into {len(segments)} segments")
 
@@ -226,17 +225,15 @@ def slice_audio_by_segments(
             segment_waveform = waveform[:, start_sample:end_sample]
 
             # Save segment
-            segment_path = output_dir / f"segment_{i:04d}.wav"
-            torchaudio.save(
-                str(segment_path),
-                segment_waveform,
-                sample_rate
-            )
+            segment_path = output_dir_path / f"segment_{i:04d}.wav"
+            torchaudio.save(str(segment_path), segment_waveform, sample_rate)
 
             sliced_paths.append(segment_path)
-            logger.debug(f"Sliced segment {i+1}/{len(segments)}: {segment['start']:.2f}s - {segment['end']:.2f}s")
+            logger.debug(
+                f"Sliced segment {i+1}/{len(segments)}: {segment['start']:.2f}s - {segment['end']:.2f}s"
+            )
 
-        logger.info(f"Created {len(sliced_paths)} audio slices in {output_dir}")
+        logger.info(f"Created {len(sliced_paths)} audio slices in {output_dir_path}")
         return sliced_paths
 
     except Exception as e:

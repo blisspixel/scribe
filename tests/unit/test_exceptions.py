@@ -130,8 +130,7 @@ class TestValidationError:
     def test_validation_error_with_config_context(self):
         """Test ValidationError with configuration context."""
         error = ValidationError(
-            "Invalid configuration",
-            context={"config_key": "api_key", "reason": "missing"}
+            "Invalid configuration", context={"config_key": "api_key", "reason": "missing"}
         )
 
         assert "Invalid configuration" in str(error)
@@ -140,8 +139,7 @@ class TestValidationError:
     def test_validation_error_with_file_context(self):
         """Test ValidationError with file path context."""
         error = ValidationError(
-            "File not found",
-            context={"path": "/test/file.mp4", "exists": False}
+            "File not found", context={"path": "/test/file.mp4", "exists": False}
         )
 
         assert error.context["path"] == "/test/file.mp4"
@@ -154,8 +152,7 @@ class TestProcessError:
     def test_process_error_with_command_context(self):
         """Test ProcessError with command context."""
         error = ProcessError(
-            "FFmpeg failed",
-            context={"command": "ffmpeg -i input.mp4", "exit_code": 1}
+            "FFmpeg failed", context={"command": "ffmpeg -i input.mp4", "exit_code": 1}
         )
 
         assert "FFmpeg failed" in str(error)
@@ -163,10 +160,7 @@ class TestProcessError:
 
     def test_process_error_with_timeout_context(self):
         """Test ProcessError with timeout context."""
-        error = ProcessError(
-            "Process timeout",
-            context={"timeout_seconds": 300, "elapsed": 305}
-        )
+        error = ProcessError("Process timeout", context={"timeout_seconds": 300, "elapsed": 305})
 
         assert error.context["timeout_seconds"] == 300
 
@@ -178,7 +172,7 @@ class TestTranscriptionError:
         """Test TranscriptionError with GPU context."""
         error = TranscriptionError(
             "GPU out of memory",
-            context={"vram_used_gb": 22.5, "vram_total_gb": 24.0, "model": "large-v3"}
+            context={"vram_used_gb": 22.5, "vram_total_gb": 24.0, "model": "large-v3"},
         )
 
         assert "GPU out of memory" in str(error)
@@ -187,8 +181,7 @@ class TestTranscriptionError:
     def test_transcription_error_with_api_context(self):
         """Test TranscriptionError with API context."""
         error = TranscriptionError(
-            "API call failed",
-            context={"status_code": 500, "retry_count": 3}
+            "API call failed", context={"status_code": 500, "retry_count": 3}
         )
 
         assert error.context["status_code"] == 500
@@ -200,8 +193,7 @@ class TestFileOperationError:
     def test_file_operation_error_with_permission_context(self):
         """Test FileOperationError with permission context."""
         error = FileOperationError(
-            "Permission denied",
-            context={"path": "/protected/file.txt", "operation": "write"}
+            "Permission denied", context={"path": "/protected/file.txt", "operation": "write"}
         )
 
         assert "Permission denied" in str(error)
@@ -209,10 +201,7 @@ class TestFileOperationError:
 
     def test_file_operation_error_with_disk_space_context(self):
         """Test FileOperationError with disk space context."""
-        error = FileOperationError(
-            "Disk full",
-            context={"required_mb": 1024, "available_mb": 100}
-        )
+        error = FileOperationError("Disk full", context={"required_mb": 1024, "available_mb": 100})
 
         assert error.context["required_mb"] == 1024
 
@@ -223,8 +212,7 @@ class TestCircuitBreakerOpen:
     def test_circuit_breaker_with_failure_context(self):
         """Test CircuitBreakerOpen with failure context."""
         error = CircuitBreakerOpen(
-            "Too many failures",
-            context={"failure_count": 5, "timeout_seconds": 60}
+            "Too many failures", context={"failure_count": 5, "timeout_seconds": 60}
         )
 
         assert "Too many failures" in str(error)
@@ -239,7 +227,7 @@ class TestConversionError:
         """Test ConversionError with format context."""
         error = ConversionError(
             "Conversion failed",
-            context={"input_format": "mp4", "output_format": "wav", "error": "Invalid codec"}
+            context={"input_format": "mp4", "output_format": "wav", "error": "Invalid codec"},
         )
 
         assert error.context["input_format"] == "mp4"
@@ -252,8 +240,7 @@ class TestAudioFormatError:
     def test_audio_format_error_with_format_context(self):
         """Test AudioFormatError with format context."""
         error = AudioFormatError(
-            "Unsupported format",
-            context={"file": "audio.xyz", "format": "unknown"}
+            "Unsupported format", context={"file": "audio.xyz", "format": "unknown"}
         )
 
         assert "Unsupported format" in str(error)
@@ -265,10 +252,7 @@ class TestGPUError:
 
     def test_gpu_error_with_memory_context(self):
         """Test GPUError with memory context."""
-        error = GPUError(
-            "CUDA out of memory",
-            context={"requested_gb": 12, "available_gb": 8}
-        )
+        error = GPUError("CUDA out of memory", context={"requested_gb": 12, "available_gb": 8})
 
         assert "CUDA out of memory" in str(error)
         assert error.context["requested_gb"] == 12
@@ -277,7 +261,7 @@ class TestGPUError:
         """Test GPUError with driver context."""
         error = GPUError(
             "CUDA driver mismatch",
-            context={"required_version": "12.4", "installed_version": "11.8"}
+            context={"required_version": "12.4", "installed_version": "11.8"},
         )
 
         assert error.context["required_version"] == "12.4"
@@ -288,10 +272,7 @@ class TestAPIError:
 
     def test_api_error_with_rate_limit_context(self):
         """Test APIError with rate limit context."""
-        error = APIError(
-            "Rate limit exceeded",
-            context={"status_code": 429, "retry_after": 60}
-        )
+        error = APIError("Rate limit exceeded", context={"status_code": 429, "retry_after": 60})
 
         assert "Rate limit exceeded" in str(error)
         assert error.context["status_code"] == 429
@@ -299,8 +280,7 @@ class TestAPIError:
     def test_api_error_with_auth_context(self):
         """Test APIError with authentication context."""
         error = APIError(
-            "Authentication failed",
-            context={"status_code": 401, "reason": "Invalid API key"}
+            "Authentication failed", context={"status_code": 401, "reason": "Invalid API key"}
         )
 
         assert error.context["status_code"] == 401
@@ -311,10 +291,7 @@ class TestExceptionFormatting:
 
     def test_error_with_multiple_context_items(self):
         """Test error formatting with multiple context items."""
-        error = ScribeError(
-            "Complex error",
-            context={"a": 1, "b": "test", "c": True, "d": 3.14}
-        )
+        error = ScribeError("Complex error", context={"a": 1, "b": "test", "c": True, "d": 3.14})
 
         error_str = str(error)
         assert "Complex error" in error_str
@@ -332,5 +309,3 @@ class TestExceptionFormatting:
         """Test error repr includes class name."""
         error = ValidationError("Test error")
         assert "ValidationError" in repr(error)
-
-

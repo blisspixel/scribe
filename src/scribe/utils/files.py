@@ -285,6 +285,7 @@ cases. This module implements all of these principles.
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from scribe.exceptions import FileOperationError
 from scribe.utils.platform import normalize_path
@@ -316,10 +317,7 @@ def safe_path(path: str) -> Path:
     try:
         return normalize_path(path)
     except Exception as e:
-        raise FileOperationError(
-            f"Invalid path: {path}",
-            context={"error": str(e)}
-        )
+        raise FileOperationError(f"Invalid path: {path}", context={"error": str(e)})
 
 
 def ensure_directory(path: Path) -> Path:
@@ -339,17 +337,14 @@ def ensure_directory(path: Path) -> Path:
         path.mkdir(parents=True, exist_ok=True)
         return path
     except Exception as e:
-        raise FileOperationError(
-            f"Cannot create directory: {path}",
-            context={"error": str(e)}
-        )
+        raise FileOperationError(f"Cannot create directory: {path}", context={"error": str(e)})
 
 
 def cleanup_files(
     directory: Path,
     patterns: list[str],
     keep_patterns: list[str] | None = None,
-    dry_run: bool = False
+    dry_run: bool = False,
 ) -> list[Path]:
     """
     Clean up files matching patterns.
@@ -400,14 +395,14 @@ def cleanup_files(
                 except Exception as e:
                     # Log but don't fail on individual file deletion errors
                     import logging
+
                     logging.warning(f"Could not delete {file_path}: {e}")
 
         return deleted_files
 
     except Exception as e:
         raise FileOperationError(
-            f"Cleanup failed in directory: {directory}",
-            context={"error": str(e)}
+            f"Cleanup failed in directory: {directory}", context={"error": str(e)}
         )
 
 
@@ -429,28 +424,21 @@ def verify_file_content(path: Path, min_size: int = 100) -> bool:
     try:
         file_stat = path.stat()
     except FileNotFoundError:
-        raise FileOperationError(
-            f"File does not exist: {path}",
-            context={"path": str(path)}
-        )
+        raise FileOperationError(f"File does not exist: {path}", context={"path": str(path)})
     except OSError as e:
         raise FileOperationError(
-            f"Cannot access file: {path}",
-            context={"path": str(path), "error": str(e)}
+            f"Cannot access file: {path}", context={"path": str(path), "error": str(e)}
         )
 
     if not path.is_file():
-        raise FileOperationError(
-            f"Path is not a file: {path}",
-            context={"path": str(path)}
-        )
+        raise FileOperationError(f"Path is not a file: {path}", context={"path": str(path)})
 
     file_size = file_stat.st_size
 
     if file_size < min_size:
         raise FileOperationError(
             f"File is too small (expected >= {min_size} bytes, got {file_size} bytes): {path}",
-            context={"path": str(path), "size": file_size, "min_size": min_size}
+            context={"path": str(path), "size": file_size, "min_size": min_size},
         )
 
     return True
@@ -467,12 +455,12 @@ def extract_date_from_filename(filename: str) -> str | None:
         Date string in YYYY-MM-DD format, or None if not found
     """
     # Try to find YYYY-MM-DD pattern
-    match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
     if match:
         return match.group(1)
 
     # Try to find YYYYMMDD pattern
-    match = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
+    match = re.search(r"(\d{4})(\d{2})(\d{2})", filename)
     if match:
         year, month, day = match.groups()
         return f"{year}-{month}-{day}"
@@ -491,8 +479,8 @@ def format_date(date_str: str) -> str:
         Formatted date string
     """
     try:
-        dt = datetime.strptime(date_str, '%Y-%m-%d')
-        return dt.strftime('%B %d, %Y')
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%B %d, %Y")
     except Exception:
         return date_str
 
@@ -536,7 +524,7 @@ def get_file_size_mb(path: Path) -> float:
         return 0.0
 
 
-def get_file_info(path: Path) -> dict:
+def get_file_info(path: Path) -> dict[str, Any]:
     """
     Get comprehensive file information.
 
@@ -559,10 +547,7 @@ def get_file_info(path: Path) -> dict:
             "is_dir": path.is_dir(),
         }
     except Exception as e:
-        return {
-            "path": str(path),
-            "error": str(e)
-        }
+        return {"path": str(path), "error": str(e)}
 
 
 def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Path | None:
@@ -600,10 +585,7 @@ def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Path |
 
 
 def wait_for_file_stable(
-    path: Path,
-    stable_duration: float = 2.0,
-    max_wait: float = 300.0,
-    check_interval: float = 0.5
+    path: Path, stable_duration: float = 2.0, max_wait: float = 300.0, check_interval: float = 0.5
 ) -> bool:
     """
     Wait for file to exist and stop growing (stable size).
@@ -664,24 +646,24 @@ def copy_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
     """
     if not source.exists():
         raise FileOperationError(
-            f"Source file does not exist: {source}",
-            context={"source": str(source)}
+            f"Source file does not exist: {source}", context={"source": str(source)}
         )
 
     if destination.exists() and not overwrite:
         raise FileOperationError(
             f"Destination file already exists: {destination}",
-            context={"destination": str(destination)}
+            context={"destination": str(destination)},
         )
 
     try:
         import shutil
+
         shutil.copy2(source, destination)
         return destination
     except Exception as e:
         raise FileOperationError(
             f"Failed to copy file from {source} to {destination}",
-            context={"source": str(source), "destination": str(destination), "error": str(e)}
+            context={"source": str(source), "destination": str(destination), "error": str(e)},
         )
 
 
@@ -702,22 +684,22 @@ def move_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
     """
     if not source.exists():
         raise FileOperationError(
-            f"Source file does not exist: {source}",
-            context={"source": str(source)}
+            f"Source file does not exist: {source}", context={"source": str(source)}
         )
 
     if destination.exists() and not overwrite:
         raise FileOperationError(
             f"Destination file already exists: {destination}",
-            context={"destination": str(destination)}
+            context={"destination": str(destination)},
         )
 
     try:
         import shutil
+
         shutil.move(str(source), str(destination))
         return destination
     except Exception as e:
         raise FileOperationError(
             f"Failed to move file from {source} to {destination}",
-            context={"source": str(source), "destination": str(destination), "error": str(e)}
+            context={"source": str(source), "destination": str(destination), "error": str(e)},
         )

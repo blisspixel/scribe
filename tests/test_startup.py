@@ -18,11 +18,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 init(autoreset=True)
 
+
 def print_header(title: str):
     """Print a formatted test section header."""
     print(f"\n{Fore.CYAN}{'='*60}")
     print(f"{Fore.CYAN}{title:^60}")
     print(f"{Fore.CYAN}{'='*60}")
+
 
 def print_test(name: str, status: str, details: str = ""):
     """Print formatted test result."""
@@ -30,6 +32,7 @@ def print_test(name: str, status: str, details: str = ""):
     print(f"{Fore.WHITE}{name:<40} {status_color}[{status}]{Fore.RESET}")
     if details:
         print(f"{Fore.CYAN}   Details: {details}")
+
 
 def test_imports():
     """Test all critical imports."""
@@ -57,6 +60,7 @@ def test_imports():
             results.append(False)
 
     return all(results)
+
 
 def test_path_handling():
     """Test path handling with various quote combinations."""
@@ -90,7 +94,9 @@ def test_path_handling():
                 if os.path.exists(cleaned_path):
                     print_test(f"Path format {i+1}: {test_path[:30]}...", "PASS")
                 else:
-                    print_test(f"Path format {i+1}: {test_path[:30]}...", "FAIL", "Cleaned path not found")
+                    print_test(
+                        f"Path format {i+1}: {test_path[:30]}...", "FAIL", "Cleaned path not found"
+                    )
                     all_passed = False
 
             except Exception as e:
@@ -104,6 +110,7 @@ def test_path_handling():
         with contextlib.suppress(BaseException):
             os.unlink(tmp_path)
 
+
 def test_script_syntax():
     """Test that all main scripts have valid syntax."""
     print_header("SYNTAX TESTS")
@@ -115,7 +122,7 @@ def test_script_syntax():
         "voicetotext.py",
         "openaitranscribe.py",
         "wavtomp3.py",
-        "txt_to_docx.py"
+        "txt_to_docx.py",
     ]
 
     base_dir = Path(__file__).parent.parent
@@ -126,9 +133,9 @@ def test_script_syntax():
         if script_path.exists():
             try:
                 # Check syntax by compiling
-                with open(script_path, encoding='utf-8') as f:
+                with open(script_path, encoding="utf-8") as f:
                     code = f.read()
-                compile(code, script_path, 'exec')
+                compile(code, script_path, "exec")
                 print_test(f"Syntax check {script}", "PASS")
             except SyntaxError as e:
                 print_test(f"Syntax check {script}", "FAIL", f"Line {e.lineno}: {e.msg}")
@@ -141,6 +148,7 @@ def test_script_syntax():
 
     return all_passed
 
+
 def test_gpu_detection():
     """Test GPU detection capability."""
     print_header("GPU DETECTION TESTS")
@@ -150,8 +158,11 @@ def test_gpu_detection():
 
         # Test CUDA availability
         cuda_available = torch.cuda.is_available()
-        print_test("CUDA availability", "PASS" if cuda_available else "INFO",
-                  f"CUDA available: {cuda_available}")
+        print_test(
+            "CUDA availability",
+            "PASS" if cuda_available else "INFO",
+            f"CUDA available: {cuda_available}",
+        )
 
         if cuda_available:
             gpu_count = torch.cuda.device_count()
@@ -162,7 +173,7 @@ def test_gpu_detection():
             print_test("Current GPU", "INFO", f"Device {current_device}: {gpu_name}")
 
             # Test memory info
-            if hasattr(torch.cuda, 'get_device_properties'):
+            if hasattr(torch.cuda, "get_device_properties"):
                 props = torch.cuda.get_device_properties(current_device)
                 memory_gb = props.total_memory / (1024**3)
                 print_test("GPU memory", "INFO", f"{memory_gb:.1f} GB")
@@ -172,6 +183,7 @@ def test_gpu_detection():
     except Exception as e:
         print_test("GPU detection", "FAIL", str(e))
         return False
+
 
 def test_environment():
     """Test environment configuration."""
@@ -185,11 +197,7 @@ def test_environment():
         print_test("Environment file", "WARN", "No .env file found (optional)")
 
     # Check environment variables
-    env_vars = [
-        "DEFAULT_OUTPUT_FOLDER",
-        "EXPECTED_AUDIO_OUTPUT",
-        "OPENAI_API_KEY"
-    ]
+    env_vars = ["DEFAULT_OUTPUT_FOLDER", "EXPECTED_AUDIO_OUTPUT", "OPENAI_API_KEY"]
 
     for var in env_vars:
         value = os.getenv(var)
@@ -200,14 +208,16 @@ def test_environment():
 
     return True
 
+
 def test_file_operations():
     """Test file operations and permissions."""
     print_header("FILE OPERATION TESTS")
 
     # Test creating output directory
     try:
-        output_dir = Path(os.getenv("DEFAULT_OUTPUT_FOLDER",
-                                   os.path.expanduser("~/Videos/OBS_Recordings")))
+        output_dir = Path(
+            os.getenv("DEFAULT_OUTPUT_FOLDER", os.path.expanduser("~/Videos/OBS_Recordings"))
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
         print_test("Output directory creation", "PASS", str(output_dir))
 
@@ -227,6 +237,7 @@ def test_file_operations():
 
     return True
 
+
 def test_external_tools():
     """Test availability of external tools."""
     print_header("EXTERNAL TOOLS TESTS")
@@ -239,12 +250,9 @@ def test_external_tools():
     all_found = True
     for tool_name, test_cmd in tools_to_test:
         try:
-            result = subprocess.run(test_cmd.split(),
-                                  capture_output=True,
-                                  text=True,
-                                  timeout=10)
+            result = subprocess.run(test_cmd.split(), capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                version = result.stdout.split('\n')[0] if result.stdout else "Unknown version"
+                version = result.stdout.split("\n")[0] if result.stdout else "Unknown version"
                 print_test(f"Tool {tool_name}", "PASS", version)
             else:
                 print_test(f"Tool {tool_name}", "FAIL", "Command failed")
@@ -257,6 +265,7 @@ def test_external_tools():
             all_found = False
 
     return all_found
+
 
 def main():
     """Run all tests."""
@@ -297,6 +306,7 @@ def main():
     else:
         print(f"\n{Fore.RED}{Style.BRIGHT}Some tests failed. Check configuration.")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

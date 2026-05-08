@@ -24,7 +24,9 @@ from scribe.utils.notes_generator import NotesGenerator
 def main():
     """Run the timing test"""
     # Test file
-    test_file = Path("C:/Users/nicks/OneDrive/scribe/output/Rawlings_AI_Literacy_Internal_2025-11-13_14-31-14.mp4")
+    test_file = Path(
+        "C:/Users/nicks/OneDrive/scribe/output/Rawlings_AI_Literacy_Internal_2025-11-13_14-31-14.mp4"
+    )
 
     if not test_file.exists():
         print(f"Test file not found: {test_file}")

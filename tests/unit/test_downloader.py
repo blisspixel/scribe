@@ -148,8 +148,10 @@ class TestURLDownloader:
     def test_download_no_ytdlp_raises(self, tmp_path):
         """Test that missing yt-dlp gives a clear error."""
         dl = URLDownloader(output_dir=tmp_path)
-        with patch.dict("sys.modules", {"yt_dlp": None}), \
-             pytest.raises(DownloadError, match="yt-dlp is required"):
+        with (
+            patch.dict("sys.modules", {"yt_dlp": None}),
+            pytest.raises(DownloadError, match="yt-dlp is required"),
+        ):
             dl.download("https://youtube.com/watch?v=abc")
 
     @patch("scribe.core.downloader.yt_dlp", create=True)
@@ -197,9 +199,7 @@ class TestURLDownloader:
     def test_download_403_forbidden(self, _mock_yt_dlp_module, tmp_path):
         """Test HTTP 403 Forbidden gives actionable error message."""
         mock_ydl = MagicMock()
-        mock_ydl.extract_info.side_effect = Exception(
-            "HTTP Error 403: Forbidden"
-        )
+        mock_ydl.extract_info.side_effect = Exception("HTTP Error 403: Forbidden")
         mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
         mock_ydl.__exit__ = MagicMock(return_value=False)
 
@@ -276,22 +276,26 @@ class TestProgressHook:
         callback = MagicMock()
         dl = URLDownloader(output_dir=tmp_path, progress_callback=callback)
 
-        dl._progress_hook({
-            "status": "downloading",
-            "total_bytes": 1000,
-            "downloaded_bytes": 500,
-        })
+        dl._progress_hook(
+            {
+                "status": "downloading",
+                "total_bytes": 1000,
+                "downloaded_bytes": 500,
+            }
+        )
         callback.assert_called_once_with(0.5)
 
     def test_downloading_with_estimate(self, tmp_path):
         callback = MagicMock()
         dl = URLDownloader(output_dir=tmp_path, progress_callback=callback)
 
-        dl._progress_hook({
-            "status": "downloading",
-            "total_bytes_estimate": 2000,
-            "downloaded_bytes": 1000,
-        })
+        dl._progress_hook(
+            {
+                "status": "downloading",
+                "total_bytes_estimate": 2000,
+                "downloaded_bytes": 1000,
+            }
+        )
         callback.assert_called_once_with(0.5)
 
     def test_finished_status(self, tmp_path):
@@ -310,10 +314,12 @@ class TestProgressHook:
         callback = MagicMock()
         dl = URLDownloader(output_dir=tmp_path, progress_callback=callback)
 
-        dl._progress_hook({
-            "status": "downloading",
-            "downloaded_bytes": 500,
-        })
+        dl._progress_hook(
+            {
+                "status": "downloading",
+                "downloaded_bytes": 500,
+            }
+        )
         callback.assert_not_called()
 
 
@@ -364,14 +370,14 @@ class TestDownloadErrorException:
 
     def test_download_error_with_context(self):
         error = DownloadError(
-            "Video unavailable",
-            context={"url": "https://example.com", "reason": "private"}
+            "Video unavailable", context={"url": "https://example.com", "reason": "private"}
         )
         assert "Video unavailable" in str(error)
         assert error.context["url"] == "https://example.com"
 
     def test_download_error_is_scribe_error(self):
         from scribe.exceptions import ScribeError
+
         error = DownloadError("test")
         assert isinstance(error, ScribeError)
 
@@ -381,28 +387,32 @@ class TestMediaUrlValidation:
 
     def test_valid_youtube_url(self):
         from scribe.utils.validation import validate_media_url
+
         url = validate_media_url("https://www.youtube.com/watch?v=abc123")
         assert url == "https://www.youtube.com/watch?v=abc123"
 
     def test_valid_direct_link(self):
         from scribe.utils.validation import validate_media_url
+
         url = validate_media_url("https://example.com/audio.mp3")
         assert url == "https://example.com/audio.mp3"
 
     def test_empty_url_raises(self):
         from scribe.exceptions import ValidationError
         from scribe.utils.validation import validate_media_url
+
         with pytest.raises(ValidationError):
             validate_media_url("")
 
     def test_invalid_format_raises(self):
         from scribe.exceptions import ValidationError
         from scribe.utils.validation import validate_media_url
+
         with pytest.raises(ValidationError):
             validate_media_url("not-a-url")
 
     def test_http_url_accepted(self):
         from scribe.utils.validation import validate_media_url
+
         url = validate_media_url("http://example.com/video.mp4")
         assert url.startswith("http://")
-

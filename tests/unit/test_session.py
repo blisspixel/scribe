@@ -447,4 +447,3 @@ class TestSessionIntegration:
         summary = session.get_summary_text()
         assert "Failed" in summary
         assert "API error" in summary
-

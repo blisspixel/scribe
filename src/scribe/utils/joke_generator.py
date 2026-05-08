@@ -21,10 +21,12 @@ import logging
 import os
 import random
 import re
+import signal
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from dotenv import find_dotenv, load_dotenv
 from openai import AuthenticationError, OpenAI
@@ -38,8 +40,8 @@ load_dotenv(find_dotenv(usecwd=True), override=False)
 
 logger = logging.getLogger("agentic_humor")
 # Use universal SCRIBE_LOG_LEVEL, fall back to HUMOR_LOG_LEVEL for backward compat
-log_level = os.getenv("SCRIBE_LOG_LEVEL") or os.getenv("HUMOR_LOG_LEVEL", "WARNING")
-level = getattr(logging, log_level.upper(), logging.WARNING)
+log_level_name = os.getenv("SCRIBE_LOG_LEVEL") or os.getenv("HUMOR_LOG_LEVEL") or "WARNING"
+level = getattr(logging, log_level_name.upper(), logging.WARNING)
 logger.setLevel(level)
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -108,6 +110,7 @@ COMEDY_STYLES: dict[str, str] = {
     ),
 }
 
+
 # -----------------------------------------------------------------------------
 # Config
 # -----------------------------------------------------------------------------
@@ -119,8 +122,8 @@ class HumorConfig:
     max_words: int = 18
     # Start higher to avoid "max_output_tokens" incomplete results with GPT-5 reasoning
     max_output_tokens: int = 160
-    reasoning_effort: str = "low"   # none | low | medium | high | xhigh
-    verbosity: str = "low"              # low | medium | high
+    reasoning_effort: str = "low"  # none | low | medium | high | xhigh
+    verbosity: str = "low"  # low | medium | high
     api_key: str | None = None
     seed: int | None = None
     archetype: str | None = None
@@ -145,11 +148,16 @@ class HumorConfig:
                 if 0 <= spice <= 10:
                     config.spice_level = spice
                 else:
-                    logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (must be 0-10), using default: {config.spice_level}")
+                    logger.warning(
+                        f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (must be 0-10), using default: {config.spice_level}"
+                    )
             except ValueError:
-                logger.warning(f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (not an integer), using default: {config.spice_level}")
+                logger.warning(
+                    f"Invalid SCRIBE_HUMOR_SPICE: {spice_str} (not an integer), using default: {config.spice_level}"
+                )
 
         return config
+
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -162,9 +170,11 @@ def _safe_read_text(path: Path) -> str:
             continue
     return ""
 
+
 def _word_len_ok(s: str, mn: int, mx: int) -> bool:
     wc = len(s.split())
     return mn <= wc <= mx
+
 
 def _clip_to_words(s: str, mx: int) -> str:
     words = s.split()
@@ -172,19 +182,35 @@ def _clip_to_words(s: str, mx: int) -> str:
         return s.strip()
     return " ".join(words[:mx]).rstrip(",.;:!?").strip()
 
-def _extract_meeting_metadata(transcript_text: str) -> dict:
+
+def _extract_meeting_metadata(transcript_text: str) -> dict[str, Any]:
     lines = transcript_text.splitlines()
     lower = transcript_text.lower()
     words = lower.split()
     word_count = len(words)
 
     jargon_terms = [
-        "synergy", "leverage", "bandwidth", "circle back", "touch base",
-        "alignment", "action item", "parking lot", "deep dive", "move the needle",
+        "synergy",
+        "leverage",
+        "bandwidth",
+        "circle back",
+        "touch base",
+        "alignment",
+        "action item",
+        "parking lot",
+        "deep dive",
+        "move the needle",
     ]
     technical_terms = [
-        "api", "database", "deployment", "architecture", "infrastructure",
-        "endpoint", "pipeline", "repository", "container",
+        "api",
+        "database",
+        "deployment",
+        "architecture",
+        "infrastructure",
+        "endpoint",
+        "pipeline",
+        "repository",
+        "container",
     ]
     decision_terms = ["decide", "decision", "agree", "consensus", "vote", "approve"]
     deferral_terms = ["later", "next time", "follow up", "circle back", "table", "revisit"]
@@ -197,15 +223,25 @@ def _extract_meeting_metadata(transcript_text: str) -> dict:
     has_repetition = any(words.count(w) > 5 for w in set(words) if len(w) > 5)
     intent_drift = deferral_count > decision_count if decision_count > 0 else False
 
-    tone_exhaustion = sum(1 for m in ["long", "finally", "anyway", "moving on", "last thing"] if m in lower)
-    tone_enthusiasm = sum(1 for m in ["great", "excited", "amazing", "love", "perfect"] if m in lower)
-    tone_confusion = sum(1 for m in ["wait", "confused", "clarify", "understand", "what do you mean"] if m in lower)
+    tone_exhaustion = sum(
+        1 for m in ["long", "finally", "anyway", "moving on", "last thing"] if m in lower
+    )
+    tone_enthusiasm = sum(
+        1 for m in ["great", "excited", "amazing", "love", "perfect"] if m in lower
+    )
+    tone_confusion = sum(
+        1 for m in ["wait", "confused", "clarify", "understand", "what do you mean"] if m in lower
+    )
 
     if max(tone_exhaustion, tone_enthusiasm, tone_confusion) == 0:
         dominant_tone = "neutral"
     else:
         dominant_tone = max(
-            [("exhaustion", tone_exhaustion), ("enthusiasm", tone_enthusiasm), ("confusion", tone_confusion)],
+            [
+                ("exhaustion", tone_exhaustion),
+                ("enthusiasm", tone_enthusiasm),
+                ("confusion", tone_confusion),
+            ],
             key=lambda x: x[1],
         )[0]
 
@@ -229,6 +265,7 @@ def _extract_meeting_metadata(transcript_text: str) -> dict:
         "high_jargon_low_decision": jargon_count > 3 and decision_count < 2,
         "circular_discussion": has_repetition and intent_drift,
     }
+
 
 def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> list[str]:
     safe: list[str] = []
@@ -254,12 +291,13 @@ def _mine_safe_entities(transcript_text: str, top_k: int = 8) -> list[str]:
     filtered = [e for e in filtered if e not in speakers]
     return filtered[:top_k]
 
-def _select_archetype_ai_provider(provider, transcript_excerpt: str) -> str:
+
+def _select_archetype_ai_provider(provider: Any, transcript_excerpt: str) -> str:
     """Use AI provider to intelligently select the best comedy archetype for this meeting."""
 
     # Gemini 3 with high thinking uses too many tokens for simple selection
     # Fall back to heuristic for Gemini 3 until thinking_level is properly supported
-    if hasattr(provider, 'config') and 'gemini-3' in provider.config.model.lower():
+    if hasattr(provider, "config") and "gemini-3" in provider.config.model.lower():
         logger.info("Using heuristic archetype selection for Gemini 3 (thinking overhead too high)")
         return _select_archetype_heuristic({}, None)
 
@@ -292,24 +330,24 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
     try:
         # Disable thinking for simple archetype selection (saves tokens)
         kwargs = {}
-        if hasattr(provider, 'config') and 'gemini' in provider.config.model.lower():
-            kwargs['disable_thinking'] = True
+        if hasattr(provider, "config") and "gemini" in provider.config.model.lower():
+            kwargs["disable_thinking"] = True
 
         response = provider.chat_completion(
-            messages=[{"role": "user", "content": selection_prompt}],
-            max_tokens=100,
-            **kwargs
+            messages=[{"role": "user", "content": selection_prompt}], max_tokens=100, **kwargs
         )
 
         # Defensive: handle None or missing content
         content = response.get("content") if isinstance(response, dict) else None
         if not content:
-            provider_name = getattr(provider, 'config', None)
+            provider_name = getattr(provider, "config", None)
             provider_name = provider_name.provider_name if provider_name else "unknown"
-            logger.debug(f"AI archetype selection returned empty content from {provider_name}, using heuristic")
+            logger.debug(
+                f"AI archetype selection returned empty content from {provider_name}, using heuristic"
+            )
             return _select_archetype_heuristic({}, None)
 
-        selected = content.strip().lower()
+        selected = str(content).strip().lower()
 
         # Validate the selection - must be non-empty and in COMEDY_STYLES
         if selected and selected in COMEDY_STYLES:
@@ -328,7 +366,7 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         return _select_archetype_heuristic({}, None)
 
 
-def _select_archetype_ai(client, transcript_excerpt: str) -> str:
+def _select_archetype_ai(client: OpenAI, transcript_excerpt: str) -> str:
     """Use GPT-5 to intelligently select the best comedy archetype for this meeting."""
 
     # Build archetype descriptions for AI
@@ -361,10 +399,11 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         response = client.chat.completions.create(
             model="gpt-5",
             messages=[{"role": "user", "content": selection_prompt}],
-            max_completion_tokens=50
+            max_completion_tokens=50,
         )
 
-        selected = response.choices[0].message.content.strip().lower()
+        message_content = response.choices[0].message.content or ""
+        selected = message_content.strip().lower()
 
         # Validate the selection
         if selected in COMEDY_STYLES:
@@ -382,7 +421,7 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         return _select_archetype_heuristic({}, None)
 
 
-def _select_archetype_heuristic(metadata: dict, seed: int | None) -> str:
+def _select_archetype_heuristic(metadata: dict[str, Any], seed: int | None) -> str:
     """Fallback heuristic-based archetype selection."""
     if seed is not None:
         random.seed(seed)
@@ -428,6 +467,7 @@ def _select_archetype_heuristic(metadata: dict, seed: int | None) -> str:
     probs = [weights[c] / total for c in choices]
     return random.choices(choices, probs, k=1)[0]
 
+
 def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
     ent_hint = ", ".join(entities) if entities else ""
     hint = f" Use meeting-specific references when helpful (e.g., {ent_hint})." if ent_hint else ""
@@ -444,7 +484,7 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
         7: "CUTTING - Slightly uncomfortable, punches up at processes",
         8: "CUTTING - Dark humor, exposes absurdity, still shareable",
         9: "SPICY - Brutally honest, may make people flinch (but laugh)",
-        10: "SPICY - 'I can't believe this app said that' funny - no filter"
+        10: "SPICY - 'I can't believe this app said that' funny - no filter",
     }
 
     spice_desc = spice_guidance.get(cfg.spice_level, "HONEST - Default level")
@@ -471,21 +511,24 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
         f"avoid individuals or protected groups.{profanity_rule}" + hint
     )
 
+
 def _build_client(api_key: str | None) -> OpenAI:
     key = api_key or os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("Missing OpenAI API key: pass it in or set OPENAI_API_KEY")
     return OpenAI(api_key=key)
 
+
 def _redact(s: str, max_chars: int = 400) -> str:
     s = s.replace("\r", " ").replace("\n", " ")
     return (s[:max_chars] + " …[truncated]") if len(s) > max_chars else s
 
-def _extract_output_text(resp) -> str:
+
+def _extract_output_text(resp: Any) -> str:
     # Prefer convenience property if present
     text = getattr(resp, "output_text", None)
     if text:
-        return text.strip()
+        return str(text).strip()
 
     # Walk response.output to recover any output_text/message shapes
     try:
@@ -506,7 +549,11 @@ def _extract_output_text(resp) -> str:
                         message = item.get("content")
                     if isinstance(message, list):
                         for part in message:
-                            if isinstance(part, dict) and part.get("type") == "output_text" and "text" in part:
+                            if (
+                                isinstance(part, dict)
+                                and part.get("type") == "output_text"
+                                and "text" in part
+                            ):
                                 buff.append(str(part["text"]))
             if buff:
                 return "\n".join(x.strip() for x in buff if x).strip()
@@ -515,13 +562,15 @@ def _extract_output_text(resp) -> str:
 
     return ""
 
-def _resp_to_dict_trunc(resp, n: int = 1200) -> str:
+
+def _resp_to_dict_trunc(resp: Any, n: int = 1200) -> str:
     try:
         blob = getattr(resp, "to_dict", None)
         s = json.dumps(blob(), ensure_ascii=False) if callable(blob) else str(resp)
         return (s[:n] + " …[truncated]") if len(s) > n else s
     except Exception:
         return "<unserializable>"
+
 
 # -----------------------------------------------------------------------------
 # Public API
@@ -558,6 +607,7 @@ def generate_transcript_joke(
     else:
         try:
             from scribe.providers import get_provider
+
             # Don't pass OpenAI-specific models to the provider factory
             # Let factory choose default if model is empty or OpenAI-specific
             openai_models = ["gpt-5", "gpt-5.2", "gpt-4", "gpt-4o", ""]
@@ -567,7 +617,9 @@ def generate_transcript_joke(
                 model=cfg.model if cfg.model and cfg.model not in openai_models else None,
                 provider_name=provider_name,
             )
-            logger.info(f"Using provider: {provider.config.provider_name} | model: {provider.config.model}")
+            logger.info(
+                f"Using provider: {provider.config.provider_name} | model: {provider.config.model}"
+            )
             use_provider = True
         except Exception as e:
             logger.warning(f"Provider system failed: {e}, falling back to OpenAI client")
@@ -582,9 +634,11 @@ def generate_transcript_joke(
     try:
         transcript_text = load_transcript_text(transcript_path)
         if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
-            logger.warning(f"Transcript is large ({len(transcript_text):,} chars), truncating to {MAX_TRANSCRIPT_CHARS:,} chars")
+            logger.warning(
+                f"Transcript is large ({len(transcript_text):,} chars), truncating to {MAX_TRANSCRIPT_CHARS:,} chars"
+            )
             head = transcript_text[: MAX_TRANSCRIPT_CHARS // 2]
-            tail = transcript_text[- MAX_TRANSCRIPT_CHARS // 2 :]
+            tail = transcript_text[-MAX_TRANSCRIPT_CHARS // 2 :]
             transcript_text = head + "\n\n[...transcript truncated for size...]\n\n" + tail
     except Exception as e:
         logger.error(f"Failed to read transcript: {e}")
@@ -614,9 +668,11 @@ def generate_transcript_joke(
         try:
             MAX_CONTEXT_CHARS = int(max_ctx_env)
             if MAX_CONTEXT_CHARS > 0 and len(context_text) > MAX_CONTEXT_CHARS:
-                logger.info(f"Clamping transcript context to {MAX_CONTEXT_CHARS} chars (env override)")
+                logger.info(
+                    f"Clamping transcript context to {MAX_CONTEXT_CHARS} chars (env override)"
+                )
                 head = context_text[: MAX_CONTEXT_CHARS // 2]
-                tail = context_text[- MAX_CONTEXT_CHARS // 2 :]
+                tail = context_text[-MAX_CONTEXT_CHARS // 2 :]
                 context_text = head + "\n[...clipped...]\n" + tail
         except ValueError:
             logger.warning(f"Ignoring invalid HUMOR_MAX_CONTEXT_CHARS='{max_ctx_env}'")
@@ -624,7 +680,9 @@ def generate_transcript_joke(
     # Archetype selection
     if cfg.archetype:
         if cfg.archetype not in COMEDY_STYLES:
-            raise ValueError(f"Unknown archetype '{cfg.archetype}'. Valid keys: {list(COMEDY_STYLES)}")
+            raise ValueError(
+                f"Unknown archetype '{cfg.archetype}'. Valid keys: {list(COMEDY_STYLES)}"
+            )
         archetype_key = cfg.archetype
         logger.info(f"Using forced archetype: {archetype_key}")
     else:
@@ -633,6 +691,8 @@ def generate_transcript_joke(
             if use_provider:
                 archetype_key = _select_archetype_ai_provider(provider, transcript_text)
             else:
+                if client is None:
+                    raise RuntimeError("OpenAI client unavailable for archetype selection")
                 archetype_key = _select_archetype_ai(client, transcript_text)
         except AuthenticationError:
             logger.error(
@@ -654,14 +714,20 @@ def generate_transcript_joke(
     )
 
     if os.getenv("HUMOR_DEBUG", "0") == "1":
-        logger.debug("Request preview (redacted): " + json.dumps({
-            "provider": provider.config.provider_name if use_provider else "openai",
-            "model": provider.config.model if use_provider else cfg.model,
-            "system": _redact(system_prompt, 240),
-            "instruction": _redact(instruction, 320),
-            "context": _redact(context_text, 400),
-            "max_tokens": cfg.max_output_tokens
-        }, ensure_ascii=False))
+        logger.debug(
+            "Request preview (redacted): "
+            + json.dumps(
+                {
+                    "provider": provider.config.provider_name if use_provider else "openai",
+                    "model": provider.config.model if use_provider else cfg.model,
+                    "system": _redact(system_prompt, 240),
+                    "instruction": _redact(instruction, 320),
+                    "context": _redact(context_text, 400),
+                    "max_tokens": cfg.max_output_tokens,
+                },
+                ensure_ascii=False,
+            )
+        )
 
     def _call_provider(instruction_text: str, max_tokens: int) -> str:
         """Call provider's chat_completion API."""
@@ -672,43 +738,47 @@ def generate_transcript_joke(
 
         # For simple joke generation, disable Gemini's thinking (wastes tokens)
         kwargs = {}
-        if hasattr(provider.config, 'provider_name') and provider.config.provider_name == 'gemini':
-            kwargs['disable_thinking'] = True
+        if hasattr(provider.config, "provider_name") and provider.config.provider_name == "gemini":
+            kwargs["disable_thinking"] = True
 
-        response = provider.chat_completion(
-            messages=messages,
-            max_tokens=max_tokens,
-            **kwargs
-        )
+        response = provider.chat_completion(messages=messages, max_tokens=max_tokens, **kwargs)
+        content = response.get("content", "")
+        return content.strip() if isinstance(content, str) else str(content).strip()
 
-        return response.get("content", "").strip()
-
-    def _call_openai(instruction_text: str, max_tokens: int):
+    def _call_openai(instruction_text: str, max_tokens: int) -> Any:
         """Call OpenAI's responses API (fallback)."""
         # Add timeout protection (30 seconds for API call)
-        import signal
 
-        def timeout_handler(signum, frame):
+        def timeout_handler(signum: int, frame: Any) -> None:
             raise TimeoutError("API call timed out after 30 seconds")
 
         # Set timeout (Unix-like systems only)
         old_handler = None
+        signal_fn = getattr(signal, "signal", None)
+        alarm_fn = getattr(signal, "alarm", None)
+        sigalrm = getattr(signal, "SIGALRM", None)
         try:
-            if hasattr(signal, 'SIGALRM'):
-                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(30)
+            if sigalrm is not None and callable(signal_fn) and callable(alarm_fn):
+                old_handler = signal_fn(sigalrm, timeout_handler)
+                alarm_fn(30)
         except Exception:
             pass  # Windows doesn't support SIGALRM
 
         try:
-            return client.responses.create(
+            if client is None:
+                raise RuntimeError("OpenAI client is not initialized")
+            responses_api = cast(Any, client.responses)
+            return responses_api.create(
                 model=cfg.model,
                 input=[
                     {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                    {"role": "user", "content": [
-                        {"type": "input_text", "text": instruction_text},
-                        {"type": "input_text", "text": context_text},
-                    ]},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": instruction_text},
+                            {"type": "input_text", "text": context_text},
+                        ],
+                    },
                 ],
                 reasoning={"effort": cfg.reasoning_effort},
                 text={"verbosity": cfg.verbosity},
@@ -717,10 +787,15 @@ def generate_transcript_joke(
             )
         finally:
             # Clear alarm
-            if old_handler is not None:
+            if (
+                old_handler is not None
+                and sigalrm is not None
+                and callable(signal_fn)
+                and callable(alarm_fn)
+            ):
                 try:
-                    signal.alarm(0)
-                    signal.signal(signal.SIGALRM, old_handler)
+                    alarm_fn(0)
+                    signal_fn(sigalrm, old_handler)
                 except Exception:
                     pass
 
@@ -766,7 +841,8 @@ def generate_transcript_joke(
                             )
                         else:
                             logger.warning(
-                                "Empty model output. Response preview (truncated): " + _resp_to_dict_trunc(resp)
+                                "Empty model output. Response preview (truncated): "
+                                + _resp_to_dict_trunc(resp)
                             )
                     except Exception:
                         logger.warning("Empty model output and failed to preview response")
@@ -775,7 +851,9 @@ def generate_transcript_joke(
             # Length refinement if needed
             if not _word_len_ok(text, cfg.min_words, cfg.max_words):
                 logger.info("Length miss; requesting single refinement.")
-                refine_instruction = instruction + " Ensure the output fits the word target precisely."
+                refine_instruction = (
+                    instruction + " Ensure the output fits the word target precisely."
+                )
                 if use_provider:
                     text2 = _call_provider(refine_instruction, max_tokens)
                 else:
@@ -813,12 +891,15 @@ def generate_transcript_joke(
             logger.warning(f"API call failed (attempt {attempt+1}): {e}")
             if attempt < len(backoffs):
                 next_tokens = token_ramp[min(attempt + 1, len(token_ramp) - 1)]
-                logger.info(f"Retrying in {backoffs[attempt]:.1f}s with max_output_tokens={next_tokens}")
+                logger.info(
+                    f"Retrying in {backoffs[attempt]:.1f}s with max_output_tokens={next_tokens}"
+                )
                 time.sleep(backoffs[attempt])
 
     logger.error(f"Failed after retries: {last_err}")
     logger.error("No joke produced.")
     return None
+
 
 # -----------------------------------------------------------------------------
 # CLI entry: python -m scribe.utils.joke_generator <file> [archetype]
@@ -849,4 +930,3 @@ if __name__ == "__main__":
         print(out[0])
     else:
         raise SystemExit(2)
-

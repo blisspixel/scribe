@@ -23,9 +23,7 @@ class TestAnthropicProvider:
         except ImportError:
             pytest.skip("anthropic package not installed")
 
-        provider = AnthropicProvider(
-            api_key="test-key", model="claude-3-5-sonnet-20241022"
-        )
+        provider = AnthropicProvider(api_key="test-key", model="claude-3-5-sonnet-20241022")
 
         assert provider.api_key == "test-key"
         assert provider.model == "claude-3-5-sonnet-20241022"
@@ -165,12 +163,11 @@ class TestAnthropicProviderFactory:
         except ImportError:
             pytest.skip("anthropic package not installed")
 
-        with patch.dict(
-            "os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False
-        ), patch("scribe.providers.anthropic_provider.Anthropic"):
-            provider = get_provider(
-                feature="joke", provider_name="anthropic", api_key="test-key"
-            )
+        with (
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False),
+            patch("scribe.providers.anthropic_provider.Anthropic"),
+        ):
+            provider = get_provider(feature="joke", provider_name="anthropic", api_key="test-key")
 
             assert provider is not None
             assert provider.model == "claude-3-5-sonnet-20241022"
@@ -179,12 +176,10 @@ class TestAnthropicProviderFactory:
         """Test that missing anthropic package raises ImportError."""
         from scribe.providers.factory import get_provider
 
-        with patch.dict(
-            "os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False
-        ), patch(
-            "scribe.providers.factory.ANTHROPIC_AVAILABLE", False
-        ), pytest.raises(
-            ImportError, match="anthropic package not installed"
+        with (
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=False),
+            patch("scribe.providers.factory.ANTHROPIC_AVAILABLE", False),
+            pytest.raises(ImportError, match="anthropic package not installed"),
         ):
             get_provider(
                 feature="joke",

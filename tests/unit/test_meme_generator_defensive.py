@@ -34,7 +34,7 @@ class TestMemeGeneratorDefensive:
                 "top_text": "TEST",
                 "bottom_text": "MEME",
                 "image_prompt": "test prompt",
-                "optimal_size": "1024x1536 (portrait)"  # Invalid format with description
+                "optimal_size": "1024x1536 (portrait)",  # Invalid format with description
             }
 
             output_path = Path("test_meme.png")
@@ -62,7 +62,7 @@ class TestMemeGeneratorDefensive:
                 "top_text": "TEST",
                 "bottom_text": "MEME",
                 "image_prompt": "test prompt",
-                "optimal_size": "invalid_size_format"
+                "optimal_size": "invalid_size_format",
             }
 
             output_path = Path("test_meme.png")
@@ -76,17 +76,11 @@ class TestMemeGeneratorDefensive:
     def test_analyze_transcript_empty_response(self):
         """Test handling of empty response from AI."""
         mock_provider = Mock()
-        mock_provider.chat_completion.return_value = {
-            "content": "",
-            "usage": {"total_tokens": 0}
-        }
+        mock_provider.chat_completion.return_value = {"content": "", "usage": {"total_tokens": 0}}
 
         config = MemeConfig()
         result = _analyze_transcript_for_meme(
-            mock_provider,
-            "Test transcript",
-            config,
-            show_reasoning=False
+            mock_provider, "Test transcript", config, show_reasoning=False
         )
 
         # Should return None for empty response
@@ -97,15 +91,12 @@ class TestMemeGeneratorDefensive:
         mock_provider = Mock()
         mock_provider.chat_completion.return_value = {
             "content": "This is not valid JSON",
-            "usage": {"total_tokens": 100}
+            "usage": {"total_tokens": 100},
         }
 
         config = MemeConfig()
         result = _analyze_transcript_for_meme(
-            mock_provider,
-            "Test transcript",
-            config,
-            show_reasoning=False
+            mock_provider, "Test transcript", config, show_reasoning=False
         )
 
         # Should return None for invalid JSON
@@ -116,15 +107,12 @@ class TestMemeGeneratorDefensive:
         mock_provider = Mock()
         mock_provider.chat_completion.return_value = {
             "content": '{"template": "test", "incomplete',
-            "usage": {"total_tokens": 100}
+            "usage": {"total_tokens": 100},
         }
 
         config = MemeConfig()
         result = _analyze_transcript_for_meme(
-            mock_provider,
-            "Test transcript",
-            config,
-            show_reasoning=False
+            mock_provider, "Test transcript", config, show_reasoning=False
         )
 
         # Should return None for malformed JSON
@@ -140,7 +128,7 @@ class TestMemeGeneratorDefensive:
             "top_text": "TEST",
             "bottom_text": "MEME",
             "image_prompt": "test prompt",
-            "optimal_size": "1024x1024"
+            "optimal_size": "1024x1024",
         }
 
         output_path = Path("test_meme.png")
@@ -163,7 +151,7 @@ class TestMemeGeneratorDefensive:
                 "top_text": "TEST",
                 "bottom_text": "MEME",
                 "image_prompt": "test prompt",
-                "optimal_size": "1024x1024"
+                "optimal_size": "1024x1024",
             }
 
             output_path = Path("test_meme.png")
@@ -189,7 +177,7 @@ class TestMemeGeneratorDefensive:
                 "top_text": "TEST",
                 "bottom_text": "MEME",
                 "image_prompt": "test prompt",
-                "optimal_size": "  1024x1536  "  # Extra spaces
+                "optimal_size": "  1024x1536  ",  # Extra spaces
             }
 
             output_path = Path("test_meme.png")
@@ -214,7 +202,7 @@ class TestMemeGeneratorDefensive:
                 "top_text": "TEST",
                 "bottom_text": "MEME",
                 "image_prompt": "test prompt",
-                "optimal_size": "auto"
+                "optimal_size": "auto",
             }
 
             output_path = Path("test_meme.png")
@@ -230,15 +218,12 @@ class TestMemeGeneratorDefensive:
         mock_provider = Mock()
         mock_provider.chat_completion.return_value = {
             "content": '{"template": "test", "top_text": "TOP", "bottom_text": "BOTTOM", "image_prompt": "test", "concept": "test concept", "reasoning": "some reasoning"}',
-            "usage": {"total_tokens": 100}
+            "usage": {"total_tokens": 100},
         }
 
         config = MemeConfig()
         result = _analyze_transcript_for_meme(
-            mock_provider,
-            "Test transcript",
-            config,
-            show_reasoning=True
+            mock_provider, "Test transcript", config, show_reasoning=True
         )
 
         assert result is not None
@@ -248,7 +233,9 @@ class TestMemeGeneratorDefensive:
     def test_safety_block_detection(self):
         """Test that safety blocks are properly detected."""
         mock_provider = Mock()
-        mock_error = Exception("Error code: 400 - {'error': {'message': 'Your request was rejected by the safety system.', 'code': 'moderation_blocked'}}")
+        mock_error = Exception(
+            "Error code: 400 - {'error': {'message': 'Your request was rejected by the safety system.', 'code': 'moderation_blocked'}}"
+        )
         mock_provider.generate_image.side_effect = mock_error
 
         config = MemeConfig()
@@ -256,7 +243,7 @@ class TestMemeGeneratorDefensive:
             "top_text": "TEST",
             "bottom_text": "MEME",
             "image_prompt": "test prompt",
-            "optimal_size": "1024x1024"
+            "optimal_size": "1024x1024",
         }
 
         output_path = Path("test_meme.png")
@@ -278,7 +265,7 @@ class TestMemeGeneratorDefensive:
             meme_concept = {
                 "top_text": "TEST",
                 "bottom_text": "MEME",
-                "image_prompt": "test prompt"
+                "image_prompt": "test prompt",
                 # No optimal_size specified
             }
 
@@ -299,11 +286,7 @@ class TestXAIImageProviderDefensive:
         from scribe.providers.base import ProviderConfig
         from scribe.providers.xai_provider import XAIProvider
 
-        config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-imagine-image"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-imagine-image")
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
             mock_client = Mock()
@@ -323,20 +306,18 @@ class TestXAIImageProviderDefensive:
         from scribe.providers.base import ProviderConfig
         from scribe.providers.xai_provider import XAIProvider
 
-        config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-imagine-image"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-imagine-image")
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
-            with patch.object(XAIProvider, "_download_image_url", return_value=b"image_data") as mock_download:
+            with patch.object(
+                XAIProvider, "_download_image_url", return_value=b"image_data"
+            ) as mock_download:
                 mock_client = Mock()
 
                 # First call (b64_json) fails
                 mock_client.images.generate.side_effect = [
                     Exception("b64_json not supported"),
-                    Mock(data=[Mock(url="http://example.com/image.jpg", b64_json=None)])
+                    Mock(data=[Mock(url="http://example.com/image.jpg", b64_json=None)]),
                 ]
 
                 mock_openai.return_value = mock_client
@@ -352,11 +333,7 @@ class TestXAIImageProviderDefensive:
         from scribe.providers.base import ProviderConfig
         from scribe.providers.xai_provider import XAIProvider
 
-        config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-imagine-image"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-imagine-image")
 
         with patch("scribe.providers.xai_provider.OpenAI") as mock_openai:
             mock_client = Mock()

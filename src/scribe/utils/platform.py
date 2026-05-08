@@ -430,9 +430,11 @@ def open_file_with_default_app(file_path: Path) -> bool:
             os.startfile(str(file_path))
         elif is_macos():
             import subprocess
+
             subprocess.run(["open", str(file_path)], check=True)
         else:  # Linux
             import subprocess
+
             subprocess.run(["xdg-open", str(file_path)], check=True)
         return True
     except Exception:
@@ -477,10 +479,11 @@ def get_temp_directory() -> Path:
         Path to temp directory
     """
     import tempfile
+
     return Path(tempfile.gettempdir())
 
 
-def get_platform_info() -> dict:
+def get_platform_info() -> dict[str, str]:
     """
     Get comprehensive platform information.
 
@@ -512,6 +515,7 @@ def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
     try:
         if is_windows():
             import ctypes
+
             free_bytes = ctypes.c_ulonglong(0)
             ctypes.windll.kernel32.GetDiskFreeSpaceExW(
                 str(path), None, None, ctypes.pointer(free_bytes)
@@ -519,7 +523,11 @@ def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
             free_gb = free_bytes.value / (1024**3)
         else:
             import os
-            stat = os.statvfs(str(path))
+
+            statvfs = getattr(os, "statvfs", None)
+            if statvfs is None:
+                return True
+            stat = statvfs(str(path))
             free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
 
         return free_gb >= required_gb

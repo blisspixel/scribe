@@ -2,8 +2,12 @@
 Unit tests for provider health monitoring.
 """
 
+import sys
 from datetime import datetime, timedelta
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
+
+import pytest
 
 from scribe.providers.health import HealthStatus, ProviderHealthMonitor
 
@@ -26,7 +30,7 @@ class TestProviderHealthMonitor:
             is_healthy=True,
             last_check=datetime.now(),
             response_time_ms=100.0,
-            consecutive_failures=0
+            consecutive_failures=0,
         )
 
         assert status.provider_name == "test"
@@ -98,8 +102,7 @@ class TestProviderHealthMonitor:
         monitor = ProviderHealthMonitor()
 
         # Mock all checks to succeed
-        with patch.object(monitor, "_check_openai"), \
-             patch.object(monitor, "_check_xai"):
+        with patch.object(monitor, "_check_openai"), patch.object(monitor, "_check_xai"):
 
             api_keys = {
                 "openai": "key1",
@@ -117,8 +120,10 @@ class TestProviderHealthMonitor:
         monitor = ProviderHealthMonitor()
 
         # OpenAI succeeds, XAI fails
-        with patch.object(monitor, "_check_openai"), \
-             patch.object(monitor, "_check_xai", side_effect=Exception("Error")):
+        with (
+            patch.object(monitor, "_check_openai"),
+            patch.object(monitor, "_check_xai", side_effect=Exception("Error")),
+        ):
 
             api_keys = {
                 "openai": "key1",
@@ -148,3 +153,119 @@ class TestProviderHealthMonitor:
             monitor.check_provider_health("openai", "key1", force=True)
             healthy = monitor.get_healthy_providers("joke", api_keys)
             assert "openai" not in healthy  # Still excluded
+
+    def test_check_openai_success_and_empty_response(self):
+        monitor = ProviderHealthMonitor()
+        create = patch("scribe.providers.factory._get_default_model", return_value="gpt-test")
+
+        class FakeOpenAI:
+            def __init__(self, *, api_key, timeout, base_url=None):
+                assert api_key == "key"
+                assert timeout == 10
+                assert base_url is None
+                self.chat = SimpleNamespace(
+                    completions=SimpleNamespace(
+                        create=lambda **kwargs: SimpleNamespace(choices=[kwargs["model"]])
+                    )
+                )
+
+        with create, patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}):
+            monitor._check_openai("key")
+
+        class EmptyOpenAI(FakeOpenAI):
+            def __init__(self, *, api_key, timeout, base_url=None):
+                super().__init__(api_key=api_key, timeout=timeout, base_url=base_url)
+
+                def create_empty(**_kwargs):
+                    return SimpleNamespace(choices=[])
+
+                self.chat = SimpleNamespace(completions=SimpleNamespace(create=create_empty))
+
+        with create, patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=EmptyOpenAI)}):
+            with pytest.raises(ValueError, match="No response from OpenAI"):
+                monitor._check_openai("key")
+
+    def test_check_xai_success(self):
+        monitor = ProviderHealthMonitor()
+
+        class FakeOpenAI:
+            def __init__(self, *, api_key, timeout, base_url=None):
+                assert api_key == "key"
+                assert timeout == 10
+                assert base_url == "https://api.x.ai/v1"
+                self.chat = SimpleNamespace(
+                    completions=SimpleNamespace(
+                        create=lambda **kwargs: SimpleNamespace(choices=[kwargs["model"]])
+                    )
+                )
+
+        with (
+            patch("scribe.providers.factory._get_default_model", return_value="grok-test"),
+            patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}),
+        ):
+            monitor._check_xai("key")
+
+    def test_check_anthropic_import_and_success_paths(self):
+        monitor = ProviderHealthMonitor()
+
+        class FakeAnthropicClient:
+            def __init__(self, *, api_key, timeout):
+                assert api_key == "key"
+                assert timeout == 10
+                self.messages = SimpleNamespace(
+                    create=lambda **kwargs: SimpleNamespace(content=[kwargs["model"]])
+                )
+
+        with patch.dict(sys.modules, {"anthropic": None}):
+            with pytest.raises(ImportError, match="anthropic package not installed"):
+                monitor._check_anthropic("key")
+
+        with (
+            patch("scribe.providers.factory._get_default_model", return_value="claude-test"),
+            patch.dict(sys.modules, {"anthropic": SimpleNamespace(Anthropic=FakeAnthropicClient)}),
+        ):
+            monitor._check_anthropic("key")
+
+    def test_check_gemini_import_and_success_paths(self):
+        monitor = ProviderHealthMonitor()
+
+        with patch.dict(
+            sys.modules, {"google": None, "google.genai": None, "google.genai.types": None}
+        ):
+            with pytest.raises(ImportError, match="google-genai package not installed"):
+                monitor._check_gemini("key")
+
+        google_module = ModuleType("google")
+        genai_module = ModuleType("google.genai")
+        types_module = ModuleType("google.genai.types")
+        types_module.ThinkingConfig = lambda **kwargs: {"thinking": kwargs}
+        types_module.GenerateContentConfig = lambda **kwargs: {"config": kwargs}
+
+        class FakeClient:
+            def __init__(self, *, api_key):
+                assert api_key == "key"
+                self.models = SimpleNamespace(
+                    generate_content=lambda **kwargs: SimpleNamespace(text=f"ok:{kwargs['model']}")
+                )
+
+        genai_module.Client = FakeClient
+        genai_module.types = types_module
+        google_module.genai = genai_module
+
+        with (
+            patch("scribe.providers.factory._get_default_model", return_value="gemini-test"),
+            patch.dict(
+                sys.modules,
+                {
+                    "google": google_module,
+                    "google.genai": genai_module,
+                    "google.genai.types": types_module,
+                },
+            ),
+        ):
+            monitor._check_gemini("key")
+
+    def test_get_health_monitor_returns_global_singleton(self):
+        from scribe.providers.health import get_health_monitor
+
+        assert get_health_monitor() is get_health_monitor()

@@ -7,6 +7,7 @@ Useful for recordings left running overnight or with long pauses.
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def remove_silence(
     output_path: Path | None = None,
     silence_threshold: str = "-50dB",
     silence_duration: float = 2.0,
-    keep_silence: float = 0.5
+    keep_silence: float = 0.5,
 ) -> Path:
     """
     Remove silence from audio/video file using FFmpeg.
@@ -72,24 +73,24 @@ def remove_silence(
     # Build FFmpeg command
     cmd = [
         "ffmpeg",
-        "-i", str(input_path),
-        "-af", filter_complex,
-        "-c:v", "copy",  # Copy video without re-encoding (fast)
-        "-c:a", "aac",   # Re-encode audio to apply filter
-        "-b:a", "192k",  # Good audio quality
+        "-i",
+        str(input_path),
+        "-af",
+        filter_complex,
+        "-c:v",
+        "copy",  # Copy video without re-encoding (fast)
+        "-c:a",
+        "aac",  # Re-encode audio to apply filter
+        "-b:a",
+        "192k",  # Good audio quality
         "-y",  # Overwrite output file
-        str(output_path)
+        str(output_path),
     ]
 
     try:
         logger.info("Running FFmpeg silence removal...")
         logger.info("Note: This reduces silent sections for faster transcription")
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         logger.info(f"Silence removed successfully: {output_path}")
         return output_path
@@ -107,10 +108,8 @@ def remove_silence(
 
 
 def analyze_silence(
-    input_path: Path,
-    silence_threshold: str = "-50dB",
-    silence_duration: float = 2.0
-) -> dict:
+    input_path: Path, silence_threshold: str = "-50dB", silence_duration: float = 2.0
+) -> dict[str, Any]:
     """
     Analyze how much silence is in a file without removing it.
 
@@ -130,10 +129,13 @@ def analyze_silence(
     # Use silencedetect filter to analyze
     cmd = [
         "ffmpeg",
-        "-i", str(input_path),
-        "-af", f"silencedetect=noise={silence_threshold}:d={silence_duration}",
-        "-f", "null",
-        "-"
+        "-i",
+        str(input_path),
+        "-af",
+        f"silencedetect=noise={silence_threshold}:d={silence_duration}",
+        "-f",
+        "null",
+        "-",
     ]
 
     try:
@@ -141,7 +143,7 @@ def analyze_silence(
             cmd,
             capture_output=True,
             text=True,
-            check=False  # Don't raise on non-zero exit (expected for analysis)
+            check=False,  # Don't raise on non-zero exit (expected for analysis)
         )
 
         # Parse silence periods from stderr
@@ -149,49 +151,44 @@ def analyze_silence(
         silence_starts = []
         silence_ends = []
 
-        for line in stderr.split('\n'):
-            if 'silence_start' in line:
+        for line in stderr.split("\n"):
+            if "silence_start" in line:
                 try:
-                    time = float(line.split('silence_start: ')[1].split()[0])
+                    time = float(line.split("silence_start: ")[1].split()[0])
                     silence_starts.append(time)
                 except (IndexError, ValueError):
                     pass
-            elif 'silence_end' in line:
+            elif "silence_end" in line:
                 try:
-                    time = float(line.split('silence_end: ')[1].split()[0])
+                    time = float(line.split("silence_end: ")[1].split()[0])
                     silence_ends.append(time)
                 except (IndexError, ValueError):
                     pass
 
         # Calculate total silence
-        total_silence = 0
-        silence_periods = []
+        total_silence = 0.0
+        silence_periods: list[dict[str, float]] = []
         for start, end in zip(silence_starts, silence_ends, strict=False):
             duration = end - start
             total_silence += duration
-            silence_periods.append({
-                'start': start,
-                'end': end,
-                'duration': duration
-            })
+            silence_periods.append({"start": start, "end": end, "duration": duration})
 
         return {
-            'total_silence_seconds': total_silence,
-            'total_silence_minutes': total_silence / 60,
-            'silence_periods': len(silence_periods),
-            'periods': silence_periods
+            "total_silence_seconds": total_silence,
+            "total_silence_minutes": total_silence / 60,
+            "silence_periods": len(silence_periods),
+            "periods": silence_periods,
         }
 
     except FileNotFoundError:
         raise RuntimeError("FFmpeg not found. Please install FFmpeg.")
 
 
-
 def trim_file(
     input_path: Path,
     output_path: Path | None = None,
     end_time: str | None = None,
-    start_time: str = "00:00:00"
+    start_time: str = "00:00:00",
 ) -> Path:
     """
     Trim audio/video file to a specific time range.
@@ -228,22 +225,21 @@ def trim_file(
     # Using -t for duration or -to for end time
     cmd = [
         "ffmpeg",
-        "-i", str(input_path),
-        "-ss", start_time,  # Start time
-        "-to", end_time,    # End time
-        "-c", "copy",       # Copy without re-encoding (fast!)
-        "-y",               # Overwrite output file
-        str(output_path)
+        "-i",
+        str(input_path),
+        "-ss",
+        start_time,  # Start time
+        "-to",
+        end_time,  # End time
+        "-c",
+        "copy",  # Copy without re-encoding (fast!)
+        "-y",  # Overwrite output file
+        str(output_path),
     ]
 
     try:
         logger.info("Running FFmpeg trim...")
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         logger.info(f"File trimmed successfully: {output_path}")
         return output_path

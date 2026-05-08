@@ -312,9 +312,7 @@ class CustomVocabulary:
             logger.debug("Loading plain text vocabulary file")
             with open(vocab_file, encoding="utf-8") as f:
                 words = [
-                    line.strip()
-                    for line in f
-                    if line.strip() and not line.strip().startswith("#")
+                    line.strip() for line in f if line.strip() and not line.strip().startswith("#")
                 ]
             logger.debug(f"Loaded {len(words)} terms from text file (comments filtered)")
 

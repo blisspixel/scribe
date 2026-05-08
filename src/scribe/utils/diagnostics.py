@@ -169,15 +169,18 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from openai import AuthenticationError, OpenAI
 
+from scribe.models.gpu import GPUConfig
 from scribe.utils.platform import get_platform, is_windows
 
 
 @dataclass
 class DiagnosticResult:
     """Result of a diagnostic check."""
+
     name: str
     status: str  # "pass", "warn", "fail"
     message: str
@@ -188,7 +191,7 @@ class DiagnosticResult:
 class SystemDiagnostics:
     """System diagnostics and health checks."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.results: list[DiagnosticResult] = []
 
     def run_all_checks(self) -> list[DiagnosticResult]:
@@ -235,7 +238,7 @@ class SystemDiagnostics:
                 name="Python Version",
                 status="pass",
                 message=f"Python {version_str}",
-                details="Python 3.10+ detected"
+                details="Python 3.10+ detected",
             )
         elif version.major == 3 and version.minor >= 8:
             result = DiagnosticResult(
@@ -243,7 +246,7 @@ class SystemDiagnostics:
                 status="warn",
                 message=f"Python {version_str}",
                 details="Python 3.10+ recommended",
-                fix_suggestion="Upgrade to Python 3.10 or newer for best compatibility"
+                fix_suggestion="Upgrade to Python 3.10 or newer for best compatibility",
             )
         else:
             result = DiagnosticResult(
@@ -251,7 +254,7 @@ class SystemDiagnostics:
                 status="fail",
                 message=f"Python {version_str}",
                 details="Python 3.10+ required",
-                fix_suggestion="Install Python 3.10 or newer from python.org"
+                fix_suggestion="Install Python 3.10 or newer from python.org",
             )
 
         self.results.append(result)
@@ -264,18 +267,15 @@ class SystemDiagnostics:
         if ffmpeg_path:
             try:
                 output = subprocess.check_output(
-                    ["ffmpeg", "-version"],
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=5
+                    ["ffmpeg", "-version"], stderr=subprocess.STDOUT, text=True, timeout=5
                 )
-                version_line = output.split('\n')[0]
+                version_line = output.split("\n")[0]
 
                 result = DiagnosticResult(
                     name="FFmpeg",
                     status="pass",
                     message="Installed",
-                    details=f"Found at: {ffmpeg_path}\n{version_line}"
+                    details=f"Found at: {ffmpeg_path}\n{version_line}",
                 )
             except Exception as e:
                 result = DiagnosticResult(
@@ -283,13 +283,13 @@ class SystemDiagnostics:
                     status="warn",
                     message="Found but not working",
                     details=f"Path: {ffmpeg_path}\nError: {e}",
-                    fix_suggestion="Reinstall FFmpeg"
+                    fix_suggestion="Reinstall FFmpeg",
                 )
         else:
             platform = get_platform()
             if is_windows():
                 fix = "Install: winget install FFmpeg.FFmpeg"
-            elif platform == "darwin":
+            elif platform == "macos":
                 fix = "Install: brew install ffmpeg"
             else:
                 fix = "Install: sudo apt install ffmpeg"
@@ -299,7 +299,7 @@ class SystemDiagnostics:
                 status="fail",
                 message="Not found",
                 details="FFmpeg is required for audio/video conversion",
-                fix_suggestion=fix
+                fix_suggestion=fix,
             )
 
         self.results.append(result)
@@ -314,7 +314,7 @@ class SystemDiagnostics:
                 name="FFprobe",
                 status="pass",
                 message="Installed",
-                details=f"Found at: {ffprobe_path}"
+                details=f"Found at: {ffprobe_path}",
             )
         else:
             result = DiagnosticResult(
@@ -322,7 +322,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Not found",
                 details="FFprobe is useful for media file inspection",
-                fix_suggestion="Usually installed with FFmpeg"
+                fix_suggestion="Usually installed with FFmpeg",
             )
 
         self.results.append(result)
@@ -331,14 +331,15 @@ class SystemDiagnostics:
     def check_ytdlp(self) -> DiagnosticResult:
         """Check yt-dlp availability for URL downloads."""
         try:
-            import yt_dlp
+            import yt_dlp  # type: ignore[import-untyped]
+
             version = getattr(yt_dlp, "version", None)
             ver_str = getattr(version, "__version__", "installed") if version else "installed"
             result = DiagnosticResult(
                 name="yt-dlp",
                 status="pass",
                 message=ver_str,
-                details="Required for scribe url command"
+                details="Required for scribe url command",
             )
         except ImportError:
             result = DiagnosticResult(
@@ -346,7 +347,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Not installed",
                 details="Required for scribe url (YouTube, Vimeo, etc.)",
-                fix_suggestion="Run: pip install yt-dlp"
+                fix_suggestion="Run: pip install yt-dlp",
             )
 
         self.results.append(result)
@@ -354,32 +355,26 @@ class SystemDiagnostics:
 
     def check_cuda(self) -> DiagnosticResult:
         """Check CUDA availability."""
-        try:
-            import torch
+        gpu_config = GPUConfig.detect()
 
-            if torch.cuda.is_available():
-                cuda_version = torch.version.cuda
-                result = DiagnosticResult(
-                    name="CUDA",
-                    status="pass",
-                    message=f"CUDA {cuda_version}",
-                    details="CUDA is available for GPU acceleration"
-                )
-            else:
-                result = DiagnosticResult(
-                    name="CUDA",
-                    status="warn",
-                    message="Not available",
-                    details="PyTorch installed but CUDA not detected",
-                    fix_suggestion="Install CUDA-enabled PyTorch: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124"
-                )
-        except ImportError:
+        if gpu_config.has_gpu:
+            result = DiagnosticResult(
+                name="CUDA",
+                status="pass",
+                message=(
+                    f"CUDA {gpu_config.cuda_version}"
+                    if gpu_config.cuda_version
+                    else "CUDA available"
+                ),
+                details=gpu_config.reason,
+            )
+        else:
             result = DiagnosticResult(
                 name="CUDA",
                 status="warn",
-                message="PyTorch not installed",
-                details="GPU acceleration not available",
-                fix_suggestion="Install PyTorch for GPU support (optional)"
+                message="Not available",
+                details=gpu_config.reason,
+                fix_suggestion="Install CUDA-enabled PyTorch for PyTorch-backed features: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124",
             )
 
         self.results.append(result)
@@ -387,38 +382,22 @@ class SystemDiagnostics:
 
     def check_gpu(self) -> DiagnosticResult:
         """Check GPU availability and details."""
-        try:
-            import torch
+        gpu_config = GPUConfig.detect()
 
-            if torch.cuda.is_available():
-                gpu_count = torch.cuda.device_count()
-                gpu_name = torch.cuda.get_device_name(0)
-
-                # Get VRAM
-                props = torch.cuda.get_device_properties(0)
-                vram_gb = props.total_memory / (1024**3)
-
-                result = DiagnosticResult(
-                    name="GPU",
-                    status="pass",
-                    message=f"{gpu_name}",
-                    details=f"VRAM: {vram_gb:.1f} GB\nDevices: {gpu_count}"
-                )
-            else:
-                result = DiagnosticResult(
-                    name="GPU",
-                    status="warn",
-                    message="No GPU detected",
-                    details="Will use OpenAI API for transcription",
-                    fix_suggestion="GPU is optional - API mode works great"
-                )
-        except ImportError:
+        if gpu_config.has_gpu:
+            result = DiagnosticResult(
+                name="GPU",
+                status="pass",
+                message=gpu_config.gpu_name or "CUDA GPU detected",
+                details=f"VRAM: {gpu_config.gpu_memory_gb:.1f} GB\n{gpu_config.reason}",
+            )
+        else:
             result = DiagnosticResult(
                 name="GPU",
                 status="warn",
-                message="PyTorch not installed",
-                details="Cannot detect GPU",
-                fix_suggestion="Install PyTorch to enable GPU detection"
+                message="No GPU detected",
+                details=gpu_config.reason,
+                fix_suggestion="GPU is optional - API mode works great",
             )
 
         self.results.append(result)
@@ -434,7 +413,7 @@ class SystemDiagnostics:
                 status="fail",
                 message="Not configured",
                 details="Required for API transcription, notes, jokes, and memes",
-                fix_suggestion="Set OPENAI_API_KEY in your .env file"
+                fix_suggestion="Set OPENAI_API_KEY in your .env file",
             )
             self.results.append(result)
             return result
@@ -446,7 +425,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Invalid format",
                 details="API key doesn't match expected format",
-                fix_suggestion="Get a valid API key from https://platform.openai.com/api-keys"
+                fix_suggestion="Get a valid API key from https://platform.openai.com/api-keys",
             )
             self.results.append(result)
             return result
@@ -459,7 +438,7 @@ class SystemDiagnostics:
                 name="OpenAI API Key",
                 status="pass",
                 message="Valid",
-                details=f"Key: {api_key[:10]}...{api_key[-4:]}"
+                details=f"Key: {api_key[:10]}...{api_key[-4:]}",
             )
         except AuthenticationError:
             result = DiagnosticResult(
@@ -470,7 +449,7 @@ class SystemDiagnostics:
                 fix_suggestion=(
                     "Your API key is rejected by OpenAI. "
                     "Get a new key at https://platform.openai.com/api-keys"
-                )
+                ),
             )
         except Exception as e:
             # Network error, timeout, etc. — key format is fine, can't verify
@@ -479,7 +458,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Could not verify",
                 details=f"Key: {api_key[:10]}...{api_key[-4:]} | Error: {e}",
-                fix_suggestion="Check your internet connection"
+                fix_suggestion="Check your internet connection",
             )
 
         self.results.append(result)
@@ -495,7 +474,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Not configured",
                 details="Will use default: ./output",
-                fix_suggestion="Set SCRIBE_OUTPUT_FOLDER in your .env file"
+                fix_suggestion="Set SCRIBE_OUTPUT_FOLDER in your .env file",
             )
         else:
             output_path = Path(output_folder).expanduser()
@@ -512,7 +491,7 @@ class SystemDiagnostics:
                             name="Output Folder",
                             status="pass",
                             message="Configured and writable",
-                            details=f"Path: {output_path}"
+                            details=f"Path: {output_path}",
                         )
                     except Exception as e:
                         result = DiagnosticResult(
@@ -520,7 +499,7 @@ class SystemDiagnostics:
                             status="fail",
                             message="Not writable",
                             details=f"Path: {output_path}\nError: {e}",
-                            fix_suggestion="Check folder permissions"
+                            fix_suggestion="Check folder permissions",
                         )
                 else:
                     result = DiagnosticResult(
@@ -528,7 +507,7 @@ class SystemDiagnostics:
                         status="fail",
                         message="Not a directory",
                         details=f"Path: {output_path}",
-                        fix_suggestion="Remove the file or choose a different path"
+                        fix_suggestion="Remove the file or choose a different path",
                     )
             else:
                 result = DiagnosticResult(
@@ -536,7 +515,7 @@ class SystemDiagnostics:
                     status="warn",
                     message="Does not exist",
                     details=f"Path: {output_path}",
-                    fix_suggestion="Folder will be created automatically on first use"
+                    fix_suggestion="Folder will be created automatically on first use",
                 )
 
         self.results.append(result)
@@ -561,7 +540,7 @@ class SystemDiagnostics:
                     name="Disk Space",
                     status="pass",
                     message=f"{free_gb:.1f} GB free",
-                    details=f"Total: {total_gb:.1f} GB ({percent_free:.1f}% free)"
+                    details=f"Total: {total_gb:.1f} GB ({percent_free:.1f}% free)",
                 )
             elif free_gb > 5:
                 result = DiagnosticResult(
@@ -569,7 +548,7 @@ class SystemDiagnostics:
                     status="warn",
                     message=f"{free_gb:.1f} GB free",
                     details=f"Total: {total_gb:.1f} GB ({percent_free:.1f}% free)",
-                    fix_suggestion="Consider freeing up disk space"
+                    fix_suggestion="Consider freeing up disk space",
                 )
             else:
                 result = DiagnosticResult(
@@ -577,7 +556,7 @@ class SystemDiagnostics:
                     status="fail",
                     message=f"{free_gb:.1f} GB free",
                     details=f"Total: {total_gb:.1f} GB ({percent_free:.1f}% free)",
-                    fix_suggestion="Free up disk space - less than 5 GB available"
+                    fix_suggestion="Free up disk space - less than 5 GB available",
                 )
         except Exception as e:
             result = DiagnosticResult(
@@ -585,7 +564,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Could not check",
                 details=f"Error: {e}",
-                fix_suggestion=None
+                fix_suggestion=None,
             )
 
         self.results.append(result)
@@ -600,7 +579,7 @@ class SystemDiagnostics:
                 name=".env File",
                 status="pass",
                 message="Found",
-                details=f"Path: {env_file.absolute()}"
+                details=f"Path: {env_file.absolute()}",
             )
         else:
             result = DiagnosticResult(
@@ -608,7 +587,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Not found",
                 details="Using environment variables or defaults",
-                fix_suggestion="Copy .env.example to .env and configure"
+                fix_suggestion="Copy .env.example to .env and configure",
             )
 
         self.results.append(result)
@@ -623,7 +602,7 @@ class SystemDiagnostics:
             "faster_whisper": "0.10.0",
             "openai": "1.0.0",
             "typer": "0.9.0",
-            "rich": "13.0.0"
+            "rich": "13.0.0",
         }
 
         for package, _min_version in critical_packages.items():
@@ -638,14 +617,14 @@ class SystemDiagnostics:
                 status="fail",
                 message=f"{len(missing)} critical package(s) missing",
                 details=f"Missing: {', '.join(missing)}",
-                fix_suggestion="Run: pip install -r requirements.txt"
+                fix_suggestion="Run: pip install -r requirements.txt",
             )
         else:
             result = DiagnosticResult(
                 name="Python Packages",
                 status="pass",
                 message="All critical packages installed",
-                details=f"Checked: {', '.join(critical_packages.keys())}"
+                details=f"Checked: {', '.join(critical_packages.keys())}",
             )
 
         self.results.append(result)
@@ -653,52 +632,51 @@ class SystemDiagnostics:
 
     def check_gpu_memory(self) -> DiagnosticResult:
         """Check GPU memory and recommend optimal settings."""
-        try:
-            import torch
+        gpu_config = GPUConfig.detect()
 
-            if torch.cuda.is_available():
-                props = torch.cuda.get_device_properties(0)
-                vram_gb = props.total_memory / (1024**3)
+        if gpu_config.has_gpu and gpu_config.gpu_memory_gb > 0:
+            vram_gb = gpu_config.gpu_memory_gb
 
-                # Recommend model based on VRAM
-                if vram_gb >= 24:
-                    recommendation = "large-v3 with beam_size=10 (optimal)"
-                    status = "pass"
-                elif vram_gb >= 16:
-                    recommendation = "large-v3 with beam_size=8 (good)"
-                    status = "pass"
-                elif vram_gb >= 12:
-                    recommendation = "large-v3 with beam_size=5 (adequate)"
-                    status = "warn"
-                elif vram_gb >= 8:
-                    recommendation = "large-v2 or medium (recommended)"
-                    status = "warn"
-                else:
-                    recommendation = "Use OpenAI API (insufficient VRAM)"
-                    status = "warn"
-
-                result = DiagnosticResult(
-                    name="GPU Memory",
-                    status=status,
-                    message=f"{vram_gb:.1f} GB VRAM",
-                    details=f"Recommendation: {recommendation}",
-                    fix_suggestion=None if status == "pass" else "Consider using OpenAI API for better performance"
-                )
+            if vram_gb >= 24:
+                recommendation = "large-v3 with beam_size=10 (optimal)"
+                status = "pass"
+            elif vram_gb >= 16:
+                recommendation = "large-v3 with beam_size=8 (good)"
+                status = "pass"
+            elif vram_gb >= 12:
+                recommendation = "large-v3 with beam_size=5 (adequate)"
+                status = "warn"
+            elif vram_gb >= 8:
+                recommendation = "large-v2 or medium (recommended)"
+                status = "warn"
             else:
-                result = DiagnosticResult(
-                    name="GPU Memory",
-                    status="warn",
-                    message="No GPU detected",
-                    details="GPU memory check skipped",
-                    fix_suggestion=None
-                )
-        except ImportError:
+                recommendation = "Use OpenAI API (insufficient VRAM)"
+                status = "warn"
+
+            result = DiagnosticResult(
+                name="GPU Memory",
+                status=status,
+                message=f"{vram_gb:.1f} GB VRAM",
+                details=f"Recommendation: {recommendation}",
+                fix_suggestion=(
+                    None if status == "pass" else "Consider using OpenAI API for better performance"
+                ),
+            )
+        elif gpu_config.has_gpu:
             result = DiagnosticResult(
                 name="GPU Memory",
                 status="warn",
-                message="PyTorch not installed",
-                details="Cannot check GPU memory",
-                fix_suggestion=None
+                message="GPU detected",
+                details="Could not determine VRAM amount automatically",
+                fix_suggestion="Run nvidia-smi to confirm available VRAM",
+            )
+        else:
+            result = DiagnosticResult(
+                name="GPU Memory",
+                status="warn",
+                message="No GPU detected",
+                details="GPU memory check skipped",
+                fix_suggestion=None,
             )
 
         self.results.append(result)
@@ -718,28 +696,34 @@ class SystemDiagnostics:
                     timeout=10,
                 )
                 client.models.list()
-                results.append(DiagnosticResult(
-                    name="XAI/Grok API Key",
-                    status="pass",
-                    message="Valid",
-                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
-                ))
+                results.append(
+                    DiagnosticResult(
+                        name="XAI/Grok API Key",
+                        status="pass",
+                        message="Valid",
+                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                    )
+                )
             except AuthenticationError:
-                results.append(DiagnosticResult(
-                    name="XAI/Grok API Key",
-                    status="fail",
-                    message="Invalid key (401 Unauthorized)",
-                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
-                    fix_suggestion="Update XAI_API_KEY in your .env file",
-                ))
+                results.append(
+                    DiagnosticResult(
+                        name="XAI/Grok API Key",
+                        status="fail",
+                        message="Invalid key (401 Unauthorized)",
+                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                        fix_suggestion="Update XAI_API_KEY in your .env file",
+                    )
+                )
             except Exception as e:
-                results.append(DiagnosticResult(
-                    name="XAI/Grok API Key",
-                    status="warn",
-                    message="Could not verify",
-                    details=f"Key: {xai_key[:8]}...{xai_key[-4:]} | Error: {e}",
-                    fix_suggestion="Check your internet connection",
-                ))
+                results.append(
+                    DiagnosticResult(
+                        name="XAI/Grok API Key",
+                        status="warn",
+                        message="Could not verify",
+                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]} | Error: {e}",
+                        fix_suggestion="Check your internet connection",
+                    )
+                )
 
         # Gemini — Google genai SDK
         gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
@@ -747,51 +731,62 @@ class SystemDiagnostics:
             try:
                 import google.genai as genai
 
-                client = genai.Client(api_key=gemini_key)
-                list(client.models.list(config={"page_size": 1}))
-                results.append(DiagnosticResult(
-                    name="Gemini API Key",
-                    status="pass",
-                    message="Valid",
-                    details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
-                ))
+                gemini_client = genai.Client(api_key=gemini_key)
+                list_models = cast(Any, gemini_client.models).list
+                list(list_models(config={"page_size": 1}))
+                results.append(
+                    DiagnosticResult(
+                        name="Gemini API Key",
+                        status="pass",
+                        message="Valid",
+                        details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                    )
+                )
             except Exception as e:
                 err = str(e).lower()
                 if "401" in err or "invalid" in err or "api key" in err:
-                    results.append(DiagnosticResult(
-                        name="Gemini API Key",
-                        status="fail",
-                        message="Invalid key",
-                        details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
-                        fix_suggestion="Update GEMINI_API_KEY in your .env file",
-                    ))
+                    results.append(
+                        DiagnosticResult(
+                            name="Gemini API Key",
+                            status="fail",
+                            message="Invalid key",
+                            details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                            fix_suggestion="Update GEMINI_API_KEY in your .env file",
+                        )
+                    )
                 else:
-                    results.append(DiagnosticResult(
-                        name="Gemini API Key",
-                        status="warn",
-                        message="Could not verify",
-                        details=f"Error: {e}",
-                        fix_suggestion="Check your internet connection",
-                    ))
+                    results.append(
+                        DiagnosticResult(
+                            name="Gemini API Key",
+                            status="warn",
+                            message="Could not verify",
+                            details=f"Error: {e}",
+                            fix_suggestion="Check your internet connection",
+                        )
+                    )
 
         # Anthropic — just check presence (no lightweight endpoint)
         anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
         if anthropic_key:
-            results.append(DiagnosticResult(
-                name="Anthropic API Key",
-                status="pass",
-                message="Configured",
-                details=f"Key: {anthropic_key[:8]}...{anthropic_key[-4:]}",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Anthropic API Key",
+                    status="pass",
+                    message="Configured",
+                    details=f"Key: {anthropic_key[:8]}...{anthropic_key[-4:]}",
+                )
+            )
 
         if not results:
-            results.append(DiagnosticResult(
-                name="Additional Providers",
-                status="warn",
-                message="No additional providers",
-                details="Only OpenAI configured",
-                fix_suggestion="Consider adding XAI or other providers for cost savings",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Additional Providers",
+                    status="warn",
+                    message="No additional providers",
+                    details="Only OpenAI configured",
+                    fix_suggestion="Consider adding XAI or other providers for cost savings",
+                )
+            )
 
         self.results.extend(results)
         return results
@@ -810,7 +805,7 @@ class SystemDiagnostics:
                     name="Temp Space",
                     status="pass",
                     message=f"{free_gb:.1f} GB free",
-                    details=f"Temp dir: {temp_dir}"
+                    details=f"Temp dir: {temp_dir}",
                 )
             elif free_gb > 2:
                 result = DiagnosticResult(
@@ -818,7 +813,7 @@ class SystemDiagnostics:
                     status="warn",
                     message=f"{free_gb:.1f} GB free",
                     details=f"Temp dir: {temp_dir}",
-                    fix_suggestion="Consider cleaning temp directory"
+                    fix_suggestion="Consider cleaning temp directory",
                 )
             else:
                 result = DiagnosticResult(
@@ -826,7 +821,7 @@ class SystemDiagnostics:
                     status="fail",
                     message=f"{free_gb:.1f} GB free",
                     details=f"Temp dir: {temp_dir}",
-                    fix_suggestion="Clean temp directory - audio processing requires temporary space"
+                    fix_suggestion="Clean temp directory - audio processing requires temporary space",
                 )
         except Exception as e:
             result = DiagnosticResult(
@@ -834,7 +829,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Could not check",
                 details=f"Error: {e}",
-                fix_suggestion=None
+                fix_suggestion=None,
             )
 
         self.results.append(result)
@@ -877,14 +872,14 @@ class SystemDiagnostics:
                 status="warn",
                 message=f"{len(issues)} issue(s) found",
                 details="\n".join(f"- {issue}" for issue in issues),
-                fix_suggestion="Review and fix configuration in .env file"
+                fix_suggestion="Review and fix configuration in .env file",
             )
         else:
             result = DiagnosticResult(
                 name="Configuration",
                 status="pass",
                 message="No conflicts detected",
-                details="Configuration appears valid"
+                details="Configuration appears valid",
             )
 
         self.results.append(result)
@@ -893,7 +888,7 @@ class SystemDiagnostics:
     def check_system_resources(self) -> DiagnosticResult:
         """Check system resources (CPU, RAM)."""
         try:
-            import psutil
+            import psutil  # type: ignore[import-untyped]
 
             # Check RAM
             ram = psutil.virtual_memory()
@@ -906,7 +901,7 @@ class SystemDiagnostics:
 
             details_lines = [
                 f"RAM: {ram_gb:.1f} GB total, {ram_available_gb:.1f} GB available ({100-ram_percent:.1f}% free)",
-                f"CPU: {cpu_count} cores"
+                f"CPU: {cpu_count} cores",
             ]
 
             if ram_gb < 8:
@@ -927,7 +922,7 @@ class SystemDiagnostics:
                 status=status,
                 message=message,
                 details="\n".join(details_lines),
-                fix_suggestion=fix
+                fix_suggestion=fix,
             )
         except ImportError:
             result = DiagnosticResult(
@@ -935,7 +930,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="psutil not installed",
                 details="Cannot check system resources",
-                fix_suggestion="Install psutil for resource monitoring: pip install psutil"
+                fix_suggestion="Install psutil for resource monitoring: pip install psutil",
             )
         except Exception as e:
             result = DiagnosticResult(
@@ -943,7 +938,7 @@ class SystemDiagnostics:
                 status="warn",
                 message="Could not check",
                 details=f"Error: {e}",
-                fix_suggestion=None
+                fix_suggestion=None,
             )
 
         self.results.append(result)

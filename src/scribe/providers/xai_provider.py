@@ -4,7 +4,7 @@ XAI/Grok provider implementation.
 
 import base64
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI  # XAI API is OpenAI-compatible
 
@@ -15,14 +15,14 @@ from scribe.utils.costs import add_cost_fields, numeric_attr, usd_from_ticks
 class XAIProvider(AIProvider):
     """XAI/Grok API provider."""
 
-    def __init__(self, config: ProviderConfig):
+    def __init__(self, config: ProviderConfig) -> None:
         super().__init__(config)
         # XAI uses OpenAI-compatible API
         self.client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url or "https://api.x.ai/v1",
             timeout=config.timeout,
-            max_retries=config.max_retries
+            max_retries=config.max_retries,
         )
 
     def chat_completion(
@@ -30,11 +30,11 @@ class XAIProvider(AIProvider):
         messages: list[dict[str, Any]],
         max_tokens: int | None = None,
         temperature: float | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Create a chat completion using Grok."""
 
-        params = {
+        params: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
         }
@@ -46,7 +46,7 @@ class XAIProvider(AIProvider):
         # Add any additional kwargs
         params.update(kwargs)
 
-        response = self.client.chat.completions.create(**params)
+        response = cast(Any, self.client.chat.completions).create(**params)
 
         usage = {
             "prompt_tokens": response.usage.prompt_tokens,
@@ -60,17 +60,12 @@ class XAIProvider(AIProvider):
         )
 
         return {
-            "content": response.choices[0].message.content,
+            "content": response.choices[0].message.content or "",
             "usage": usage,
             "model": response.model,
         }
 
-    def transcribe_audio(
-        self,
-        audio_path: str,
-        language: str | None = None,
-        **kwargs
-    ) -> str:
+    def transcribe_audio(self, audio_path: str, language: str | None = None, **kwargs: Any) -> str:
         """
         Transcribe audio using Grok.
 
@@ -82,14 +77,10 @@ class XAIProvider(AIProvider):
             "Use OpenAI provider for transcription."
         )
 
-    def generate_image(
-        self,
-        prompt: str,
-        size: str = "1024x1024",
-        **kwargs
-    ) -> bytes:
+    def generate_image(self, prompt: str, size: str = "1024x1024", **kwargs: Any) -> bytes:
         """Generate an image using Grok."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         model = self.config.model or "grok-imagine-image"
@@ -98,20 +89,21 @@ class XAIProvider(AIProvider):
         try:
             logger.debug(f"Attempting XAI image generation with b64_json format using {model}")
             response = self.client.images.generate(
-                model=model,
-                prompt=prompt,
-                n=1,
-                response_format="b64_json"
+                model=model, prompt=prompt, n=1, response_format="b64_json"
             )
 
-            logger.debug(f"XAI response received: {type(response)}, data length: {len(response.data) if response.data else 0}")
+            logger.debug(
+                f"XAI response received: {type(response)}, data length: {len(response.data) if response.data else 0}"
+            )
 
             if not response.data or len(response.data) == 0:
                 raise ValueError("XAI API returned no image data")
 
             # Get base64 data
             b64_data = response.data[0].b64_json
-            logger.debug(f"b64_json data present: {b64_data is not None}, length: {len(b64_data) if b64_data else 0}")
+            logger.debug(
+                f"b64_json data present: {b64_data is not None}, length: {len(b64_data) if b64_data else 0}"
+            )
 
             if not b64_data:
                 raise ValueError("XAI API returned empty base64 data")
@@ -127,13 +119,12 @@ class XAIProvider(AIProvider):
             try:
                 logger.debug(f"Attempting XAI image generation with URL format using {model}")
                 response = self.client.images.generate(
-                    model=model,
-                    prompt=prompt,
-                    n=1,
-                    response_format="url"
+                    model=model, prompt=prompt, n=1, response_format="url"
                 )
 
-                logger.debug(f"XAI URL response received: {type(response)}, data length: {len(response.data) if response.data else 0}")
+                logger.debug(
+                    f"XAI URL response received: {type(response)}, data length: {len(response.data) if response.data else 0}"
+                )
 
                 if not response.data or len(response.data) == 0:
                     raise ValueError("XAI API returned no image data")
@@ -143,7 +134,9 @@ class XAIProvider(AIProvider):
 
                 if not image_url:
                     # Log the full response for debugging
-                    logger.error(f"XAI returned None URL. Response data[0] attributes: {dir(response.data[0])}")
+                    logger.error(
+                        f"XAI returned None URL. Response data[0] attributes: {dir(response.data[0])}"
+                    )
                     raise ValueError("XAI API returned no URL")
 
                 # Download the image
@@ -167,7 +160,7 @@ class XAIProvider(AIProvider):
             return response.content
         except ImportError:
             with urllib.request.urlopen(image_url, timeout=timeout) as response:
-                return response.read()
+                return bytes(response.read())
 
     def _log_response_cost(self, response: Any, logger: Any) -> None:
         """Log xAI exact response cost when the API provides it."""
@@ -177,16 +170,11 @@ class XAIProvider(AIProvider):
         if cost_usd is not None:
             logger.info(f"XAI request cost: ${cost_usd:.6f}")
 
-    def analyze_image(
-        self,
-        image_data: bytes,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
         """Analyze an image using Grok vision."""
 
         # Encode image to base64
-        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         messages = [
             {
@@ -195,13 +183,11 @@ class XAIProvider(AIProvider):
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{image_b64}"
-                        }
-                    }
-                ]
+                        "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                    },
+                ],
             }
         ]
 
         response = self.chat_completion(messages, **kwargs)
-        return response["content"]
+        return str(response["content"])

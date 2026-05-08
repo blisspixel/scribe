@@ -132,4 +132,3 @@ def get_terminal_ui_config() -> TerminalUIConfig:
         use_color=use_color,
         capabilities=capabilities,
     )
-

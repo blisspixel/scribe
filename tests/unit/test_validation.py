@@ -177,7 +177,17 @@ class TestValidateModelName:
 
     def test_validate_valid_whisper_models(self):
         """Test validation of valid Whisper model names."""
-        valid_models = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"]
+        valid_models = [
+            "tiny",
+            "base",
+            "small",
+            "medium",
+            "large",
+            "large-v2",
+            "large-v3",
+            "large-v3-turbo",
+            "turbo",
+        ]
 
         for model in valid_models:
             result = validate_model_name(model, valid_models)
@@ -302,7 +312,7 @@ class TestValidateEmail:
             "user@example.com",
             "test.user@example.co.uk",
             "user+tag@example.com",
-            "user_name@example-domain.com"
+            "user_name@example-domain.com",
         ]
 
         for email in valid_emails:
@@ -316,7 +326,7 @@ class TestValidateEmail:
             "@example.com",
             "user@",
             "user @example.com",
-            "user@example"
+            "user@example",
         ]
 
         for email in invalid_emails:
@@ -339,7 +349,7 @@ class TestValidateURL:
             "https://example.com",
             "https://www.example.com/path",
             "http://localhost:8080",
-            "https://example.com:443/path?query=value"
+            "https://example.com:443/path?query=value",
         ]
 
         for url in valid_urls:

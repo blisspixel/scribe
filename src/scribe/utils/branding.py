@@ -56,4 +56,3 @@ def brand_header_markup(
         end_hue=end_hue + hue_shift,
         bold=bold,
     )
-

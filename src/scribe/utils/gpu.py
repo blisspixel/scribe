@@ -81,6 +81,7 @@ def check_cuda_available() -> bool:
     """
     try:
         import torch
+
         return torch.cuda.is_available()
     except ImportError:
         return False
@@ -95,6 +96,7 @@ def get_cuda_version() -> str:
     """
     try:
         import torch
+
         if torch.cuda.is_available():
             return torch.version.cuda or "Unknown"
     except ImportError:
@@ -118,6 +120,7 @@ def get_gpu_memory_info() -> dict[str, float]:
 
     try:
         import torch
+
         if torch.cuda.is_available():
             total = torch.cuda.get_device_properties(0).total_memory
             allocated = torch.cuda.memory_allocated(0)
@@ -135,6 +138,7 @@ def clear_gpu_cache() -> None:
     """Clear GPU memory cache."""
     try:
         import torch
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()

@@ -244,6 +244,7 @@ module handles both with appropriate detail levels.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -259,7 +260,7 @@ def setup_logging(
     session_name: str,
     log_dir: Path,
     console_level: int = logging.WARNING,
-    file_level: int = logging.DEBUG
+    file_level: int = logging.DEBUG,
 ) -> logging.Logger:
     """
     Configure dual-output logging (console + file).
@@ -285,6 +286,7 @@ def setup_logging(
 
     # Generate log filename
     from datetime import datetime
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"scribe_{session_name}_{timestamp}.log"
 
@@ -301,7 +303,7 @@ def setup_logging(
     file_handler.setLevel(file_level)
     file_formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     file_handler.setFormatter(file_formatter)
 
@@ -379,7 +381,9 @@ def log_system_info(logger: logging.Logger) -> None:
         logger.debug(f"  GPU: Detection failed ({e})")
 
 
-def log_exception(logger: logging.Logger, exc: Exception, context: dict | None = None) -> None:
+def log_exception(
+    logger: logging.Logger, exc: Exception, context: dict[str, Any] | None = None
+) -> None:
     """
     Log exception with context.
 

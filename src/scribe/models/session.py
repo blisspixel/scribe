@@ -51,6 +51,7 @@ class TranscriptionSession:
     transcript_file: Path | None = None
     docx_file: Path | None = None
     meme_file: Path | None = None
+    joke_data: dict[str, str] | None = None
 
     # Method and settings
     transcription_method: str | None = None
@@ -85,13 +86,11 @@ class TranscriptionSession:
         """
         import uuid
 
-        session_id = f"{meeting_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-
-        return cls(
-            session_id=session_id,
-            meeting_name=meeting_name,
-            start_time=datetime.now()
+        session_id = (
+            f"{meeting_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         )
+
+        return cls(session_id=session_id, meeting_name=meeting_name, start_time=datetime.now())
 
     def complete(self, success: bool = True, error_message: str | None = None) -> None:
         """
@@ -154,7 +153,13 @@ class TranscriptionSession:
             data["end_time"] = self.end_time.isoformat()
 
         # Convert Path objects to strings
-        for key in ["source_file", "audio_file", "transcript_file", "docx_file", "meme_file"]:
+        for key in [
+            "source_file",
+            "audio_file",
+            "transcript_file",
+            "docx_file",
+            "meme_file",
+        ]:
             if data.get(key):
                 data[key] = str(data[key])
 

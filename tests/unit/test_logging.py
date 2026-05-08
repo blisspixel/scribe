@@ -49,10 +49,7 @@ class TestLoggingSetup:
         log_dir = tmp_path / "logs"
 
         logger = setup_logging(
-            "custom_session",
-            log_dir,
-            console_level=logging.ERROR,
-            file_level=logging.INFO
+            "custom_session", log_dir, console_level=logging.ERROR, file_level=logging.INFO
         )
 
         # Should have handlers with correct levels
@@ -87,7 +84,10 @@ class TestLoggingSetup:
 
         # Should create all parent directories
         assert log_dir.exists()
-        assert (log_dir / f"scribe_nested_session_{logger.handlers[0].baseFilename.split('_')[-1].replace('.log', '')}.log").exists() or len(list(log_dir.glob("*.log"))) > 0
+        assert (
+            log_dir
+            / f"scribe_nested_session_{logger.handlers[0].baseFilename.split('_')[-1].replace('.log', '')}.log"
+        ).exists() or len(list(log_dir.glob("*.log"))) > 0
 
 
 class TestGetLogger:
@@ -119,8 +119,8 @@ class TestGetLogger:
 class TestLogSystemInfo:
     """Test system information logging."""
 
-    @patch('scribe.utils.gpu.detect_gpu_capability')
-    @patch('scribe.utils.platform.get_platform_info')
+    @patch("scribe.utils.gpu.detect_gpu_capability")
+    @patch("scribe.utils.platform.get_platform_info")
     def test_log_system_info_with_gpu(self, mock_platform, mock_gpu):
         """Test logging system info with GPU."""
         mock_logger = Mock()
@@ -128,7 +128,7 @@ class TestLogSystemInfo:
             "has_gpu": True,
             "gpu_name": "NVIDIA RTX 3090",
             "gpu_memory_gb": 24.0,
-            "cuda_version": "11.8"
+            "cuda_version": "11.8",
         }
 
         log_system_info(mock_logger)
@@ -141,8 +141,8 @@ class TestLogSystemInfo:
         gpu_logged = any("GPU" in str(call) or "NVIDIA" in str(call) for call in calls)
         assert gpu_logged
 
-    @patch('scribe.utils.gpu.detect_gpu_capability')
-    @patch('scribe.utils.platform.get_platform_info')
+    @patch("scribe.utils.gpu.detect_gpu_capability")
+    @patch("scribe.utils.platform.get_platform_info")
     def test_log_system_info_without_gpu(self, mock_platform, mock_gpu):
         """Test logging system info without GPU."""
         mock_logger = Mock()
@@ -155,8 +155,8 @@ class TestLogSystemInfo:
         no_gpu_logged = any("Not available" in str(call) for call in calls)
         assert no_gpu_logged
 
-    @patch('scribe.utils.gpu.detect_gpu_capability')
-    @patch('scribe.utils.platform.get_platform_info')
+    @patch("scribe.utils.gpu.detect_gpu_capability")
+    @patch("scribe.utils.platform.get_platform_info")
     def test_log_system_info_gpu_detection_fails(self, mock_platform, mock_gpu):
         """Test logging system info when GPU detection fails."""
         mock_logger = Mock()
@@ -237,6 +237,7 @@ class TestSetLogLevel:
 
         # Rich handler should be updated
         from rich.logging import RichHandler
+
         rich_handlers = [h for h in logger.handlers if isinstance(h, RichHandler)]
 
         if rich_handlers:
@@ -285,7 +286,7 @@ class TestLoggingIntegration:
         assert "中文" in log_content
         assert "café" in log_content
 
-    @patch('scribe.utils.gpu.detect_gpu_capability')
+    @patch("scribe.utils.gpu.detect_gpu_capability")
     def test_logging_with_system_info(self, mock_gpu, tmp_path):
         """Test logging with system information."""
         log_dir = tmp_path / "logs"
@@ -362,5 +363,3 @@ class TestLoggingEdgeCases:
         # Should not crash
         set_log_level(logger, logging.INFO)
         assert logger.level == logging.INFO
-
-

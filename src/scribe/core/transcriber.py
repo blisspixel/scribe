@@ -132,7 +132,7 @@ format conversion, error recovery, and resource management transparently.
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 if TYPE_CHECKING:
     from scribe.utils.vocabulary import CustomVocabulary
@@ -141,7 +141,7 @@ from scribe.core.converter import Converter
 from scribe.core.local_whisper import LocalWhisperTranscriber
 from scribe.core.openai_api import OpenAITranscriber
 from scribe.exceptions import TranscriptionError, ValidationError
-from scribe.models.config import ScribeConfig, TranscriptionMethod
+from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
 from scribe.models.gpu import GPUConfig
 from scribe.models.session import TranscriptionSession
 from scribe.utils.files import cleanup_files
@@ -232,10 +232,7 @@ class Transcriber:
                 f"Recommended model: {self.gpu_config.model_size}"
             )
 
-    def choose_method(
-        self,
-        preference: TranscriptionMethod = "auto"
-    ) -> Literal["local", "openai"]:
+    def choose_method(self, preference: TranscriptionMethod = "auto") -> Literal["local", "openai"]:
         """
         Choose transcription method based on preference and system capabilities.
 
@@ -294,9 +291,7 @@ class Transcriber:
         else:  # auto
             # Use GPU recommendation based on hardware detection
             if self.gpu_config.recommendation == "local":
-                logger.info(
-                    f"Auto-selected local transcription - {self.gpu_config.reason}"
-                )
+                logger.info(f"Auto-selected local transcription - {self.gpu_config.reason}")
                 return "local"
             else:
                 if self.config.openai_api_key:
@@ -308,14 +303,10 @@ class Transcriber:
                     logger.info("No OpenAI API key, falling back to local transcription")
                     return "local"
 
-    def _prepare_audio_for_method(
-        self,
-        audio_path: Path,
-        method: TranscriptionMethod
-    ) -> Path:
+    def _prepare_audio_for_method(self, audio_path: Path, method: TranscriptionMethod) -> Path:
         """Prepare audio file in optimal format for chosen transcription method."""
         if method == "local":
-            if audio_path.suffix.lower() == '.wav':
+            if audio_path.suffix.lower() == ".wav":
                 logger.info("Using existing WAV file for local transcription")
                 return audio_path
             logger.info("Converting to 16kHz mono WAV for local transcription...")
@@ -325,7 +316,10 @@ class Transcriber:
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             if file_size_mb > 24:
                 from scribe.utils.logging import console
-                console.print(f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]")
+
+                console.print(
+                    f"[yellow]File is {file_size_mb:.0f}MB (OpenAI limit is 25MB)[/yellow]"
+                )
                 console.print("[cyan]Converting to compressed MP3...[/cyan]")
                 logger.info(f"File is {file_size_mb:.1f}MB, converting to compressed MP3...")
                 return self.converter.convert_to_mp3(audio_path, bitrate=48)
@@ -339,17 +333,18 @@ class Transcriber:
         from scribe.utils.logging import console
 
         console.print("  [dim]Detecting language...[/dim]", end="")
+        model_size = self._get_effective_local_model()
 
         detector = LocalWhisperTranscriber(
-            model_size=self.config.default_model,
-            language=None,
-            gpu_config=self.gpu_config
+            model_size=model_size, language=None, gpu_config=self.gpu_config
         )
         detected_lang, confidence, has_speech = detector.detect_language(audio_file)
 
         if not has_speech:
             console.print(" [yellow]no speech[/yellow]")
-            raise TranscriptionError("No speech detected in audio (file may be silent or contain only noise)")
+            raise TranscriptionError(
+                "No speech detected in audio (file may be silent or contain only noise)"
+            )
 
         if detected_lang:
             logger.info(f"Using detected language: {detected_lang} ({confidence:.1%} confidence)")
@@ -359,6 +354,24 @@ class Transcriber:
             logger.info("Speech detected but uncertain language, using auto-detect")
             console.print(" [green]auto-detect[/green]")
             return None
+
+    def _get_effective_local_model(self) -> ModelSize:
+        """Resolve the local Whisper model, auto-tuning only when user did not override it."""
+        configured_model = self.config.default_model
+        configured_fields: set[str] = cast(
+            set[str], getattr(self.config, "model_fields_set", set())
+        )
+        if "default_model" in configured_fields:
+            return configured_model
+
+        recommended_model = self.gpu_config.model_size
+        if recommended_model != configured_model:
+            logger.info(
+                "Auto-adjusting local Whisper model from %s to %s based on detected hardware",
+                configured_model,
+                recommended_model,
+            )
+        return recommended_model
 
     def _attempt_fallback_transcription(
         self,
@@ -408,7 +421,7 @@ class Transcriber:
         method: TranscriptionMethod = "auto",
         session: TranscriptionSession | None = None,
         custom_vocabulary: Optional["CustomVocabulary"] = None,
-        music_mode: bool = False
+        music_mode: bool = False,
     ) -> Path:
         """
         Transcribe audio file with automatic method selection and fallback.
@@ -432,7 +445,7 @@ class Transcriber:
         validate_audio_file(
             audio_path,
             max_size_gb=self.config.max_file_size_gb,
-            max_duration_hours=self.config.max_audio_duration_hours
+            max_duration_hours=self.config.max_audio_duration_hours,
         )
 
         # Choose method and prepare audio
@@ -444,7 +457,8 @@ class Transcriber:
             session.add_file(audio_file, "audio")
 
         # Detect language for music mode if needed
-        if music_mode and chosen_method == "local" and self.config.default_language is None:
+        default_language = self.config.default_language
+        if music_mode and chosen_method == "local" and default_language is None:
             detected_lang = self._detect_language_for_music(audio_file)
             if detected_lang:
                 local_language_override = detected_lang
@@ -501,8 +515,8 @@ class Transcriber:
                         "primary_method": chosen_method,
                         "primary_error": str(e),
                         "fallback_method": fallback_method,
-                        "fallback_error": str(fallback_error)
-                    }
+                        "fallback_error": str(fallback_error),
+                    },
                 )
 
     def _transcribe_local(
@@ -514,11 +528,12 @@ class Transcriber:
         language_override: str | None = None,
     ) -> Path:
         """Transcribe using local GPU."""
-        language = language_override if language_override is not None else self.config.default_language
+        language = (
+            language_override if language_override is not None else self.config.default_language
+        )
+        model_size = self._get_effective_local_model()
         transcriber = LocalWhisperTranscriber(
-            model_size=self.config.default_model,
-            language=language,
-            gpu_config=self.gpu_config
+            model_size=model_size, language=language, gpu_config=self.gpu_config
         )
 
         # Convert vocabulary to Whisper prompt format
@@ -533,12 +548,12 @@ class Transcriber:
         transcript_path = transcriber.transcribe(
             audio_path,
             detect_silence=self.config.enable_silence_detection,
-            initial_prompt=initial_prompt
+            initial_prompt=initial_prompt,
         )
 
         if session:
             session.transcription_method = "local"
-            session.model_used = f"faster-whisper-{self.config.default_model}"
+            session.model_used = f"faster-whisper-{model_size}"
             session.gpu_info = self.gpu_config.to_dict()
 
         return transcript_path
@@ -547,15 +562,14 @@ class Transcriber:
         self,
         audio_path: Path,
         session: TranscriptionSession | None,
-        custom_vocabulary: Optional["CustomVocabulary"] = None
+        custom_vocabulary: Optional["CustomVocabulary"] = None,
     ) -> Path:
         """Transcribe using OpenAI API."""
         if not self.config.openai_api_key:
             raise ValidationError("OpenAI API key not configured")
 
         transcriber = OpenAITranscriber(
-            api_key=self.config.openai_api_key,
-            model=self.config.openai_model
+            api_key=self.config.openai_api_key, model=self.config.openai_model
         )
 
         # Convert vocabulary to Whisper prompt format
@@ -567,7 +581,7 @@ class Transcriber:
         transcript_path = transcriber.transcribe(
             audio_path,
             cleanup_temp=not self.config.keep_intermediate_files,
-            initial_prompt=initial_prompt
+            initial_prompt=initial_prompt,
         )
 
         if session:
@@ -577,9 +591,7 @@ class Transcriber:
         return transcript_path
 
     def cleanup_intermediate_files(
-        self,
-        directory: Path,
-        keep_patterns: list[str] | None = None
+        self, directory: Path, keep_patterns: list[str] | None = None
     ) -> list[Path]:
         """
         Clean up intermediate files.
@@ -637,18 +649,13 @@ class Transcriber:
             default_keep_patterns.extend(keep_patterns)
 
         deleted_files = cleanup_files(
-            directory=directory,
-            patterns=delete_patterns,
-            keep_patterns=default_keep_patterns
+            directory=directory, patterns=delete_patterns, keep_patterns=default_keep_patterns
         )
 
         if deleted_files:
-            total_size_mb = sum(
-                f.stat().st_size for f in deleted_files if f.exists()
-            ) / (1024 * 1024)
-            logger.info(
-                f"Cleaned up {len(deleted_files)} files "
-                f"({total_size_mb:.1f}MB freed)"
+            total_size_mb = sum(f.stat().st_size for f in deleted_files if f.exists()) / (
+                1024 * 1024
             )
+            logger.info(f"Cleaned up {len(deleted_files)} files " f"({total_size_mb:.1f}MB freed)")
 
         return deleted_files

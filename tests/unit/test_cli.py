@@ -105,17 +105,26 @@ class TestTranscribeCommand:
 
         assert result.exit_code != 0
 
-    @patch('scribe.utils.audio.get_audio_duration')
-    @patch('scribe.utils.unified_progress.UnifiedProgress')
-    @patch('scribe.cli.main.txt_to_docx')
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.Transcriber')
-    @patch('scribe.cli.main.validate_file_path')
-    @patch('scribe.cli.main.TranscriptionSession')
-    @patch('scribe.cli.main.setup_logging')
+    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.utils.unified_progress.UnifiedProgress")
+    @patch("scribe.cli.main.txt_to_docx")
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.validate_file_path")
+    @patch("scribe.cli.main.TranscriptionSession")
+    @patch("scribe.cli.main.setup_logging")
     def test_transcribe_basic_flow(
-        self, mock_logging, mock_session, mock_validate,
-        mock_transcriber_class, mock_config_class, mock_docx, mock_progress, mock_duration, cli_runner, tmp_path
+        self,
+        mock_logging,
+        mock_session,
+        mock_validate,
+        mock_transcriber_class,
+        mock_config_class,
+        mock_docx,
+        mock_progress,
+        mock_duration,
+        cli_runner,
+        tmp_path,
     ):
         """Test basic transcribe command flow."""
         # Setup mocks
@@ -161,7 +170,9 @@ class TestTranscribeCommand:
         mock_progress.return_value = mock_progress_inst
 
         # Run command with flags to disable optional features
-        result = cli_runner.invoke(app, ["transcribe", str(test_file), "--no-joke", "--no-notes", "--no-meme"])
+        result = cli_runner.invoke(
+            app, ["transcribe", str(test_file), "--no-joke", "--no-notes", "--no-meme"]
+        )
 
         # Verify
         if result.exit_code != 0:
@@ -172,7 +183,7 @@ class TestTranscribeCommand:
         assert result.exit_code == 0
         mock_transcriber.transcribe.assert_called_once()
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_method_option(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with --method option."""
         test_file = tmp_path / "test.wav"
@@ -187,7 +198,7 @@ class TestTranscribeCommand:
         # Command should parse successfully (may fail on execution, that's OK)
         assert "--method" in str(result) or result.exit_code in [0, 1]
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_model_option(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with --model option."""
         test_file = tmp_path / "test.wav"
@@ -198,7 +209,7 @@ class TestTranscribeCommand:
         # Command should parse successfully
         assert "--model" in str(result) or result.exit_code in [0, 1]
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_language_option(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with --language option."""
         test_file = tmp_path / "test.wav"
@@ -209,7 +220,7 @@ class TestTranscribeCommand:
         # Command should parse successfully
         assert "--language" in str(result) or result.exit_code in [0, 1]
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_no_joke_flag(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with --no-joke flag."""
         test_file = tmp_path / "test.wav"
@@ -220,7 +231,7 @@ class TestTranscribeCommand:
         # Command should parse successfully
         assert "--no-joke" in str(result) or result.exit_code in [0, 1]
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_keep_all_flag(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with --keep-all flag."""
         test_file = tmp_path / "test.wav"
@@ -243,8 +254,8 @@ class TestRecordCommand:
         assert result.exit_code == 0
         assert "--name" in output
 
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.OBSRecorder')
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.OBSRecorder")
     def test_record_command_structure(self, mock_recorder_class, mock_config_class, cli_runner):
         """Test record command basic structure."""
         mock_config = Mock()
@@ -300,9 +311,9 @@ class TestJokeCommand:
         assert result.exit_code != 0
         assert "text file" in result.stdout.lower()
 
-    @patch.dict('os.environ', {'SCRIBE_ENABLE_JOKE_BAKEOFF': 'false'})
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.generate_transcript_joke')
+    @patch.dict("os.environ", {"SCRIBE_ENABLE_JOKE_BAKEOFF": "false"})
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.generate_transcript_joke")
     def test_joke_success(self, mock_generate, mock_config_class, cli_runner, tmp_path):
         """Test successful joke generation."""
         # Create test transcript
@@ -323,7 +334,7 @@ class TestJokeCommand:
         assert "Test joke" in result.stdout
         assert "Joke:" in result.stdout
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_joke_no_api_key(self, mock_config_class, cli_runner, tmp_path):
         """Test joke command without API key."""
         test_file = tmp_path / "transcript.txt"
@@ -338,9 +349,9 @@ class TestJokeCommand:
         assert result.exit_code != 0
         assert "API key" in result.stdout
 
-    @patch.dict('os.environ', {'SCRIBE_ENABLE_JOKE_BAKEOFF': 'false'})
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.generate_transcript_joke')
+    @patch.dict("os.environ", {"SCRIBE_ENABLE_JOKE_BAKEOFF": "false"})
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.generate_transcript_joke")
     def test_joke_generation_failure(self, mock_generate, mock_config_class, cli_runner, tmp_path):
         """Test joke command when generation fails."""
         test_file = tmp_path / "transcript.txt"
@@ -362,8 +373,8 @@ class TestJokeCommand:
 class TestInfoCommand:
     """Test info command functionality."""
 
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.GPUConfig')
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.GPUConfig")
     def test_info_shows_system_information(self, mock_gpu_class, mock_config_class, cli_runner):
         """Test info command displays system information."""
         # Mock config
@@ -396,8 +407,8 @@ class TestInfoCommand:
         # Should show some system info
         assert len(result.stdout) > 100
 
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.GPUConfig')
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.GPUConfig")
     def test_info_shows_gpu_status(self, mock_gpu_class, mock_config_class, cli_runner):
         """Test info command shows GPU status."""
         mock_config = Mock()
@@ -426,10 +437,14 @@ class TestInfoCommand:
 
         assert result.exit_code == 0
         # Should mention GPU or CUDA
-        assert "gpu" in result.stdout.lower() or "cuda" in result.stdout.lower() or "nvidia" in result.stdout.lower()
+        assert (
+            "gpu" in result.stdout.lower()
+            or "cuda" in result.stdout.lower()
+            or "nvidia" in result.stdout.lower()
+        )
 
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.GPUConfig')
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.GPUConfig")
     def test_info_shows_config_status(self, mock_gpu_class, mock_config_class, cli_runner):
         """Test info command shows configuration status."""
         mock_config = Mock()
@@ -469,7 +484,7 @@ class TestVersionCommand:
 class TestErrorHandling:
     """Test CLI error handling."""
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_scribe_error_handling(self, mock_config_class, cli_runner, tmp_path):
         """Test ScribeError is caught and displayed properly."""
         test_file = tmp_path / "test.wav"
@@ -536,8 +551,8 @@ class TestArgumentValidation:
 class TestOutputFormatting:
     """Test CLI output formatting."""
 
-    @patch('scribe.cli.main.ScribeConfig')
-    @patch('scribe.cli.main.GPUConfig')
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.GPUConfig")
     def test_info_output_is_formatted(self, mock_gpu_class, mock_config_class, cli_runner):
         """Test info command output is well-formatted."""
         mock_config = Mock()
@@ -580,19 +595,25 @@ class TestOutputFormatting:
 class TestIntegrationScenarios:
     """Test realistic usage scenarios."""
 
-    @patch('scribe.cli.main.ScribeConfig')
+    @patch("scribe.cli.main.ScribeConfig")
     def test_transcribe_with_multiple_options(self, mock_config_class, cli_runner, tmp_path):
         """Test transcribe with multiple options combined."""
         test_file = tmp_path / "test.wav"
         test_file.write_text("fake")
 
-        result = cli_runner.invoke(app, [
-            "transcribe", str(test_file),
-            "--method", "openai",
-            "--language", "es",
-            "--no-joke",
-            "--keep-all"
-        ])
+        result = cli_runner.invoke(
+            app,
+            [
+                "transcribe",
+                str(test_file),
+                "--method",
+                "openai",
+                "--language",
+                "es",
+                "--no-joke",
+                "--keep-all",
+            ],
+        )
 
         # Should parse all options successfully
         assert result.exit_code in [0, 1]  # May fail on execution, but should parse
@@ -605,8 +626,6 @@ class TestIntegrationScenarios:
             result = cli_runner.invoke(app, [cmd, "--help"])
             assert result.exit_code == 0, f"Help failed for {cmd}"
             assert len(result.stdout) > 20, f"Help too short for {cmd}"
-
-
 
 
 class TestMusicCommand:
@@ -627,8 +646,17 @@ class TestMusicCommand:
     @patch("scribe.utils.music_detection.MusicDetector")
     @patch("scribe.cli.main.Transcriber")
     @patch("scribe.cli.main.ScribeConfig")
-    def test_music_single_file(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
-                                mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+    def test_music_single_file(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        mock_detect_vocals,
+        mock_get_duration,
+        cli_runner,
+        tmp_path,
+    ):
         """Test music command with single file."""
         # Setup
         audio_file = tmp_path / "song.mp3"
@@ -644,7 +672,7 @@ class TestMusicCommand:
         mock_detector = Mock()
         mock_detector.analyze_music.return_value = {
             "is_music": True,
-            "metadata": {"tempo": 120, "key": "C"}
+            "metadata": {"tempo": 120, "key": "C"},
         }
         mock_music_detector_class.return_value = mock_detector
 
@@ -679,8 +707,17 @@ class TestMusicCommand:
     @patch("scribe.utils.music_detection.MusicDetector")
     @patch("scribe.cli.main.Transcriber")
     @patch("scribe.cli.main.ScribeConfig")
-    def test_music_folder(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
-                          mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+    def test_music_folder(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        mock_detect_vocals,
+        mock_get_duration,
+        cli_runner,
+        tmp_path,
+    ):
         """Test music command with folder."""
         # Setup folder with multiple files
         music_folder = tmp_path / "music"
@@ -700,7 +737,7 @@ class TestMusicCommand:
         mock_detector = Mock()
         mock_detector.analyze_music.return_value = {
             "is_music": True,
-            "metadata": {"tempo": 120, "key": "C"}
+            "metadata": {"tempo": 120, "key": "C"},
         }
         mock_music_detector_class.return_value = mock_detector
 
@@ -712,6 +749,7 @@ class TestMusicCommand:
             vocals_path = audio_path.parent / f"{audio_path.stem}_vocals.wav"
             vocals_path.write_text("fake vocals")
             return vocals_path
+
         mock_separate_vocals.side_effect = create_vocals_path
 
         # Mock VAD
@@ -735,8 +773,17 @@ class TestMusicCommand:
     @patch("scribe.utils.music_detection.MusicDetector")
     @patch("scribe.cli.main.Transcriber")
     @patch("scribe.cli.main.ScribeConfig")
-    def test_music_instrumental_handling(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
-                                         mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+    def test_music_instrumental_handling(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        mock_detect_vocals,
+        mock_get_duration,
+        cli_runner,
+        tmp_path,
+    ):
         """Test music command handles instrumental tracks gracefully."""
 
         # Setup
@@ -753,7 +800,7 @@ class TestMusicCommand:
         mock_detector = Mock()
         mock_detector.analyze_music.return_value = {
             "is_music": True,
-            "metadata": {"tempo": 120, "key": "C"}
+            "metadata": {"tempo": 120, "key": "C"},
         }
         mock_music_detector_class.return_value = mock_detector
 
@@ -786,8 +833,17 @@ class TestMusicCommand:
     @patch("scribe.utils.music_detection.MusicDetector")
     @patch("scribe.cli.main.Transcriber")
     @patch("scribe.cli.main.ScribeConfig")
-    def test_music_continue_on_error(self, mock_config_class, mock_transcriber_class, mock_music_detector_class,
-                                     mock_separate_vocals, mock_detect_vocals, mock_get_duration, cli_runner, tmp_path):
+    def test_music_continue_on_error(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        mock_detect_vocals,
+        mock_get_duration,
+        cli_runner,
+        tmp_path,
+    ):
         """Test music command continues processing after errors."""
 
         # Setup multiple files
@@ -810,7 +866,7 @@ class TestMusicCommand:
         mock_detector = Mock()
         mock_detector.analyze_music.return_value = {
             "is_music": True,
-            "metadata": {"tempo": 120, "key": "C"}
+            "metadata": {"tempo": 120, "key": "C"},
         }
         mock_music_detector_class.return_value = mock_detector
 
@@ -824,6 +880,7 @@ class TestMusicCommand:
             vocals_path = audio_path.parent / f"{audio_path.stem}_vocals.wav"
             vocals_path.write_text("fake vocals")
             return vocals_path
+
         mock_separate_vocals.side_effect = create_vocals_path_with_error
 
         # Mock VAD

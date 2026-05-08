@@ -24,14 +24,10 @@ class TestProgressEstimation:
             gpu_name="NVIDIA GeForce RTX 4090",
             gpu_memory_gb=24.0,
             beam_size=10,
-            use_fp16=True
+            use_fp16=True,
         )
 
-        LocalWhisperTranscriber(
-            model_size="large-v3-turbo",
-            language="en",
-            gpu_config=gpu_config
-        )
+        LocalWhisperTranscriber(model_size="large-v3-turbo", language="en", gpu_config=gpu_config)
 
         # For a 53-minute (3180 second) file at 11.5x speed
         # Expected time: 3180 / 11.5 = 276.5 seconds (4m 36s)
@@ -47,14 +43,10 @@ class TestProgressEstimation:
             gpu_name="NVIDIA GeForce RTX 4080",
             gpu_memory_gb=16.0,
             beam_size=8,
-            use_fp16=True
+            use_fp16=True,
         )
 
-        LocalWhisperTranscriber(
-            model_size="large-v3-turbo",
-            language="en",
-            gpu_config=gpu_config
-        )
+        LocalWhisperTranscriber(model_size="large-v3-turbo", language="en", gpu_config=gpu_config)
 
         # For a 53-minute file at 8x speed
         # Expected time: 3180 / 8 = 397.5 seconds (6m 37s)
@@ -70,14 +62,10 @@ class TestProgressEstimation:
             gpu_name="NVIDIA GeForce RTX 4070",
             gpu_memory_gb=12.0,
             beam_size=5,
-            use_fp16=True
+            use_fp16=True,
         )
 
-        LocalWhisperTranscriber(
-            model_size="large-v2",
-            language="en",
-            gpu_config=gpu_config
-        )
+        LocalWhisperTranscriber(model_size="large-v2", language="en", gpu_config=gpu_config)
 
         # For a 53-minute file at 6x speed
         # Expected time: 3180 / 6 = 530 seconds (8m 50s)
@@ -93,14 +81,10 @@ class TestProgressEstimation:
             gpu_name="NVIDIA GeForce GTX 1080",
             gpu_memory_gb=8.0,
             beam_size=5,
-            use_fp16=False
+            use_fp16=False,
         )
 
-        LocalWhisperTranscriber(
-            model_size="base",
-            language="en",
-            gpu_config=gpu_config
-        )
+        LocalWhisperTranscriber(model_size="base", language="en", gpu_config=gpu_config)
 
         # For a 53-minute file at 4x speed (fallback)
         # Expected time: 3180 / 4 = 795 seconds (13m 15s)
@@ -314,8 +298,8 @@ class TestDurationCorrection:
         """Test does not correct reasonable durations (< 2 hours)."""
         # Reasonable durations
         test_durations = [
-            60.0,    # 1 minute
-            600.0,   # 10 minutes
+            60.0,  # 1 minute
+            600.0,  # 10 minutes
             3180.0,  # 53 minutes
             7199.0,  # Just under 2 hours
         ]
@@ -344,19 +328,10 @@ class TestProgressDisplay:
     def test_progress_bar_shows_percentage_and_eta(self):
         """Test progress bar shows only percentage and ETA."""
         # Simulated progress bar components
-        components = [
-            "spinner",
-            "bar",
-            "percentage",
-            "eta"
-        ]
+        components = ["spinner", "bar", "percentage", "eta"]
 
         # Should NOT include
-        excluded = [
-            "elapsed_time",
-            "speed_multiplier",
-            "status_message"
-        ]
+        excluded = ["elapsed_time", "speed_multiplier", "status_message"]
 
         for component in components:
             assert component in ["spinner", "bar", "percentage", "eta"]
@@ -404,14 +379,11 @@ class TestProgressBarUX:
             "eta",
             "speed_multiplier",
             "audio_position",
-            "total_duration"
+            "total_duration",
         ]
 
         # New (good): 2 metrics
-        new_metrics = [
-            "percentage",
-            "eta"
-        ]
+        new_metrics = ["percentage", "eta"]
 
         assert len(new_metrics) < len(old_metrics)
         assert len(new_metrics) == 2
@@ -515,4 +487,3 @@ class TestEdgeCases:
         estimated_time = 60 if not duration else duration / expected_speed
 
         assert estimated_time == 60
-

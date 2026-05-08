@@ -31,11 +31,14 @@ def mock_google_genai():
     mock_google = Mock()
     mock_google.genai = mock_genai
 
-    with patch.dict(sys.modules, {
-        "google": mock_google,
-        "google.genai": mock_genai,
-        "google.genai.types": mock_types,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "google": mock_google,
+            "google.genai": mock_genai,
+            "google.genai.types": mock_types,
+        },
+    ):
         yield mock_genai, mock_types
 
 
@@ -98,9 +101,7 @@ class TestGeminiProvider:
         mock_response = Mock()
         mock_response.text = "Test response"
         mock_response.usage_metadata = Mock(
-            prompt_token_count=10,
-            candidates_token_count=20,
-            total_token_count=30
+            prompt_token_count=10, candidates_token_count=20, total_token_count=30
         )
         mock_client.models.generate_content.return_value = mock_response
 
@@ -108,7 +109,7 @@ class TestGeminiProvider:
 
         messages = [
             {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "Hello"}
+            {"role": "user", "content": "Hello"},
         ]
 
         result = provider.chat_completion(messages)

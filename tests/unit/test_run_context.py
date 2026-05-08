@@ -425,4 +425,3 @@ class TestIntegration:
 
         # History should have the runs
         assert len(history.runs) >= initial_count + 3
-

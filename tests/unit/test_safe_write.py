@@ -94,6 +94,7 @@ class TestAtomicWriteJSON:
         assert target.exists()
 
         import json
+
         loaded = json.loads(target.read_text())
         assert loaded == data
 
@@ -105,6 +106,7 @@ class TestAtomicWriteJSON:
         atomic_write_json(target, data)
 
         import json
+
         loaded = json.loads(target.read_text(encoding="utf-8"))
         assert loaded == data
 

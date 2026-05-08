@@ -43,20 +43,19 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
 
         if must_exist and not validated_path.exists():
             raise ValidationError(
-                f"File does not exist: {validated_path}",
-                context={"path": str(validated_path)}
+                f"File does not exist: {validated_path}", context={"path": str(validated_path)}
             )
 
         if must_exist and must_be_file and not validated_path.is_file():
             if validated_path.is_dir():
                 raise ValidationError(
                     f"Path is a directory, not a file: {validated_path}",
-                    context={"path": str(validated_path)}
+                    context={"path": str(validated_path)},
                 )
             else:
                 raise ValidationError(
                     f"Path exists but is not a regular file: {validated_path}",
-                    context={"path": str(validated_path)}
+                    context={"path": str(validated_path)},
                 )
 
         return validated_path
@@ -64,10 +63,7 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
     except ValidationError:
         raise
     except Exception as e:
-        raise ValidationError(
-            f"Invalid file path: {path}",
-            context={"error": str(e)}
-        )
+        raise ValidationError(f"Invalid file path: {path}", context={"error": str(e)})
 
 
 def validate_directory_path(path: str, must_exist: bool = False, create: bool = True) -> Path:
@@ -93,14 +89,13 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
 
         if must_exist and not validated_path.exists():
             raise ValidationError(
-                f"Directory does not exist: {validated_path}",
-                context={"path": str(validated_path)}
+                f"Directory does not exist: {validated_path}", context={"path": str(validated_path)}
             )
 
         if validated_path.exists() and not validated_path.is_dir():
             raise ValidationError(
                 f"Path exists but is not a directory: {validated_path}",
-                context={"path": str(validated_path)}
+                context={"path": str(validated_path)},
             )
 
         if create and not validated_path.exists():
@@ -108,8 +103,7 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
                 validated_path.mkdir(parents=True, exist_ok=True)
             except Exception as e:
                 raise ValidationError(
-                    f"Cannot create directory: {validated_path}",
-                    context={"error": str(e)}
+                    f"Cannot create directory: {validated_path}", context={"error": str(e)}
                 )
 
         return validated_path
@@ -117,10 +111,7 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
     except ValidationError:
         raise
     except Exception as e:
-        raise ValidationError(
-            f"Invalid directory path: {path}",
-            context={"error": str(e)}
-        )
+        raise ValidationError(f"Invalid directory path: {path}", context={"error": str(e)})
 
 
 def validate_audio_file(path: str | Path) -> Path:
@@ -142,17 +133,11 @@ def validate_audio_file(path: str | Path) -> Path:
 
     # Check file exists
     if not path.exists():
-        raise ValidationError(
-            f"Audio file does not exist: {path}",
-            context={"path": str(path)}
-        )
+        raise ValidationError(f"Audio file does not exist: {path}", context={"path": str(path)})
 
     # Check file size (must be > 0)
     if path.stat().st_size == 0:
-        raise ValidationError(
-            f"Audio file is empty: {path}",
-            context={"path": str(path)}
-        )
+        raise ValidationError(f"Audio file is empty: {path}", context={"path": str(path)})
 
     # Check file extension
     valid_extensions = {".wav", ".mp3", ".mp4", ".m4a", ".mkv", ".flac", ".ogg", ".webm"}
@@ -162,8 +147,8 @@ def validate_audio_file(path: str | Path) -> Path:
             context={
                 "path": str(path),
                 "extension": path.suffix,
-                "supported": ", ".join(sorted(valid_extensions))
-            }
+                "supported": ", ".join(sorted(valid_extensions)),
+            },
         )
 
     # Check file is readable
@@ -173,8 +158,7 @@ def validate_audio_file(path: str | Path) -> Path:
             f.read(1024)
     except Exception as e:
         raise ValidationError(
-            f"Cannot read audio file: {path}",
-            context={"path": str(path), "error": str(e)}
+            f"Cannot read audio file: {path}", context={"path": str(path), "error": str(e)}
         )
 
     return path
@@ -195,32 +179,23 @@ def validate_api_key(api_key: str | None, service: str = "OpenAI") -> str:
         ValidationError: If API key is invalid
     """
     if not api_key:
-        raise ValidationError(
-            f"{service} API key is required",
-            context={"service": service}
-        )
+        raise ValidationError(f"{service} API key is required", context={"service": service})
 
     api_key = api_key.strip()
 
     if not api_key:
-        raise ValidationError(
-            f"{service} API key cannot be empty",
-            context={"service": service}
-        )
+        raise ValidationError(f"{service} API key cannot be empty", context={"service": service})
 
     # OpenAI-specific validation
     if service.lower() == "openai":
         if not api_key.startswith("sk-"):
             raise ValidationError(
                 "Invalid OpenAI API key format (should start with 'sk-')",
-                context={"key_prefix": api_key[:10] if len(api_key) >= 10 else api_key}
+                context={"key_prefix": api_key[:10] if len(api_key) >= 10 else api_key},
             )
 
         if len(api_key) < 20:
-            raise ValidationError(
-                "OpenAI API key is too short",
-                context={"length": len(api_key)}
-            )
+            raise ValidationError("OpenAI API key is too short", context={"length": len(api_key)})
 
     return api_key
 
@@ -256,8 +231,8 @@ def sanitize_meeting_name(name: str) -> str:
     name = re.sub(invalid_chars, "", name)
 
     # Replace spaces and multiple underscores with single underscore
-    name = re.sub(r'\s+', "_", name)
-    name = re.sub(r'_+', "_", name)
+    name = re.sub(r"\s+", "_", name)
+    name = re.sub(r"_+", "_", name)
 
     # Remove leading/trailing underscores
     name = name.strip("_")
@@ -270,14 +245,13 @@ def sanitize_meeting_name(name: str) -> str:
     # Ensure we still have a valid name
     if not name:
         raise ValidationError(
-            "Meeting name contains only invalid characters",
-            context={"original": name}
+            "Meeting name contains only invalid characters", context={"original": name}
         )
 
     return name
 
 
-def validate_model_name(model: str, valid_models: list) -> str:
+def validate_model_name(model: str, valid_models: list[str]) -> str:
     """
     Validate model name against list of valid models.
 
@@ -299,10 +273,7 @@ def validate_model_name(model: str, valid_models: list) -> str:
     if model not in [m.lower() for m in valid_models]:
         raise ValidationError(
             f"Invalid model: {model}",
-            context={
-                "provided": model,
-                "valid_models": ", ".join(valid_models)
-            }
+            context={"provided": model, "valid_models": ", ".join(valid_models)},
         )
 
     # Return original case from valid_models
@@ -317,63 +288,132 @@ def validate_model_name(model: str, valid_models: list) -> str:
 # Supports common names, variations, and native names
 LANGUAGE_ALIASES = {
     # English
-    "english": "en", "eng": "en",
+    "english": "en",
+    "eng": "en",
     # Spanish
-    "spanish": "es", "español": "es", "espanol": "es", "spa": "es",
+    "spanish": "es",
+    "español": "es",
+    "espanol": "es",
+    "spa": "es",
     # French
-    "french": "fr", "français": "fr", "francais": "fr", "fra": "fr",
+    "french": "fr",
+    "français": "fr",
+    "francais": "fr",
+    "fra": "fr",
     # German
-    "german": "de", "deutsch": "de", "deu": "de", "ger": "de",
+    "german": "de",
+    "deutsch": "de",
+    "deu": "de",
+    "ger": "de",
     # Italian
-    "italian": "it", "italiano": "it", "ita": "it",
+    "italian": "it",
+    "italiano": "it",
+    "ita": "it",
     # Portuguese
-    "portuguese": "pt", "português": "pt", "portugues": "pt", "por": "pt",
+    "portuguese": "pt",
+    "português": "pt",
+    "portugues": "pt",
+    "por": "pt",
     # Russian
-    "russian": "ru", "русский": "ru", "rus": "ru",
+    "russian": "ru",
+    "русский": "ru",
+    "rus": "ru",
     # Japanese
-    "japanese": "ja", "日本語": "ja", "jpn": "ja", "jp": "ja",
+    "japanese": "ja",
+    "日本語": "ja",
+    "jpn": "ja",
+    "jp": "ja",
     # Chinese
-    "chinese": "zh", "中文": "zh", "mandarin": "zh", "zho": "zh", "chi": "zh", "cn": "zh",
+    "chinese": "zh",
+    "中文": "zh",
+    "mandarin": "zh",
+    "zho": "zh",
+    "chi": "zh",
+    "cn": "zh",
     # Korean
-    "korean": "ko", "한국어": "ko", "kor": "ko", "kr": "ko",
+    "korean": "ko",
+    "한국어": "ko",
+    "kor": "ko",
+    "kr": "ko",
     # Arabic
-    "arabic": "ar", "العربية": "ar", "ara": "ar",
+    "arabic": "ar",
+    "العربية": "ar",
+    "ara": "ar",
     # Hindi
-    "hindi": "hi", "हिन्दी": "hi", "hin": "hi",
+    "hindi": "hi",
+    "हिन्दी": "hi",
+    "hin": "hi",
     # Dutch
-    "dutch": "nl", "nederlands": "nl", "nld": "nl",
+    "dutch": "nl",
+    "nederlands": "nl",
+    "nld": "nl",
     # Polish
-    "polish": "pl", "polski": "pl", "pol": "pl",
+    "polish": "pl",
+    "polski": "pl",
+    "pol": "pl",
     # Turkish
-    "turkish": "tr", "türkçe": "tr", "turkce": "tr", "tur": "tr",
+    "turkish": "tr",
+    "türkçe": "tr",
+    "turkce": "tr",
+    "tur": "tr",
     # Vietnamese
-    "vietnamese": "vi", "tiếng việt": "vi", "vie": "vi",
+    "vietnamese": "vi",
+    "tiếng việt": "vi",
+    "vie": "vi",
     # Thai
-    "thai": "th", "ไทย": "th", "tha": "th",
+    "thai": "th",
+    "ไทย": "th",
+    "tha": "th",
     # Swedish
-    "swedish": "sv", "svenska": "sv", "swe": "sv",
+    "swedish": "sv",
+    "svenska": "sv",
+    "swe": "sv",
     # Norwegian
-    "norwegian": "no", "norsk": "no", "nor": "no",
+    "norwegian": "no",
+    "norsk": "no",
+    "nor": "no",
     # Danish
-    "danish": "da", "dansk": "da", "dan": "da",
+    "danish": "da",
+    "dansk": "da",
+    "dan": "da",
     # Finnish
-    "finnish": "fi", "suomi": "fi", "fin": "fi",
+    "finnish": "fi",
+    "suomi": "fi",
+    "fin": "fi",
     # Greek
-    "greek": "el", "ελληνικά": "el", "ell": "el",
+    "greek": "el",
+    "ελληνικά": "el",
+    "ell": "el",
     # Hebrew
-    "hebrew": "he", "עברית": "he", "heb": "he",
+    "hebrew": "he",
+    "עברית": "he",
+    "heb": "he",
     # Czech
-    "czech": "cs", "čeština": "cs", "cestina": "cs", "ces": "cs",
+    "czech": "cs",
+    "čeština": "cs",
+    "cestina": "cs",
+    "ces": "cs",
     # Romanian
-    "romanian": "ro", "română": "ro", "romana": "ro", "ron": "ro",
+    "romanian": "ro",
+    "română": "ro",
+    "romana": "ro",
+    "ron": "ro",
     # Hungarian
-    "hungarian": "hu", "magyar": "hu", "hun": "hu",
+    "hungarian": "hu",
+    "magyar": "hu",
+    "hun": "hu",
     # Indonesian
-    "indonesian": "id", "bahasa indonesia": "id", "ind": "id",
+    "indonesian": "id",
+    "bahasa indonesia": "id",
+    "ind": "id",
     # Malay
-    "malay": "ms", "bahasa melayu": "ms", "msa": "ms",
+    "malay": "ms",
+    "bahasa melayu": "ms",
+    "msa": "ms",
     # Ukrainian
-    "ukrainian": "uk", "українська": "uk", "ukr": "uk",
+    "ukrainian": "uk",
+    "українська": "uk",
+    "ukr": "uk",
 }
 
 
@@ -422,8 +462,8 @@ def validate_language_code(language: str) -> str:
         f"Unknown language: '{language}'",
         context={
             "provided": language,
-            "hint": "Use language name (spanish, french) or ISO code (es, fr)"
-        }
+            "hint": "Use language name (spanish, french) or ISO code (es, fr)",
+        },
     )
 
 
@@ -442,15 +482,11 @@ def validate_port(port: int) -> int:
     """
     if not isinstance(port, int):
         raise ValidationError(
-            "Port must be an integer",
-            context={"provided": port, "type": type(port).__name__}
+            "Port must be an integer", context={"provided": port, "type": type(port).__name__}
         )
 
     if not (1 <= port <= 65535):
-        raise ValidationError(
-            "Port must be between 1 and 65535",
-            context={"provided": port}
-        )
+        raise ValidationError("Port must be between 1 and 65535", context={"provided": port})
 
     return port
 
@@ -472,14 +508,12 @@ def validate_positive_number(value: float, name: str = "value", min_value: float
     """
     if not isinstance(value, (int, float)):
         raise ValidationError(
-            f"{name} must be a number",
-            context={"provided": value, "type": type(value).__name__}
+            f"{name} must be a number", context={"provided": value, "type": type(value).__name__}
         )
 
     if value < min_value:
         raise ValidationError(
-            f"{name} must be >= {min_value}",
-            context={"provided": value, "min": min_value}
+            f"{name} must be >= {min_value}", context={"provided": value, "min": min_value}
         )
 
     return float(value)
@@ -504,13 +538,10 @@ def validate_email(email: str) -> str:
     email = email.strip().lower()
 
     # Basic email regex
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
     if not re.match(email_pattern, email):
-        raise ValidationError(
-            "Invalid email address format",
-            context={"provided": email}
-        )
+        raise ValidationError("Invalid email address format", context={"provided": email})
 
     return email
 
@@ -534,13 +565,10 @@ def validate_url(url: str) -> str:
     url = url.strip()
 
     # Basic URL regex
-    url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
+    url_pattern = r"^https?://[^\s/$.?#].[^\s]*$"
 
     if not re.match(url_pattern, url, re.IGNORECASE):
-        raise ValidationError(
-            "Invalid URL format",
-            context={"provided": url}
-        )
+        raise ValidationError("Invalid URL format", context={"provided": url})
 
     return url
 
@@ -566,8 +594,7 @@ def validate_media_url(url: str) -> str:
     # Reject file:// and other non-http schemes (already covered by validate_url, but explicit)
     if not url.lower().startswith(("http://", "https://")):
         raise ValidationError(
-            "Only http:// and https:// URLs are supported",
-            context={"provided": url}
+            "Only http:// and https:// URLs are supported", context={"provided": url}
         )
 
     return url

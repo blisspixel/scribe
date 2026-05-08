@@ -231,9 +231,10 @@ from scribe.utils.terminal_ui import get_terminal_ui_config
 @dataclass
 class ProgressMeasurement:
     """Single progress measurement."""
+
     progress: float  # 0.0 to 1.0
-    elapsed: float   # seconds since start
-    timestamp: float # absolute timestamp
+    elapsed: float  # seconds since start
+    timestamp: float  # absolute timestamp
 
 
 class ProgressTracker:
@@ -294,11 +295,7 @@ class ProgressTracker:
         elapsed = time.time() - self.start_time
         progress = min(1.0, current_position / self.total_duration)
 
-        measurement = ProgressMeasurement(
-            progress=progress,
-            elapsed=elapsed,
-            timestamp=time.time()
-        )
+        measurement = ProgressMeasurement(progress=progress, elapsed=elapsed, timestamp=time.time())
         self.measurements.append(measurement)
 
         # Update Kalman filter
@@ -335,7 +332,7 @@ class ProgressTracker:
             Estimated seconds remaining
         """
         if self.speed_estimate is None or self.speed_estimate <= 0:
-            return float('inf')
+            return float("inf")
 
         remaining = 1.0 - current_progress
         return remaining / self.speed_estimate
@@ -365,10 +362,10 @@ class ProgressTracker:
 
             # Log completion (will be picked up by logger)
             import logging
+
             logger = logging.getLogger("scribe")
             logger.info(
-                f"{self.operation} completed in {elapsed:.1f}s "
-                f"({speed_ratio:.1f}x realtime)"
+                f"{self.operation} completed in {elapsed:.1f}s " f"({speed_ratio:.1f}x realtime)"
             )
 
 
@@ -387,7 +384,9 @@ def create_progress_bar(description: str = "Processing") -> Progress:
     ui_config = get_terminal_ui_config()
     return Progress(
         SpinnerColumn(),
-        TextColumn(f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"),
+        TextColumn(
+            f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"
+        ),
         BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
         TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
         TimeElapsedColumn(),
@@ -428,7 +427,7 @@ def format_eta(seconds: float) -> str:
     Returns:
         Formatted string (e.g., "2m 30s", "1h 15m")
     """
-    if seconds == float('inf') or seconds < 0:
+    if seconds == float("inf") or seconds < 0:
         return "calculating..."
 
     if seconds < 60:

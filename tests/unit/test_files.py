@@ -117,11 +117,7 @@ class TestCleanupFiles:
         (tmp_path / "temp2_final.tmp").touch()
         (tmp_path / "temp3.tmp").touch()
 
-        deleted = cleanup_files(
-            tmp_path,
-            ["*.tmp"],
-            keep_patterns=["*_final.*"]
-        )
+        deleted = cleanup_files(tmp_path, ["*.tmp"], keep_patterns=["*_final.*"])
 
         assert len(deleted) == 2
         assert (tmp_path / "temp2_final.tmp").exists()

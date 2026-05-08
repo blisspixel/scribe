@@ -20,7 +20,7 @@ class TestConverter:
         converter = Converter()
         assert converter.ffmpeg_path is not None
 
-    @patch('scribe.core.converter.get_ffmpeg_path')
+    @patch("scribe.core.converter.get_ffmpeg_path")
     def test_converter_no_ffmpeg(self, mock_ffmpeg):
         """Test converter fails gracefully when ffmpeg not found."""
         mock_ffmpeg.return_value = None
@@ -111,6 +111,7 @@ class TestConverter:
 
         # Make output newer
         import time
+
         time.sleep(0.1)
         output_file.touch()
 
@@ -123,7 +124,7 @@ class TestConverter:
 class TestConvenienceFunctions:
     """Test convenience functions."""
 
-    @patch('scribe.core.converter.Converter')
+    @patch("scribe.core.converter.Converter")
     def test_convert_to_wav_function(self, mock_converter_class, tmp_path):
         """Test convert_to_wav convenience function."""
         from scribe.core.converter import convert_to_wav
@@ -138,7 +139,7 @@ class TestConvenienceFunctions:
         mock_converter.convert_to_wav.assert_called_once_with(input_file)
         assert result == tmp_path / "output.wav"
 
-    @patch('scribe.core.converter.Converter')
+    @patch("scribe.core.converter.Converter")
     def test_convert_to_mp3_function(self, mock_converter_class, tmp_path):
         """Test convert_to_mp3 convenience function."""
         from scribe.core.converter import convert_to_mp3
@@ -157,5 +158,3 @@ class TestConvenienceFunctions:
 # TODO: Add real integration tests with actual audio files
 # These would require test fixtures with real audio/video files
 # and would be slower but more comprehensive
-
-

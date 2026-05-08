@@ -11,6 +11,7 @@ This module provides cloud-based transcription using OpenAI's API with:
 import random
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI, RateLimitError
@@ -42,10 +43,7 @@ class OpenAITranscriber:
     """
 
     def __init__(
-        self,
-        api_key: str,
-        model: str = "gpt-4o-transcribe",
-        use_server_chunking: bool = True
+        self, api_key: str, model: str = "gpt-4o-transcribe", use_server_chunking: bool = True
     ):
         """
         Initialize OpenAI transcriber.
@@ -63,10 +61,7 @@ class OpenAITranscriber:
         logger.debug(f"Initialized OpenAI transcriber with model: {model}")
 
     def transcribe_with_server_chunking(
-        self,
-        audio_path: Path,
-        output_path: Path,
-        prompt: str | None = None
+        self, audio_path: Path, output_path: Path, prompt: str | None = None
     ) -> Path:
         """
         Transcribe using OpenAI's server-side chunking (2025 best practice).
@@ -108,13 +103,17 @@ class OpenAITranscriber:
                         params["prompt"] = prompt
 
                 try:
-                    transcript_response = self.client.audio.transcriptions.create(**params)
+                    transcript_response = cast(Any, self.client.audio.transcriptions).create(
+                        **params
+                    )
                 except Exception as api_error:
                     # If chunking_strategy fails, retry without it
                     if "chunking_strategy" in str(api_error) and "chunking_strategy" in params:
                         logger.warning("chunking_strategy not supported, retrying without it...")
                         del params["chunking_strategy"]
-                        transcript_response = self.client.audio.transcriptions.create(**params)
+                        transcript_response = cast(Any, self.client.audio.transcriptions).create(
+                            **params
+                        )
                     else:
                         raise
 
@@ -122,10 +121,7 @@ class OpenAITranscriber:
             logger.info("Processing transcription response...")
 
             # Format the output
-            formatted_text = self._format_transcript_response(
-                transcript_response,
-                audio_path
-            )
+            formatted_text = self._format_transcript_response(transcript_response, audio_path)
 
             # Write output
             logger.info(f"Writing transcript to: {output_path}")
@@ -141,7 +137,7 @@ class OpenAITranscriber:
         except AuthenticationError as e:
             raise APIError(
                 "OpenAI API authentication failed",
-                context={"error": str(e), "key_prefix": self.api_key[:10]}
+                context={"error": str(e), "key_prefix": self.api_key[:10]},
             )
         except Exception as e:
             error_msg = str(e)
@@ -153,14 +149,10 @@ class OpenAITranscriber:
 
             raise TranscriptionError(
                 f"Server-side chunking transcription failed: {e}",
-                context={"audio_path": str(audio_path), "model": self.model}
+                context={"audio_path": str(audio_path), "model": self.model},
             )
 
-    def _format_transcript_response(
-        self,
-        response,
-        audio_path: Path
-    ) -> str:
+    def _format_transcript_response(self, response: Any, audio_path: Path) -> str:
         """
         Format transcription response with header and speaker labels.
 
@@ -173,15 +165,15 @@ class OpenAITranscriber:
         """
         # Extract metadata
         meeting_name = audio_path.stem
-        for suffix in ['_16k_mono', '_standardized', '_converted']:
-            meeting_name = meeting_name.replace(suffix, '')
+        for suffix in ["_16k_mono", "_standardized", "_converted"]:
+            meeting_name = meeting_name.replace(suffix, "")
 
         date_str = extract_date_from_filename(audio_path.name)
         formatted_date = format_date(date_str) if date_str else "Unknown"
 
         # Get duration if available
         duration_str = "Unknown"
-        if hasattr(response, 'duration'):
+        if hasattr(response, "duration"):
             duration_str = format_duration_minutes(int(response.duration))
 
         # Build header
@@ -191,26 +183,26 @@ class OpenAITranscriber:
             f"Duration: {duration_str}",
             "",
             "─" * 80,
-            ""
+            "",
         ]
 
         # Handle different response formats defensively
         if isinstance(response, str):
             # response_format="text" returns a plain string
             lines.append(response.strip())
-        elif hasattr(response, 'segments') and response.segments:
+        elif hasattr(response, "segments") and response.segments:
             # response_format="verbose_json" with segments (diarization)
             try:
                 for segment in response.segments:
                     # Safely extract segment data
                     if isinstance(segment, dict):
-                        start = segment.get('start', 0)
-                        text = segment.get('text', '').strip()
-                        speaker = segment.get('speaker')
+                        start = segment.get("start", 0)
+                        text = segment.get("text", "").strip()
+                        speaker = segment.get("speaker")
                     else:
-                        start = getattr(segment, 'start', 0)
-                        text = getattr(segment, 'text', '').strip()
-                        speaker = getattr(segment, 'speaker', None)
+                        start = getattr(segment, "start", 0)
+                        text = getattr(segment, "text", "").strip()
+                        speaker = getattr(segment, "speaker", None)
 
                     # Skip empty segments
                     if not text:
@@ -227,9 +219,9 @@ class OpenAITranscriber:
             except Exception as e:
                 logger.warning(f"Error processing segments: {e}, falling back to text extraction")
                 # Fallback to text attribute if segment processing fails
-                if hasattr(response, 'text'):
+                if hasattr(response, "text"):
                     lines.append(response.text.strip())
-        elif hasattr(response, 'text'):
+        elif hasattr(response, "text"):
             # response_format="json" or "verbose_json" with simple text
             lines.append(response.text.strip())
         else:
@@ -246,11 +238,7 @@ class OpenAITranscriber:
         secs = int(seconds % 60)
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
-    def standardize_audio(
-        self,
-        input_path: Path,
-        target_bitrate_kbps: int = 48
-    ) -> Path:
+    def standardize_audio(self, input_path: Path, target_bitrate_kbps: int = 48) -> Path:
         """
         Convert audio to stable format for ASR.
 
@@ -263,21 +251,25 @@ class OpenAITranscriber:
         Returns:
             Path to standardized audio file
         """
-        logger.info(f"Standardizing audio (phase-safe mono, 16kHz, {target_bitrate_kbps}kbps MP3)...")
+        logger.info(
+            f"Standardizing audio (phase-safe mono, 16kHz, {target_bitrate_kbps}kbps MP3)..."
+        )
 
         audio = AudioSegment.from_file(str(input_path))
         logger.debug(
-            f"Source: {len(audio)/1000:.1f}s, "
-            f"{audio.channels}ch, "
-            f"{audio.frame_rate}Hz"
+            f"Source: {len(audio)/1000:.1f}s, " f"{audio.channels}ch, " f"{audio.frame_rate}Hz"
         )
 
         use_channel = None
 
         # Analyze stereo for phase issues
         if audio.channels >= 2:
-            probe = audio[:min(30_000, len(audio))]
-            samples = np.array(probe.get_array_of_samples()).reshape((-1, audio.channels)).astype(np.int16)
+            probe = audio[: min(30_000, len(audio))]
+            samples = (
+                np.array(probe.get_array_of_samples())
+                .reshape((-1, audio.channels))
+                .astype(np.int16)
+            )
 
             L = samples[:, 0].astype(np.float32)
             R = samples[:, 1].astype(np.float32)
@@ -285,7 +277,9 @@ class OpenAITranscriber:
             rmsL = 20.0 * np.log10(max(1e-9, np.sqrt(np.mean(L * L)) / 32768.0))
             rmsR = 20.0 * np.log10(max(1e-9, np.sqrt(np.mean(R * R)) / 32768.0))
 
-            logger.debug(f"Stereo analysis: corr={corr:+.3f}, rmsL={rmsL:.1f}dBFS, rmsR={rmsR:.1f}dBFS")
+            logger.debug(
+                f"Stereo analysis: corr={corr:+.3f}, rmsL={rmsL:.1f}dBFS, rmsR={rmsR:.1f}dBFS"
+            )
 
             # Pick single channel if phase issues or imbalance
             if corr < -0.5 or abs(rmsL - rmsR) > 6.0:
@@ -308,7 +302,9 @@ class OpenAITranscriber:
         target_dbfs = -20.0
         if current_dbfs < -35:  # If very quiet
             gain_needed = target_dbfs - current_dbfs
-            logger.info(f"Audio is quiet ({current_dbfs:.1f}dBFS), normalizing with +{gain_needed:.1f}dB gain")
+            logger.info(
+                f"Audio is quiet ({current_dbfs:.1f}dBFS), normalizing with +{gain_needed:.1f}dB gain"
+            )
             stable = stable.apply_gain(gain_needed)
         elif current_dbfs < -25:  # If somewhat quiet
             gain_needed = target_dbfs - current_dbfs
@@ -317,17 +313,15 @@ class OpenAITranscriber:
 
         # Export as MP3
         standardized_path = input_path.with_name(f"{input_path.stem}_standardized.mp3")
-        stable.export(
-            str(standardized_path),
-            format="mp3",
-            bitrate=f"{target_bitrate_kbps}k"
-        )
+        stable.export(str(standardized_path), format="mp3", bitrate=f"{target_bitrate_kbps}k")
 
         # Verify final level
         std = AudioSegment.from_file(str(standardized_path))
         logger.debug(f"Final audio level: {std.dBFS:.1f}dBFS")
         if std.dBFS < -30:
-            logger.warning(f"Audio level is still low ({std.dBFS:.1f}dBFS) - transcription quality may be affected")
+            logger.warning(
+                f"Audio level is still low ({std.dBFS:.1f}dBFS) - transcription quality may be affected"
+            )
 
         logger.info(f"Standardized audio: {standardized_path.name}")
         return standardized_path
@@ -339,7 +333,7 @@ class OpenAITranscriber:
         min_silence_len_ms: int = 500,
         silence_thresh_delta_db: int = -30,
         keep_silence_ms: int = 300,
-        export_bitrate_kbps: int = 48
+        export_bitrate_kbps: int = 48,
     ) -> list[Path]:
         """
         Split audio on silence with duration cap.
@@ -365,7 +359,7 @@ class OpenAITranscriber:
             audio,
             min_silence_len=min_silence_len_ms,
             silence_thresh=silence_thresh,
-            keep_silence=keep_silence_ms
+            keep_silence=keep_silence_ms,
         )
 
         # Cap chunk duration
@@ -389,21 +383,14 @@ class OpenAITranscriber:
 
         for i, chunk in enumerate(chunks, 1):
             out_name = file_path.parent / f"{stem}_chunk_{i}.mp3"
-            chunk.export(
-                str(out_name),
-                format="mp3",
-                bitrate=f"{export_bitrate_kbps}k"
-            )
+            chunk.export(str(out_name), format="mp3", bitrate=f"{export_bitrate_kbps}k")
             out_paths.append(out_name)
 
         logger.info(f"Created {len(out_paths)} chunks for transcription")
         return out_paths
 
     def transcribe_chunk(
-        self,
-        chunk_path: Path,
-        prompt: str | None = None,
-        retries: int = 5
+        self, chunk_path: Path, prompt: str | None = None, retries: int = 5
     ) -> tuple[bool, str | None]:
         """
         Transcribe a single chunk with retry logic.
@@ -419,16 +406,12 @@ class OpenAITranscriber:
         for attempt in range(retries):
             try:
                 with open(chunk_path, "rb") as f:
-                    kwargs = {
-                        "model": self.model,
-                        "file": f,
-                        "response_format": "text"
-                    }
+                    kwargs = {"model": self.model, "file": f, "response_format": "text"}
 
                     if prompt:
                         kwargs["prompt"] = prompt
 
-                    response = self.client.audio.transcriptions.create(**kwargs)
+                    response = cast(Any, self.client.audio.transcriptions).create(**kwargs)
 
                     # Extract text
                     text = response.text if hasattr(response, "text") else str(response)
@@ -439,7 +422,7 @@ class OpenAITranscriber:
                 logger.warning(f"API error ({chunk_path.name}, attempt {attempt + 1}): {e}")
 
                 if attempt < retries - 1:
-                    sleep_time = (2 ** attempt) + random.uniform(0, 1)
+                    sleep_time = (2**attempt) + random.uniform(0, 1)
                     logger.info(f"Retrying in {sleep_time:.2f}s...")
                     time.sleep(sleep_time)
                 else:
@@ -457,7 +440,7 @@ class OpenAITranscriber:
         output_path: Path | None = None,
         prompt: str | None = None,
         cleanup_temp: bool = True,
-        initial_prompt: str | None = None
+        initial_prompt: str | None = None,
     ) -> Path:
         """
         Transcribe audio file with chunking.
@@ -483,12 +466,13 @@ class OpenAITranscriber:
         if output_path is None:
             # Remove intermediate suffixes like _16k_mono, _standardized, etc.
             clean_stem = audio_path.stem
-            for suffix in ['_16k_mono', '_standardized', '_converted']:
-                clean_stem = clean_stem.replace(suffix, '')
+            for suffix in ["_16k_mono", "_standardized", "_converted"]:
+                clean_stem = clean_stem.replace(suffix, "")
             output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
 
         # Check duration to decide chunking strategy
         from scribe.utils.audio import get_audio_duration
+
         duration = get_audio_duration(audio_path)
 
         # OpenAI has an undocumented ~1400 second (23 minute) limit per file
@@ -531,7 +515,7 @@ class OpenAITranscriber:
                 TextColumn("({task.completed}/{task.total})"),
                 TimeElapsedColumn(),
                 console=console,
-                transient=False
+                transient=False,
             ) as progress:
                 task = progress.add_task("Transcribing", total=len(chunk_paths))
 
@@ -554,8 +538,7 @@ class OpenAITranscriber:
 
             if not transcripts:
                 raise TranscriptionError(
-                    "No transcripts generated from any chunks",
-                    context={"chunks": len(chunk_paths)}
+                    "No transcripts generated from any chunks", context={"chunks": len(chunk_paths)}
                 )
 
             # Write combined transcript with explicit flushing
@@ -596,8 +579,8 @@ class OpenAITranscriber:
                     context={
                         "output_path": str(output_path),
                         "file_size": output_path.stat().st_size if output_path.exists() else 0,
-                        "error": str(e)
-                    }
+                        "error": str(e),
+                    },
                 )
 
             logger.info(f"Transcription complete: {output_path}")
@@ -620,7 +603,7 @@ def transcribe_with_openai(
     audio_path: Path,
     api_key: str,
     model: str = "gpt-4o-transcribe",
-    **kwargs
+    **kwargs: Any,
 ) -> Path:
     """
     Convenience function for OpenAI transcription.

@@ -162,8 +162,10 @@ state, even if the process crashes or is interrupted.
 import os
 import shutil
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import Any, BinaryIO, TextIO, cast
 
 from scribe.utils.logging import get_logger
 
@@ -171,10 +173,7 @@ logger = get_logger(__name__)
 
 
 def atomic_write(
-    path: str | Path,
-    content: str | bytes,
-    encoding: str | None = "utf-8",
-    mode: str = "w"
+    path: str | Path, content: str | bytes, encoding: str | None = "utf-8", mode: str = "w"
 ) -> Path:
     """
     Write content to a file atomically.
@@ -201,13 +200,9 @@ def atomic_write(
 
     # Create temporary file in the same directory as target
     # This ensures atomic rename works (same filesystem)
-    fd, temp_path = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp"
-    )
+    fd, temp_path_str = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
 
-    temp_path = Path(temp_path)
+    temp_path = Path(temp_path_str)
 
     try:
         # Write to temporary file
@@ -220,8 +215,6 @@ def atomic_write(
         else:
             # Text mode
             with os.fdopen(fd, "w", encoding=encoding) as f:
-                if isinstance(content, bytes):
-                    content = content.decode(encoding or "utf-8")
                 f.write(content)
 
         # Atomic rename (overwrites existing file)
@@ -243,7 +236,7 @@ def atomic_write(
         raise OSError(f"Failed to write file: {e}") from e
 
 
-def atomic_write_json(path: str | Path, data: dict, indent: int = 2) -> Path:
+def atomic_write_json(path: str | Path, data: dict[str, Any], indent: int = 2) -> Path:
     """
     Write JSON data to a file atomically.
 
@@ -262,7 +255,9 @@ def atomic_write_json(path: str | Path, data: dict, indent: int = 2) -> Path:
 
 
 @contextmanager
-def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8"):
+def safe_write_context(
+    path: str | Path, mode: str = "w", encoding: str = "utf-8"
+) -> Generator[TextIO | BinaryIO, None, None]:
     """
     Context manager for safe file writing.
 
@@ -285,17 +280,16 @@ def safe_write_context(path: str | Path, mode: str = "w", encoding: str = "utf-8
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create temporary file
-    fd, temp_path = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp"
-    )
+    fd, temp_path_str = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
 
-    temp_path = Path(temp_path)
+    temp_path = Path(temp_path_str)
 
     try:
         # Open file handle
-        f = os.fdopen(fd, mode) if "b" in mode else os.fdopen(fd, mode, encoding=encoding)
+        f = cast(
+            TextIO | BinaryIO,
+            os.fdopen(fd, mode) if "b" in mode else os.fdopen(fd, mode, encoding=encoding),
+        )
 
         try:
             yield f
@@ -340,13 +334,9 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     # Create temporary file
-    fd, temp_path = tempfile.mkstemp(
-        dir=dst.parent,
-        prefix=f".{dst.name}.",
-        suffix=".tmp"
-    )
+    fd, temp_path_str = tempfile.mkstemp(dir=dst.parent, prefix=f".{dst.name}.", suffix=".tmp")
 
-    temp_path = Path(temp_path)
+    temp_path = Path(temp_path_str)
 
     try:
         # Close the file descriptor (shutil.copy2 will open it)

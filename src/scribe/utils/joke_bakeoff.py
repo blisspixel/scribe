@@ -198,9 +198,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_joke_bakeoff(
-    transcript: str,
-    config: HumorConfig,
-    providers: list[str] | None = None
+    transcript: str, config: HumorConfig, providers: list[str] | None = None
 ) -> dict[str, Any]:
     """
     Run a joke bake-off across multiple providers.
@@ -220,19 +218,31 @@ def run_joke_bakeoff(
     """
     # Default to all available providers
     if providers is None:
-        providers = ['xai', 'openai', 'gemini', 'anthropic']
+        providers = ["xai", "openai", "gemini", "anthropic"]
 
     # Filter to only providers with API keys
     import os
+
     available_providers = []
     for provider_name in providers:
-        if provider_name == 'xai' and os.getenv('XAI_API_KEY') or provider_name == 'openai' and os.getenv('OPENAI_API_KEY') or provider_name == 'gemini' and os.getenv('GEMINI_API_KEY') or provider_name == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+        if (
+            provider_name == "xai"
+            and os.getenv("XAI_API_KEY")
+            or provider_name == "openai"
+            and os.getenv("OPENAI_API_KEY")
+            or provider_name == "gemini"
+            and os.getenv("GEMINI_API_KEY")
+            or provider_name == "anthropic"
+            and os.getenv("ANTHROPIC_API_KEY")
+        ):
             available_providers.append(provider_name)
 
     if not available_providers:
         raise ValueError("No providers available with API keys")
 
-    logger.info(f"Starting joke bake-off with {len(available_providers)} providers: {', '.join(available_providers)}")
+    logger.info(
+        f"Starting joke bake-off with {len(available_providers)} providers: {', '.join(available_providers)}"
+    )
 
     # Collect jokes from all providers
     jokes = []
@@ -245,15 +255,15 @@ def run_joke_bakeoff(
             import tempfile
             from pathlib import Path
 
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False, encoding="utf-8"
+            ) as f:
                 f.write(transcript)
                 temp_path = Path(f.name)
 
             try:
                 result = generate_transcript_joke(
-                    transcript_path=temp_path,
-                    api_key_or_cfg=config,
-                    provider_name=provider_name
+                    transcript_path=temp_path, api_key_or_cfg=config, provider_name=provider_name
                 )
                 joke_text = result[0] if result else None
             finally:
@@ -262,13 +272,15 @@ def run_joke_bakeoff(
                     temp_path.unlink()
 
             if joke_text:
-                jokes.append({
-                    'provider': provider_name,
-                    'joke': joke_text,
-                })
+                jokes.append(
+                    {
+                        "provider": provider_name,
+                        "joke": joke_text,
+                    }
+                )
                 # Truncate for display
                 display_joke = joke_text[:80] + "..." if len(joke_text) > 80 else joke_text
-                logger.info(f"    ✓ {provider_name}: \"{display_joke}\"")
+                logger.info(f'    ✓ {provider_name}: "{display_joke}"')
             else:
                 logger.warning(f"    ✗ {provider_name} returned no joke")
 
@@ -282,14 +294,14 @@ def run_joke_bakeoff(
     logger.info(f"\nJudging {len(jokes)} jokes...")
 
     # Use XAI/Grok for judging (default for jokes), fallback to OpenAI, then first available
-    if 'xai' in available_providers:
-        judge_provider_name = 'xai'
-    elif 'openai' in available_providers:
-        judge_provider_name = 'openai'
+    if "xai" in available_providers:
+        judge_provider_name = "xai"
+    elif "openai" in available_providers:
+        judge_provider_name = "openai"
     else:
         judge_provider_name = available_providers[0]
 
-    judge_provider = get_provider(feature='joke', provider_name=judge_provider_name)
+    judge_provider = get_provider(feature="joke", provider_name=judge_provider_name)
 
     # Build judging prompt
     jokes_text = ""
@@ -327,44 +339,48 @@ Respond in JSON:
 """
 
     messages = [
-        {"role": "system", "content": "You are an expert comedy judge. Pick the funniest joke. Respond with valid JSON only."},
-        {"role": "user", "content": judging_prompt}
+        {
+            "role": "system",
+            "content": "You are an expert comedy judge. Pick the funniest joke. Respond with valid JSON only.",
+        },
+        {"role": "user", "content": judging_prompt},
     ]
 
     try:
         response = judge_provider.chat_completion(messages=messages, max_tokens=2000)
-        result = response["content"]
+        result_text = str(response["content"])
 
         # Extract JSON
         import json
         import re
-        json_match = re.search(r'\{.*\}', result, re.DOTALL)
+
+        json_match = re.search(r"\{.*\}", result_text, re.DOTALL)
         if json_match:
-            result = json_match.group()
+            result_text = json_match.group()
 
-        judgment = json.loads(result)
+        judgment = json.loads(result_text)
 
-        winner_idx = int(judgment['winner']) - 1
+        winner_idx = int(judgment["winner"]) - 1
         winner_joke = jokes[winner_idx]
 
         logger.info(f"\nWINNER: {winner_joke['provider'].upper()}")
         logger.info(f"Reasoning: {judgment['reasoning']}")
 
         return {
-            'winner': winner_joke['provider'],
-            'joke': winner_joke['joke'],
-            'reasoning': judgment['reasoning'],
-            'all_jokes': jokes,
-            'scores': judgment.get('scores', {})
+            "winner": winner_joke["provider"],
+            "joke": winner_joke["joke"],
+            "reasoning": judgment["reasoning"],
+            "all_jokes": jokes,
+            "scores": judgment.get("scores", {}),
         }
 
     except Exception as e:
         logger.warning(f"Judging failed: {e}, defaulting to first joke")
         # Fallback: just use the first joke
         return {
-            'winner': jokes[0]['provider'],
-            'joke': jokes[0]['joke'],
-            'reasoning': 'Judging failed, using first joke',
-            'all_jokes': jokes,
-            'scores': {}
+            "winner": jokes[0]["provider"],
+            "joke": jokes[0]["joke"],
+            "reasoning": "Judging failed, using first joke",
+            "all_jokes": jokes,
+            "scores": {},
         }

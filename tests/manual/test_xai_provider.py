@@ -13,19 +13,14 @@ print("Testing XAI provider for jokes...")
 print("=" * 60)
 
 try:
-    provider = get_provider(
-        feature="joke",
-        provider_name="xai"
-    )
+    provider = get_provider(feature="joke", provider_name="xai")
 
     print(f"Provider: {provider.config.provider_name}")
     print(f"Model: {provider.config.model}")
     print()
 
     # Test chat completion
-    messages = [
-        {"role": "user", "content": "Tell me a short joke about AI meetings."}
-    ]
+    messages = [{"role": "user", "content": "Tell me a short joke about AI meetings."}]
 
     print("Sending request...")
     response = provider.chat_completion(messages, max_tokens=100)
@@ -38,4 +33,5 @@ try:
 except Exception as e:
     print(f"✗ Error: {e}")
     import traceback
+
     traceback.print_exc()

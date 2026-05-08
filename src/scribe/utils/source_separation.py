@@ -205,6 +205,7 @@ significantly reduce hallucinations and enable complete lyric extraction.
 """
 
 from pathlib import Path
+from typing import Any, cast
 
 from scribe.utils.logging import get_logger
 
@@ -219,7 +220,7 @@ class VocalSeparator:
     before transcription, we eliminate hallucinations caused by instruments.
     """
 
-    def __init__(self, model_name: str = "htdemucs", device: str = "cuda"):
+    def __init__(self, model_name: str = "htdemucs", device: str = "cuda") -> None:
         """
         Initialize vocal separator.
 
@@ -229,9 +230,9 @@ class VocalSeparator:
         """
         self.model_name = model_name
         self.device = device
-        self.model = None
+        self.model: Any | None = None
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Load Demucs model lazily."""
         if self.model is not None:
             return
@@ -240,25 +241,23 @@ class VocalSeparator:
             from demucs.pretrained import get_model
 
             logger.info(f"Loading Demucs model: {self.model_name}")
-            self.model = get_model(self.model_name)
-            self.model.to(self.device)
-            self.model.eval()
+            get_model_fn = cast(Any, get_model)
+            self.model = get_model_fn(self.model_name)
+            model = self.model
+            if model is None:
+                raise RuntimeError("Demucs model failed to load")
+            model.to(self.device)
+            model.eval()
 
             logger.info(f"Demucs model loaded on {self.device}")
 
         except ImportError:
-            raise ImportError(
-                "Demucs not installed. Install with: pip install demucs"
-            )
+            raise ImportError("Demucs not installed. Install with: pip install demucs")
         except Exception as e:
             logger.error(f"Failed to load Demucs model: {e}")
             raise
 
-    def separate_vocals(
-        self,
-        audio_path: Path,
-        output_dir: Path | None = None
-    ) -> Path:
+    def separate_vocals(self, audio_path: Path, output_dir: Path | None = None) -> Path:
         """
         Separate vocals from music track.
 
@@ -270,6 +269,9 @@ class VocalSeparator:
             Path to isolated vocals file
         """
         self._load_model()
+        model = self.model
+        if model is None:
+            raise RuntimeError("Demucs model failed to load")
 
         if output_dir is None:
             output_dir = audio_path.parent
@@ -315,19 +317,20 @@ class VocalSeparator:
             old_stderr = sys.stderr
             try:
                 # Redirect to devnull to suppress tqdm progress bars
-                sys.stdout = open(os.devnull, 'w')
-                sys.stderr = open(os.devnull, 'w')
+                sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
 
                 # Apply separation (progress=False to disable tqdm)
                 with torch.no_grad():
-                    sources = apply_model(
-                        self.model,
+                    apply_model_fn = cast(Any, apply_model)
+                    sources = apply_model_fn(
+                        model,
                         wav[None],  # Add batch dimension
                         device=self.device,
                         shifts=1,
                         split=True,
                         overlap=0.25,
-                        progress=False  # Disable progress bar
+                        progress=False,  # Disable progress bar
                     )[0]
             finally:
                 # Restore stdout/stderr

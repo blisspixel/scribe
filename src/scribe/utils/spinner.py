@@ -2,8 +2,9 @@
 
 import threading
 import time
+from types import TracebackType
 
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from scribe.utils.logging import console
 from scribe.utils.shimmer import shimmer_markup
@@ -16,13 +17,13 @@ class SpinnerProgress:
 
     # Modern color scheme using ScribeTheme
     COLORS = {
-        "process": ScribeTheme.PRIMARY,       # Sophisticated teal for ongoing ops
-        "success": ScribeTheme.SUCCESS,       # Soft green for completion
-        "warning": ScribeTheme.WARNING,       # Amber for warnings
-        "error": ScribeTheme.ERROR,           # Soft red for errors
-        "info": ScribeTheme.INFO,             # Soft blue for info
-        "dim": ScribeTheme.TEXT_MUTED,        # Muted for secondary info
-        "ai": ScribeTheme.AI_ACCENT,          # Purple for AI features
+        "process": ScribeTheme.PRIMARY,  # Sophisticated teal for ongoing ops
+        "success": ScribeTheme.SUCCESS,  # Soft green for completion
+        "warning": ScribeTheme.WARNING,  # Amber for warnings
+        "error": ScribeTheme.ERROR,  # Soft red for errors
+        "info": ScribeTheme.INFO,  # Soft blue for info
+        "dim": ScribeTheme.TEXT_MUTED,  # Muted for secondary info
+        "ai": ScribeTheme.AI_ACCENT,  # Purple for AI features
     }
 
     def __init__(self, message: str, spinner_style: str = "dots"):
@@ -35,7 +36,7 @@ class SpinnerProgress:
         self.message = message
         self.start_time = time.time()
         self.progress: Progress | None = None
-        self.task_id = None
+        self.task_id: TaskID | None = None
         self.ui_config = get_terminal_ui_config()
         self._lock = threading.Lock()
         self._shimmer_stop: threading.Event | None = None
@@ -43,7 +44,7 @@ class SpinnerProgress:
         self._shimmer_cycle_seconds = 3.2
         self._shimmer_width = 0.25 if self.ui_config.capabilities.is_windows else 0.35
 
-    def __enter__(self):
+    def __enter__(self) -> "SpinnerProgress":
         """Start the spinner display."""
         if self.ui_config.animation_mode == "off":
             console.print(f"[{self.COLORS['process']}]{self.message}...[/{self.COLORS['process']}]")
@@ -64,7 +65,12 @@ class SpinnerProgress:
         self._start_shimmer_if_enabled()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Stop the spinner display."""
         self._stop_shimmer()
         if self.progress:
@@ -94,17 +100,20 @@ class SpinnerProgress:
         if not self._shimmer_enabled() or not self.progress or self.task_id is None:
             return
         self._shimmer_stop = threading.Event()
+        shimmer_stop = self._shimmer_stop
 
         def _run() -> None:
-            while self._shimmer_stop and not self._shimmer_stop.is_set():
+            while not shimmer_stop.is_set():
                 elapsed = time.time() - self.start_time
                 phase = (elapsed % self._shimmer_cycle_seconds) / self._shimmer_cycle_seconds
                 with self._lock:
-                    if not self.progress or self.task_id is None:
+                    progress = self.progress
+                    task_id = self.task_id
+                    if progress is None or task_id is None:
                         return
-                    self.progress.update(self.task_id, description=self._render_description(phase))
-                    self.progress.refresh()
-                if self._shimmer_stop.wait(self.ui_config.frame_delay):
+                    progress.update(task_id, description=self._render_description(phase))
+                    progress.refresh()
+                if shimmer_stop.wait(self.ui_config.frame_delay):
                     return
 
         self._shimmer_thread = threading.Thread(target=_run, daemon=True)
@@ -126,7 +135,7 @@ class SpinnerProgress:
         """
         if message:
             self.message = message
-        if self.progress and self.task_id is not None and not self._shimmer_enabled():
+        if self.progress is not None and self.task_id is not None and not self._shimmer_enabled():
             with self._lock:
                 self.progress.update(self.task_id, description=self._render_description())
                 self.progress.refresh()
@@ -146,9 +155,13 @@ class SpinnerProgress:
         elapsed_str = f"{int(elapsed // 60):01d}:{int(elapsed % 60):02d}"
 
         if extra:
-            console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({extra}, {elapsed_str})[/{self.COLORS['dim']}]")
+            console.print(
+                f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({extra}, {elapsed_str})[/{self.COLORS['dim']}]"
+            )
         else:
-            console.print(f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]")
+            console.print(
+                f"[{self.COLORS['success']}]DONE[/{self.COLORS['success']}] {message} [{self.COLORS['dim']}]({elapsed_str})[/{self.COLORS['dim']}]"
+            )
 
     def complete(self) -> None:
         """Stop spinner silently without printing a message.

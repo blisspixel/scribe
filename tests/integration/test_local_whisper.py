@@ -18,7 +18,7 @@ from scribe.models.gpu import GPUConfig
 # Skip all tests in this module if CUDA not available
 pytestmark = pytest.mark.skipif(
     not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
-    reason="CUDA not available"
+    reason="CUDA not available",
 )
 
 
@@ -40,7 +40,9 @@ class TestLocalWhisperTranscriber:
         assert "Meeting: test_meeting" in content
         assert "Date:" in content
 
-    def test_transcribe_with_progress_callback(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_transcribe_with_progress_callback(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription with progress updates."""
         transcriber = LocalWhisperTranscriber(temp_config)
 
@@ -50,9 +52,7 @@ class TestLocalWhisperTranscriber:
             progress_updates.append((percent, message))
 
         result = transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            progress_callback=progress_callback
+            sample_audio, "meeting", progress_callback=progress_callback
         )
 
         assert result is not None
@@ -62,7 +62,9 @@ class TestLocalWhisperTranscriber:
         assert any(0 < p[0] < 100 for p in progress_updates)
         assert progress_updates[-1][0] == 100.0
 
-    def test_transcribe_shows_speed_ratio(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_transcribe_shows_speed_ratio(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription shows processing speed ratio."""
         transcriber = LocalWhisperTranscriber(temp_config)
 
@@ -71,16 +73,14 @@ class TestLocalWhisperTranscriber:
         def progress_callback(percent: float, message: str):
             messages.append(message)
 
-        transcriber.transcribe(
-            sample_audio,
-            "meeting",
-            progress_callback=progress_callback
-        )
+        transcriber.transcribe(sample_audio, "meeting", progress_callback=progress_callback)
 
         # Should show speed ratio in messages
         assert any("x" in msg for msg in messages)  # e.g., "8.5x real-time"
 
-    def test_transcribe_with_rtx4090_optimizations(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_transcribe_with_rtx4090_optimizations(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription uses RTX 4090 optimizations."""
         gpu_config = GPUConfig.detect()
 
@@ -93,7 +93,9 @@ class TestLocalWhisperTranscriber:
 
         assert result is not None
 
-    def test_transcribe_with_silence_detection(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_transcribe_with_silence_detection(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription includes silence markers."""
         transcriber = LocalWhisperTranscriber(temp_config, detect_silence=True)
 
@@ -104,9 +106,13 @@ class TestLocalWhisperTranscriber:
         # Just verify it doesn't crash
         assert len(content) > 0
 
-    @pytest.mark.skipif(not pytest.importorskip("whisperx", reason="WhisperX not available"),
-                        reason="WhisperX not available")
-    def test_transcribe_with_speaker_diarization(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    @pytest.mark.skipif(
+        not pytest.importorskip("whisperx", reason="WhisperX not available"),
+        reason="WhisperX not available",
+    )
+    def test_transcribe_with_speaker_diarization(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription with speaker diarization."""
         import os
 
@@ -114,10 +120,7 @@ class TestLocalWhisperTranscriber:
         if not os.getenv("HF_TOKEN"):
             pytest.skip("HF_TOKEN not available")
 
-        transcriber = LocalWhisperTranscriber(
-            temp_config,
-            enable_diarization=True
-        )
+        transcriber = LocalWhisperTranscriber(temp_config, enable_diarization=True)
 
         result = transcriber.transcribe(sample_audio, "meeting")
         content = result.read_text(encoding="utf-8")
@@ -145,7 +148,9 @@ class TestLocalWhisperTranscriber:
         with pytest.raises(TranscriptionError, match="does not exist"):
             transcriber.transcribe(fake_file, "meeting")
 
-    def test_transcribe_creates_output_directory(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_transcribe_creates_output_directory(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcription creates output directory if needed."""
         nested_output = temp_config.output_folder / "nested" / "dir"
         temp_config.output_folder = nested_output
@@ -192,9 +197,11 @@ class TestGPUOptimizations:
 
         assert transcriber.model_size == "large-v3"
 
-    def test_clears_gpu_cache_after_transcription(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_clears_gpu_cache_after_transcription(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test GPU cache is cleared after transcription."""
-        with patch('scribe.core.local_whisper.clear_gpu_cache') as mock_clear:
+        with patch("scribe.core.local_whisper.clear_gpu_cache") as mock_clear:
             transcriber = LocalWhisperTranscriber(temp_config)
             transcriber.transcribe(sample_audio, "meeting")
 
@@ -217,7 +224,9 @@ class TestTranscriptFormatting:
         assert "Duration:" in content
         assert "─" in content  # Separator
 
-    def test_format_includes_timestamps(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_format_includes_timestamps(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcript includes timestamps."""
         transcriber = LocalWhisperTranscriber(temp_config)
         result = transcriber.transcribe(sample_audio, "meeting")
@@ -226,20 +235,24 @@ class TestTranscriptFormatting:
 
         # Should have timestamp format [HH:MM:SS]
         import re
-        timestamps = re.findall(r'\[\d{2}:\d{2}:\d{2}\]', content)
+
+        timestamps = re.findall(r"\[\d{2}:\d{2}:\d{2}\]", content)
         assert len(timestamps) > 0
 
-    def test_format_extracts_date_from_filename(self, temp_dir: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_format_extracts_date_from_filename(
+        self, temp_dir: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcript extracts date from filename."""
         audio_with_date = temp_dir / "Meeting_2025-11-07.wav"
 
         # Create minimal WAV file
         import wave
-        with wave.open(str(audio_with_date), 'wb') as wav:
+
+        with wave.open(str(audio_with_date), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * 32000)  # 1 second of silence
+            wav.writeframes(b"\x00" * 32000)  # 1 second of silence
 
         transcriber = LocalWhisperTranscriber(temp_config)
         result = transcriber.transcribe(audio_with_date, "meeting")
@@ -247,7 +260,9 @@ class TestTranscriptFormatting:
         content = result.read_text(encoding="utf-8")
         assert "November 7, 2025" in content
 
-    def test_format_no_technical_metadata(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_format_no_technical_metadata(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test transcript doesn't include technical metadata."""
         transcriber = LocalWhisperTranscriber(temp_config)
         result = transcriber.transcribe(sample_audio, "meeting")
@@ -264,8 +279,10 @@ class TestTranscriptFormatting:
 class TestSilenceDetection:
     """Test silence detection integration."""
 
-    @patch('scribe.core.local_whisper.detect_silence_periods')
-    def test_silence_markers_inserted(self, mock_detect, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    @patch("scribe.core.local_whisper.detect_silence_periods")
+    def test_silence_markers_inserted(
+        self, mock_detect, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test silence markers are inserted in transcript."""
         # Mock silence detection to return periods
         mock_detect.return_value = [(10.0, 15.0), (30.0, 35.0)]
@@ -278,7 +295,9 @@ class TestSilenceDetection:
         # Should have silence markers
         assert "[silence" in content.lower() or "..." in content
 
-    def test_silence_detection_disabled_by_default(self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu):
+    def test_silence_detection_disabled_by_default(
+        self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
+    ):
         """Test silence detection is disabled by default."""
         transcriber = LocalWhisperTranscriber(temp_config)
 
@@ -290,7 +309,7 @@ class TestErrorHandling:
 
     def test_handles_out_of_memory_error(self, sample_audio: Path, temp_config: ScribeConfig):
         """Test graceful handling of GPU out of memory error."""
-        with patch('scribe.core.local_whisper.whisper.load_model') as mock_load:
+        with patch("scribe.core.local_whisper.whisper.load_model") as mock_load:
             mock_load.side_effect = RuntimeError("CUDA out of memory")
 
             transcriber = LocalWhisperTranscriber(temp_config)
@@ -300,7 +319,7 @@ class TestErrorHandling:
 
     def test_handles_model_load_error(self, sample_audio: Path, temp_config: ScribeConfig):
         """Test graceful handling of model loading error."""
-        with patch('scribe.core.local_whisper.whisper.load_model') as mock_load:
+        with patch("scribe.core.local_whisper.whisper.load_model") as mock_load:
             mock_load.side_effect = Exception("Model load failed")
 
             transcriber = LocalWhisperTranscriber(temp_config)

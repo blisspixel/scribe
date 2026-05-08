@@ -4,14 +4,18 @@ Anthropic Claude provider implementation.
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 try:
-    from anthropic import Anthropic
+    from anthropic import Anthropic as _AnthropicImport
+
+    _anthropic_ctor: Any | None = _AnthropicImport
     ANTHROPIC_AVAILABLE = True
 except ImportError:
-    Anthropic = None
+    _anthropic_ctor = None
     ANTHROPIC_AVAILABLE = False
+
+Anthropic: Any | None = _anthropic_ctor
 
 from .base import AIProvider, ProviderConfig
 
@@ -21,7 +25,12 @@ logger = logging.getLogger(__name__)
 class AnthropicProvider(AIProvider):
     """Provider for Anthropic Claude models."""
 
-    def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-20241022", config: ProviderConfig | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str = "claude-3-5-sonnet-20241022",
+        config: ProviderConfig | None = None,
+    ) -> None:
         """
         Initialize Anthropic provider.
 
@@ -33,23 +42,24 @@ class AnthropicProvider(AIProvider):
         # Check the runtime symbol rather than only the import flag so tests
         # can patch Anthropic without requiring the package to be installed.
         if Anthropic is None:
-            raise ImportError("anthropic package not installed. Install with: pip install anthropic")
+            raise ImportError(
+                "anthropic package not installed. Install with: pip install anthropic"
+            )
 
         # Handle both direct initialization and config-based initialization
         if config:
             super().__init__(config)
-            self.api_key = config.api_key
+            self.api_key: str = config.api_key
             self.model = config.model
         else:
-            self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-            if not self.api_key:
+            resolved_api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+            if not resolved_api_key:
                 raise ValueError("Anthropic API key required")
+            self.api_key = resolved_api_key
             self.model = model
             # Create a minimal config for parent class
             self.config = ProviderConfig(
-                provider_name="anthropic",
-                api_key=self.api_key,
-                model=self.model
+                provider_name="anthropic", api_key=self.api_key, model=self.model
             )
 
         self.client = Anthropic(api_key=self.api_key)
@@ -58,9 +68,9 @@ class AnthropicProvider(AIProvider):
     def chat_completion(
         self,
         messages: list[dict[str, str]],
-        max_tokens: int = 4096,
-        temperature: float = 1.0,
-        **kwargs
+        max_tokens: int | None = 4096,
+        temperature: float | None = 1.0,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Generate chat completion using Claude.
@@ -75,8 +85,8 @@ class AnthropicProvider(AIProvider):
             Dict with 'content' and 'usage' keys
         """
         # Claude uses 'system' parameter separately from messages
-        system_message = None
-        user_messages = []
+        system_message: str | None = None
+        user_messages: list[dict[str, str]] = []
 
         for msg in messages:
             if msg["role"] == "system":
@@ -87,17 +97,17 @@ class AnthropicProvider(AIProvider):
                 user_messages.append({"role": role, "content": msg["content"]})
 
         # Call Claude API
-        params = {
+        params: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": max_tokens,
+            "max_tokens": max_tokens or 4096,
             "temperature": temperature,
-            "messages": user_messages
+            "messages": user_messages,
         }
 
         if system_message:
             params["system"] = system_message
 
-        response = self.client.messages.create(**params)
+        response = cast(Any, self.client.messages).create(**params)
 
         # Extract content from response
         content = response.content[0].text if response.content else ""
@@ -107,8 +117,8 @@ class AnthropicProvider(AIProvider):
             "usage": {
                 "prompt_tokens": response.usage.input_tokens,
                 "completion_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.input_tokens + response.usage.output_tokens
-            }
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+            },
         }
 
     def generate_image(
@@ -116,7 +126,7 @@ class AnthropicProvider(AIProvider):
         prompt: str,
         size: str = "1024x1024",
         quality: str = "standard",
-        **kwargs
+        **kwargs: Any,
     ) -> bytes:
         """
         Claude doesn't support image generation.
@@ -126,12 +136,7 @@ class AnthropicProvider(AIProvider):
         """
         raise NotImplementedError("Anthropic Claude does not support image generation")
 
-    def transcribe_audio(
-        self,
-        audio_path: str,
-        language: str | None = None,
-        **kwargs
-    ) -> str:
+    def transcribe_audio(self, audio_path: str, language: str | None = None, **kwargs: Any) -> str:
         """
         Claude doesn't support audio transcription.
 
@@ -140,12 +145,7 @@ class AnthropicProvider(AIProvider):
         """
         raise NotImplementedError("Anthropic Claude does not support audio transcription")
 
-    def analyze_image(
-        self,
-        image_data: bytes,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
         """
         Analyze an image using Claude's vision capabilities.
 
@@ -160,10 +160,10 @@ class AnthropicProvider(AIProvider):
         import base64
 
         # Convert image to base64
-        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         # Claude vision API
-        response = self.client.messages.create(
+        response = cast(Any, self.client.messages).create(
             model=self.model,
             max_tokens=4096,
             messages=[
@@ -178,13 +178,13 @@ class AnthropicProvider(AIProvider):
                                 "data": image_b64,
                             },
                         },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
+                        {"type": "text", "text": prompt},
                     ],
                 }
             ],
         )
 
-        return response.content[0].text if response.content else ""
+        if not response.content:
+            return ""
+        first_block = response.content[0]
+        return str(getattr(first_block, "text", ""))

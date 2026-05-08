@@ -11,12 +11,14 @@ from scribe.providers.xai_provider import XAIProvider
 
 try:
     from scribe.providers.anthropic_provider import AnthropicProvider
+
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
 try:
     from scribe.providers.gemini_provider import GeminiProvider
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -102,9 +104,7 @@ def get_provider(
         status = monitor.check_provider_health(provider_name, api_key)
 
         if not status.is_healthy:
-            logger.warning(
-                f"Provider {provider_name} failed health check: {status.error_message}"
-            )
+            logger.warning(f"Provider {provider_name} failed health check: {status.error_message}")
             # Try to get a fallback provider
             fallback = _get_fallback_provider(feature, provider_name, api_key)
             if fallback:
@@ -132,11 +132,15 @@ def get_provider(
         return XAIProvider(config)
     elif provider_name == "anthropic":
         if not ANTHROPIC_AVAILABLE:
-            raise ImportError("anthropic package not installed. Install with: pip install anthropic")
+            raise ImportError(
+                "anthropic package not installed. Install with: pip install anthropic"
+            )
         return AnthropicProvider(api_key=api_key, model=model)
     elif provider_name == "gemini":
         if not GEMINI_AVAILABLE:
-            raise ImportError("google-genai package not installed. Install with: pip install google-genai")
+            raise ImportError(
+                "google-genai package not installed. Install with: pip install google-genai"
+            )
         return GeminiProvider(config)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
@@ -145,7 +149,7 @@ def get_provider(
 def _get_default_model(provider_name: str, feature: str) -> str:
     """Get default model for a provider and feature."""
 
-    defaults = {
+    defaults: dict[str, dict[str, str | None]] = {
         "openai": {
             "joke": "gpt-5.2",
             "meme": "gpt-5.2",
@@ -176,21 +180,16 @@ def _get_default_model(provider_name: str, feature: str) -> str:
         },
     }
 
-    model = defaults.get(provider_name, {}).get(feature)
+    provider_defaults: dict[str, str | None] | None = defaults.get(provider_name)
+    model = provider_defaults.get(feature) if provider_defaults is not None else None
 
     if model is None:
-        raise ValueError(
-            f"Provider '{provider_name}' does not support feature '{feature}'"
-        )
+        raise ValueError(f"Provider '{provider_name}' does not support feature '{feature}'")
 
     return model
 
 
-def _get_fallback_provider(
-    feature: str,
-    failed_provider: str,
-    original_api_key: str
-) -> str | None:
+def _get_fallback_provider(feature: str, failed_provider: str, original_api_key: str) -> str | None:
     """
     Get a fallback provider when the primary fails.
 

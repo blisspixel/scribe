@@ -14,10 +14,7 @@ from scribe.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def validate_file_size(
-    file_path: Path,
-    max_size_gb: float = 25.0
-) -> None:
+def validate_file_size(file_path: Path, max_size_gb: float = 25.0) -> None:
     """
     Validate file size is within limits.
 
@@ -29,10 +26,7 @@ def validate_file_size(
         ValidationError: If file exceeds size limit
     """
     if not file_path.exists():
-        raise ValidationError(
-            f"File not found: {file_path}",
-            context={"file_path": str(file_path)}
-        )
+        raise ValidationError(f"File not found: {file_path}", context={"file_path": str(file_path)})
 
     size_bytes = file_path.stat().st_size
     size_gb = size_bytes / (1024**3)
@@ -40,20 +34,13 @@ def validate_file_size(
     if size_gb > max_size_gb:
         raise ValidationError(
             f"File too large: {size_gb:.2f}GB (limit: {max_size_gb:.1f}GB)",
-            context={
-                "file_path": str(file_path),
-                "size_gb": size_gb,
-                "limit_gb": max_size_gb
-            }
+            context={"file_path": str(file_path), "size_gb": size_gb, "limit_gb": max_size_gb},
         )
 
     logger.debug(f"File size OK: {size_gb:.2f}GB / {max_size_gb:.1f}GB")
 
 
-def validate_audio_duration(
-    file_path: Path,
-    max_duration_hours: float = 12.0
-) -> float | None:
+def validate_audio_duration(file_path: Path, max_duration_hours: float = 12.0) -> float | None:
     """
     Validate audio duration is within limits.
 
@@ -81,8 +68,8 @@ def validate_audio_duration(
             context={
                 "file_path": str(file_path),
                 "duration_hours": duration_hours,
-                "limit_hours": max_duration_hours
-            }
+                "limit_hours": max_duration_hours,
+            },
         )
 
     logger.debug(f"Audio duration OK: {duration_hours:.2f}h / {max_duration_hours:.1f}h")
@@ -90,9 +77,7 @@ def validate_audio_duration(
 
 
 def validate_audio_file(
-    file_path: Path,
-    max_size_gb: float = 25.0,
-    max_duration_hours: float = 12.0
+    file_path: Path, max_size_gb: float = 25.0, max_duration_hours: float = 12.0
 ) -> float | None:
     """
     Validate audio file meets all resource limits.

@@ -126,11 +126,7 @@ def get_provider_speedup() -> float:
     meme_provider = os.getenv("SCRIBE_MEME_PROVIDER", "xai").lower()
 
     # If majority are XAI, use XAI speedup
-    xai_count = sum([
-        joke_provider == "xai",
-        notes_provider == "xai",
-        meme_provider == "xai"
-    ])
+    xai_count = sum([joke_provider == "xai", notes_provider == "xai", meme_provider == "xai"])
 
     if xai_count >= 2:
         return 2.5  # XAI is ~2.5x faster on average
@@ -153,7 +149,7 @@ class PerformanceMetrics:
     # Note: Times vary by provider (XAI/Grok is typically faster than OpenAI)
     docx_time: float = 1.0
     notes_time: float = 30.0  # ~15s with XAI, ~30s with OpenAI
-    joke_time: float = 10.0   # ~2s with XAI, ~10s with OpenAI
+    joke_time: float = 10.0  # ~2s with XAI, ~10s with OpenAI
     meme_time: float = 180.0  # ~60s with XAI, ~180s with OpenAI
 
     # Sample count for averaging
@@ -213,16 +209,15 @@ class PerformanceMetrics:
             ratio = new / current
             if ratio > 3.0 or ratio < 0.33:
                 # Likely an outlier - reduce weight dramatically
-                logger.debug(f"Outlier detected: new={new:.2f}, current={current:.2f}, ratio={ratio:.2f}x")
+                logger.debug(
+                    f"Outlier detected: new={new:.2f}, current={current:.2f}, ratio={ratio:.2f}x"
+                )
                 weight = 0.1  # Use only 10% weight for outliers
 
         return current * (1 - weight) + new * weight
 
     def estimate_total_time(
-        self,
-        audio_duration: float,
-        include_post: bool = True,
-        provider_speedup: float = 1.0
+        self, audio_duration: float, include_post: bool = True, provider_speedup: float = 1.0
     ) -> float:
         """
         Estimate total processing time for given audio duration.
@@ -244,13 +239,15 @@ class PerformanceMetrics:
         if include_post:
             # Apply provider speedup to AI-dependent tasks
             total += self.docx_time  # Not AI-dependent
-            total += (self.notes_time / provider_speedup)
-            total += (self.joke_time / provider_speedup)
-            total += (self.meme_time / provider_speedup)
+            total += self.notes_time / provider_speedup
+            total += self.joke_time / provider_speedup
+            total += self.meme_time / provider_speedup
 
         return total
 
-    def get_phase_percentages(self, audio_duration: float, include_api_features: bool = True) -> dict[str, tuple]:
+    def get_phase_percentages(
+        self, audio_duration: float, include_api_features: bool = True
+    ) -> dict[str, tuple[float, float, float]]:
         """
         Calculate phase percentages based on estimated times.
 
@@ -278,15 +275,19 @@ class PerformanceMetrics:
 
         return {
             "preparing": (0, preparing_pct, (analysis_time + conversion_time) / audio_duration),
-            "transcribing": (preparing_pct, preparing_pct + transcribing_pct, transcription_time / audio_duration),
-            "finishing": (preparing_pct + transcribing_pct, 100, post_time / audio_duration)
+            "transcribing": (
+                preparing_pct,
+                preparing_pct + transcribing_pct,
+                transcription_time / audio_duration,
+            ),
+            "finishing": (preparing_pct + transcribing_pct, 100, post_time / audio_duration),
         }
 
 
 class PerformanceTracker:
     """Tracks and persists performance metrics per machine."""
 
-    def __init__(self, machine_id: str, config_dir: Path | None = None):
+    def __init__(self, machine_id: str, config_dir: Path | None = None) -> None:
         """
         Initialize performance tracker.
 
@@ -317,10 +318,10 @@ class PerformanceTracker:
 
         return PerformanceMetrics()
 
-    def _save_metrics(self):
+    def _save_metrics(self) -> None:
         """Save metrics to disk."""
         try:
-            with open(self.metrics_file, 'w') as f:
+            with open(self.metrics_file, "w") as f:
                 json.dump(asdict(self.metrics), f, indent=2)
         except Exception as e:
             logger.warning(f"Failed to save performance metrics: {e}")
@@ -351,9 +352,11 @@ class PerformanceTracker:
         """Estimate total processing time."""
         return self.metrics.estimate_total_time(audio_duration)
 
-    def get_phase_percentages(self, audio_duration: float) -> dict[str, tuple]:
+    def get_phase_percentages(
+        self, audio_duration: float, include_api_features: bool = True
+    ) -> dict[str, tuple[float, float, float]]:
         """Get adaptive phase percentages."""
-        return self.metrics.get_phase_percentages(audio_duration)
+        return self.metrics.get_phase_percentages(audio_duration, include_api_features)
 
 
 def get_performance_tracker(machine_id: str) -> PerformanceTracker:

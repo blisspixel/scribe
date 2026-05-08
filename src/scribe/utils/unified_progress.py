@@ -126,11 +126,15 @@ Simple adaptive learning beats static estimates every time.
 """
 
 import time
+from typing import TYPE_CHECKING
 
-from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
 from scribe.utils.logging import console
 from scribe.utils.terminal_ui import get_terminal_ui_config
+
+if TYPE_CHECKING:
+    from scribe.utils.performance_tracker import PerformanceTracker
 
 
 class UnifiedProgress:
@@ -143,8 +147,12 @@ class UnifiedProgress:
     - Finishing (85-100%)
     """
 
-    def __init__(self, total_duration: float | None = None, machine_id: str | None = None,
-                 include_api_features: bool = False):
+    def __init__(
+        self,
+        total_duration: float | None = None,
+        machine_id: str | None = None,
+        include_api_features: bool = False,
+    ):
         """
         Initialize unified progress.
 
@@ -155,10 +163,12 @@ class UnifiedProgress:
         """
         self.total_duration = total_duration
         self.start_time = time.time()
-        self.progress = None
-        self.task = None
-        self.current_phase = None
-        self.phase_start_times = {}
+        self.progress: Progress | None = None
+        self.task: TaskID | None = None
+        self.current_phase: str | None = None
+        self.phase_start_times: dict[str, float] = {}
+        self.phases: dict[str, tuple[float, float, float]] = {}
+        self.tracker: PerformanceTracker | None = None
         self.include_api_features = include_api_features
         self.ui_config = get_terminal_ui_config()
         self.frame_delay = self.ui_config.frame_delay
@@ -167,6 +177,7 @@ class UnifiedProgress:
         if machine_id and total_duration:
             try:
                 from scribe.utils.performance_tracker import get_performance_tracker
+
                 tracker = get_performance_tracker(machine_id)
                 self.phases = tracker.get_phase_percentages(total_duration, include_api_features)
                 self.tracker = tracker
@@ -177,7 +188,7 @@ class UnifiedProgress:
             self.tracker = None
             self._set_default_phases()
 
-    def _set_default_phases(self):
+    def _set_default_phases(self) -> None:
         """Set default phase definitions based on actual measurements."""
         # Real measurements from 28.9 min (1732s) test file:
         # WITHOUT API features (transcribe only):
@@ -192,24 +203,26 @@ class UnifiedProgress:
         if self.include_api_features:
             # Full workflow with API features
             self.phases = {
-                "preparing": (0, 19, 0.0559),      # 96.8s / 1732s
+                "preparing": (0, 19, 0.0559),  # 96.8s / 1732s
                 "transcribing": (19, 45, 0.0780),  # 135.2s / 1732s
-                "finishing": (45, 100, 0.1615)     # 279.7s / 1732s (notes+joke+meme)
+                "finishing": (45, 100, 0.1615),  # 279.7s / 1732s (notes+joke+meme)
             }
         else:
             # Transcribe only (no API features)
             self.phases = {
-                "preparing": (0, 42, 0.0559),      # 96.8s / 1732s = 41.8%
+                "preparing": (0, 42, 0.0559),  # 96.8s / 1732s = 41.8%
                 "transcribing": (42, 99, 0.0780),  # 135.2s / 1732s = 58.3%
-                "finishing": (99, 100, 0.0001)     # 0.1s / 1732s = 0.04% (just DOCX)
+                "finishing": (99, 100, 0.0001),  # 0.1s / 1732s = 0.04% (just DOCX)
             }
 
     def start(self) -> None:
         """Start the unified progress display."""
         from scribe.utils.theme import ScribeTheme
 
-        self.progress = Progress(
-            TextColumn(f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"),
+        progress = Progress(
+            TextColumn(
+                f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"
+            ),
             BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TextColumn("•"),
@@ -219,11 +232,15 @@ class UnifiedProgress:
             auto_refresh=False,
             refresh_per_second=max(2, self.ui_config.fps),
         )
-        self.progress.start()
-        self.task = self.progress.add_task("Starting...", total=100)
-        self.progress.refresh()
+        progress.start()
+        task = progress.add_task("Starting...", total=100)
+        progress.refresh()
+        self.progress = progress
+        self.task = task
 
-    def update_phase(self, phase: str, progress_in_phase: float = 0.0, step_description: str = None) -> None:
+    def update_phase(
+        self, phase: str, progress_in_phase: float = 0.0, step_description: str | None = None
+    ) -> None:
         """
         Update progress within a phase.
 
@@ -251,7 +268,12 @@ class UnifiedProgress:
                 progress_in_phase = min(0.98, elapsed / expected_time)  # Cap at 98%
 
         # Record phase completion for performance tracking
-        if progress_in_phase >= 1.0 and phase in self.phase_start_times and self.tracker and self.total_duration:
+        if (
+            progress_in_phase >= 1.0
+            and phase in self.phase_start_times
+            and self.tracker
+            and self.total_duration
+        ):
             actual_time = time.time() - self.phase_start_times[phase]
             self.tracker.record_phase(phase, self.total_duration, actual_time)
 
@@ -267,28 +289,24 @@ class UnifiedProgress:
             descriptions = {
                 "preparing": "Preparing audio",
                 "transcribing": "Transcribing",
-                "finishing": "Finishing"
+                "finishing": "Finishing",
             }
             description = descriptions.get(phase, "Processing")
 
-        if self.progress and self.task is not None:
-            self.progress.update(
-                self.task,
-                completed=overall_progress,
-                description=description
-            )
+        if self.progress is not None and self.task is not None:
+            self.progress.update(self.task, completed=overall_progress, description=description)
             self.progress.refresh()
 
     def refresh(self) -> None:
         """Refresh progress based on elapsed time in current phase."""
-        if self.current_phase:
+        if self.current_phase is not None:
             self.update_phase(self.current_phase, 0.0)
 
     def complete(self) -> None:
         """Mark workflow as complete."""
         from scribe.utils.theme import ScribeTheme
 
-        if self.progress and self.task is not None:
+        if self.progress is not None and self.task is not None:
             elapsed = time.time() - self.start_time
             minutes = int(elapsed // 60)
             seconds = int(elapsed % 60)
@@ -296,12 +314,12 @@ class UnifiedProgress:
             self.progress.update(
                 self.task,
                 completed=100,
-                description=f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)[/{ScribeTheme.SUCCESS}]"
+                description=f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)[/{ScribeTheme.SUCCESS}]",
             )
             self.progress.refresh()
             self.progress.stop()
 
     def stop(self) -> None:
         """Stop progress display."""
-        if self.progress:
+        if self.progress is not None:
             self.progress.stop()

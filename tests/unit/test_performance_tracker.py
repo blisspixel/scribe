@@ -258,11 +258,14 @@ class TestEdgeCases:
 class TestProviderSpeedup:
     """Test provider speedup calculations."""
 
-    @patch.dict('os.environ', {
-        'SCRIBE_JOKE_PROVIDER': 'xai',
-        'SCRIBE_NOTES_PROVIDER': 'xai',
-        'SCRIBE_MEME_PROVIDER': 'xai'
-    })
+    @patch.dict(
+        "os.environ",
+        {
+            "SCRIBE_JOKE_PROVIDER": "xai",
+            "SCRIBE_NOTES_PROVIDER": "xai",
+            "SCRIBE_MEME_PROVIDER": "xai",
+        },
+    )
     def test_get_provider_speedup_xai(self):
         """Test speedup calculation when using XAI."""
         from scribe.utils.performance_tracker import get_provider_speedup
@@ -270,11 +273,14 @@ class TestProviderSpeedup:
         speedup = get_provider_speedup()
         assert speedup == 2.5  # XAI is 2.5x faster
 
-    @patch.dict('os.environ', {
-        'SCRIBE_JOKE_PROVIDER': 'openai',
-        'SCRIBE_NOTES_PROVIDER': 'openai',
-        'SCRIBE_MEME_PROVIDER': 'openai'
-    })
+    @patch.dict(
+        "os.environ",
+        {
+            "SCRIBE_JOKE_PROVIDER": "openai",
+            "SCRIBE_NOTES_PROVIDER": "openai",
+            "SCRIBE_MEME_PROVIDER": "openai",
+        },
+    )
     def test_get_provider_speedup_openai(self):
         """Test speedup calculation when using OpenAI."""
         from scribe.utils.performance_tracker import get_provider_speedup
@@ -282,11 +288,14 @@ class TestProviderSpeedup:
         speedup = get_provider_speedup()
         assert speedup == 1.0  # OpenAI is baseline
 
-    @patch.dict('os.environ', {
-        'SCRIBE_JOKE_PROVIDER': 'xai',
-        'SCRIBE_NOTES_PROVIDER': 'openai',
-        'SCRIBE_MEME_PROVIDER': 'openai'
-    })
+    @patch.dict(
+        "os.environ",
+        {
+            "SCRIBE_JOKE_PROVIDER": "xai",
+            "SCRIBE_NOTES_PROVIDER": "openai",
+            "SCRIBE_MEME_PROVIDER": "openai",
+        },
+    )
     def test_get_provider_speedup_mixed(self):
         """Test speedup calculation with mixed providers."""
         from scribe.utils.performance_tracker import get_provider_speedup

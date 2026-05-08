@@ -17,11 +17,7 @@ from scribe.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def txt_to_docx(
-    txt_path: Path,
-    docx_path: Path | None = None,
-    title: str | None = None
-) -> Path:
+def txt_to_docx(txt_path: Path, docx_path: Path | None = None, title: str | None = None) -> Path:
     """
     Convert TXT transcript to formatted DOCX document.
 
@@ -45,8 +41,7 @@ def txt_to_docx(
     """
     if not txt_path.exists():
         raise FileOperationError(
-            f"Input file does not exist: {txt_path}",
-            context={"path": str(txt_path)}
+            f"Input file does not exist: {txt_path}", context={"path": str(txt_path)}
         )
 
     # Generate output path if not provided
@@ -84,7 +79,9 @@ def txt_to_docx(
 
         # Add title (centered, bold, 16pt)
         if header_lines:
-            title_text = header_lines[0].replace("Meeting:", "").replace("Transcription:", "").strip()
+            title_text = (
+                header_lines[0].replace("Meeting:", "").replace("Transcription:", "").strip()
+            )
             title_para = doc.add_paragraph()
             title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_run = title_para.add_run(title_text)
@@ -151,5 +148,5 @@ def txt_to_docx(
     except Exception as e:
         raise FileOperationError(
             f"Failed to convert TXT to DOCX: {e}",
-            context={"txt_path": str(txt_path), "error": str(e)}
+            context={"txt_path": str(txt_path), "error": str(e)},
         )

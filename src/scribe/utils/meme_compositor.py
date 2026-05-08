@@ -32,7 +32,7 @@ class MemeCompositor:
     Handles dynamic font sizing, text wrapping, and stroke rendering.
     """
 
-    def __init__(self, font_path: str | None = None):
+    def __init__(self, font_path: str | None = None) -> None:
         """
         Initialize compositor with Impact font.
 
@@ -44,6 +44,7 @@ class MemeCompositor:
         # Try to find Impact font in common locations
         if not self.font_path:
             import platform
+
             system = platform.system()
 
             if system == "Windows":
@@ -70,7 +71,7 @@ class MemeCompositor:
         image: PILImage.Image,
         top_text: str = "",
         bottom_text: str = "",
-        font_size_ratio: float = 0.08
+        font_size_ratio: float = 0.08,
     ) -> PILImage.Image:
         """
         Overlay meme text on image with Impact font styling.
@@ -94,6 +95,7 @@ class MemeCompositor:
         base_font_size = int(height * font_size_ratio)
 
         # Load font
+        font: Any
         try:
             if self.font_path:
                 font = ImageFont.truetype(self.font_path, base_font_size)
@@ -108,15 +110,25 @@ class MemeCompositor:
         # Draw top text
         if top_text:
             self._draw_caption(
-                draw, font, top_text.upper(), width, height,
-                position="top", base_font_size=base_font_size
+                draw,
+                font,
+                top_text.upper(),
+                width,
+                height,
+                position="top",
+                base_font_size=base_font_size,
             )
 
         # Draw bottom text
         if bottom_text:
             self._draw_caption(
-                draw, font, bottom_text.upper(), width, height,
-                position="bottom", base_font_size=base_font_size
+                draw,
+                font,
+                bottom_text.upper(),
+                width,
+                height,
+                position="bottom",
+                base_font_size=base_font_size,
             )
 
         return img
@@ -129,8 +141,8 @@ class MemeCompositor:
         width: int,
         height: int,
         position: str,
-        base_font_size: int
-    ):
+        base_font_size: int,
+    ) -> None:
         """Draw a single caption (top or bottom) with wrapping and stroke."""
         if not text:
             return
@@ -182,7 +194,7 @@ class MemeCompositor:
                 font=font,
                 fill="white",
                 stroke_width=stroke_width,
-                stroke_fill="black"
+                stroke_fill="black",
             )
 
             current_y += line_height + line_spacing

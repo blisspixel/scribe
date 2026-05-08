@@ -50,7 +50,7 @@ class TestConfigValidation:
             log_folder=log_dir,
             default_model="medium",
             default_language="es",
-            obs_port=5000
+            obs_port=5000,
         )
 
         assert config.output_folder == output_dir.resolve()
@@ -178,7 +178,7 @@ class TestPathValidation:
 
         assert nested_dir.exists()
 
-    @patch('pathlib.Path.mkdir')
+    @patch("pathlib.Path.mkdir")
     def test_path_creation_failure(self, mock_mkdir, tmp_path):
         """Test path creation failure raises error."""
         mock_mkdir.side_effect = PermissionError("Access denied")
@@ -254,7 +254,7 @@ class TestFeatureFlags:
         config = ScribeConfig(
             enable_silence_detection=False,
             enable_speaker_diarization=False,
-            keep_intermediate_files=True
+            keep_intermediate_files=True,
         )
 
         assert config.enable_silence_detection is False
@@ -386,7 +386,7 @@ class TestConfigIntegration:
             openai_api_key="sk-test123",
             obs_port=4455,
             max_retries=3,
-            enable_silence_detection=True
+            enable_silence_detection=True,
         )
 
         # Verify paths created
@@ -436,7 +436,7 @@ class TestConfigEdgeCases:
 
         assert config.default_model == "medium"
 
-    @patch('shutil.disk_usage')
+    @patch("shutil.disk_usage")
     def test_low_disk_space_warning(self, mock_disk_usage, tmp_path):
         """Test warning on low disk space."""
         # Mock low disk space
@@ -446,4 +446,3 @@ class TestConfigEdgeCases:
         config = ScribeConfig(output_folder=tmp_path / "test")
 
         assert config.output_folder.exists()
-

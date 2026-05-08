@@ -22,7 +22,7 @@ class TestDiagnosticResult:
             status="pass",
             message="All good",
             details="Everything works",
-            fix_suggestion="No action needed"
+            fix_suggestion="No action needed",
         )
 
         assert result.name == "Test Check"
@@ -33,11 +33,7 @@ class TestDiagnosticResult:
 
     def test_result_without_optional_fields(self):
         """Test creating result without optional fields."""
-        result = DiagnosticResult(
-            name="Test Check",
-            status="pass",
-            message="All good"
-        )
+        result = DiagnosticResult(name="Test Check", status="pass", message="All good")
 
         assert result.details is None
         assert result.fix_suggestion is None
@@ -51,9 +47,9 @@ class TestPythonVersionCheck:
         diagnostics = SystemDiagnostics()
 
         # Create a mock version_info with named tuple attributes
-        mock_version = type('version_info', (), {'major': 3, 'minor': 10, 'micro': 11})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 10, "micro": 11})()
 
-        with patch('sys.version_info', mock_version):
+        with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
             assert result.status == "pass"
@@ -63,9 +59,9 @@ class TestPythonVersionCheck:
         """Test Python 3.8-3.9 warns."""
         diagnostics = SystemDiagnostics()
 
-        mock_version = type('version_info', (), {'major': 3, 'minor': 9, 'micro': 0})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 9, "micro": 0})()
 
-        with patch('sys.version_info', mock_version):
+        with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
             assert result.status == "warn"
@@ -76,9 +72,9 @@ class TestPythonVersionCheck:
         """Test Python < 3.8 fails."""
         diagnostics = SystemDiagnostics()
 
-        mock_version = type('version_info', (), {'major': 3, 'minor': 7, 'micro': 0})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 7, "micro": 0})()
 
-        with patch('sys.version_info', mock_version):
+        with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
             assert result.status == "fail"
@@ -89,8 +85,8 @@ class TestPythonVersionCheck:
 class TestFFmpegCheck:
     """Test FFmpeg checking."""
 
-    @patch('shutil.which')
-    @patch('subprocess.check_output')
+    @patch("shutil.which")
+    @patch("subprocess.check_output")
     def test_ffmpeg_installed(self, mock_check_output, mock_which):
         """Test FFmpeg installed and working."""
         mock_which.return_value = "/usr/bin/ffmpeg"
@@ -102,7 +98,7 @@ class TestFFmpegCheck:
         assert result.status == "pass"
         assert "Installed" in result.message
 
-    @patch('shutil.which')
+    @patch("shutil.which")
     def test_ffmpeg_not_found(self, mock_which):
         """Test FFmpeg not found."""
         mock_which.return_value = None
@@ -114,8 +110,8 @@ class TestFFmpegCheck:
         assert "Not found" in result.message
         assert result.fix_suggestion is not None
 
-    @patch('shutil.which')
-    @patch('subprocess.check_output')
+    @patch("shutil.which")
+    @patch("subprocess.check_output")
     def test_ffmpeg_found_but_broken(self, mock_check_output, mock_which):
         """Test FFmpeg found but not working."""
         mock_which.return_value = "/usr/bin/ffmpeg"
@@ -131,30 +127,34 @@ class TestFFmpegCheck:
 class TestCUDACheck:
     """Test CUDA checking."""
 
-    def test_cuda_available(self):
+    @patch("scribe.utils.diagnostics.GPUConfig.detect")
+    def test_cuda_available(self, mock_detect):
         """Test CUDA available."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = True
-        mock_torch.version.cuda = "12.4"
+        mock_gpu = Mock()
+        mock_gpu.has_gpu = True
+        mock_gpu.cuda_version = "12.4"
+        mock_gpu.reason = "CUDA available for local transcription"
+        mock_detect.return_value = mock_gpu
 
-        with patch.dict('sys.modules', {'torch': mock_torch}):
-            diagnostics = SystemDiagnostics()
-            result = diagnostics.check_cuda()
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_cuda()
 
-            assert result.status == "pass"
-            assert "CUDA 12.4" in result.message
+        assert result.status == "pass"
+        assert "CUDA 12.4" in result.message
 
-    def test_cuda_not_available(self):
+    @patch("scribe.utils.diagnostics.GPUConfig.detect")
+    def test_cuda_not_available(self, mock_detect):
         """Test CUDA not available."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = False
+        mock_gpu = Mock()
+        mock_gpu.has_gpu = False
+        mock_gpu.reason = "No local CUDA backend detected"
+        mock_detect.return_value = mock_gpu
 
-        with patch.dict('sys.modules', {'torch': mock_torch}):
-            diagnostics = SystemDiagnostics()
-            result = diagnostics.check_cuda()
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_cuda()
 
-            assert result.status == "warn"
-            assert "Not available" in result.message
+        assert result.status == "warn"
+        assert "Not available" in result.message
 
     def test_pytorch_not_installed(self):
         """Test PyTorch not installed."""
@@ -165,36 +165,36 @@ class TestCUDACheck:
 class TestGPUCheck:
     """Test GPU checking."""
 
-    def test_gpu_detected(self):
+    @patch("scribe.utils.diagnostics.GPUConfig.detect")
+    def test_gpu_detected(self, mock_detect):
         """Test GPU detected."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = True
-        mock_torch.cuda.device_count.return_value = 1
-        mock_torch.cuda.get_device_name.return_value = "NVIDIA GeForce RTX 4090"
+        mock_gpu = Mock()
+        mock_gpu.has_gpu = True
+        mock_gpu.gpu_name = "NVIDIA GeForce RTX 4090"
+        mock_gpu.gpu_memory_gb = 24.0
+        mock_gpu.reason = "GPU detected via CTranslate2"
+        mock_detect.return_value = mock_gpu
 
-        mock_props = Mock()
-        mock_props.total_memory = 24 * 1024**3  # 24 GB
-        mock_torch.cuda.get_device_properties.return_value = mock_props
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_gpu()
 
-        with patch.dict('sys.modules', {'torch': mock_torch}):
-            diagnostics = SystemDiagnostics()
-            result = diagnostics.check_gpu()
+        assert result.status == "pass"
+        assert "RTX 4090" in result.message
+        assert "24.0 GB" in result.details
 
-            assert result.status == "pass"
-            assert "RTX 4090" in result.message
-            assert "24.0 GB" in result.details
-
-    def test_no_gpu(self):
+    @patch("scribe.utils.diagnostics.GPUConfig.detect")
+    def test_no_gpu(self, mock_detect):
         """Test no GPU detected."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = False
+        mock_gpu = Mock()
+        mock_gpu.has_gpu = False
+        mock_gpu.reason = "No local CUDA backend detected"
+        mock_detect.return_value = mock_gpu
 
-        with patch.dict('sys.modules', {'torch': mock_torch}):
-            diagnostics = SystemDiagnostics()
-            result = diagnostics.check_gpu()
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_gpu()
 
-            assert result.status == "warn"
-            assert "No GPU" in result.message
+        assert result.status == "warn"
+        assert "No GPU" in result.message
 
 
 class TestAPIKeyCheck:
@@ -208,7 +208,9 @@ class TestAPIKeyCheck:
 
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"}
+        ):
             result = diagnostics.check_openai_api_key()
 
             assert result.status == "pass"
@@ -230,7 +232,9 @@ class TestAPIKeyCheck:
 
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"}
+        ):
             result = diagnostics.check_openai_api_key()
 
             assert result.status == "fail"
@@ -246,7 +250,9 @@ class TestAPIKeyCheck:
 
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz'}):
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"}
+        ):
             result = diagnostics.check_openai_api_key()
 
             assert result.status == "warn"
@@ -256,7 +262,7 @@ class TestAPIKeyCheck:
         """Test invalid API key format."""
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'invalid-key'}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "invalid-key"}):
             result = diagnostics.check_openai_api_key()
 
             assert result.status == "warn"
@@ -284,7 +290,7 @@ class TestAdditionalProviders:
 
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'XAI_API_KEY': 'xai-test-key'}, clear=True):
+        with patch.dict(os.environ, {"XAI_API_KEY": "xai-test-key"}, clear=True):
             results = diagnostics.check_additional_providers()
 
             xai = [r for r in results if "XAI" in r.name][0]
@@ -298,13 +304,15 @@ class TestAdditionalProviders:
 
         mock_client = MagicMock()
         mock_client.models.list.side_effect = AuthenticationError(
-            message="Invalid", response=MagicMock(status_code=401), body=None,
+            message="Invalid",
+            response=MagicMock(status_code=401),
+            body=None,
         )
         mock_openai_cls.return_value = mock_client
 
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'XAI_API_KEY': 'xai-bad-key'}, clear=True):
+        with patch.dict(os.environ, {"XAI_API_KEY": "xai-bad-key"}, clear=True):
             results = diagnostics.check_additional_providers()
 
             xai = [r for r in results if "XAI" in r.name][0]
@@ -330,7 +338,7 @@ class TestOutputFolderCheck:
         """Test output folder exists and is writable."""
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {'SCRIBE_OUTPUT_FOLDER': str(tmp_path)}):
+        with patch.dict(os.environ, {"SCRIBE_OUTPUT_FOLDER": str(tmp_path)}):
             result = diagnostics.check_output_folder()
 
             assert result.status == "pass"
@@ -351,7 +359,7 @@ class TestOutputFolderCheck:
         diagnostics = SystemDiagnostics()
         non_existent = tmp_path / "does_not_exist"
 
-        with patch.dict(os.environ, {'SCRIBE_OUTPUT_FOLDER': str(non_existent)}):
+        with patch.dict(os.environ, {"SCRIBE_OUTPUT_FOLDER": str(non_existent)}):
             result = diagnostics.check_output_folder()
 
             assert result.status == "warn"
@@ -361,7 +369,7 @@ class TestOutputFolderCheck:
 class TestDiskSpaceCheck:
     """Test disk space checking."""
 
-    @patch('shutil.disk_usage')
+    @patch("shutil.disk_usage")
     def test_plenty_of_space(self, mock_disk_usage):
         """Test plenty of disk space."""
         mock_usage = Mock()
@@ -375,7 +383,7 @@ class TestDiskSpaceCheck:
         assert result.status == "pass"
         assert "50.0 GB" in result.message
 
-    @patch('shutil.disk_usage')
+    @patch("shutil.disk_usage")
     def test_low_disk_space(self, mock_disk_usage):
         """Test low disk space."""
         mock_usage = Mock()
@@ -389,7 +397,7 @@ class TestDiskSpaceCheck:
         assert result.status == "warn"
         assert "7.0 GB" in result.message
 
-    @patch('shutil.disk_usage')
+    @patch("shutil.disk_usage")
     def test_very_low_disk_space(self, mock_disk_usage):
         """Test very low disk space."""
         mock_usage = Mock()
@@ -437,6 +445,7 @@ class TestSystemDiagnostics:
         """Test running all checks."""
         # Mock torch to avoid import issues in tests
         mock_torch = MagicMock()
+        mock_torch.__spec__ = Mock()
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 1
         mock_torch.cuda.get_device_name.return_value = "Test GPU"
@@ -445,7 +454,7 @@ class TestSystemDiagnostics:
         mock_props.total_memory = 8 * 1024**3
         mock_torch.cuda.get_device_properties.return_value = mock_props
 
-        with patch.dict('sys.modules', {'torch': mock_torch}):
+        with patch.dict("sys.modules", {"torch": mock_torch}):
             diagnostics = SystemDiagnostics()
             results = diagnostics.run_all_checks()
 

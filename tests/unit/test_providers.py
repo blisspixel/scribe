@@ -21,10 +21,7 @@ class TestProviderConfig:
     def test_provider_config_creation(self):
         """Test creating provider config."""
         config = ProviderConfig(
-            provider_name="openai",
-            api_key="test-key",
-            model="gpt-5",
-            timeout=120
+            provider_name="openai", api_key="test-key", model="gpt-5", timeout=120
         )
 
         assert config.provider_name == "openai"
@@ -103,11 +100,7 @@ class TestProviderFactory:
 
     def test_get_provider_with_explicit_key(self):
         """Test getting provider with explicit API key."""
-        provider = get_provider(
-            feature="joke",
-            api_key="explicit-key",
-            provider_name="openai"
-        )
+        provider = get_provider(feature="joke", api_key="explicit-key", provider_name="openai")
 
         assert provider.config.api_key == "explicit-key"
 
@@ -120,24 +113,16 @@ class TestProviderFactory:
     def test_get_provider_unknown_provider(self):
         """Test error for unknown provider."""
         with pytest.raises(ValueError, match="does not support feature"):
-            get_provider(
-                feature="joke",
-                api_key="test-key",
-                provider_name="unknown"
-            )
+            get_provider(feature="joke", api_key="test-key", provider_name="unknown")
 
 
 class TestOpenAIProvider:
     """Test OpenAI provider implementation."""
 
-    @patch('scribe.providers.openai_provider.OpenAI')
+    @patch("scribe.providers.openai_provider.OpenAI")
     def test_chat_completion(self, mock_openai_class):
         """Test chat completion."""
-        config = ProviderConfig(
-            provider_name="openai",
-            api_key="test-key",
-            model="gpt-5"
-        )
+        config = ProviderConfig(provider_name="openai", api_key="test-key", model="gpt-5")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -154,22 +139,17 @@ class TestOpenAIProvider:
 
         provider = OpenAIProvider(config)
         result = provider.chat_completion(
-            messages=[{"role": "user", "content": "Test"}],
-            max_tokens=100
+            messages=[{"role": "user", "content": "Test"}], max_tokens=100
         )
 
         assert result["content"] == "Test response"
         assert result["usage"]["total_tokens"] == 30
         assert result["model"] == "gpt-5"
 
-    @patch('scribe.providers.openai_provider.OpenAI')
+    @patch("scribe.providers.openai_provider.OpenAI")
     def test_generate_image(self, mock_openai_class):
         """Test image generation."""
-        config = ProviderConfig(
-            provider_name="openai",
-            api_key="test-key",
-            model="gpt-image-1"
-        )
+        config = ProviderConfig(provider_name="openai", api_key="test-key", model="gpt-image-1")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -184,14 +164,10 @@ class TestOpenAIProvider:
 
         assert result == b"test"
 
-    @patch('scribe.providers.openai_provider.OpenAI')
+    @patch("scribe.providers.openai_provider.OpenAI")
     def test_generate_image_url_fallback(self, mock_openai_class):
         """Test image generation with URL fallback (dall-e-3 behavior)."""
-        config = ProviderConfig(
-            provider_name="openai",
-            api_key="test-key",
-            model="gpt-5"
-        )
+        config = ProviderConfig(provider_name="openai", api_key="test-key", model="gpt-5")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -204,7 +180,7 @@ class TestOpenAIProvider:
         # Mock requests module as imported inside generate_image
         mock_requests = Mock()
         mock_requests.get.return_value = Mock(content=b"fake_image_data")
-        with patch.dict('sys.modules', {'requests': mock_requests}):
+        with patch.dict("sys.modules", {"requests": mock_requests}):
             provider = OpenAIProvider(config)
             result = provider.generate_image(prompt="Test image", model="dall-e-3")
 
@@ -214,13 +190,11 @@ class TestOpenAIProvider:
 class TestXAIProvider:
     """Test XAI provider implementation."""
 
-    @patch('scribe.providers.xai_provider.OpenAI')
+    @patch("scribe.providers.xai_provider.OpenAI")
     def test_chat_completion(self, mock_openai_class):
         """Test chat completion with XAI."""
         config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-4.20-non-reasoning"
+            provider_name="xai", api_key="test-key", model="grok-4.20-non-reasoning"
         )
 
         mock_client = Mock()
@@ -228,19 +202,14 @@ class TestXAIProvider:
 
         mock_response = Mock()
         mock_response.choices = [Mock(message=Mock(content="Grok response"))]
-        mock_response.usage = Mock(
-            prompt_tokens=10,
-            completion_tokens=20,
-            total_tokens=30
-        )
+        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
         mock_response.usage.cost_in_usd_ticks = 37_756_000
         mock_response.model = "grok-4.20-non-reasoning"
         mock_client.chat.completions.create.return_value = mock_response
 
         provider = XAIProvider(config)
         result = provider.chat_completion(
-            messages=[{"role": "user", "content": "Test"}],
-            max_tokens=100
+            messages=[{"role": "user", "content": "Test"}], max_tokens=100
         )
 
         assert result["content"] == "Grok response"
@@ -252,14 +221,10 @@ class TestXAIProvider:
         assert call_args["model"] == "grok-4.20-non-reasoning"
         assert call_args["max_completion_tokens"] == 100
 
-    @patch('scribe.providers.xai_provider.OpenAI')
+    @patch("scribe.providers.xai_provider.OpenAI")
     def test_generate_image(self, mock_openai_class):
         """Test image generation with Grok."""
-        config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-imagine-image"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-imagine-image")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -271,7 +236,7 @@ class TestXAIProvider:
         mock_requests = Mock()
         mock_requests.get.return_value = Mock(content=b"fake_grok_image")
         mock_requests.get.return_value.raise_for_status = Mock()
-        with patch.dict('sys.modules', {'requests': mock_requests}):
+        with patch.dict("sys.modules", {"requests": mock_requests}):
             provider = XAIProvider(config)
             result = provider.generate_image(prompt="Test Grok image")
 
@@ -282,9 +247,7 @@ class TestXAIProvider:
     def test_transcribe_not_supported(self):
         """Test that XAI doesn't support transcription."""
         config = ProviderConfig(
-            provider_name="xai",
-            api_key="test-key",
-            model="grok-4.20-non-reasoning"
+            provider_name="xai", api_key="test-key", model="grok-4.20-non-reasoning"
         )
 
         provider = XAIProvider(config)
@@ -297,7 +260,7 @@ class TestProviderIntegration:
     """Test provider integration with features."""
 
     @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
-    @patch('scribe.providers.xai_provider.OpenAI')
+    @patch("scribe.providers.xai_provider.OpenAI")
     def test_joke_with_xai_provider(self, mock_openai_class):
         """Test joke generation uses XAI provider correctly."""
         mock_client = Mock()
@@ -310,16 +273,14 @@ class TestProviderIntegration:
         mock_client.chat.completions.create.return_value = mock_response
 
         provider = get_provider(feature="joke", provider_name="xai")
-        result = provider.chat_completion(
-            messages=[{"role": "user", "content": "Tell a joke"}]
-        )
+        result = provider.chat_completion(messages=[{"role": "user", "content": "Tell a joke"}])
 
         assert result["content"] == "Grok joke"
         call_args = mock_client.chat.completions.create.call_args[1]
         assert call_args["model"] == "grok-4.20-non-reasoning"
 
     @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
-    @patch('scribe.providers.xai_provider.OpenAI')
+    @patch("scribe.providers.xai_provider.OpenAI")
     def test_notes_with_xai_provider(self, mock_openai_class):
         """Test notes generation uses XAI provider correctly."""
         mock_client = Mock()
@@ -334,7 +295,7 @@ class TestProviderIntegration:
         provider = get_provider(feature="notes", provider_name="xai")
         result = provider.chat_completion_with_json(
             messages=[{"role": "user", "content": "Analyze meeting"}],
-            json_schema={"type": "object"}
+            json_schema={"type": "object"},
         )
 
         assert '{"summary": "test"}' in result["content"]
@@ -345,14 +306,10 @@ class TestProviderIntegration:
 class TestProviderChatCompletionWithJSON:
     """Test JSON-aware chat completion."""
 
-    @patch('scribe.providers.openai_provider.OpenAI')
+    @patch("scribe.providers.openai_provider.OpenAI")
     def test_chat_completion_with_json_schema(self, mock_openai_class):
         """Test that JSON schema is added to prompt."""
-        config = ProviderConfig(
-            provider_name="openai",
-            api_key="test-key",
-            model="gpt-5"
-        )
+        config = ProviderConfig(provider_name="openai", api_key="test-key", model="gpt-5")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -367,8 +324,7 @@ class TestProviderChatCompletionWithJSON:
         schema = {"type": "object", "properties": {"key": {"type": "string"}}}
 
         result = provider.chat_completion_with_json(
-            messages=[{"role": "user", "content": "Test"}],
-            json_schema=schema
+            messages=[{"role": "user", "content": "Test"}], json_schema=schema
         )
 
         assert result["content"] == '{"key": "value"}'

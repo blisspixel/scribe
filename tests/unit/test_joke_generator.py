@@ -32,24 +32,24 @@ class TestMetadataExtraction:
         transcript = "This is a short meeting transcript with some words."
         metadata = _extract_meeting_metadata(transcript)
 
-        assert 'word_count' in metadata
-        assert 'is_short' in metadata
-        assert 'is_long' in metadata
-        assert metadata['word_count'] > 0
+        assert "word_count" in metadata
+        assert "is_short" in metadata
+        assert "is_long" in metadata
+        assert metadata["word_count"] > 0
 
     def test_detect_jargon(self):
         """Test detection of corporate jargon."""
         transcript = "We need to leverage synergy and circle back on bandwidth alignment."
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['has_jargon'] is True
+        assert metadata["has_jargon"] is True
 
     def test_detect_technical_content(self):
         """Test detection of technical terminology."""
         transcript = "The API deployment to the database infrastructure failed."
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['has_technical'] is True
+        assert metadata["has_technical"] is True
 
     def test_detect_intent_drift(self):
         """Test detection of intent drift (decisions deferred)."""
@@ -60,44 +60,44 @@ class TestMetadataExtraction:
         metadata = _extract_meeting_metadata(transcript)
 
         # Should detect more deferrals than decisions
-        assert 'intent_drift' in metadata
+        assert "intent_drift" in metadata
 
     def test_detect_circular_discussion(self):
         """Test detection of circular/repetitive discussions."""
         transcript = "budget " * 10 + "timeline " * 10
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['has_repetition'] is True
+        assert metadata["has_repetition"] is True
 
     def test_detect_exhaustion_tone(self):
         """Test detection of exhaustion markers."""
         transcript = "This is taking long. Finally we can move on. Anyway, last thing..."
         metadata = _extract_meeting_metadata(transcript)
 
-        assert 'dominant_tone' in metadata
+        assert "dominant_tone" in metadata
 
     def test_short_meeting_classification(self):
         """Test classification of short meetings."""
         transcript = "Quick sync. " * 30  # ~60 words
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['is_short'] is True
-        assert metadata['is_long'] is False
+        assert metadata["is_short"] is True
+        assert metadata["is_long"] is False
 
     def test_long_meeting_classification(self):
         """Test classification of long meetings."""
         transcript = "Long discussion. " * 2000  # ~4000 words
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['is_short'] is False
-        assert metadata['is_long'] is True
+        assert metadata["is_short"] is False
+        assert metadata["is_long"] is True
 
     def test_high_jargon_low_decision_detection(self):
         """Test detection of jargon-heavy meetings with few decisions."""
         transcript = "synergy leverage bandwidth alignment circle back touch base deep dive"
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['high_jargon_low_decision'] is True
+        assert metadata["high_jargon_low_decision"] is True
 
 
 class TestArchetypeSelection:
@@ -106,95 +106,95 @@ class TestArchetypeSelection:
     def test_select_translator_for_high_jargon(self):
         """Test Jargon Translator selected for jargon-heavy meetings."""
         metadata = {
-            'has_jargon': True,
-            'has_technical': False,
-            'is_long': False,
-            'is_short': False,
-            'high_jargon_low_decision': True,
-            'intent_drift': False,
-            'circular_discussion': False,
-            'dominant_tone': 'neutral',
-            'decision_ratio': 1.0
+            "has_jargon": True,
+            "has_technical": False,
+            "is_long": False,
+            "is_short": False,
+            "high_jargon_low_decision": True,
+            "intent_drift": False,
+            "circular_discussion": False,
+            "dominant_tone": "neutral",
+            "decision_ratio": 1.0,
         }
 
         # Run multiple times to check weighting
         selections = [_select_archetype_heuristic(metadata, seed=i) for i in range(20)]
 
         # Translator should be heavily weighted (4x)
-        assert 'translator' in selections
-        assert selections.count('translator') > 5  # Should appear frequently
+        assert "translator" in selections
+        assert selections.count("translator") > 5  # Should appear frequently
 
     def test_select_empathic_for_long_exhausting_meeting(self):
         """Test Empathic Realist selected for long, exhausting meetings."""
         metadata = {
-            'has_jargon': False,
-            'has_technical': False,
-            'is_long': True,
-            'is_short': False,
-            'dominant_tone': 'exhaustion',
-            'intent_drift': False,
-            'circular_discussion': False,
-            'high_jargon_low_decision': False,
-            'decision_ratio': 1.0
+            "has_jargon": False,
+            "has_technical": False,
+            "is_long": True,
+            "is_short": False,
+            "dominant_tone": "exhaustion",
+            "intent_drift": False,
+            "circular_discussion": False,
+            "high_jargon_low_decision": False,
+            "decision_ratio": 1.0,
         }
 
         selections = [_select_archetype_heuristic(metadata, seed=i) for i in range(20)]
 
         # Empathic or Time Alchemist should be weighted (at least 25% of selections)
-        empathic_or_time = [s for s in selections if s in ['empathic', 'time_alchemist']]
+        empathic_or_time = [s for s in selections if s in ["empathic", "time_alchemist"]]
         assert len(empathic_or_time) >= 5  # At least 25% should be empathic or time_alchemist
 
     def test_select_trickster_for_intent_drift(self):
         """Test Trickster selected when goals diverge from outcomes."""
         metadata = {
-            'has_jargon': False,
-            'has_technical': False,
-            'is_long': False,
-            'is_short': False,
-            'intent_drift': True,
-            'circular_discussion': False,
-            'high_jargon_low_decision': False,
-            'dominant_tone': 'neutral',
-            'decision_ratio': 1.0
+            "has_jargon": False,
+            "has_technical": False,
+            "is_long": False,
+            "is_short": False,
+            "intent_drift": True,
+            "circular_discussion": False,
+            "high_jargon_low_decision": False,
+            "dominant_tone": "neutral",
+            "decision_ratio": 1.0,
         }
 
         selections = [_select_archetype_heuristic(metadata, seed=i) for i in range(20)]
 
         # Trickster should be heavily weighted (3.5x), but with 10 archetypes now, adjust threshold
-        assert 'trickster' in selections
-        assert selections.count('trickster') >= 4  # Adjusted for more archetypes
+        assert "trickster" in selections
+        assert selections.count("trickster") >= 4  # Adjusted for more archetypes
 
     def test_select_fool_scholar_for_circular_discussion(self):
         """Test Fool-Scholar selected for circular discussions."""
         metadata = {
-            'has_jargon': False,
-            'has_technical': False,
-            'is_long': False,
-            'is_short': False,
-            'intent_drift': False,
-            'circular_discussion': True,
-            'high_jargon_low_decision': False,
-            'dominant_tone': 'confusion',
-            'decision_ratio': 1.0
+            "has_jargon": False,
+            "has_technical": False,
+            "is_long": False,
+            "is_short": False,
+            "intent_drift": False,
+            "circular_discussion": True,
+            "high_jargon_low_decision": False,
+            "dominant_tone": "confusion",
+            "decision_ratio": 1.0,
         }
 
         selections = [_select_archetype_heuristic(metadata, seed=i) for i in range(20)]
 
         # Fool-Scholar should be heavily weighted (3x)
-        assert 'fool_scholar' in selections
+        assert "fool_scholar" in selections
 
     def test_all_archetypes_available(self):
         """Test all archetypes can be selected."""
         metadata = {
-            'has_jargon': False,
-            'has_technical': False,
-            'is_long': False,
-            'is_short': False,
-            'intent_drift': False,
-            'circular_discussion': False,
-            'high_jargon_low_decision': False,
-            'dominant_tone': 'neutral',
-            'decision_ratio': 1.0
+            "has_jargon": False,
+            "has_technical": False,
+            "is_long": False,
+            "is_short": False,
+            "intent_drift": False,
+            "circular_discussion": False,
+            "high_jargon_low_decision": False,
+            "dominant_tone": "neutral",
+            "decision_ratio": 1.0,
         }
 
         # With neutral metadata, all should be possible
@@ -206,15 +206,15 @@ class TestArchetypeSelection:
     def test_seeded_selection_is_deterministic(self):
         """Test archetype selection is deterministic with seed."""
         metadata = {
-            'has_jargon': True,
-            'has_technical': False,
-            'is_long': False,
-            'is_short': False,
-            'intent_drift': False,
-            'circular_discussion': False,
-            'high_jargon_low_decision': False,
-            'dominant_tone': 'neutral',
-            'decision_ratio': 1.0
+            "has_jargon": True,
+            "has_technical": False,
+            "is_long": False,
+            "is_short": False,
+            "intent_drift": False,
+            "circular_discussion": False,
+            "high_jargon_low_decision": False,
+            "dominant_tone": "neutral",
+            "decision_ratio": 1.0,
         }
 
         # Same seed should give same result
@@ -330,7 +330,9 @@ class TestInstructionBuilding:
         cfg = HumorConfig()
         instruction = _build_instruction([], cfg)
 
-        assert "avoid individuals" in instruction.lower() or "protected groups" in instruction.lower()
+        assert (
+            "avoid individuals" in instruction.lower() or "protected groups" in instruction.lower()
+        )
 
 
 class TestHumorConfig:
@@ -350,11 +352,7 @@ class TestHumorConfig:
     def test_custom_config(self):
         """Test custom configuration values."""
         cfg = HumorConfig(
-            model="gpt-4",
-            min_words=5,
-            max_words=10,
-            api_key="test-key",
-            spice_level=8
+            model="gpt-4", min_words=5, max_words=10, api_key="test-key", spice_level=8
         )
 
         assert cfg.model == "gpt-4"
@@ -366,21 +364,21 @@ class TestHumorConfig:
     def test_from_env_default_spice(self):
         """Test from_env with default spice level."""
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('SCRIBE_HUMOR_SPICE', None)
+            os.environ.pop("SCRIBE_HUMOR_SPICE", None)
             cfg = HumorConfig.from_env()
 
             assert cfg.spice_level == 5
 
     def test_from_env_custom_spice(self):
         """Test from_env with custom spice level."""
-        with patch.dict(os.environ, {'SCRIBE_HUMOR_SPICE': '7'}):
+        with patch.dict(os.environ, {"SCRIBE_HUMOR_SPICE": "7"}):
             cfg = HumorConfig.from_env()
 
             assert cfg.spice_level == 7
 
     def test_from_env_invalid_spice_too_low(self):
         """Test from_env with invalid spice level (too low)."""
-        with patch.dict(os.environ, {'SCRIBE_HUMOR_SPICE': '-1'}):
+        with patch.dict(os.environ, {"SCRIBE_HUMOR_SPICE": "-1"}):
             cfg = HumorConfig.from_env()
 
             # Should use default
@@ -388,7 +386,7 @@ class TestHumorConfig:
 
     def test_from_env_invalid_spice_too_high(self):
         """Test from_env with invalid spice level (too high)."""
-        with patch.dict(os.environ, {'SCRIBE_HUMOR_SPICE': '11'}):
+        with patch.dict(os.environ, {"SCRIBE_HUMOR_SPICE": "11"}):
             cfg = HumorConfig.from_env()
 
             # Should use default
@@ -396,7 +394,7 @@ class TestHumorConfig:
 
     def test_from_env_invalid_spice_not_integer(self):
         """Test from_env with invalid spice level (not an integer)."""
-        with patch.dict(os.environ, {'SCRIBE_HUMOR_SPICE': 'very_spicy'}):
+        with patch.dict(os.environ, {"SCRIBE_HUMOR_SPICE": "very_spicy"}):
             cfg = HumorConfig.from_env()
 
             # Should use default
@@ -406,7 +404,7 @@ class TestHumorConfig:
 class TestJokeGeneration:
     """Test end-to-end joke generation."""
 
-    @patch('scribe.utils.joke_generator.OpenAI')
+    @patch("scribe.utils.joke_generator.OpenAI")
     def test_generate_joke_success(self, mock_openai_class, tmp_path):
         """Test successful joke generation."""
         # Create test transcript
@@ -432,7 +430,7 @@ class TestJokeGeneration:
         assert isinstance(comedy_style, str)
         assert len(comedy_style) > 0
 
-    @patch('scribe.providers.get_provider')
+    @patch("scribe.providers.get_provider")
     def test_generate_joke_uses_provider(self, mock_get_provider, tmp_path):
         """Test that provider system is used for joke generation."""
         transcript_path = tmp_path / "test_transcript.txt"
@@ -450,9 +448,9 @@ class TestJokeGeneration:
         # Verify provider was requested
         assert mock_get_provider.called
         call_args = mock_get_provider.call_args
-        assert call_args[1]['feature'] == 'joke'
+        assert call_args[1]["feature"] == "joke"
 
-    @patch('scribe.providers.get_provider')
+    @patch("scribe.providers.get_provider")
     def test_generate_joke_handles_api_error(self, mock_get_provider, tmp_path):
         """Test graceful handling of API errors."""
         transcript_path = tmp_path / "test_transcript.txt"
@@ -470,7 +468,7 @@ class TestJokeGeneration:
         # Should return None on error, not crash
         assert result is None
 
-    @patch('scribe.providers.get_provider')
+    @patch("scribe.providers.get_provider")
     def test_generate_joke_handles_empty_response(self, mock_get_provider, tmp_path):
         """Test handling of empty joke response."""
         transcript_path = tmp_path / "test_transcript.txt"
@@ -493,12 +491,12 @@ class TestJokeGeneration:
         transcript_path = tmp_path / "test_transcript.txt"
         transcript_path.write_text("Meeting content.")
 
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             # Should raise RuntimeError for missing API key
             with pytest.raises(RuntimeError, match="Missing OpenAI API key"):
                 generate_transcript_joke(transcript_path, None)
 
-    @patch('scribe.utils.joke_generator.OpenAI')
+    @patch("scribe.utils.joke_generator.OpenAI")
     def test_generate_joke_with_config(self, mock_openai_class, tmp_path):
         """Test joke generation with custom config."""
         transcript_path = tmp_path / "test_transcript.txt"
@@ -512,12 +510,7 @@ class TestJokeGeneration:
         mock_client.responses.create.return_value = mock_response
 
         # Create custom config
-        config = HumorConfig(
-            model="gpt-5",
-            min_words=5,
-            max_words=10,
-            api_key="test-key"
-        )
+        config = HumorConfig(model="gpt-5", min_words=5, max_words=10, api_key="test-key")
 
         result = generate_transcript_joke(transcript_path, config)
 
@@ -579,16 +572,16 @@ class TestEdgeCases:
         """Test handling of empty transcript."""
         metadata = _extract_meeting_metadata("")
 
-        assert metadata['word_count'] == 0
-        assert metadata['is_short'] is True
+        assert metadata["word_count"] == 0
+        assert metadata["is_short"] is True
 
     def test_very_long_transcript(self):
         """Test handling of very long transcript."""
         transcript = "word " * 10000
         metadata = _extract_meeting_metadata(transcript)
 
-        assert metadata['word_count'] == 10000
-        assert metadata['is_long'] is True
+        assert metadata["word_count"] == 10000
+        assert metadata["is_long"] is True
 
     def test_transcript_with_special_characters(self):
         """Test handling of special characters."""
@@ -596,7 +589,7 @@ class TestEdgeCases:
         metadata = _extract_meeting_metadata(transcript)
 
         # Should not crash
-        assert 'word_count' in metadata
+        assert "word_count" in metadata
 
     def test_transcript_with_unicode(self):
         """Test handling of unicode characters."""
@@ -604,14 +597,14 @@ class TestEdgeCases:
         metadata = _extract_meeting_metadata(transcript)
 
         # Should handle unicode
-        assert 'word_count' in metadata
-        assert metadata['word_count'] > 0
+        assert "word_count" in metadata
+        assert metadata["word_count"] > 0
 
 
 class TestIntegration:
     """Test integration scenarios."""
 
-    @patch('scribe.utils.joke_generator.OpenAI')
+    @patch("scribe.utils.joke_generator.OpenAI")
     def test_full_pipeline_with_jargon_heavy_meeting(self, mock_openai_class, tmp_path):
         """Test full pipeline with jargon-heavy meeting."""
         transcript = """

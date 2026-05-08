@@ -42,7 +42,7 @@ def sample_audio(temp_dir: Path) -> Path:
     audio_data = (np.sin(2 * np.pi * frequency * t) * 32767).astype(np.int16)
 
     # Write WAV file
-    with wave.open(str(audio_path), 'w') as wav_file:
+    with wave.open(str(audio_path), "w") as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(sample_rate)
@@ -94,6 +94,7 @@ def mock_obs(monkeypatch):
 @pytest.fixture
 def mock_gpu(monkeypatch):
     """Mock GPU detection."""
+
     def mock_cuda_available():
         return True
 
@@ -164,7 +165,7 @@ def long_audio(temp_dir: Path) -> Path:
     # Generate sine wave (use smaller chunks to avoid memory issues)
     chunk_duration = 60  # Generate 1 minute at a time
 
-    with wave.open(str(audio_path), 'w') as wav_file:
+    with wave.open(str(audio_path), "w") as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(sample_rate)
@@ -206,7 +207,7 @@ def test_video(temp_dir: Path) -> Path:
     t = np.linspace(0, duration, int(sample_rate * duration))
     audio_data = (np.sin(2 * np.pi * frequency * t) * 32767).astype(np.int16)
 
-    with wave.open(str(temp_wav), 'w') as wav_file:
+    with wave.open(str(temp_wav), "w") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
@@ -222,17 +223,26 @@ def test_video(temp_dir: Path) -> Path:
         ffmpeg_path = get_ffmpeg_path()
         if ffmpeg_path:
             # Create a black video with audio
-            subprocess.run([
-                str(ffmpeg_path),
-                '-f', 'lavfi',
-                '-i', 'color=c=black:s=320x240:d=5',
-                '-i', str(temp_wav),
-                '-c:v', 'libx264',
-                '-c:a', 'aac',
-                '-shortest',
-                '-y',
-                str(video_path)
-            ], check=True, capture_output=True)
+            subprocess.run(
+                [
+                    str(ffmpeg_path),
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=black:s=320x240:d=5",
+                    "-i",
+                    str(temp_wav),
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                    "-y",
+                    str(video_path),
+                ],
+                check=True,
+                capture_output=True,
+            )
         else:
             # Fallback: just copy WAV as "video" for testing
             video_path.write_bytes(temp_wav.read_bytes())
@@ -251,6 +261,7 @@ def mock_no_gpu(monkeypatch):
     Simulates environment where CUDA is not available, forcing fallback
     to OpenAI API transcription.
     """
+
     def mock_cuda_not_available():
         return False
 
@@ -268,7 +279,7 @@ def mock_no_gpu(monkeypatch):
             model_size="medium",
             beam_size=5,
             use_fp16=False,
-            enable_tensor_cores=False
+            enable_tensor_cores=False,
         )
         return config
 
@@ -292,6 +303,7 @@ def clean_env(monkeypatch):
 # Mock Factories - Create properly typed mocks for external dependencies
 # ============================================================================
 
+
 def create_mock_transcription_response(text: str):
     """
     Create a properly typed mock OpenAI transcription response.
@@ -302,6 +314,7 @@ def create_mock_transcription_response(text: str):
     Returns:
         Mock object with .text attribute matching OpenAI API response
     """
+
     class MockTranscriptionResponse:
         def __init__(self, text: str):
             self.text = text
@@ -330,7 +343,7 @@ def create_mock_audio_file(path: Path, duration_seconds: float = 10.0) -> Path:
     t = np.linspace(0, duration_seconds, int(sample_rate * duration_seconds))
     audio_data = (np.sin(2 * np.pi * frequency * t) * 32767).astype(np.int16)
 
-    with wave.open(str(path), 'w') as wav_file:
+    with wave.open(str(path), "w") as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(sample_rate)
@@ -346,6 +359,7 @@ def mock_audio_duration(monkeypatch):
 
     Prevents Mock objects from being returned instead of actual durations.
     """
+
     def mock_get_duration(audio_path):
         """Return duration based on filename or default."""
         path_str = str(audio_path)
@@ -370,8 +384,10 @@ def mock_file_size(monkeypatch):
 
     Prevents Mock objects from being returned instead of actual file sizes.
     """
+
     def mock_stat(self):
         """Return mock stat result with proper size."""
+
         class MockStat:
             st_size = 1024 * 1024 * 10  # 10 MB default
             st_mtime = 1700000000.0
@@ -380,6 +396,7 @@ def mock_file_size(monkeypatch):
         return MockStat()
 
     from pathlib import Path
+
     monkeypatch.setattr(Path, "stat", mock_stat)
 
     return mock_stat

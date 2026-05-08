@@ -5,6 +5,7 @@ This module provides GPU detection and configuration with optimized
 settings for different GPU models, especially RTX 4090.
 """
 
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -66,33 +67,108 @@ class GPUConfig:
             GPUConfig with detection results and optimized settings
         """
         config = cls(has_gpu=False)
+        torch_reason = "PyTorch not available for GPU detection"
+        ctranslate2_reason = "CTranslate2 not available for GPU detection"
 
         try:
             import torch
 
-            if not torch.cuda.is_available():
-                config.reason = "CUDA not available"
+            if torch.cuda.is_available():
+                config.has_gpu = True
+                config.cuda_available = True
+                config.cuda_version = torch.version.cuda
+                config.gpu_name = torch.cuda.get_device_name(0)
+                gpu_memory_bytes = torch.cuda.get_device_properties(0).total_memory
+                config.gpu_memory_gb = gpu_memory_bytes / (1024**3)
+                config._configure_for_gpu()
                 return config
 
-            # GPU detected
-            config.has_gpu = True
-            config.cuda_available = True
-            config.cuda_version = torch.version.cuda
-
-            # Get GPU details
-            config.gpu_name = torch.cuda.get_device_name(0)
-            gpu_memory_bytes = torch.cuda.get_device_properties(0).total_memory
-            config.gpu_memory_gb = gpu_memory_bytes / (1024**3)
-
-            # Configure based on GPU
-            config._configure_for_gpu()
-
+            torch_reason = "PyTorch installed but CUDA not available"
         except ImportError:
-            config.reason = "PyTorch not available for GPU detection"
+            torch_reason = "PyTorch not available for GPU detection"
         except Exception as e:
-            config.reason = f"GPU detection error: {e}"
+            torch_reason = f"PyTorch GPU detection error: {e}"
+
+        try:
+            import ctranslate2  # type: ignore[import-untyped]
+
+            cuda_device_count = int(ctranslate2.get_cuda_device_count())
+            if cuda_device_count > 0:
+                config.has_gpu = True
+                config.cuda_available = True
+
+                nvidia_info = cls._detect_nvidia_gpu()
+                if nvidia_info is not None:
+                    config.gpu_name = str(nvidia_info["gpu_name"])
+                    config.gpu_memory_gb = float(nvidia_info["gpu_memory_gb"])
+                elif config.gpu_name is None:
+                    suffix = "" if cuda_device_count == 1 else "s"
+                    config.gpu_name = f"NVIDIA GPU ({cuda_device_count} device{suffix})"
+
+                if config.gpu_memory_gb > 0:
+                    config._configure_for_gpu()
+                else:
+                    config.model_size = "medium"
+                    config.beam_size = 5
+                    config.batch_size = 4
+                    config.use_fp16 = True
+                    config.enable_tensor_cores = False
+                    config.recommendation = "local"
+
+                if config.gpu_name and config.gpu_memory_gb > 0:
+                    config.reason = (
+                        f"GPU detected via CTranslate2 ({config.gpu_name}, "
+                        f"{config.gpu_memory_gb:.1f}GB VRAM) - local faster-whisper transcription available"
+                    )
+                else:
+                    config.reason = "GPU detected via CTranslate2 - local faster-whisper transcription available"
+                return config
+
+            ctranslate2_reason = "CTranslate2 CUDA backend reports no devices"
+        except ImportError:
+            ctranslate2_reason = "CTranslate2 not available for GPU detection"
+        except Exception as e:
+            ctranslate2_reason = f"CTranslate2 GPU detection error: {e}"
+
+        config.reason = f"No local CUDA backend detected ({torch_reason}; {ctranslate2_reason})"
 
         return config
+
+    @staticmethod
+    def _detect_nvidia_gpu() -> dict[str, float | str] | None:
+        """Detect GPU name and VRAM via nvidia-smi when PyTorch CUDA is unavailable."""
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.total",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        first_gpu = result.stdout.strip().splitlines()[0]
+        parts = [part.strip() for part in first_gpu.split(",", maxsplit=1)]
+        if len(parts) != 2:
+            return None
+
+        try:
+            memory_gb = float(parts[1]) / 1024
+        except ValueError:
+            return None
+
+        return {
+            "gpu_name": parts[0],
+            "gpu_memory_gb": memory_gb,
+        }
 
     def _configure_for_gpu(self) -> None:
         """Configure optimal settings based on detected GPU."""
@@ -130,7 +206,9 @@ class GPUConfig:
             self.use_fp16 = True
             self.enable_tensor_cores = True
             self.recommendation = "local"
-            self.reason = f"Mid-high GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - good for local transcription"
+            self.reason = (
+                f"Mid-high GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - good for local transcription"
+            )
 
         # RTX 4070 / 4060 Ti - Balanced
         elif "RTX 40" in gpu_name_upper or (10 <= vram < 16):
@@ -178,8 +256,10 @@ class GPUConfig:
             self.batch_size = 4
             self.use_fp16 = True
             self.enable_tensor_cores = False
-            self.recommendation = "openai"
-            self.reason = f"Low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - OpenAI API recommended for quality"
+            self.recommendation = "local"
+            self.reason = (
+                f"Low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - best-fit local model selected"
+            )
 
         else:
             # Very low VRAM
@@ -188,8 +268,11 @@ class GPUConfig:
             self.batch_size = 2
             self.use_fp16 = False
             self.enable_tensor_cores = False
-            self.recommendation = "openai"
-            self.reason = f"Insufficient VRAM ({vram:.1f}GB) - OpenAI API recommended"
+            self.recommendation = "local" if self.has_gpu else "openai"
+            if self.has_gpu:
+                self.reason = f"Very low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - using smallest local model"
+            else:
+                self.reason = f"Insufficient VRAM ({vram:.1f}GB) - OpenAI API recommended"
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -220,10 +303,10 @@ class GPUConfig:
         Returns:
             Speed description (e.g., "8-12x real-time")
         """
-        if not self.has_gpu or self.recommendation == "openai":
+        if not self.has_gpu:
             return "1-2x real-time (API)"
 
-        if self.model_size in ("large-v3", "large-v3-turbo"):
+        if self.model_size in ("large-v3", "large-v3-turbo", "turbo"):
             if self.beam_size >= 10:
                 return "8-12x real-time"
             elif self.beam_size >= 8:

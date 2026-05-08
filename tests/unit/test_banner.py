@@ -206,9 +206,7 @@ class TestIsBannerEnabled:
             os.environ.pop("SCRIBE_BANNER", None)
             assert _is_banner_enabled() is True
 
-    @pytest.mark.parametrize(
-        "val", ["off", "false", "0", "no", "OFF", "False", "NO"]
-    )
+    @pytest.mark.parametrize("val", ["off", "false", "0", "no", "OFF", "False", "NO"])
     def test_disabled_values(self, val):
         with patch.dict(os.environ, {"SCRIBE_BANNER": val}):
             assert _is_banner_enabled() is False
@@ -263,9 +261,7 @@ class TestShowBanner:
     @patch("scribe.utils.banner._animate_sweep")
     @patch("scribe.utils.banner.get_terminal_ui_config")
     @patch("scribe.utils.banner._is_banner_enabled", return_value=True)
-    def test_full_animation_mode(
-        self, _mock_enabled, mock_cfg, mock_animate
-    ):
+    def test_full_animation_mode(self, _mock_enabled, mock_cfg, mock_animate):
         mock_cfg.return_value = _make_config(animation_mode="full")
         console = MagicMock()
         result = show_banner(console)
@@ -277,9 +273,7 @@ class TestShowBanner:
     @patch("scribe.utils.banner._animate_sweep")
     @patch("scribe.utils.banner.get_terminal_ui_config")
     @patch("scribe.utils.banner._is_banner_enabled", return_value=True)
-    def test_light_animation_mode(
-        self, _mock_enabled, mock_cfg, mock_animate
-    ):
+    def test_light_animation_mode(self, _mock_enabled, mock_cfg, mock_animate):
         mock_cfg.return_value = _make_config(animation_mode="light")
         console = MagicMock()
         result = show_banner(console)
@@ -301,9 +295,7 @@ class TestShowBanner:
     @patch("scribe.utils.banner.get_terminal_ui_config")
     @patch("scribe.utils.banner._is_banner_enabled", return_value=True)
     def test_dumb_terminal_shows_static(self, _mock_enabled, mock_cfg):
-        mock_cfg.return_value = _make_config(
-            animation_mode="light", is_dumb=True
-        )
+        mock_cfg.return_value = _make_config(animation_mode="light", is_dumb=True)
         console = MagicMock()
         result = show_banner(console)
         assert result is True
@@ -389,9 +381,7 @@ class TestPreciseSleep:
 class TestAnimateSweep:
     @patch("scribe.utils.banner._precise_sleep")
     @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
-    def test_animation_writes_to_console_file(
-        self, _mock_counter, _mock_sleep
-    ):
+    def test_animation_writes_to_console_file(self, _mock_counter, _mock_sleep):
         console = MagicMock()
         cfg = _make_config(animation_mode="full", fps=10)
         _animate_sweep(console, BANNER_ART, cfg, duration=0.5)
@@ -412,9 +402,7 @@ class TestAnimateSweep:
 
     @patch("scribe.utils.banner._precise_sleep")
     @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
-    def test_animation_hides_and_shows_cursor(
-        self, _mock_counter, _mock_sleep
-    ):
+    def test_animation_hides_and_shows_cursor(self, _mock_counter, _mock_sleep):
         console = MagicMock()
         cfg = _make_config(fps=10)
         _animate_sweep(console, "AB", cfg, duration=0.3)
@@ -429,9 +417,7 @@ class TestAnimateSweep:
         side_effect=Exception("boom"),
     )
     @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
-    def test_animation_fallback_on_error(
-        self, _mock_counter, _mock_sleep
-    ):
+    def test_animation_fallback_on_error(self, _mock_counter, _mock_sleep):
         console = MagicMock()
         cfg = _make_config(animation_mode="full", fps=10)
 
@@ -443,9 +429,7 @@ class TestAnimateSweep:
 
     @patch("scribe.utils.banner._precise_sleep")
     @patch("scribe.utils.banner.time.perf_counter", return_value=0.0)
-    def test_animation_writes_cursor_up_codes(
-        self, _mock_counter, _mock_sleep
-    ):
+    def test_animation_writes_cursor_up_codes(self, _mock_counter, _mock_sleep):
         console = MagicMock()
         cfg = _make_config(fps=10)
         _animate_sweep(console, "X\nY", cfg, duration=0.2)

@@ -4,7 +4,7 @@ OpenAI provider implementation.
 
 import base64
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
 
@@ -14,13 +14,13 @@ from scribe.providers.base import AIProvider, ProviderConfig
 class OpenAIProvider(AIProvider):
     """OpenAI API provider."""
 
-    def __init__(self, config: ProviderConfig):
+    def __init__(self, config: ProviderConfig) -> None:
         super().__init__(config)
         self.client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
             timeout=config.timeout,
-            max_retries=config.max_retries
+            max_retries=config.max_retries,
         )
 
     def chat_completion(
@@ -28,11 +28,11 @@ class OpenAIProvider(AIProvider):
         messages: list[dict[str, Any]],
         max_tokens: int | None = None,
         temperature: float | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Create a chat completion using OpenAI."""
 
-        params = {
+        params: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
         }
@@ -51,10 +51,10 @@ class OpenAIProvider(AIProvider):
         # Add any additional kwargs
         params.update(kwargs)
 
-        response = self.client.chat.completions.create(**params)
+        response = cast(Any, self.client.chat.completions).create(**params)
 
         return {
-            "content": response.choices[0].message.content,
+            "content": response.choices[0].message.content or "",
             "usage": {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
@@ -63,16 +63,11 @@ class OpenAIProvider(AIProvider):
             "model": response.model,
         }
 
-    def transcribe_audio(
-        self,
-        audio_path: str,
-        language: str | None = None,
-        **kwargs
-    ) -> str:
+    def transcribe_audio(self, audio_path: str, language: str | None = None, **kwargs: Any) -> str:
         """Transcribe audio using OpenAI Whisper."""
 
         with open(audio_path, "rb") as audio_file:
-            params = {
+            params: dict[str, Any] = {
                 "model": "whisper-1",
                 "file": audio_file,
             }
@@ -82,15 +77,10 @@ class OpenAIProvider(AIProvider):
 
             params.update(kwargs)
 
-            transcript = self.client.audio.transcriptions.create(**params)
-            return transcript.text
+            transcript = cast(Any, self.client.audio.transcriptions).create(**params)
+            return str(getattr(transcript, "text", ""))
 
-    def generate_image(
-        self,
-        prompt: str,
-        size: str = "1024x1024",
-        **kwargs
-    ) -> bytes:
+    def generate_image(self, prompt: str, size: str = "1024x1024", **kwargs: Any) -> bytes:
         """Generate an image using GPT Image 1 (or DALL-E as fallback)."""
         import base64
 
@@ -122,30 +112,34 @@ class OpenAIProvider(AIProvider):
         )
 
         # gpt-image-1 returns base64, dall-e returns URL
-        if hasattr(response.data[0], 'b64_json') and response.data[0].b64_json:
-            return base64.b64decode(response.data[0].b64_json)
+        data = response.data or []
+        if not data:
+            raise ValueError("OpenAI image generation returned no data")
+
+        first_image = data[0]
+        b64_json = getattr(first_image, "b64_json", None)
+        if b64_json:
+            return base64.b64decode(b64_json)
         else:
             # Download from URL (dall-e-3)
-            image_url = response.data[0].url
+            image_url = getattr(first_image, "url", None)
+            if not image_url:
+                raise ValueError("OpenAI image generation returned no image URL")
             try:
                 import requests  # Optional dependency
+
                 image_response = requests.get(image_url)
                 image_response.raise_for_status()
                 return image_response.content
             except ImportError:
                 with urllib.request.urlopen(image_url) as resp:
-                    return resp.read()
+                    return bytes(resp.read())
 
-    def analyze_image(
-        self,
-        image_data: bytes,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
         """Analyze an image using GPT-4 Vision."""
 
         # Encode image to base64
-        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         messages = [
             {
@@ -154,13 +148,11 @@ class OpenAIProvider(AIProvider):
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{image_b64}"
-                        }
-                    }
-                ]
+                        "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                    },
+                ],
             }
         ]
 
         response = self.chat_completion(messages, **kwargs)
-        return response["content"]
+        return str(response["content"])

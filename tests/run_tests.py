@@ -14,13 +14,23 @@ from colorama import Fore, Style, init
 
 init(autoreset=True)
 
+
 def print_banner():
     """Print the test runner banner."""
-    print(f"{Fore.GREEN}{Style.BRIGHT}╔════════════════════════════════════════════════════════════╗")
-    print(f"{Fore.GREEN}{Style.BRIGHT}║              SCRIBE SYSTEM TEST RUNNER                     ║")
-    print(f"{Fore.GREEN}{Style.BRIGHT}║          Comprehensive Testing Framework                   ║")
-    print(f"{Fore.GREEN}{Style.BRIGHT}╚════════════════════════════════════════════════════════════╝")
+    print(
+        f"{Fore.GREEN}{Style.BRIGHT}╔════════════════════════════════════════════════════════════╗"
+    )
+    print(
+        f"{Fore.GREEN}{Style.BRIGHT}║              SCRIBE SYSTEM TEST RUNNER                     ║"
+    )
+    print(
+        f"{Fore.GREEN}{Style.BRIGHT}║          Comprehensive Testing Framework                   ║"
+    )
+    print(
+        f"{Fore.GREEN}{Style.BRIGHT}╚════════════════════════════════════════════════════════════╝"
+    )
     print()
+
 
 def run_test_module(module_path: Path, test_name: str) -> tuple[bool, str, float]:
     """
@@ -37,7 +47,7 @@ def run_test_module(module_path: Path, test_name: str) -> tuple[bool, str, float
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout per test
-            cwd=module_path.parent.parent  # Run from project root
+            cwd=module_path.parent.parent,  # Run from project root
         )
 
         duration = time.time() - start_time
@@ -54,19 +64,23 @@ def run_test_module(module_path: Path, test_name: str) -> tuple[bool, str, float
         duration = time.time() - start_time
         return False, f"Test execution failed: {str(e)}", duration
 
+
 def print_test_result(test_name: str, success: bool, duration: float, details: str = ""):
     """Print formatted test result."""
     status = "PASS" if success else "FAIL"
     status_color = Fore.GREEN if success else Fore.RED
 
-    print(f"{Fore.WHITE}{test_name:<25} {status_color}[{status}]{Fore.RESET} {Fore.CYAN}({duration:.2f}s)")
+    print(
+        f"{Fore.WHITE}{test_name:<25} {status_color}[{status}]{Fore.RESET} {Fore.CYAN}({duration:.2f}s)"
+    )
 
     if details and not success:
         # Show last few lines of error output
-        lines = details.strip().split('\n')
+        lines = details.strip().split("\n")
         error_lines = [line for line in lines[-10:] if line.strip()]  # Last 10 non-empty lines
         for line in error_lines[:5]:  # Show up to 5 lines
             print(f"{Fore.YELLOW}  {line}")
+
 
 def discover_tests(tests_dir: Path) -> list[tuple[Path, str]]:
     """Discover all test modules in the tests directory."""
@@ -77,6 +91,7 @@ def discover_tests(tests_dir: Path) -> list[tuple[Path, str]]:
         test_modules.append((test_file, test_name))
 
     return sorted(test_modules, key=lambda x: x[1])
+
 
 def run_all_tests(tests_dir: Path, verbose: bool = False) -> dict:
     """Run all discovered tests."""
@@ -103,23 +118,20 @@ def run_all_tests(tests_dir: Path, verbose: bool = False) -> dict:
         success, output, duration = run_test_module(test_path, test_name)
         total_duration += duration
 
-        results[test_name] = {
-            'success': success,
-            'duration': duration,
-            'output': output
-        }
+        results[test_name] = {"success": success, "duration": duration, "output": output}
 
         print_test_result(test_name, success, duration, output if not success else "")
 
         if verbose and success:
             # Show summary of successful test output
-            lines = output.split('\n')
-            summary_lines = [line for line in lines if 'PASS' in line or 'Results:' in line]
+            lines = output.split("\n")
+            summary_lines = [line for line in lines if "PASS" in line or "Results:" in line]
             for line in summary_lines[-3:]:  # Last 3 relevant lines
                 if line.strip():
                     print(f"{Fore.GREEN}  {line.strip()}")
 
     return results
+
 
 def print_summary(results: dict, total_duration: float):
     """Print comprehensive test summary."""
@@ -127,16 +139,18 @@ def print_summary(results: dict, total_duration: float):
     print(f"{Fore.BLUE}TEST SUMMARY")
     print(f"{Fore.BLUE}{'='*60}")
 
-    passed_tests = sum(1 for r in results.values() if r['success'])
+    passed_tests = sum(1 for r in results.values() if r["success"])
     total_tests = len(results)
 
     print(f"\n{Fore.WHITE}Test Results:")
     for test_name, result in results.items():
-        status = "PASS" if result['success'] else "FAIL"
-        status_color = Fore.GREEN if result['success'] else Fore.RED
-        duration = result['duration']
+        status = "PASS" if result["success"] else "FAIL"
+        status_color = Fore.GREEN if result["success"] else Fore.RED
+        duration = result["duration"]
 
-        print(f"{Fore.WHITE}  {test_name:<25} {status_color}[{status}]{Fore.RESET} {Fore.CYAN}({duration:.2f}s)")
+        print(
+            f"{Fore.WHITE}  {test_name:<25} {status_color}[{status}]{Fore.RESET} {Fore.CYAN}({duration:.2f}s)"
+        )
 
     print(f"\n{Fore.CYAN}Overall Results:")
     print(f"{Fore.WHITE}  Tests passed: {Fore.GREEN}{passed_tests}")
@@ -149,21 +163,27 @@ def print_summary(results: dict, total_duration: float):
     if success_rate == 100:
         print(f"\n{Fore.GREEN}{Style.BRIGHT}ALL TESTS PASSED! System is ready.")
     elif success_rate >= 80:
-        print(f"\n{Fore.YELLOW}{Style.BRIGHT}Most tests passed ({success_rate:.0f}%). Check failed tests.")
+        print(
+            f"\n{Fore.YELLOW}{Style.BRIGHT}Most tests passed ({success_rate:.0f}%). Check failed tests."
+        )
     else:
-        print(f"\n{Fore.RED}{Style.BRIGHT}Multiple test failures ({success_rate:.0f}%). System needs attention.")
+        print(
+            f"\n{Fore.RED}{Style.BRIGHT}Multiple test failures ({success_rate:.0f}%). System needs attention."
+        )
 
     return success_rate == 100
+
 
 def main():
     """Main test runner function."""
     parser = argparse.ArgumentParser(description="Run Scribe system tests")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                       help="Show detailed output for passed tests")
-    parser.add_argument("--test", "-t", type=str,
-                       help="Run specific test (e.g., 'startup', 'audio')")
-    parser.add_argument("--list", "-l", action="store_true",
-                       help="List available tests and exit")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show detailed output for passed tests"
+    )
+    parser.add_argument(
+        "--test", "-t", type=str, help="Run specific test (e.g., 'startup', 'audio')"
+    )
+    parser.add_argument("--list", "-l", action="store_true", help="List available tests and exit")
 
     args = parser.parse_args()
 
@@ -215,6 +235,7 @@ def main():
         else:
             print(f"{Fore.RED}No tests were executed.")
             return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

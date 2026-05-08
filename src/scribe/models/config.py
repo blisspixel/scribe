@@ -14,7 +14,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from scribe.exceptions import ValidationError
 
 TranscriptionMethod = Literal["auto", "local", "openai"]
-ModelSize = Literal["tiny", "base", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"]
+ModelSize = Literal[
+    "tiny",
+    "base",
+    "small",
+    "medium",
+    "large",
+    "large-v2",
+    "large-v3",
+    "large-v3-turbo",
+    "turbo",
+]
 
 
 def _find_env_file() -> str | None:
@@ -83,102 +93,79 @@ class ScribeConfig(BaseSettings):
     # Paths
     output_folder: Path = Field(
         default=Path.home() / "Videos" / "Transcriptions",
-        description="Output directory for transcriptions and recordings"
+        description="Output directory for transcriptions and recordings",
     )
 
-    log_folder: Path = Field(
-        default=Path("logs"),
-        description="Directory for log files"
-    )
+    log_folder: Path = Field(default=Path("logs"), description="Directory for log files")
 
     # Audio settings
     expected_audio_output: str | None = Field(
-        default=None,
-        description="Expected Windows audio output device name"
+        default=None, description="Expected Windows audio output device name"
     )
 
     # Transcription settings
     default_model: ModelSize = Field(
         default="large-v3",
-        description="Default Whisper model size (large-v3 = best quality, large-v3-turbo = faster)"
+        description="Default Whisper model size (large-v3 = best quality, large-v3-turbo = faster)",
     )
 
-    default_language: str = Field(
-        default="en",
-        description="Default language code (ISO 639-1)"
+    default_language: str | None = Field(
+        default="en", description="Default language code (ISO 639-1)"
     )
 
     default_method: TranscriptionMethod = Field(
-        default="auto",
-        description="Default transcription method"
+        default="auto", description="Default transcription method"
     )
 
     # OpenAI settings
     openai_api_key: str | None = Field(
         default=None,
         description="OpenAI API key for cloud transcription",
-        alias="OPENAI_API_KEY"  # Use standard OPENAI_API_KEY
+        alias="OPENAI_API_KEY",  # Use standard OPENAI_API_KEY
     )
 
     openai_model: str = Field(
         default="gpt-4o-transcribe-diarize",
-        description="OpenAI transcription model (with speaker diarization)"
+        description="OpenAI transcription model (with speaker diarization)",
     )
 
     # Hugging Face settings (for speaker diarization)
     hf_token: str | None = Field(
-        default=None,
-        description="Hugging Face token for speaker diarization models"
+        default=None, description="Hugging Face token for speaker diarization models"
     )
 
     # OBS settings
-    obs_host: str = Field(
-        default="localhost",
-        description="OBS WebSocket host"
-    )
+    obs_host: str = Field(default="localhost", description="OBS WebSocket host")
 
-    obs_port: int = Field(
-        default=4455,
-        description="OBS WebSocket port"
-    )
+    obs_port: int = Field(default=4455, description="OBS WebSocket port")
 
-    obs_password: str | None = Field(
-        default=None,
-        description="OBS WebSocket password"
-    )
+    obs_password: str | None = Field(default=None, description="OBS WebSocket password")
 
     # Processing settings
     max_retries: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum retry attempts for failed operations"
+        default=3, ge=1, le=10, description="Maximum retry attempts for failed operations"
     )
 
     process_timeout: int = Field(
-        default=14400,  # 4 hours
-        ge=60,
-        description="Maximum timeout for processes in seconds"
+        default=14400, ge=60, description="Maximum timeout for processes in seconds"  # 4 hours
     )
 
     file_wait_timeout: int = Field(
-        default=300,  # 5 minutes
-        ge=10,
-        description="Maximum time to wait for files in seconds"
+        default=300, ge=10, description="Maximum time to wait for files in seconds"  # 5 minutes
     )
 
     max_recording_hours: float = Field(
         default=9.0,
         ge=0.1,
         le=24.0,
-        description="Maximum recording duration in hours before Scribe auto-stops OBS"
+        description="Maximum recording duration in hours before Scribe auto-stops OBS",
     )
 
     recording_warning_fraction: float = Field(
         default=0.9,
         ge=0.1,
         le=1.0,
-        description="Fraction of max recording duration at which to show a warning"
+        description="Fraction of max recording duration at which to show a warning",
     )
 
     # Resource limits (prevent OOM and runaway processes)
@@ -186,69 +173,53 @@ class ScribeConfig(BaseSettings):
         default=12.0,
         ge=0.1,
         le=48.0,
-        description="Maximum audio duration in hours (prevents runaway processing)"
+        description="Maximum audio duration in hours (prevents runaway processing)",
     )
 
     max_file_size_gb: float = Field(
-        default=25.0,
-        ge=0.01,
-        le=100.0,
-        description="Maximum file size in GB (prevents OOM)"
+        default=25.0, ge=0.01, le=100.0, description="Maximum file size in GB (prevents OOM)"
     )
 
     # Cleanup settings
     keep_intermediate_files: bool = Field(
-        default=False,
-        description="Keep all intermediate files (WAV, chunks, etc.)"
+        default=False, description="Keep all intermediate files (WAV, chunks, etc.)"
     )
 
     # Feature flags
     enable_silence_detection: bool = Field(
-        default=True,
-        description="Enable silence period detection"
+        default=True, description="Enable silence period detection"
     )
 
     enable_speaker_diarization: bool = Field(
-        default=True,
-        description="Enable speaker diarization (requires HF_TOKEN)"
+        default=True, description="Enable speaker diarization (requires HF_TOKEN)"
     )
 
     enable_notes: bool = Field(
-        default=True,
-        description="Enable automatic meeting notes generation"
+        default=True, description="Enable automatic meeting notes generation"
     )
 
-    notes_model: str = Field(
-        default="gpt-5",
-        description="GPT model to use for notes generation"
-    )
+    notes_model: str = Field(default="gpt-5", description="GPT model to use for notes generation")
 
     # URL download settings
     download_timeout: int = Field(
-        default=600,
-        ge=30,
-        le=7200,
-        description="Maximum time in seconds for URL downloads"
+        default=600, ge=30, le=7200, description="Maximum time in seconds for URL downloads"
     )
 
     keep_downloads: bool = Field(
-        default=False,
-        description="Keep downloaded files after transcription (default: cleanup)"
+        default=False, description="Keep downloaded files after transcription (default: cleanup)"
     )
 
     download_folder: Path | None = Field(
-        default=None,
-        description="Directory for downloaded files (default: temp directory)"
+        default=None, description="Directory for downloaded files (default: temp directory)"
     )
 
     download_audio_only: bool = Field(
-        default=True,
-        description="Download audio only from URLs (saves bandwidth)"
+        default=True, description="Download audio only from URLs (saves bandwidth)"
     )
 
     cookies_from_browser: str | None = Field(
         default=None,
-        description="Browser to extract cookies from for URL downloads (chrome, firefox, edge, etc.)"
+        description="Browser to extract cookies from for URL downloads (chrome, firefox, edge, etc.)",
     )
 
     @field_validator("output_folder", "log_folder")
@@ -279,10 +250,7 @@ class ScribeConfig(BaseSettings):
         try:
             v.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            raise ValidationError(
-                f"Cannot create directory: {v}",
-                context={"error": str(e)}
-            )
+            raise ValidationError(f"Cannot create directory: {v}", context={"error": str(e)})
 
         # Test write permissions
         test_file = v / ".write_test"
@@ -290,18 +258,17 @@ class ScribeConfig(BaseSettings):
             test_file.touch()
             test_file.unlink()
         except Exception as e:
-            raise ValidationError(
-                f"Directory not writable: {v}",
-                context={"error": str(e)}
-            )
+            raise ValidationError(f"Directory not writable: {v}", context={"error": str(e)})
 
         # Check disk space (warn if < 1GB)
         import shutil
+
         try:
             stat = shutil.disk_usage(v)
             free_gb = stat.free / (1024**3)
             if free_gb < 1.0:
                 import logging
+
                 logging.warning(f"Low disk space: {free_gb:.1f}GB free in {v}")
         except Exception:
             pass  # Don't fail on disk space check
@@ -336,14 +303,14 @@ class ScribeConfig(BaseSettings):
         if not v.startswith("sk-"):
             raise ValidationError(
                 "Invalid OpenAI API key format (should start with 'sk-')",
-                context={"key_prefix": v[:10] if len(v) >= 10 else v}
+                context={"key_prefix": v[:10] if len(v) >= 10 else v},
             )
 
         return v
 
     @field_validator("default_language")
     @classmethod
-    def validate_language_code(cls, v: str) -> str:
+    def validate_language_code(cls, v: str | None) -> str | None:
         """
         Validate language code is 2-letter ISO 639-1 format.
 
@@ -356,12 +323,15 @@ class ScribeConfig(BaseSettings):
         Raises:
             ValidationError: If language code format is invalid
         """
+        if v is None:
+            return None
+
         v = v.strip().lower()
 
         if len(v) != 2:
             raise ValidationError(
                 "Language code must be 2-letter ISO 639-1 format (e.g., 'en', 'es', 'fr')",
-                context={"provided": v}
+                context={"provided": v},
             )
 
         return v
@@ -382,10 +352,7 @@ class ScribeConfig(BaseSettings):
             ValidationError: If port is out of range
         """
         if not (1 <= v <= 65535):
-            raise ValidationError(
-                "Port must be between 1 and 65535",
-                context={"provided": v}
-            )
+            raise ValidationError("Port must be between 1 and 65535", context={"provided": v})
 
         return v
 
@@ -402,7 +369,7 @@ class ScribeConfig(BaseSettings):
         if method == "openai" and not self.openai_api_key:
             raise ValidationError(
                 "OpenAI API key required for OpenAI transcription method",
-                context={"method": method}
+                context={"method": method},
             )
 
         if method == "local":
@@ -420,5 +387,6 @@ class ScribeConfig(BaseSettings):
             Path to log file
         """
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return self.log_folder / f"scribe_{session_name}_{timestamp}.log"

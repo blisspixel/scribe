@@ -44,4 +44,3 @@ def load_transcript_text(path: Path) -> str:
 
     supported = ", ".join(sorted(SUPPORTED_TRANSCRIPT_EXTENSIONS))
     raise ValueError(f"Unsupported transcript format: {suffix}. Supported: {supported}")
-

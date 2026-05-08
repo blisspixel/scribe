@@ -128,7 +128,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -142,27 +142,32 @@ logger = get_logger(__name__)
 
 class NotesGenerationError(ScribeError):
     """Base exception for notes generation errors."""
+
     pass
 
 
 class TranscriptTooShortError(NotesGenerationError):
     """Transcript has insufficient content for analysis."""
+
     pass
 
 
 class APIError(NotesGenerationError):
     """OpenAI API call failed."""
+
     pass
 
 
 class ValidationError(NotesGenerationError):
     """Generated output failed validation."""
+
     pass
 
 
 @dataclass
 class NotesConfig:
     """Configuration for notes generation."""
+
     api_key: str
     model: str = "gpt-5"
     max_retries: int = 3
@@ -191,8 +196,8 @@ class NotesGenerator:
         api_key: str | None = None,
         model: str = "gpt-5",
         max_retries: int = 3,
-        provider_name: str | None = None
-    ):
+        provider_name: str | None = None,
+    ) -> None:
         """
         Initialize notes generator with AI provider configuration.
 
@@ -211,6 +216,7 @@ class NotesGenerator:
 
         try:
             from scribe.providers import get_provider
+
             self.provider = get_provider(
                 feature="notes",
                 api_key=api_key,
@@ -218,13 +224,15 @@ class NotesGenerator:
                 provider_name=provider_name,
             )
             self.use_provider = True
-            logger.info(f"Using provider: {self.provider.config.provider_name} | model: {self.provider.config.model}")
+            logger.info(
+                f"Using provider: {self.provider.config.provider_name} | model: {self.provider.config.model}"
+            )
 
             # Set config from provider
             self.config = NotesConfig(
                 api_key=self.provider.config.api_key,
                 model=self.provider.config.model,
-                max_retries=max_retries
+                max_retries=max_retries,
             )
             self.api_key = self.provider.config.api_key
 
@@ -233,33 +241,27 @@ class NotesGenerator:
             self.use_provider = False
 
             # Fallback to OpenAI - get key from environment if not provided
-            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-            if not self.api_key:
+            resolved_api_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not resolved_api_key:
                 raise NotesGenerationError(
                     "API key not found. Set OPENAI_API_KEY or XAI_API_KEY environment variable, "
                     "or pass api_key parameter."
                 )
+            self.api_key = resolved_api_key
 
-            self.config = NotesConfig(
-                api_key=self.api_key,
-                model=model,
-                max_retries=max_retries
-            )
+            self.config = NotesConfig(api_key=self.api_key, model=model, max_retries=max_retries)
 
         # Always create OpenAI client for now (will migrate to provider in future)
         self.client = OpenAI(api_key=self.api_key)
         try:
             import importlib.metadata as im
+
             logger.info(f"openai SDK version: {im.version('openai')}")
         except Exception:
             pass
         logger.info(f"Initialized NotesGenerator with model={self.config.model}")
 
-    def generate_notes(
-        self,
-        transcript_path: Path,
-        output_path: Path | None = None
-    ) -> Path:
+    def generate_notes(self, transcript_path: Path, output_path: Path | None = None) -> Path:
         """
         Generate structured meeting notes from transcript.
 
@@ -320,7 +322,7 @@ class NotesGenerator:
             "total_duration_sec": round(total_duration, 2),
             "confidence_score": round(confidence, 3),
             "output_file": str(final_path),
-            "transcript_length_chars": len(transcript_content)
+            "transcript_length_chars": len(transcript_content),
         }
         logger.info(f"Notes generation summary: {json.dumps(summary_metrics)}")
         logger.info(f"Notes generation completed successfully: {final_path}")
@@ -329,7 +331,7 @@ class NotesGenerator:
 
     # ---------------- Core GPT-5 Call ----------------
 
-    def _extract_output_text(self, resp) -> str:
+    def _extract_output_text(self, resp: Any) -> str:
         """
         Extract text from GPT-5 Responses API response.
         """
@@ -342,7 +344,9 @@ class NotesGenerator:
             if outputs:
                 buff: list[str] = []
                 for item in outputs:
-                    typ = getattr(item, "type", None) or (isinstance(item, dict) and item.get("type"))
+                    typ = getattr(item, "type", None) or (
+                        isinstance(item, dict) and item.get("type")
+                    )
                     if typ == "message":
                         message = getattr(item, "content", None)
                         if message is None and isinstance(item, dict):
@@ -397,7 +401,7 @@ class NotesGenerator:
         # Remove any text after the last }
         last_brace = raw.rfind("}")
         if last_brace > 0 and last_brace < len(raw) - 1:
-            raw = raw[:last_brace + 1]
+            raw = raw[: last_brace + 1]
 
         # Fix missing commas between array elements (common Grok issue)
         # Pattern: "text" "text" should be "text", "text"
@@ -418,7 +422,7 @@ class NotesGenerator:
             for _ in range(diff):
                 last_close = raw.rfind("}")
                 if last_close > 0:
-                    raw = raw[:last_close] + raw[last_close + 1:]
+                    raw = raw[:last_close] + raw[last_close + 1 :]
 
         # Balance brackets - add missing ] before the final }
         open_brackets = raw.count("[")
@@ -433,7 +437,7 @@ class NotesGenerator:
                 raw = raw + ("]" * (open_brackets - close_brackets))
 
         # Remove trailing commas in common places
-        raw = re.sub(r',(\s*[}\]])', r'\1', raw)
+        raw = re.sub(r",(\s*[}\]])", r"\1", raw)
 
         # Fix common quote issues
         raw = raw.replace('\\"', '"')  # Unescape quotes
@@ -443,7 +447,7 @@ class NotesGenerator:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((Exception,))
+        retry=retry_if_exception_type((Exception,)),
     )
     def _call_gpt5_api(
         self,
@@ -451,7 +455,7 @@ class NotesGenerator:
         reasoning_effort: str = "medium",
         verbosity: str = "low",
         phase: str = "unknown",
-        json_schema: dict[str, Any] | None = None
+        json_schema: dict[str, Any] | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """
         Call AI provider with retry logic (provider-agnostic).
@@ -470,17 +474,18 @@ class NotesGenerator:
             start_time = time.time()
 
             # Use provider if available, otherwise fall back to OpenAI client
+            provider = self.provider
             if self.use_provider:
+                if provider is None:
+                    raise APIError("Provider mode enabled but no provider is configured")
                 # Provider-agnostic path
                 messages = [{"role": "user", "content": input_text}]
 
                 # Determine max tokens based on phase
                 max_tokens = 4000 if json_schema else 2000
 
-                response = self.provider.chat_completion_with_json(
-                    messages=messages,
-                    json_schema=json_schema,
-                    max_tokens=max_tokens
+                response = provider.chat_completion_with_json(
+                    messages=messages, json_schema=json_schema, max_tokens=max_tokens
                 )
 
                 content = response["content"]
@@ -493,7 +498,9 @@ class NotesGenerator:
                 # OpenAI Responses API path (legacy)
                 prompt_text = input_text
                 if json_schema is not None:
-                    prompt_text = self._build_json_schema_prompt_hint(json_schema) + "\n\n" + input_text
+                    prompt_text = (
+                        self._build_json_schema_prompt_hint(json_schema) + "\n\n" + input_text
+                    )
 
                 params: dict[str, Any] = {
                     "model": self.config.model,
@@ -511,7 +518,9 @@ class NotesGenerator:
                     inc = getattr(resp, "incomplete_details", None)
                     reason = getattr(inc, "reason", None) if inc else None
                     if reason == "max_output_tokens":
-                        logger.warning("Server reported max_output_tokens cap; retrying with lower reasoning.")
+                        logger.warning(
+                            "Server reported max_output_tokens cap; retrying with lower reasoning."
+                        )
                         params["reasoning"] = {"effort": "low"}
                         resp = self.client.responses.create(**params)
 
@@ -520,7 +529,9 @@ class NotesGenerator:
                     status = getattr(resp, "status", None)
                     inc = getattr(resp, "incomplete_details", None)
                     inc_reason = getattr(inc, "reason", None) if inc else None
-                    raise APIError(f"Empty response. status={status}, incomplete_reason={inc_reason}")
+                    raise APIError(
+                        f"Empty response. status={status}, incomplete_reason={inc_reason}"
+                    )
 
                 usage = getattr(resp, "usage", None)
                 tokens_used = getattr(usage, "total_tokens", 0) if usage else 0
@@ -530,11 +541,14 @@ class NotesGenerator:
             if not content:
                 raise APIError("Empty response from AI provider")
 
+            provider_name_for_metrics = (
+                provider.config.provider_name if provider is not None else "openai"
+            )
             metrics = {
                 "phase": phase,
                 "duration_sec": round(time.time() - start_time, 2),
                 "tokens": tokens_used,
-                "provider": self.provider.config.provider_name if self.use_provider else "openai",
+                "provider": provider_name_for_metrics,
                 "model": self.config.model,
                 "structured_output": json_schema is not None,
             }
@@ -561,12 +575,14 @@ class NotesGenerator:
             raise NotesGenerationError(f"Failed to read transcript: {e}")
 
         metadata = self._extract_metadata(content)
-        logger.debug(f"Read transcript: {len(content)} chars, meeting={metadata.get('meeting_name')}")
+        logger.debug(
+            f"Read transcript: {len(content)} chars, meeting={metadata.get('meeting_name')}"
+        )
         return {
             "content": content,
             "meeting_name": metadata.get("meeting_name", "Unknown Meeting"),
             "date": metadata.get("date", ""),
-            "duration": metadata.get("duration", "")
+            "duration": metadata.get("duration", ""),
         }
 
     def _validate_transcript(self, content: str) -> None:
@@ -621,21 +637,14 @@ Use a factual, professional tone. Include specific names, numbers, systems, and 
 Write 2-4 paragraphs. Be comprehensive but concise."""
         try:
             summary, _ = self._call_gpt5_api(
-                prompt,
-                reasoning_effort="medium",
-                verbosity="low",
-                phase="summary"
+                prompt, reasoning_effort="medium", verbosity="low", phase="summary"
             )
             logger.info(f"Generated summary: {len(summary)} characters")
             return summary.strip()
         except Exception as e:
             raise NotesGenerationError(f"Failed to generate summary: {e}")
 
-    def _generate_analytical_breakdown(
-        self,
-        transcript: str,
-        summary: str
-    ) -> dict[str, Any]:
+    def _generate_analytical_breakdown(self, transcript: str, summary: str) -> dict[str, Any]:
         logger.info("Generating analytical breakdown...")
 
         breakdown_schema = {
@@ -647,7 +656,7 @@ Write 2-4 paragraphs. Be comprehensive but concise."""
                 "blockers": {"type": "array", "items": {"type": "string"}},
                 "future_state_business": {"type": "array", "items": {"type": "string"}},
                 "future_state_technical": {"type": "array", "items": {"type": "string"}},
-                "next_steps": {"type": "array", "items": {"type": "string"}}
+                "next_steps": {"type": "array", "items": {"type": "string"}},
             },
             "required": [
                 "current_state_business",
@@ -656,9 +665,9 @@ Write 2-4 paragraphs. Be comprehensive but concise."""
                 "blockers",
                 "future_state_business",
                 "future_state_technical",
-                "next_steps"
+                "next_steps",
             ],
-            "additionalProperties": False
+            "additionalProperties": False,
         }
 
         prompt = f"""You are creating a structured breakdown of a meeting for business intelligence.
@@ -700,15 +709,15 @@ CRITICAL FORMATTING RULES:
                 reasoning_effort="low",
                 verbosity="low",
                 phase="breakdown",
-                json_schema=breakdown_schema
+                json_schema=breakdown_schema,
             )
             try:
-                breakdown = json.loads(response_text)
+                breakdown = cast(dict[str, Any], json.loads(response_text))
             except json.JSONDecodeError as e1:
                 logger.debug(f"Initial JSON parse failed: {e1}, attempting repair...")
                 try:
                     repaired = self._repair_json_lenient(response_text)
-                    breakdown = json.loads(repaired)
+                    breakdown = cast(dict[str, Any], json.loads(repaired))
                     logger.debug("JSON repair successful")
                 except json.JSONDecodeError as e2:
                     logger.error(f"JSON repair failed: {e2}")
@@ -723,16 +732,16 @@ CRITICAL FORMATTING RULES:
             logger.info(f"Generated breakdown with {len(breakdown)} sections")
             return breakdown
         except json.JSONDecodeError as e:
-            provider_name = self.provider.config.provider_name if self.use_provider else "OpenAI"
+            provider_name = (
+                self.provider.config.provider_name
+                if self.use_provider and self.provider is not None
+                else "OpenAI"
+            )
             raise ValidationError(f"Invalid JSON response from {provider_name}: {e}")
         except Exception as e:
             raise NotesGenerationError(f"Failed to generate analytical breakdown: {e}")
 
-    def _refine_and_polish(
-        self,
-        transcript: str,
-        breakdown: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _refine_and_polish(self, transcript: str, breakdown: dict[str, Any]) -> dict[str, Any]:
         logger.info("Refining and polishing breakdown...")
 
         breakdown_schema = {
@@ -744,7 +753,7 @@ CRITICAL FORMATTING RULES:
                 "blockers": {"type": "array", "items": {"type": "string"}},
                 "future_state_business": {"type": "array", "items": {"type": "string"}},
                 "future_state_technical": {"type": "array", "items": {"type": "string"}},
-                "next_steps": {"type": "array", "items": {"type": "string"}}
+                "next_steps": {"type": "array", "items": {"type": "string"}},
             },
             "required": [
                 "current_state_business",
@@ -753,9 +762,9 @@ CRITICAL FORMATTING RULES:
                 "blockers",
                 "future_state_business",
                 "future_state_technical",
-                "next_steps"
+                "next_steps",
             ],
-            "additionalProperties": False
+            "additionalProperties": False,
         }
 
         current_breakdown_text = json.dumps(breakdown, indent=2)
@@ -783,24 +792,31 @@ Each bullet should be a complete sentence with maximum detail density."""
                 reasoning_effort="low",
                 verbosity="low",
                 phase="refinement",
-                json_schema=breakdown_schema
+                json_schema=breakdown_schema,
             )
             try:
-                refined_breakdown = json.loads(response_text)
+                refined_breakdown = cast(dict[str, Any], json.loads(response_text))
             except json.JSONDecodeError:
                 # Try to repair JSON
                 try:
-                    refined_breakdown = json.loads(self._repair_json_lenient(response_text))
+                    refined_breakdown = cast(
+                        dict[str, Any], json.loads(self._repair_json_lenient(response_text))
+                    )
                 except json.JSONDecodeError as repair_error:
                     # Repair failed, use original (this is fine - refinement is optional)
-                    logger.debug(f"Refinement JSON repair failed, using original breakdown: {repair_error}")
+                    logger.debug(
+                        f"Refinement JSON repair failed, using original breakdown: {repair_error}"
+                    )
                     return breakdown
 
             required = [
-                "current_state_business", "current_state_technical",
-                "drivers", "blockers",
-                "future_state_business", "future_state_technical",
-                "next_steps"
+                "current_state_business",
+                "current_state_technical",
+                "drivers",
+                "blockers",
+                "future_state_business",
+                "future_state_technical",
+                "next_steps",
             ]
             for key in required:
                 if key not in refined_breakdown:
@@ -818,10 +834,7 @@ Each bullet should be a complete sentence with maximum detail density."""
     # ---------------- Segmentation & Merge for Ultra-long Transcripts ----------------
 
     def _segment_for_full_coverage(
-        self,
-        text: str,
-        approx_token_per_chunk: int = 220_000,
-        overlap_tokens: int = 2_000
+        self, text: str, approx_token_per_chunk: int = 220_000, overlap_tokens: int = 2_000
     ) -> list[str] | None:
         """
         Deterministic, overlap-aware segmentation that guarantees every character is processed.
@@ -859,13 +872,16 @@ Each bullet should be a complete sentence with maximum detail density."""
         Conflicts are preserved as distinct bullets.
         """
         keys = [
-            "current_state_business", "current_state_technical",
-            "drivers", "blockers",
-            "future_state_business", "future_state_technical",
-            "next_steps"
+            "current_state_business",
+            "current_state_technical",
+            "drivers",
+            "blockers",
+            "future_state_business",
+            "future_state_technical",
+            "next_steps",
         ]
         merged: dict[str, list[str]] = {k: [] for k in keys}
-        seen: dict[str, set] = {k: set() for k in keys}
+        seen: dict[str, set[str]] = {k: set() for k in keys}
         for b in parts:
             for k in keys:
                 for bullet in b.get(k, []):
@@ -879,10 +895,13 @@ Each bullet should be a complete sentence with maximum detail density."""
 
     def _validate_breakdown_keys(self, breakdown: dict[str, Any]) -> None:
         required_keys = [
-            "current_state_business", "current_state_technical",
-            "drivers", "blockers",
-            "future_state_business", "future_state_technical",
-            "next_steps"
+            "current_state_business",
+            "current_state_technical",
+            "drivers",
+            "blockers",
+            "future_state_business",
+            "future_state_technical",
+            "next_steps",
         ]
         for key in required_keys:
             if key not in breakdown:
@@ -902,12 +921,16 @@ Each bullet should be a complete sentence with maximum detail density."""
 
         required_sections = {
             "current_state_business": ["current_business", "business_state", "business_context"],
-            "current_state_technical": ["current_technical", "technical_state", "technical_context"],
+            "current_state_technical": [
+                "current_technical",
+                "technical_state",
+                "technical_context",
+            ],
             "drivers": ["motivators", "forces", "catalysts"],
             "blockers": ["challenges", "obstacles", "issues", "constraints"],
             "future_state_business": ["future_business", "business_goals", "business_targets"],
             "future_state_technical": ["future_technical", "technical_goals", "technical_targets"],
-            "next_steps": ["action_items", "actions", "follow_ups", "tasks"]
+            "next_steps": ["action_items", "actions", "follow_ups", "tasks"],
         }
 
         # Section presence (40)
@@ -935,12 +958,22 @@ Each bullet should be a complete sentence with maximum detail density."""
                             len(bullet) > 50,
                             any(char.isdigit() for char in bullet),
                             bullet.count(" ") > 8,
-                            any(word in bullet.lower() for word in ["system", "api", "database", "server", "model"]),
-                            any(word in bullet.lower() for word in ["team", "project", "deadline", "milestone", "goal"]),
+                            any(
+                                word in bullet.lower()
+                                for word in ["system", "api", "database", "server", "model"]
+                            ),
+                            any(
+                                word in bullet.lower()
+                                for word in ["team", "project", "deadline", "milestone", "goal"]
+                            ),
                         ]
                         generic_phrases = [
-                            "improve performance", "enhance user experience", "optimize system",
-                            "increase efficiency", "better integration", "more scalable"
+                            "improve performance",
+                            "enhance user experience",
+                            "optimize system",
+                            "increase efficiency",
+                            "better integration",
+                            "more scalable",
                         ]
                         has_generic = any(phrase in bullet.lower() for phrase in generic_phrases)
                         detail_score = sum(detail_indicators) - (2 if has_generic else 0)
@@ -959,10 +992,7 @@ Each bullet should be a complete sentence with maximum detail density."""
         return final_confidence
 
     def _format_markdown(
-        self,
-        summary: str,
-        breakdown: dict[str, Any],
-        metadata: dict[str, str]
+        self, summary: str, breakdown: dict[str, Any], metadata: dict[str, str]
     ) -> str:
         logger.debug("Formatting output as Markdown...")
 
@@ -1033,4 +1063,3 @@ Each bullet should be a complete sentence with maximum detail density."""
             return output_path
         except Exception as e:
             raise NotesGenerationError(f"Failed to write notes file: {e}")
-

@@ -25,9 +25,11 @@ import os
 import sys
 import threading
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from types import TracebackType
 from typing import Any, Optional
 
 from scribe.utils.logging import get_logger
@@ -37,8 +39,7 @@ logger = get_logger(__name__)
 # Context variable for async/await support (Python 3.7+)
 # This works with both threading and asyncio
 _context_var: contextvars.ContextVar[Optional["RunContext"]] = contextvars.ContextVar(
-    "run_context",
-    default=None
+    "run_context", default=None
 )
 
 
@@ -88,10 +89,13 @@ class RunContext:
     error_message: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     parent_run_id: str | None = None
+    _previous_context: "RunContext | None" = field(default=None, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Capture system information on initialization."""
-        self.metadata["python_version"] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        self.metadata["python_version"] = (
+            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        )
         self.metadata["platform"] = sys.platform
         self.metadata["pid"] = os.getpid()
 
@@ -111,18 +115,14 @@ class RunContext:
 
         logger.info(
             f"Starting run: {run_id}",
-            extra={
-                "run_id": run_id,
-                "operation": operation,
-                "parent_run_id": parent_run_id
-            }
+            extra={"run_id": run_id, "operation": operation, "parent_run_id": parent_run_id},
         )
 
         return cls(
             run_id=run_id,
             operation=operation,
             start_time=datetime.now(),
-            parent_run_id=parent_run_id
+            parent_run_id=parent_run_id,
         )
 
     def add_metadata(self, key: str, value: Any) -> None:
@@ -139,8 +139,7 @@ class RunContext:
         self.metadata[key] = value
 
         logger.debug(
-            f"Run metadata: {key}={value}",
-            extra={"run_id": self.run_id, "metadata_key": key}
+            f"Run metadata: {key}={value}", extra={"run_id": self.run_id, "metadata_key": key}
         )
 
     def mark_success(self) -> None:
@@ -156,8 +155,8 @@ class RunContext:
                 "run_id": self.run_id,
                 "operation": self.operation,
                 "duration_seconds": duration,
-                "success": True
-            }
+                "success": True,
+            },
         )
 
     def mark_failure(self, error_message: str) -> None:
@@ -180,8 +179,8 @@ class RunContext:
                 "operation": self.operation,
                 "duration_seconds": duration,
                 "success": False,
-                "error_message": error_message
-            }
+                "error_message": error_message,
+            },
         )
 
     def get_duration(self) -> float | None:
@@ -251,7 +250,12 @@ class RunContext:
         self.set_current(self)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         Exit context manager - mark success/failure and restore previous context.
 
@@ -305,7 +309,7 @@ def add_run_metadata(key: str, value: Any) -> None:
 
 
 @contextmanager
-def nested_operation(operation: str):
+def nested_operation(operation: str) -> Generator[RunContext, None, None]:
     """
     Create a nested operation within the current run.
 
@@ -358,7 +362,7 @@ class RunHistory:
 
             # Trim to max size (FIFO)
             if len(self.runs) > self.max_size:
-                self.runs = self.runs[-self.max_size:]
+                self.runs = self.runs[-self.max_size :]
 
     def get_recent(self, count: int = 10) -> list[RunContext]:
         """

@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from scribe.exceptions import DownloadError
 
@@ -73,11 +74,11 @@ class URLDownloader:
             DownloadError: If download fails for any reason
         """
         try:
-            import yt_dlp
+            import yt_dlp  # type: ignore[import-untyped]
         except ImportError as e:
             raise DownloadError(
                 "yt-dlp is required for URL downloads. Install with: pip install yt-dlp",
-                context={"url": url}
+                context={"url": url},
             ) from e
 
         logger.info(f"Downloading from URL: {url}")
@@ -91,8 +92,7 @@ class URLDownloader:
                 info = ydl.extract_info(url, download=False)
                 if info is None:
                     raise DownloadError(
-                        "Could not extract media info from URL",
-                        context={"url": url}
+                        "Could not extract media info from URL", context={"url": url}
                     )
 
                 title = info.get("title", "download")
@@ -102,7 +102,7 @@ class URLDownloader:
                 if duration and duration > 48 * 3600:
                     raise DownloadError(
                         f"Media too long ({duration / 3600:.1f} hours, max 48 hours)",
-                        context={"url": url, "duration_hours": duration / 3600}
+                        context={"url": url, "duration_hours": duration / 3600},
                     )
 
                 # Check estimated file size if available
@@ -111,7 +111,7 @@ class URLDownloader:
                     size_gb = filesize / 1024**3
                     raise DownloadError(
                         f"File too large ({size_gb:.1f}GB, max {self.max_file_size_gb}GB)",
-                        context={"url": url, "size_gb": size_gb}
+                        context={"url": url, "size_gb": size_gb},
                     )
 
                 logger.info(f"Downloading: {title} (duration: {duration}s)")
@@ -126,7 +126,7 @@ class URLDownloader:
                 if not downloaded_file or not downloaded_file.exists():
                     raise DownloadError(
                         "Download completed but output file not found",
-                        context={"url": url, "output_dir": str(self.output_dir)}
+                        context={"url": url, "output_dir": str(self.output_dir)},
                     )
 
                 logger.info(f"Downloaded to: {downloaded_file}")
@@ -145,37 +145,31 @@ class URLDownloader:
             # Provide user-friendly messages for common errors
             if "is not a valid URL" in error_msg or "Unsupported URL" in error_msg:
                 raise DownloadError(
-                    f"URL not supported: {url}",
-                    context={"url": url, "detail": error_msg}
+                    f"URL not supported: {url}", context={"url": url, "detail": error_msg}
                 ) from e
             if "Video unavailable" in error_msg or "Private video" in error_msg:
                 raise DownloadError(
-                    "Video is unavailable or private",
-                    context={"url": url, "detail": error_msg}
+                    "Video is unavailable or private", context={"url": url, "detail": error_msg}
                 ) from e
             if "Sign in" in error_msg or "age" in error_msg.lower():
                 raise DownloadError(
                     "Video requires authentication or is age-restricted"
                     "\nTry: scribe url <link> --cookies edge",
-                    context={"url": url, "detail": error_msg}
+                    context={"url": url, "detail": error_msg},
                 ) from e
             if "403" in error_msg or "Forbidden" in error_msg:
                 hint = (
-                    "\nTry: pip install --upgrade yt-dlp"
-                    "\n  or: scribe url <link> --cookies edge"
+                    "\nTry: pip install --upgrade yt-dlp" "\n  or: scribe url <link> --cookies edge"
                 )
                 raise DownloadError(
                     f"Download blocked (HTTP 403). YouTube may require browser cookies.{hint}",
-                    context={"url": url, "detail": error_msg}
+                    context={"url": url, "detail": error_msg},
                 ) from e
-            raise DownloadError(
-                f"Download failed: {error_msg}",
-                context={"url": url}
-            ) from e
+            raise DownloadError(f"Download failed: {error_msg}", context={"url": url}) from e
 
-    def _build_options(self) -> dict:
+    def _build_options(self) -> dict[str, Any]:
         """Build yt-dlp options dict."""
-        opts: dict = {
+        opts: dict[str, Any] = {
             "outtmpl": str(self.output_dir / "%(title).100s.%(ext)s"),
             "socket_timeout": self.timeout,
             "retries": 10,
@@ -214,7 +208,7 @@ class URLDownloader:
 
         return opts
 
-    def _progress_hook(self, d: dict) -> None:
+    def _progress_hook(self, d: dict[str, Any]) -> None:
         """yt-dlp progress hook — translates to our callback."""
         if not self.progress_callback:
             return
@@ -227,7 +221,7 @@ class URLDownloader:
         elif d.get("status") == "finished":
             self.progress_callback(1.0)
 
-    def _find_downloaded_file(self, info: dict) -> Path | None:
+    def _find_downloaded_file(self, info: dict[str, Any]) -> Path | None:
         """Find the actual downloaded file on disk."""
         # yt-dlp prepares the filename — use it directly
         if info.get("requested_downloads"):
@@ -252,7 +246,15 @@ class URLDownloader:
         )
         for candidate in candidates:
             if candidate.is_file() and candidate.suffix.lower() in (
-                ".wav", ".mp3", ".m4a", ".mp4", ".mkv", ".webm", ".ogg", ".opus", ".flac"
+                ".wav",
+                ".mp3",
+                ".m4a",
+                ".mp4",
+                ".mkv",
+                ".webm",
+                ".ogg",
+                ".opus",
+                ".flac",
             ):
                 return candidate
 

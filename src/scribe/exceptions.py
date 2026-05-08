@@ -92,6 +92,7 @@ enabling graceful degradation and intelligent error recovery throughout the
 transcription pipeline.
 """
 
+from typing import Any
 
 
 class ScribeError(Exception):
@@ -106,7 +107,7 @@ class ScribeError(Exception):
         context: Optional dictionary with additional error context
     """
 
-    def __init__(self, message: str, context: dict | None = None):
+    def __init__(self, message: str, context: dict[str, Any] | None = None):
         """
         Initialize ScribeError with message and optional context.
 
@@ -142,6 +143,7 @@ class ValidationError(ScribeError):
             context={"torch_version": "2.0.0", "cuda_available": False}
         )
     """
+
     pass
 
 
@@ -161,6 +163,7 @@ class ProcessError(ScribeError):
             context={"command": "ffmpeg -i input.mp4", "exit_code": 1}
         )
     """
+
     pass
 
 
@@ -181,6 +184,7 @@ class TranscriptionError(ScribeError):
             context={"vram_used_gb": 22.5, "vram_total_gb": 24.0, "model": "large-v3"}
         )
     """
+
     pass
 
 
@@ -201,6 +205,7 @@ class FileOperationError(ScribeError):
             context={"path": "/output", "error": "Permission denied"}
         )
     """
+
     pass
 
 
@@ -222,6 +227,7 @@ class CircuitBreakerOpen(ScribeError):
             context={"failure_count": 5, "timeout_seconds": 60}
         )
     """
+
     pass
 
 
@@ -241,6 +247,7 @@ class ConversionError(ScribeError):
             context={"input": "video.mp4", "error": "Invalid codec"}
         )
     """
+
     pass
 
 
@@ -260,6 +267,7 @@ class AudioFormatError(ScribeError):
             context={"file": "audio.xyz", "format": "unknown"}
         )
     """
+
     pass
 
 
@@ -279,6 +287,7 @@ class GPUError(ScribeError):
             context={"requested_gb": 12, "available_gb": 8}
         )
     """
+
     pass
 
 
@@ -298,6 +307,7 @@ class APIError(ScribeError):
             context={"status_code": 429, "retry_after": 60}
         )
     """
+
     pass
 
 
@@ -318,4 +328,5 @@ class DownloadError(ScribeError):
             context={"url": "https://youtube.com/watch?v=...", "reason": "private"}
         )
     """
+
     pass

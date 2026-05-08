@@ -184,7 +184,7 @@ class TestRealWorldExamples:
             "WebSocket",
             "OAuth",
             "JWT",
-            "CI/CD"
+            "CI/CD",
         ]
         vocab = CustomVocabulary(words)
 
@@ -195,12 +195,7 @@ class TestRealWorldExamples:
 
     def test_company_names(self):
         """Test with company names."""
-        words = [
-            "Acme Corporation",
-            "TechStart Inc",
-            "DataSync Pro",
-            "CloudHub API"
-        ]
+        words = ["Acme Corporation", "TechStart Inc", "DataSync Pro", "CloudHub API"]
         vocab = CustomVocabulary(words)
 
         assert len(vocab) == 4

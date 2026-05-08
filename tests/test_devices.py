@@ -16,11 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 init(autoreset=True)
 
+
 def print_header(title: str):
     """Print a formatted test section header."""
     print(f"\n{Fore.CYAN}{'='*60}")
     print(f"{Fore.CYAN}{title:^60}")
     print(f"{Fore.CYAN}{'='*60}")
+
 
 def print_test(name: str, status: str, details: str = ""):
     """Print formatted test result."""
@@ -29,21 +31,22 @@ def print_test(name: str, status: str, details: str = ""):
     if details:
         print(f"{Fore.CYAN}   Details: {details}")
 
+
 def test_pycaw_import():
     """Test if pycaw is available for Windows audio control."""
     print_header("AUDIO LIBRARY TESTS")
 
     try:
-        if os.name != 'nt':
+        if os.name != "nt":
             print_test("pycaw import", "SKIP", "Not Windows platform")
             return True
 
         import importlib.util
 
-        if not importlib.util.find_spec('comtypes'):
-            raise ImportError('comtypes not available')
-        if not importlib.util.find_spec('pycaw'):
-            raise ImportError('pycaw not available')
+        if not importlib.util.find_spec("comtypes"):
+            raise ImportError("comtypes not available")
+        if not importlib.util.find_spec("pycaw"):
+            raise ImportError("pycaw not available")
 
         print_test("pycaw import", "PASS", "Audio control library available")
         return True
@@ -55,61 +58,65 @@ def test_pycaw_import():
         print_test("pycaw import", "FAIL", str(e))
         return False
 
+
 def get_audio_devices():
     """Get list of audio devices using different methods."""
-    devices = []    # Method 1: pycaw (Windows only)
-    if os.name == 'nt':
+    devices = []  # Method 1: pycaw (Windows only)
+    if os.name == "nt":
         try:
             from comtypes import CLSCTX_ALL, CoCreateInstance
             from pycaw.constants import EDataFlow, ERole
             from pycaw.pycaw import IMMDeviceEnumerator
 
             device_enumerator = CoCreateInstance(
-                IMMDeviceEnumerator._iid_,
-                IMMDeviceEnumerator,
-                CLSCTX_ALL
+                IMMDeviceEnumerator._iid_, IMMDeviceEnumerator, CLSCTX_ALL
             )
 
             # Get default device
-            default_device = device_enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia)
+            default_device = device_enumerator.GetDefaultAudioEndpoint(
+                EDataFlow.eRender, ERole.eMultimedia
+            )
             if default_device:
-                devices.append({
-                    'name': default_device.FriendlyName,
-                    'default': True,
-                    'method': 'pycaw'
-                })
+                devices.append(
+                    {"name": default_device.FriendlyName, "default": True, "method": "pycaw"}
+                )
 
         except Exception:
             pass
 
     # Method 2: PowerShell (Windows only)
-    if os.name == 'nt':
+    if os.name == "nt":
         try:
             import subprocess
+
             result = subprocess.run(
-                ['powershell', '-Command',
-                 'Get-AudioDevice -PlaybackCommunication | Select-Object Name, Default'],
-                capture_output=True, text=True, timeout=10
+                [
+                    "powershell",
+                    "-Command",
+                    "Get-AudioDevice -PlaybackCommunication | Select-Object Name, Default",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
 
             if result.returncode == 0 and result.stdout:
-                lines = result.stdout.strip().split('\n')[2:]  # Skip header
+                lines = result.stdout.strip().split("\n")[2:]  # Skip header
                 for line in lines:
                     if line.strip():
                         parts = line.strip().split()
                         if len(parts) >= 2:
-                            name = ' '.join(parts[:-1])
-                            is_default = parts[-1].lower() == 'true'
-                            devices.append({
-                                'name': name,
-                                'default': is_default,
-                                'method': 'powershell'
-                            })
+                            name = " ".join(parts[:-1])
+                            is_default = parts[-1].lower() == "true"
+                            devices.append(
+                                {"name": name, "default": is_default, "method": "powershell"}
+                            )
 
         except Exception:
             pass
 
     return devices
+
 
 def test_audio_device_detection():
     """Test audio device detection capabilities."""
@@ -124,11 +131,11 @@ def test_audio_device_detection():
     print_test("Device detection", "PASS", f"Found {len(devices)} devices")
 
     # Show detected devices
-    [d for d in devices if d.get('default', False)]
+    [d for d in devices if d.get("default", False)]
 
     for i, device in enumerate(devices[:5]):  # Show up to 5 devices
-        is_default = device.get('default', False)
-        method = device.get('method', 'unknown')
+        is_default = device.get("default", False)
+        method = device.get("method", "unknown")
         status = "DEFAULT" if is_default else "AVAILABLE"
 
         print_test(f"Device {i+1}", status, f"{device['name']} ({method})")
@@ -138,12 +145,14 @@ def test_audio_device_detection():
 
     return True
 
+
 def test_expected_device_configuration():
     """Test if expected audio device is configured correctly."""
     print_header("EXPECTED DEVICE CONFIGURATION TESTS")
 
     # Load expected device from environment
     from dotenv import load_dotenv
+
     load_dotenv()
 
     expected_device = os.getenv("EXPECTED_AUDIO_OUTPUT", "").strip()
@@ -156,14 +165,14 @@ def test_expected_device_configuration():
 
     # Get current devices
     devices = get_audio_devices()
-    default_devices = [d for d in devices if d.get('default', False)]
+    default_devices = [d for d in devices if d.get("default", False)]
 
     if not default_devices:
         print_test("Default device check", "FAIL", "No default device found")
         return False
 
     # Check if expected device is the default
-    current_default = default_devices[0]['name']
+    current_default = default_devices[0]["name"]
 
     if expected_device.lower() in current_default.lower():
         print_test("Device match", "PASS", "Current default matches expected")
@@ -173,29 +182,35 @@ def test_expected_device_configuration():
         print_test("Device mismatch details", "INFO", f"Expected: {expected_device}")
         return False
 
+
 def test_audio_device_switching():
     """Test audio device switching capabilities (informational)."""
     print_header("AUDIO DEVICE SWITCHING TESTS")
 
-    if os.name != 'nt':
+    if os.name != "nt":
         print_test("Device switching", "SKIP", "Not Windows platform")
         return True
 
     try:
         # Test if AudioDeviceCmdlets is available
         import subprocess
+
         result = subprocess.run(
-            ['powershell', '-Command', 'Get-Module -ListAvailable AudioDeviceCmdlets'],
-            capture_output=True, text=True, timeout=10
+            ["powershell", "-Command", "Get-Module -ListAvailable AudioDeviceCmdlets"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
 
-        if 'AudioDeviceCmdlets' in result.stdout:
+        if "AudioDeviceCmdlets" in result.stdout:
             print_test("AudioDeviceCmdlets", "PASS", "Device switching module available")
 
             # Test Get-AudioDevice command
             result = subprocess.run(
-                ['powershell', '-Command', 'Get-AudioDevice -List | Select-Object -First 3'],
-                capture_output=True, text=True, timeout=10
+                ["powershell", "-Command", "Get-AudioDevice -List | Select-Object -First 3"],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
 
             if result.returncode == 0:
@@ -213,6 +228,7 @@ def test_audio_device_switching():
         print_test("Device switching test", "FAIL", str(e))
         return False
 
+
 def test_audio_system_health():
     """Test overall audio system health."""
     print_header("AUDIO SYSTEM HEALTH TESTS")
@@ -221,11 +237,11 @@ def test_audio_system_health():
         devices = get_audio_devices()
 
         # Check for multiple detection methods
-        methods = {d.get('method', 'unknown') for d in devices}
+        methods = {d.get("method", "unknown") for d in devices}
         print_test("Detection methods", "INFO", f"Available: {', '.join(methods)}")
 
         # Check for default device
-        default_count = len([d for d in devices if d.get('default', False)])
+        default_count = len([d for d in devices if d.get("default", False)])
         if default_count == 1:
             print_test("Default device count", "PASS", "Exactly one default device")
         elif default_count == 0:
@@ -247,6 +263,7 @@ def test_audio_system_health():
     except Exception as e:
         print_test("Audio system health", "FAIL", str(e))
         return False
+
 
 def main():
     """Run all audio device tests."""
@@ -285,8 +302,6 @@ def main():
         print(f"\n{Fore.RED}{Style.BRIGHT}Some audio device tests failed.")
         return 1
 
+
 if __name__ == "__main__":
     sys.exit(main())
-
-
-

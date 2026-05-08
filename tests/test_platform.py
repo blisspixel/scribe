@@ -22,10 +22,10 @@ from scribe.utils.platform import (
 )
 
 # Platform markers
-windows_only = pytest.mark.skipif(not sys.platform.startswith('win'), reason="Windows only")
-macos_only = pytest.mark.skipif(not sys.platform.startswith('darwin'), reason="macOS only")
-linux_only = pytest.mark.skipif(not sys.platform.startswith('linux'), reason="Linux only")
-unix_only = pytest.mark.skipif(sys.platform.startswith('win'), reason="Unix only")
+windows_only = pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows only")
+macos_only = pytest.mark.skipif(not sys.platform.startswith("darwin"), reason="macOS only")
+linux_only = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux only")
+unix_only = pytest.mark.skipif(sys.platform.startswith("win"), reason="Unix only")
 
 
 class TestPlatformDetection:
@@ -39,17 +39,17 @@ class TestPlatformDetection:
     def test_is_windows(self):
         """Test Windows detection."""
         result = is_windows()
-        assert result == sys.platform.startswith('win')
+        assert result == sys.platform.startswith("win")
 
     def test_is_macos(self):
         """Test macOS detection."""
         result = is_macos()
-        assert result == sys.platform.startswith('darwin')
+        assert result == sys.platform.startswith("darwin")
 
     def test_is_linux(self):
         """Test Linux detection."""
         result = is_linux()
-        assert result == sys.platform.startswith('linux')
+        assert result == sys.platform.startswith("linux")
 
 
 class TestPathHandling:
@@ -186,7 +186,7 @@ class TestFFmpegDetection:
 
     def test_ffmpeg_in_path(self):
         """Test ffmpeg detection via PATH environment variable."""
-        with patch('shutil.which') as mock_which:
+        with patch("shutil.which") as mock_which:
             mock_which.return_value = "/usr/bin/ffmpeg"
 
             ffmpeg_path = get_ffmpeg_path()
@@ -317,10 +317,7 @@ class TestPlatformSpecificErrors:
 # Platform-specific test configuration
 def pytest_configure(config):
     """Configure pytest with platform information."""
-    config.addinivalue_line(
-        "markers",
-        f"platform_{get_platform()}: Tests for current platform"
-    )
+    config.addinivalue_line("markers", f"platform_{get_platform()}: Tests for current platform")
 
 
 def pytest_collection_modifyitems(config, items):

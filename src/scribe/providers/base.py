@@ -171,7 +171,7 @@ class ProviderConfig:
 class AIProvider(ABC):
     """Abstract base class for AI providers."""
 
-    def __init__(self, config: ProviderConfig):
+    def __init__(self, config: ProviderConfig) -> None:
         self.config = config
 
     @abstractmethod
@@ -180,7 +180,7 @@ class AIProvider(ABC):
         messages: list[dict[str, Any]],
         max_tokens: int | None = None,
         temperature: float | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Create a chat completion.
@@ -197,12 +197,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def transcribe_audio(
-        self,
-        audio_path: str,
-        language: str | None = None,
-        **kwargs
-    ) -> str:
+    def transcribe_audio(self, audio_path: str, language: str | None = None, **kwargs: Any) -> str:
         """
         Transcribe audio file.
 
@@ -217,12 +212,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def generate_image(
-        self,
-        prompt: str,
-        size: str = "1024x1024",
-        **kwargs
-    ) -> bytes:
+    def generate_image(self, prompt: str, size: str = "1024x1024", **kwargs: Any) -> bytes:
         """
         Generate an image from a prompt.
 
@@ -237,12 +227,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def analyze_image(
-        self,
-        image_data: bytes,
-        prompt: str,
-        **kwargs
-    ) -> str:
+    def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
         """
         Analyze an image with vision capabilities.
 
@@ -262,7 +247,7 @@ class AIProvider(ABC):
         json_schema: dict[str, Any] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
-        **kwargs
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Create a chat completion with JSON output.
@@ -298,15 +283,9 @@ class AIProvider(ABC):
                     break
 
             return self.chat_completion(
-                modified_messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                **kwargs
+                modified_messages, max_tokens=max_tokens, temperature=temperature, **kwargs
             )
         else:
             return self.chat_completion(
-                messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                **kwargs
+                messages, max_tokens=max_tokens, temperature=temperature, **kwargs
             )

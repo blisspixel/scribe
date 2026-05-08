@@ -104,14 +104,14 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e .
 
-      - name: Run unit tests with coverage
+      - name: Run full test suite with coverage
         env:
           OPENAI_API_KEY: sk-test-key
           XAI_API_KEY: test-key
           GEMINI_API_KEY: test-key
           ANTHROPIC_API_KEY: test-key
         run: |
-          pytest tests/unit -m "not gpu and not slow and not requires_openai and not requires_ffmpeg and not requires_whisperx" --cov=scribe --cov-report=xml --cov-report=term --maxfail=1
+          pytest --cov=scribe --cov-report=xml --cov-report=term-missing --maxfail=1
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

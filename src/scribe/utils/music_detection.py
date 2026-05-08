@@ -209,6 +209,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 from scribe.utils.logging import get_logger
 
@@ -226,7 +227,7 @@ class MusicDetector:
     - Harmonic content (musical vs noise)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize music detector."""
         pass
 
@@ -253,7 +254,8 @@ class MusicDetector:
             logger.info(f"Analyzing music: {audio_path.name}")
 
             # Load full audio for complete analysis
-            y, sr = librosa.load(str(audio_path), sr=22050)
+            y, loaded_sr = librosa.load(str(audio_path), sr=22050)
+            sr = int(loaded_sr)
             duration = get_audio_duration(audio_path) or len(y) / sr
 
             # Extract music metadata
@@ -267,7 +269,7 @@ class MusicDetector:
                 "confidence": confidence,
                 "reason": reason,
                 "metadata": metadata,
-                "features": metadata.get("technical", {})
+                "features": metadata.get("technical", {}),
             }
 
         except ImportError:
@@ -277,15 +279,15 @@ class MusicDetector:
             logger.warning(f"Music analysis failed: {e}")
             return self._fallback_analysis(audio_path)
 
-    def _extract_metadata(self, y: np.ndarray, sr: int, duration: float) -> dict[str, Any]:
+    def _extract_metadata(self, y: NDArray[Any], sr: int, duration: float) -> dict[str, Any]:
         """Extract comprehensive music metadata."""
         import librosa
 
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
         try:
             # 1. Tempo (BPM) - use onset strength for better detection
-            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+            onset_env: NDArray[Any] = librosa.onset.onset_strength(y=y, sr=sr)
             tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
 
             # Validate tempo is reasonable
@@ -315,7 +317,7 @@ class MusicDetector:
             # 2. Key detection
             chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
             key_index = np.argmax(np.sum(chroma, axis=1))
-            keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+            keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
             metadata["key"] = keys[key_index]
         except Exception as e:
             logger.debug(f"Key detection failed: {e}")
@@ -344,7 +346,7 @@ class MusicDetector:
             metadata["percussive_ratio"] = round(float(percussive_ratio), 3)
 
             # 7. Measurable characteristics (not genre guesses)
-            characteristics = []
+            characteristics: list[str] = []
             if percussive_ratio > 0.3:
                 characteristics.append("percussion-heavy")
             if harmonic_ratio > 0.3:
@@ -356,7 +358,7 @@ class MusicDetector:
                 "sample_rate": sr,
                 "samples": len(y),
                 "rms_energy": float(np.sqrt(np.mean(y**2))),
-                "zero_crossing_rate": float(np.mean(librosa.feature.zero_crossing_rate(y)))
+                "zero_crossing_rate": float(np.mean(librosa.feature.zero_crossing_rate(y))),
             }
         except Exception as e:
             logger.debug(f"Feature extraction failed: {e}")
@@ -371,10 +373,7 @@ class MusicDetector:
         return metadata
 
     def _validate_music(
-        self,
-        y: np.ndarray,
-        sr: int,
-        metadata: dict[str, Any]
+        self, y: NDArray[Any], sr: int, metadata: dict[str, Any]
     ) -> tuple[bool, float, str]:
         """Validate that audio is actually music."""
 
@@ -417,8 +416,6 @@ class MusicDetector:
 
         return is_music, confidence, reason
 
-
-
     def _format_duration(self, seconds: float) -> str:
         """Format duration as MM:SS."""
         minutes = int(seconds // 60)
@@ -437,9 +434,9 @@ class MusicDetector:
             "reason": "Music analysis unavailable (librosa not installed)",
             "metadata": {
                 "duration": round(duration, 1) if duration else 0,
-                "duration_formatted": self._format_duration(duration) if duration else "0:00"
+                "duration_formatted": self._format_duration(duration) if duration else "0:00",
             },
-            "features": {}
+            "features": {},
         }
 
     def is_music(self, audio_path: Path) -> dict[str, Any]:
@@ -457,7 +454,7 @@ class MusicDetector:
             "is_music": result["is_music"],
             "confidence": result["confidence"],
             "reason": result["reason"],
-            "features": result.get("metadata", {})
+            "features": result.get("metadata", {}),
         }
 
 
@@ -473,4 +470,4 @@ def is_music(audio_path: Path) -> bool:
     """
     detector = MusicDetector()
     result = detector.is_music(audio_path)
-    return result["is_music"]
+    return bool(result["is_music"])

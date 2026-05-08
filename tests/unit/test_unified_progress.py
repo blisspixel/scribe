@@ -44,7 +44,7 @@ class TestUnifiedProgress:
         assert progress_with_api.phases["transcribing"][1] == 45  # 26.4% transcribing
         assert progress_with_api.phases["finishing"][1] == 100  # 54.7% finishing
 
-    @patch('scribe.utils.unified_progress.Progress')
+    @patch("scribe.utils.unified_progress.Progress")
     def test_start(self, mock_progress_class):
         """Test starting progress display."""
         mock_progress = Mock()
@@ -56,7 +56,7 @@ class TestUnifiedProgress:
         assert mock_progress.start.called
         assert mock_progress.add_task.called
 
-    @patch('scribe.utils.unified_progress.Progress')
+    @patch("scribe.utils.unified_progress.Progress")
     def test_update_phase(self, mock_progress_class):
         """Test updating progress within a phase."""
         mock_progress = Mock()
@@ -75,7 +75,7 @@ class TestUnifiedProgress:
         call_args = mock_progress.update.call_args
         assert call_args[1]["completed"] == 21.0
 
-    @patch('scribe.utils.unified_progress.Progress')
+    @patch("scribe.utils.unified_progress.Progress")
     def test_complete(self, mock_progress_class):
         """Test completing progress."""
         mock_progress = Mock()
@@ -127,8 +127,9 @@ class TestUnifiedProgressIntegration:
     def reset_console(self):
         """Reset console state between tests to avoid LiveError."""
         from scribe.utils.unified_progress import console
+
         # Ensure no live display is active
-        if hasattr(console, '_live') and console._live is not None:
+        if hasattr(console, "_live") and console._live is not None:
             with contextlib.suppress(Exception):
                 console._live.stop()
         yield

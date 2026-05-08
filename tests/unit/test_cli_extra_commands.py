@@ -1,0 +1,263 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from typer.testing import CliRunner
+
+from scribe.cli.main import app
+
+
+def _make_config(tmp_path: Path, *, api_key: str | None = None) -> Mock:
+    config = Mock()
+    config.output_folder = tmp_path
+    config.log_folder = tmp_path
+    config.default_model = "large-v3"
+    config.default_language = "en"
+    config.openai_api_key = api_key
+    config.notes_model = "gpt-5"
+    config.enable_notes = False
+    config.keep_intermediate_files = False
+    config.keep_downloads = False
+    config.download_folder = None
+    config.download_audio_only = True
+    config.download_timeout = 60
+    config.max_file_size_gb = 5.0
+    config.cookies_from_browser = None
+    config.max_recording_hours = 2.0
+    config.recording_warning_fraction = 0.9
+    return config
+
+
+def test_url_command_success(tmp_path: Path) -> None:
+    runner = CliRunner()
+    downloaded_file = tmp_path / "downloaded.mp3"
+    downloaded_file.write_text("audio")
+    transcript_path = tmp_path / "downloaded_transcript.txt"
+    transcript_path.write_text("transcript text")
+    docx_path = tmp_path / "downloaded_transcript.docx"
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    config = _make_config(tmp_path)
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch(
+            "scribe.utils.validation.validate_media_url", return_value="https://example.com/video"
+        ),
+        patch("scribe.core.downloader.URLDownloader") as mock_downloader_class,
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=docx_path),
+    ):
+        mock_downloader = Mock()
+        mock_downloader.download.return_value = SimpleNamespace(
+            file_path=downloaded_file,
+            title="Example Video",
+            duration=120.0,
+        )
+        mock_downloader_class.return_value = mock_downloader
+        result = runner.invoke(
+            app, ["url", "https://example.com/video", "--no-joke", "--no-notes", "--no-meme"]
+        )
+
+    assert result.exit_code == 0
+    assert "Transcription Complete" in result.stdout
+    transcriber.transcribe.assert_called_once()
+
+
+def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
+    runner = CliRunner()
+    first = tmp_path / "first.mp3"
+    second = tmp_path / "second.mp3"
+    first.write_text("audio1")
+    second.write_text("audio2")
+    transcript_path = tmp_path / "first_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.side_effect = [transcript_path, RuntimeError("boom")]
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", side_effect=lambda value: Path(value)),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "first.docx"),
+    ):
+        result = runner.invoke(
+            app, ["batch", str(first), str(second), "--no-joke", "--no-notes", "--no-meme"]
+        )
+
+    assert result.exit_code == 0
+    assert "Batch Summary" in result.stdout
+    assert "Failed" in result.stdout
+
+
+def test_record_command_auto_transcribes(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    recorder = Mock()
+    recorder.record.return_value = recording_path
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+    ):
+        result = runner.invoke(app, ["record", "--name", "Weekly Sync", "--no-joke", "--no-meme"])
+
+    assert result.exit_code == 0
+    assert "Recording & Transcription Complete" in result.stdout
+
+
+def test_meme_command_success_with_custom_output(tmp_path: Path) -> None:
+    runner = CliRunner()
+    transcript = tmp_path / "meeting.txt"
+    transcript.write_text("meeting transcript")
+    raw_output = tmp_path / "raw.png"
+    raw_output.write_text("image")
+    desired_output = tmp_path / "custom.png"
+    config = _make_config(tmp_path, api_key="sk-test")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.utils.meme_generator.MemeConfig.from_env") as mock_from_env,
+        patch("scribe.utils.meme_generator.generate_meeting_meme") as mock_generate,
+        patch("shutil.move") as mock_move,
+    ):
+        mock_from_env.return_value = SimpleNamespace(spice_level=5)
+        mock_generate.return_value = {
+            "final_path": raw_output,
+            "attempts": [{"attempt": 1, "score": 8.5, "path": raw_output}],
+        }
+        result = runner.invoke(app, ["meme", str(transcript), "--output", str(desired_output)])
+
+    assert result.exit_code == 0
+    assert "Meme:" in result.stdout
+    mock_move.assert_called_once()
+
+
+def test_notes_command_success(tmp_path: Path) -> None:
+    runner = CliRunner()
+    transcript = tmp_path / "meeting.txt"
+    transcript.write_text("meeting transcript")
+    notes_path = tmp_path / "meeting_notes.md"
+    notes_path.write_text("notes")
+    config = _make_config(tmp_path, api_key="sk-test")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.utils.notes_generator.NotesGenerator") as mock_generator_class,
+    ):
+        mock_generator = Mock()
+        mock_generator.generate_notes.return_value = notes_path
+        mock_generator_class.return_value = mock_generator
+        result = runner.invoke(app, ["notes", str(transcript)])
+
+    assert result.exit_code == 0
+    assert "Notes:" in result.stdout
+
+
+def test_doctor_command_reports_failures() -> None:
+    runner = CliRunner()
+    diagnostics = Mock()
+    diagnostics.run_all_checks.return_value = [
+        SimpleNamespace(name="GPU", status="pass", message="ok", fix_suggestion=None),
+        SimpleNamespace(
+            name="OBS", status="warn", message="not running", fix_suggestion="Start OBS"
+        ),
+        SimpleNamespace(name="API", status="fail", message="missing", fix_suggestion="Set key"),
+    ]
+    diagnostics.get_summary.return_value = (1, 1, 1)
+
+    with patch("scribe.utils.diagnostics.SystemDiagnostics", return_value=diagnostics):
+        result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "FAILED" in result.stdout
+    assert "WARNINGS" in result.stdout
+
+
+def test_health_check_success() -> None:
+    runner = CliRunner()
+    status = SimpleNamespace(is_healthy=True, response_time_ms=123.0, error_message=None)
+    monitor = Mock()
+    monitor.check_provider_health.return_value = status
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch("scribe.providers.health.get_health_monitor", return_value=monitor),
+    ):
+        result = runner.invoke(app, ["health", "--provider", "openai"])
+
+    assert result.exit_code == 0
+    assert "all providers healthy" in result.stdout
+
+
+def test_support_bundle_command_success(tmp_path: Path) -> None:
+    runner = CliRunner()
+    bundle_path = tmp_path / "bundle.json"
+    bundle_path.write_text("{}")
+
+    with patch("scribe.utils.support_bundle.generate_support_bundle_cli", return_value=bundle_path):
+        result = runner.invoke(app, ["support-bundle", "--output", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert "Support bundle created successfully" in result.stdout
+
+
+def test_clean_command_analyze_mode(tmp_path: Path) -> None:
+    runner = CliRunner()
+    input_file = tmp_path / "meeting.mp4"
+    input_file.write_text("video")
+
+    with (
+        patch("scribe.utils.audio.get_audio_duration", return_value=600.0),
+        patch(
+            "scribe.utils.silence_remover.analyze_silence",
+            return_value={
+                "total_silence_minutes": 3.0,
+                "total_silence_seconds": 180.0,
+                "silence_periods": 2,
+                "periods": [{"start": 60.0, "duration": 30.0}],
+            },
+        ),
+    ):
+        result = runner.invoke(app, ["clean", str(input_file), "--analyze"])
+
+    assert result.exit_code == 0
+    assert "Silence Analysis" in result.stdout
+
+
+def test_clean_command_trim_mode(tmp_path: Path) -> None:
+    runner = CliRunner()
+    input_file = tmp_path / "meeting.mp4"
+    input_file.write_text("video")
+    trimmed = tmp_path / "meeting_trimmed.mp4"
+    trimmed.write_text("trimmed")
+
+    with (
+        patch("scribe.utils.audio.get_audio_duration", side_effect=[7200.0, 3600.0]),
+        patch("scribe.utils.silence_remover.trim_file", return_value=trimmed),
+    ):
+        result = runner.invoke(app, ["clean", str(input_file), "--trim", "01:00:00"])
+
+    assert result.exit_code == 0
+    assert "Success!" in result.stdout

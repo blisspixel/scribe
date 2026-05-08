@@ -94,13 +94,9 @@ def mobile_transcribe(input_file: str) -> None:
 
         # Step 2: Transcribe with OpenAI
         console.print("[bold cyan]Step 2: Transcribing with OpenAI API...[/bold cyan]")
-        transcriber = OpenAITranscriber(
-            api_key=config.openai_api_key,
-            model=config.openai_model
-        )
+        transcriber = OpenAITranscriber(api_key=config.openai_api_key, model=config.openai_model)
         transcript_path = transcriber.transcribe(
-            mp3_path,
-            cleanup_temp=not config.keep_intermediate_files
+            mp3_path, cleanup_temp=not config.keep_intermediate_files
         )
         console.print(f"[green]Transcript created: {transcript_path.name}[/green]\n")
 
@@ -134,7 +130,7 @@ def mobile_transcribe(input_file: str) -> None:
         sys.exit(1)
 
 
-def main():
+def main() -> None:
     """Main entry point for mobile workflow."""
     if len(sys.argv) < 2:
         console.print("[yellow]Usage: python -m scribe.cli.mobile <input_file>[/yellow]")

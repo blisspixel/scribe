@@ -39,7 +39,7 @@ def get_system_info() -> dict[str, Any]:
     Returns:
         Dictionary with system details
     """
-    info = {
+    info: dict[str, Any] = {
         "timestamp": datetime.now().isoformat(),
         "scribe_version": __version__,
         "python": {
@@ -47,10 +47,10 @@ def get_system_info() -> dict[str, Any]:
             "version_info": {
                 "major": sys.version_info.major,
                 "minor": sys.version_info.minor,
-                "micro": sys.version_info.micro
+                "micro": sys.version_info.micro,
             },
             "executable": sys.executable,
-            "platform": sys.platform
+            "platform": sys.platform,
         },
         "os": {
             "system": platform.system(),
@@ -58,34 +58,39 @@ def get_system_info() -> dict[str, Any]:
             "version": platform.version(),
             "machine": platform.machine(),
             "processor": platform.processor(),
-            "architecture": platform.architecture()[0]
+            "architecture": platform.architecture()[0],
         },
         "environment": {
             "cwd": os.getcwd(),
             "home": str(Path.home()),
             "path": os.environ.get("PATH", ""),
-            "pythonpath": os.environ.get("PYTHONPATH", "")
-        }
+            "pythonpath": os.environ.get("PYTHONPATH", ""),
+        },
     }
 
     # Add GPU info if available
     try:
         import torch
-        info["gpu"] = {
+
+        gpu_info: dict[str, Any] = {
             "cuda_available": torch.cuda.is_available(),
             "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
-            "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
+            "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
         }
+        info["gpu"] = gpu_info
 
         if torch.cuda.is_available():
-            info["gpu"]["devices"] = []
+            devices: list[dict[str, Any]] = []
+            gpu_info["devices"] = devices
             for i in range(torch.cuda.device_count()):
                 props = torch.cuda.get_device_properties(i)
-                info["gpu"]["devices"].append({
-                    "name": torch.cuda.get_device_name(i),
-                    "total_memory_gb": props.total_memory / (1024**3),
-                    "compute_capability": f"{props.major}.{props.minor}"
-                })
+                devices.append(
+                    {
+                        "name": torch.cuda.get_device_name(i),
+                        "total_memory_gb": props.total_memory / (1024**3),
+                        "compute_capability": f"{props.major}.{props.minor}",
+                    }
+                )
     except ImportError:
         info["gpu"] = {"available": False, "reason": "PyTorch not installed"}
 
@@ -101,7 +106,7 @@ def get_environment_config() -> dict[str, Any]:
     Returns:
         Dictionary with configuration
     """
-    config = {}
+    config: dict[str, Any] = {}
 
     # Scribe environment variables
     scribe_vars = [
@@ -115,7 +120,7 @@ def get_environment_config() -> dict[str, Any]:
         "SCRIBE_MEME_QA_ATTEMPTS",
         "SCRIBE_HUMOR_SPICE",
         "SCRIBE_ENABLE_NOTES",
-        "SCRIBE_NOTES_MODEL"
+        "SCRIBE_NOTES_MODEL",
     ]
 
     for var in scribe_vars:
@@ -126,7 +131,9 @@ def get_environment_config() -> dict[str, Any]:
     # API key status (sanitized)
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
     if api_key:
-        config["OPENAI_API_KEY"] = f"{api_key[:10]}...{api_key[-4:]}" if len(api_key) > 14 else "[REDACTED]"
+        config["OPENAI_API_KEY"] = (
+            f"{api_key[:10]}...{api_key[-4:]}" if len(api_key) > 14 else "[REDACTED]"
+        )
     else:
         config["OPENAI_API_KEY"] = None
 
@@ -148,7 +155,7 @@ def get_diagnostics_results() -> dict[str, Any]:
         "summary": {
             "pass": sum(1 for r in results if r.status == "pass"),
             "warn": sum(1 for r in results if r.status == "warn"),
-            "fail": sum(1 for r in results if r.status == "fail")
+            "fail": sum(1 for r in results if r.status == "fail"),
         },
         "checks": [
             {
@@ -156,10 +163,10 @@ def get_diagnostics_results() -> dict[str, Any]:
                 "status": r.status,
                 "message": r.message,
                 "details": r.details,
-                "fix_suggestion": r.fix_suggestion
+                "fix_suggestion": r.fix_suggestion,
             }
             for r in results
-        ]
+        ],
     }
 
 
@@ -184,15 +191,12 @@ def get_run_history_summary(max_runs: int = 20) -> dict[str, Any]:
         "summary": {
             "total": len(history.runs),
             "recent_count": len(recent),
-            "failed_count": len(failed)
-        }
+            "failed_count": len(failed),
+        },
     }
 
 
-def create_support_bundle(
-    include_run_history: bool = True,
-    max_runs: int = 20
-) -> dict[str, Any]:
+def create_support_bundle(include_run_history: bool = True, max_runs: int = 20) -> dict[str, Any]:
     """
     Create a comprehensive support bundle.
 
@@ -210,7 +214,7 @@ def create_support_bundle(
         "created_at": datetime.now().isoformat(),
         "system_info": get_system_info(),
         "environment_config": get_environment_config(),
-        "diagnostics": get_diagnostics_results()
+        "diagnostics": get_diagnostics_results(),
     }
 
     if include_run_history:
@@ -220,11 +224,7 @@ def create_support_bundle(
     return bundle
 
 
-def save_support_bundle(
-    bundle: dict[str, Any],
-    output_path: Path,
-    pretty: bool = True
-) -> Path:
+def save_support_bundle(bundle: dict[str, Any], output_path: Path, pretty: bool = True) -> Path:
     """
     Save support bundle to a JSON file.
 
@@ -244,9 +244,10 @@ def save_support_bundle(
     if pretty:
         content = json.dumps(bundle, indent=2, ensure_ascii=False)
         from scribe.utils.safe_write import atomic_write
+
         atomic_write(output_path, content, encoding="utf-8")
     else:
-        atomic_write_json(output_path, bundle, indent=None)
+        atomic_write_json(output_path, bundle)
 
     logger.info(f"Support bundle saved to: {output_path}")
     return output_path

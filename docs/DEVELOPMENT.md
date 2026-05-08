@@ -69,6 +69,7 @@ pytest
 ```bash
 pytest --cov=scribe --cov-report=term-missing
 pytest --cov=scribe --cov-report=html
+pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
 ```
 
 ### Specific Tests

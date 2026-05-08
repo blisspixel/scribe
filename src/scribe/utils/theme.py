@@ -39,25 +39,25 @@ class ScribeTheme:
 
     # Blue accent - modern, professional, universal
     # Similar to Claude Code, GitHub, VS Code
-    ACCENT = "#6b9fff"          # Soft blue - primary accent
-    ACCENT_DIM = "#4a7fd4"      # Dimmed accent for borders
+    ACCENT = "#6b9fff"  # Soft blue - primary accent
+    ACCENT_DIM = "#4a7fd4"  # Dimmed accent for borders
 
     # ═══════════════════════════════════════════════════════════════════════
     # SEMANTIC COLORS - Meaning-based, used only when necessary
     # ═══════════════════════════════════════════════════════════════════════
 
-    SUCCESS = "#6bc46b"         # Green - success states only
-    WARNING = "#d4a84b"         # Amber - warnings only
-    ERROR = "#e05252"           # Red - errors only
+    SUCCESS = "#6bc46b"  # Green - success states only
+    WARNING = "#d4a84b"  # Amber - warnings only
+    ERROR = "#e05252"  # Red - errors only
 
     # ═══════════════════════════════════════════════════════════════════════
     # GRAY SCALE - Primary visual hierarchy
     # ═══════════════════════════════════════════════════════════════════════
 
     # Text hierarchy (most important visual system)
-    TEXT_PRIMARY = "#e8e8e8"    # Primary text - high contrast
+    TEXT_PRIMARY = "#e8e8e8"  # Primary text - high contrast
     TEXT_SECONDARY = "#a0a0a0"  # Secondary text - labels, descriptions
-    TEXT_MUTED = "#606060"      # Muted text - hints, timestamps
+    TEXT_MUTED = "#606060"  # Muted text - hints, timestamps
 
     # ═══════════════════════════════════════════════════════════════════════
     # LEGACY ALIASES - For backward compatibility
@@ -87,20 +87,22 @@ class ScribeTheme:
     @classmethod
     def get_rich_theme(cls) -> Theme:
         """Get a Rich Theme object for use with Rich console."""
-        return Theme({
-            "primary": Style(color=cls.ACCENT),
-            "primary.bright": Style(color=cls.ACCENT),
-            "primary.dim": Style(color=cls.ACCENT_DIM),
-            "secondary": Style(color=cls.TEXT_SECONDARY),
-            "success": Style(color=cls.SUCCESS),
-            "warning": Style(color=cls.WARNING),
-            "error": Style(color=cls.ERROR),
-            "info": Style(color=cls.ACCENT),
-            "text": Style(color=cls.TEXT_PRIMARY),
-            "text.secondary": Style(color=cls.TEXT_SECONDARY),
-            "text.muted": Style(color=cls.TEXT_MUTED),
-            "dim": Style(color=cls.TEXT_MUTED),
-        })
+        return Theme(
+            {
+                "primary": Style(color=cls.ACCENT),
+                "primary.bright": Style(color=cls.ACCENT),
+                "primary.dim": Style(color=cls.ACCENT_DIM),
+                "secondary": Style(color=cls.TEXT_SECONDARY),
+                "success": Style(color=cls.SUCCESS),
+                "warning": Style(color=cls.WARNING),
+                "error": Style(color=cls.ERROR),
+                "info": Style(color=cls.ACCENT),
+                "text": Style(color=cls.TEXT_PRIMARY),
+                "text.secondary": Style(color=cls.TEXT_SECONDARY),
+                "text.muted": Style(color=cls.TEXT_MUTED),
+                "dim": Style(color=cls.TEXT_MUTED),
+            }
+        )
 
 
 class Styles:

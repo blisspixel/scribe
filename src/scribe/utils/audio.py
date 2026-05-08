@@ -263,6 +263,7 @@ import json
 import subprocess
 import wave
 from pathlib import Path
+from typing import Any
 
 from scribe.exceptions import AudioFormatError
 from scribe.utils.platform import get_ffprobe_path
@@ -311,6 +312,7 @@ def _correct_suspicious_wav_duration(path: Path, duration: float) -> float:
         return duration
 
     from scribe.utils.logging import get_logger
+
     logger = get_logger(__name__)
 
     logger.debug(
@@ -381,11 +383,13 @@ def _get_duration_wave(path: Path) -> float | None:
                 duration = frames / float(rate)
                 # Debug log for troubleshooting
                 from scribe.utils.logging import get_logger
+
                 logger = get_logger(__name__)
                 logger.debug(f"WAV duration: {duration:.1f}s (frames={frames}, rate={rate})")
                 return duration
     except Exception as e:
         from scribe.utils.logging import get_logger
+
         logger = get_logger(__name__)
         logger.debug(f"Failed to read WAV duration: {e}")
         pass
@@ -397,6 +401,7 @@ def _get_duration_torchaudio(path: Path) -> float | None:
     """Get duration using torchaudio metadata."""
     try:
         import torchaudio
+
         info = torchaudio.info(str(path))
         if hasattr(info, "sample_rate") and hasattr(info, "num_frames"):
             if info.sample_rate > 0 and info.num_frames > 0:
@@ -417,15 +422,17 @@ def _get_duration_ffprobe(path: Path) -> float | None:
         result = subprocess.run(
             [
                 str(ffprobe_path),
-                "-v", "error",
-                "-print_format", "json",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
                 "-show_format",
                 "-show_streams",
-                str(path)
+                str(path),
             ],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
 
         if result.returncode != 0:
@@ -450,9 +457,7 @@ def _get_duration_ffprobe(path: Path) -> float | None:
 
 
 def detect_silence_periods(
-    audio_path: Path,
-    silence_threshold: float = -40.0,
-    min_silence_duration: float = 30.0
+    audio_path: Path, silence_threshold: float = -40.0, min_silence_duration: float = 30.0
 ) -> list[tuple[float, float]]:
     """
     Analyze audio file to detect significant periods of silence.
@@ -481,16 +486,16 @@ def detect_silence_periods(
 
         # Calculate RMS energy in sliding windows
         window_size = int(sample_rate * 0.5)  # 0.5 second windows
-        hop_size = int(sample_rate * 0.1)     # 0.1 second hops
+        hop_size = int(sample_rate * 0.1)  # 0.1 second hops
 
         silence_periods = []
         current_silence_start = None
 
         for i in range(0, waveform.shape[1] - window_size, hop_size):
-            window = waveform[0, i:i + window_size]
+            window = waveform[0, i : i + window_size]
 
             # Calculate RMS and convert to dB
-            rms = torch.sqrt(torch.mean(window ** 2))
+            rms = torch.sqrt(torch.mean(window**2))
             db = 20 * torch.log10(rms + 1e-10)  # Add small value to avoid log(0)
 
             current_time = i / sample_rate
@@ -531,28 +536,20 @@ def validate_audio_file(path: Path) -> None:
         AudioFormatError: If file has issues
     """
     if not path.exists():
-        raise AudioFormatError(
-            f"Audio file does not exist: {path}",
-            context={"path": str(path)}
-        )
+        raise AudioFormatError(f"Audio file does not exist: {path}", context={"path": str(path)})
 
     if not path.is_file():
-        raise AudioFormatError(
-            f"Path is not a file: {path}",
-            context={"path": str(path)}
-        )
+        raise AudioFormatError(f"Path is not a file: {path}", context={"path": str(path)})
 
     # Check file size
     file_size = path.stat().st_size
     if file_size == 0:
-        raise AudioFormatError(
-            f"Audio file is empty: {path}",
-            context={"path": str(path)}
-        )
+        raise AudioFormatError(f"Audio file is empty: {path}", context={"path": str(path)})
 
     # Warn if very large (> 2GB)
     if file_size > 2 * 1024 * 1024 * 1024:
         import logging
+
         logging.warning(
             f"Large file size ({file_size / (1024**3):.2f} GB). "
             f"Processing may take a while: {path}"
@@ -566,8 +563,8 @@ def validate_audio_file(path: Path) -> None:
             context={
                 "path": str(path),
                 "extension": path.suffix,
-                "supported": ", ".join(sorted(valid_extensions))
-            }
+                "supported": ", ".join(sorted(valid_extensions)),
+            },
         )
 
     # Try to read first few bytes
@@ -577,14 +574,13 @@ def validate_audio_file(path: Path) -> None:
             if len(header) < 100:
                 raise AudioFormatError(
                     f"Audio file appears corrupted (too small): {path}",
-                    context={"path": str(path), "header_size": len(header)}
+                    context={"path": str(path), "header_size": len(header)},
                 )
     except AudioFormatError:
         raise
     except Exception as e:
         raise AudioFormatError(
-            f"Cannot read audio file: {path}",
-            context={"path": str(path), "error": str(e)}
+            f"Cannot read audio file: {path}", context={"path": str(path), "error": str(e)}
         )
 
 
@@ -625,7 +621,7 @@ def format_duration(seconds: float) -> str:
         return f"{minutes}m"
 
 
-def get_audio_info(path: Path) -> dict:
+def get_audio_info(path: Path) -> dict[str, Any]:
     """
     Get comprehensive audio file information.
 
@@ -662,6 +658,7 @@ def get_audio_info(path: Path) -> dict:
     # Try to get sample rate and channels
     try:
         import torchaudio
+
         audio_info = torchaudio.info(str(path))
         if hasattr(audio_info, "sample_rate"):
             info["sample_rate"] = audio_info.sample_rate

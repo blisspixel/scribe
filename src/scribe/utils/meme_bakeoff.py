@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_meme_bakeoff(
-    transcript: str,
-    config: MemeConfig,
-    providers: list[str] | None = None
+    transcript: str, config: MemeConfig, providers: list[str] | None = None
 ) -> dict[str, Any]:
     """
     Run a meme concept bake-off across multiple providers.
@@ -32,19 +30,31 @@ def run_meme_bakeoff(
     """
     # Default to all available providers
     if providers is None:
-        providers = ['xai', 'openai', 'gemini']
+        providers = ["xai", "openai", "gemini"]
 
     # Filter to only providers with API keys
     import os
+
     available_providers = []
     for provider_name in providers:
-        if provider_name == 'xai' and os.getenv('XAI_API_KEY') or provider_name == 'openai' and os.getenv('OPENAI_API_KEY') or provider_name == 'gemini' and os.getenv('GEMINI_API_KEY') or provider_name == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+        if (
+            provider_name == "xai"
+            and os.getenv("XAI_API_KEY")
+            or provider_name == "openai"
+            and os.getenv("OPENAI_API_KEY")
+            or provider_name == "gemini"
+            and os.getenv("GEMINI_API_KEY")
+            or provider_name == "anthropic"
+            and os.getenv("ANTHROPIC_API_KEY")
+        ):
             available_providers.append(provider_name)
 
     if not available_providers:
         raise ValueError("No providers available with API keys")
 
-    logger.info(f"🎭 Starting meme bake-off with {len(available_providers)} providers: {', '.join(available_providers)}")
+    logger.info(
+        f"🎭 Starting meme bake-off with {len(available_providers)} providers: {', '.join(available_providers)}"
+    )
 
     # Collect concepts from all providers
     concepts = []
@@ -53,19 +63,25 @@ def run_meme_bakeoff(
         logger.info(f"  → Getting concept from {provider_name.upper()}...")
 
         try:
-            provider = get_provider(feature='meme', provider_name=provider_name)
-            concept = _analyze_transcript_for_meme(provider, transcript, config, show_reasoning=False)
+            provider = get_provider(feature="meme", provider_name=provider_name)
+            concept = _analyze_transcript_for_meme(
+                provider, transcript, config, show_reasoning=False
+            )
 
             if concept:
-                concepts.append({
-                    'provider': provider_name,
-                    'concept': concept,
-                    'top_text': concept.get('top_text', ''),
-                    'bottom_text': concept.get('bottom_text', ''),
-                    'template': concept.get('template', ''),
-                    'judgment': concept.get('judgment', ''),
-                })
-                logger.info(f"    ✓ {provider_name}: \"{concept.get('top_text')}\" / \"{concept.get('bottom_text')}\"")
+                concepts.append(
+                    {
+                        "provider": provider_name,
+                        "concept": concept,
+                        "top_text": concept.get("top_text", ""),
+                        "bottom_text": concept.get("bottom_text", ""),
+                        "template": concept.get("template", ""),
+                        "judgment": concept.get("judgment", ""),
+                    }
+                )
+                logger.info(
+                    f"    ✓ {provider_name}: \"{concept.get('top_text')}\" / \"{concept.get('bottom_text')}\""
+                )
             else:
                 logger.warning(f"    ✗ {provider_name} returned no concept")
 
@@ -79,8 +95,8 @@ def run_meme_bakeoff(
     logger.info(f"\n🏆 Judging {len(concepts)} concepts...")
 
     # Use OpenAI for judging if available (most reliable), otherwise use first available
-    judge_provider_name = 'openai' if 'openai' in available_providers else available_providers[0]
-    judge_provider = get_provider(feature='meme', provider_name=judge_provider_name)
+    judge_provider_name = "openai" if "openai" in available_providers else available_providers[0]
+    judge_provider = get_provider(feature="meme", provider_name=judge_provider_name)
 
     # Build judging prompt
     concepts_text = ""
@@ -121,8 +137,11 @@ Respond in JSON:
 """
 
     messages = [
-        {"role": "system", "content": "You are an expert meme judge. Pick the funniest concept. Respond with valid JSON only."},
-        {"role": "user", "content": judging_prompt}
+        {
+            "role": "system",
+            "content": "You are an expert meme judge. Pick the funniest concept. Respond with valid JSON only.",
+        },
+        {"role": "user", "content": judging_prompt},
     ]
 
     try:
@@ -132,33 +151,34 @@ Respond in JSON:
         # Extract JSON
         import json
         import re
-        json_match = re.search(r'\{.*\}', result, re.DOTALL)
+
+        json_match = re.search(r"\{.*\}", result, re.DOTALL)
         if json_match:
             result = json_match.group()
 
         judgment = json.loads(result)
 
-        winner_idx = int(judgment['winner']) - 1
+        winner_idx = int(judgment["winner"]) - 1
         winner_concept = concepts[winner_idx]
 
         logger.info(f"\n🎉 WINNER: {winner_concept['provider'].upper()}")
         logger.info(f"   Reasoning: {judgment['reasoning']}")
 
         return {
-            'winner': winner_concept['provider'],
-            'concept': winner_concept['concept'],
-            'reasoning': judgment['reasoning'],
-            'all_concepts': concepts,
-            'scores': judgment.get('scores', {})
+            "winner": winner_concept["provider"],
+            "concept": winner_concept["concept"],
+            "reasoning": judgment["reasoning"],
+            "all_concepts": concepts,
+            "scores": judgment.get("scores", {}),
         }
 
     except Exception as e:
         logger.warning(f"Judging failed: {e}, defaulting to first concept")
         # Fallback: just use the first concept
         return {
-            'winner': concepts[0]['provider'],
-            'concept': concepts[0]['concept'],
-            'reasoning': 'Judging failed, using first concept',
-            'all_concepts': concepts,
-            'scores': {}
+            "winner": concepts[0]["provider"],
+            "concept": concepts[0]["concept"],
+            "reasoning": "Judging failed, using first concept",
+            "all_concepts": concepts,
+            "scores": {},
         }

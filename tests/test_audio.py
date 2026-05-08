@@ -18,11 +18,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 init(autoreset=True)
 
+
 def print_header(title: str):
     """Print a formatted test section header."""
     print(f"\n{Fore.CYAN}{'='*60}")
     print(f"{Fore.CYAN}{title:^60}")
     print(f"{Fore.CYAN}{'='*60}")
+
 
 def print_test(name: str, status: str, details: str = ""):
     """Print formatted test result."""
@@ -30,6 +32,7 @@ def print_test(name: str, status: str, details: str = ""):
     print(f"{Fore.WHITE}{name:<40} {status_color}[{status}]{Fore.RESET}")
     if details:
         print(f"{Fore.CYAN}   Details: {details}")
+
 
 def create_test_wav_file(duration_seconds: float = 1.0, sample_rate: int = 44100) -> str:
     """Create a test WAV file for testing."""
@@ -47,13 +50,14 @@ def create_test_wav_file(duration_seconds: float = 1.0, sample_rate: int = 44100
     temp_file.close()
 
     # Write WAV file
-    with wave.open(temp_path, 'wb') as wav_file:
+    with wave.open(temp_path, "wb") as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(audio_data.tobytes())
 
     return temp_path
+
 
 def test_audio_file_handling():
     """Test audio file reading and validation."""
@@ -76,14 +80,16 @@ def test_audio_file_handling():
                 test_files.append(test_file)
 
                 # Test file properties
-                with wave.open(test_file, 'rb') as wav:
+                with wave.open(test_file, "rb") as wav:
                     channels = wav.getnchannels()
                     sample_width = wav.getsampwidth()
                     framerate = wav.getframerate()
                     frames = wav.getnframes()
                     duration_actual = frames / framerate
 
-                details = f"{channels}ch, {sample_width*8}bit, {framerate}Hz, {duration_actual:.1f}s"
+                details = (
+                    f"{channels}ch, {sample_width*8}bit, {framerate}Hz, {duration_actual:.1f}s"
+                )
                 print_test(f"Create {name}", "PASS", details)
 
             except Exception as e:
@@ -98,25 +104,36 @@ def test_audio_file_handling():
             with contextlib.suppress(BaseException):
                 os.unlink(test_file)
 
+
 def test_audio_device_detection():
     """Test audio device detection and configuration."""
     print_header("AUDIO DEVICE TESTS")
 
     try:
         # Test Windows audio device detection
-        if os.name == 'nt':
+        if os.name == "nt":
             try:
                 import subprocess
+
                 result = subprocess.run(
-                    ['powershell', '-Command',
-                     'Get-AudioDevice -PlaybackCommunication | Select-Object Name, Default'],
-                    capture_output=True, text=True, timeout=10
+                    [
+                        "powershell",
+                        "-Command",
+                        "Get-AudioDevice -PlaybackCommunication | Select-Object Name, Default",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
 
                 if result.returncode == 0 and result.stdout:
-                    lines = result.stdout.strip().split('\n')
-                    devices_found = len([line for line in lines if line.strip() and 'Name' not in line])
-                    print_test("Audio device detection", "PASS", f"{devices_found} playback devices found")
+                    lines = result.stdout.strip().split("\n")
+                    devices_found = len(
+                        [line for line in lines if line.strip() and "Name" not in line]
+                    )
+                    print_test(
+                        "Audio device detection", "PASS", f"{devices_found} playback devices found"
+                    )
 
                     # Check for expected device
                     expected_device = os.getenv("EXPECTED_AUDIO_OUTPUT", "")
@@ -124,7 +141,9 @@ def test_audio_device_detection():
                         if expected_device in result.stdout:
                             print_test("Expected audio device", "PASS", f"Found: {expected_device}")
                         else:
-                            print_test("Expected audio device", "WARN", f"Not found: {expected_device}")
+                            print_test(
+                                "Expected audio device", "WARN", f"Not found: {expected_device}"
+                            )
                 else:
                     print_test("Audio device detection", "FAIL", "PowerShell command failed")
 
@@ -139,6 +158,7 @@ def test_audio_device_detection():
     except Exception as e:
         print_test("Audio device detection", "FAIL", str(e))
         return False
+
 
 def test_path_normalization():
     """Test path normalization with various input formats."""
@@ -157,7 +177,7 @@ def test_path_normalization():
             ("Single quoted", f"'{temp_path}'"),
             ("Spaces around quotes", f' "{temp_path}" '),
             ("Mixed quotes", f"'{temp_path}\""),  # Edge case
-            ("Forward slashes", temp_path.replace('\\', '/')),
+            ("Forward slashes", temp_path.replace("\\", "/")),
             ("Extra spaces", f"  {temp_path}  "),
         ]
 
@@ -185,6 +205,7 @@ def test_path_normalization():
         with contextlib.suppress(BaseException):
             os.unlink(temp_path)
 
+
 def test_audio_format_validation():
     """Test audio format validation and error handling."""
     print_header("AUDIO FORMAT VALIDATION TESTS")
@@ -194,7 +215,7 @@ def test_audio_format_validation():
         valid_wav = create_test_wav_file(2.0)
 
         try:
-            with wave.open(valid_wav, 'rb'):
+            with wave.open(valid_wav, "rb"):
                 print_test("Valid WAV file", "PASS", "Opened successfully")
         except Exception as e:
             print_test("Valid WAV file", "FAIL", str(e))
@@ -210,7 +231,7 @@ def test_audio_format_validation():
 
         try:
             try:
-                with wave.open(invalid_path, 'rb'):
+                with wave.open(invalid_path, "rb"):
                     print_test("Invalid WAV handling", "FAIL", "Should have failed")
                     return False
             except wave.Error:
@@ -223,19 +244,22 @@ def test_audio_format_validation():
         # Test non-existent file
         non_existent = "this_file_does_not_exist.wav"
         try:
-            with wave.open(non_existent, 'rb'):
+            with wave.open(non_existent, "rb"):
                 print_test("Non-existent file handling", "FAIL", "Should have failed")
                 return False
         except FileNotFoundError:
             print_test("Non-existent file handling", "PASS", "Correctly handled missing file")
         except Exception as e:
-            print_test("Non-existent file handling", "PASS", f"Correctly failed: {type(e).__name__}")
+            print_test(
+                "Non-existent file handling", "PASS", f"Correctly failed: {type(e).__name__}"
+            )
 
         return True
 
     except Exception as e:
         print_test("Audio format validation", "FAIL", str(e))
         return False
+
 
 def test_file_size_handling():
     """Test handling of various file sizes."""
@@ -261,13 +285,17 @@ def test_file_size_handling():
                 size_mb = file_size / (1024 * 1024)
 
                 # Validate with wave module
-                with wave.open(test_file, 'rb') as wav:
+                with wave.open(test_file, "rb") as wav:
                     actual_duration = wav.getnframes() / wav.getframerate()
 
                 if abs(actual_duration - duration) < 0.1:  # Within 100ms
                     print_test(test_name, "PASS", f"{size_mb:.2f} MB, {actual_duration:.1f}s")
                 else:
-                    print_test(test_name, "FAIL", f"Duration mismatch: {actual_duration:.1f}s vs {duration:.1f}s")
+                    print_test(
+                        test_name,
+                        "FAIL",
+                        f"Duration mismatch: {actual_duration:.1f}s vs {duration:.1f}s",
+                    )
                     all_passed = False
 
                 os.unlink(test_file)
@@ -281,6 +309,7 @@ def test_file_size_handling():
     except Exception as e:
         print_test("File size handling", "FAIL", str(e))
         return False
+
 
 def main():
     """Run all audio tests."""
@@ -319,6 +348,7 @@ def main():
     else:
         print(f"\n{Fore.RED}{Style.BRIGHT}Some audio tests failed.")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

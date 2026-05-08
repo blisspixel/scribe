@@ -5,6 +5,7 @@ Provider health check utilities.
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class HealthStatus:
 class ProviderHealthMonitor:
     """Monitor health status of AI providers."""
 
-    def __init__(self, check_interval_seconds: int = 300):
+    def __init__(self, check_interval_seconds: int = 300) -> None:
         """
         Initialize health monitor.
 
@@ -36,10 +37,7 @@ class ProviderHealthMonitor:
         self.max_consecutive_failures = 3
 
     def check_provider_health(
-        self,
-        provider_name: str,
-        api_key: str,
-        force: bool = False
+        self, provider_name: str, api_key: str, force: bool = False
     ) -> HealthStatus:
         """
         Check health of a provider.
@@ -114,11 +112,7 @@ class ProviderHealthMonitor:
         self.health_status[provider_name] = status
         return status
 
-    def get_healthy_providers(
-        self,
-        feature: str,
-        api_keys: dict[str, str]
-    ) -> list[str]:
+    def get_healthy_providers(self, feature: str, api_keys: dict[str, str]) -> list[str]:
         """
         Get list of healthy providers for a feature.
 
@@ -157,7 +151,7 @@ class ProviderHealthMonitor:
 
         return healthy
 
-    def _check_openai(self, api_key: str):
+    def _check_openai(self, api_key: str) -> None:
         """Check OpenAI API health."""
         from openai import OpenAI
 
@@ -176,18 +170,14 @@ class ProviderHealthMonitor:
         if not response.choices:
             raise ValueError("No response from OpenAI")
 
-    def _check_xai(self, api_key: str):
+    def _check_xai(self, api_key: str) -> None:
         """Check XAI API health."""
         from openai import OpenAI
 
         from scribe.providers.factory import _get_default_model
 
         model = _get_default_model("xai", "joke")
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://api.x.ai/v1",
-            timeout=10
-        )
+        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1", timeout=10)
 
         # Simple completion test
         response = client.chat.completions.create(
@@ -199,7 +189,7 @@ class ProviderHealthMonitor:
         if not response.choices:
             raise ValueError("No response from XAI")
 
-    def _check_anthropic(self, api_key: str):
+    def _check_anthropic(self, api_key: str) -> None:
         """Check Anthropic API health."""
         try:
             import anthropic
@@ -207,6 +197,7 @@ class ProviderHealthMonitor:
             raise ImportError("anthropic package not installed")
 
         from scribe.providers.factory import _get_default_model
+
         model = _get_default_model("anthropic", "joke")
 
         client = anthropic.Anthropic(api_key=api_key, timeout=10)
@@ -221,7 +212,7 @@ class ProviderHealthMonitor:
         if not response.content:
             raise ValueError("No response from Anthropic")
 
-    def _check_gemini(self, api_key: str):
+    def _check_gemini(self, api_key: str) -> None:
         """Check Gemini API health."""
         try:
             from google import genai
@@ -231,19 +222,22 @@ class ProviderHealthMonitor:
 
         # Get the default model from factory
         from scribe.providers.factory import _get_default_model
+
         model = _get_default_model("gemini", "joke")
 
         client = genai.Client(api_key=api_key)
 
         # Test with actual model we use
         # Use higher max_output_tokens because Gemini 3 thinking uses tokens
+        thinking_config_factory = cast(Any, types.ThinkingConfig)
+        config_factory = cast(Any, types.GenerateContentConfig)
         response = client.models.generate_content(
             model=model,
             contents="test",
-            config=types.GenerateContentConfig(
+            config=config_factory(
                 max_output_tokens=200,
-                thinking_config=types.ThinkingConfig(thinking_level="low")
-            )
+                thinking_config=thinking_config_factory(thinking_level="low"),
+            ),
         )
 
         if not response.text:

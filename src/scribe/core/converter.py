@@ -10,8 +10,16 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from scribe.exceptions import AudioFormatError, ProcessError
 from scribe.utils.audio import get_audio_duration
@@ -30,13 +38,13 @@ class Converter:
     optimized formats for transcription using ffmpeg.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize converter and validate ffmpeg availability."""
         self.ffmpeg_path = get_ffmpeg_path()
         if not self.ffmpeg_path:
             raise ProcessError(
                 "ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.",
-                context={"ffmpeg_path": None}
+                context={"ffmpeg_path": None},
             )
 
         logger.debug(f"Using ffmpeg: {self.ffmpeg_path}")
@@ -46,8 +54,8 @@ class Converter:
         input_file: Path,
         duration: float | None,
         show_progress: bool,
-        progress_callback: Callable[[float], None] | None
-    ) -> dict:
+        progress_callback: Callable[[float], None] | None,
+    ) -> dict[str, str]:
         """
         Analyze audio for optimal loudness normalization parameters.
 
@@ -58,13 +66,18 @@ class Converter:
         analyze_command = [
             str(self.ffmpeg_path),
             "-hide_banner",
-            "-loglevel", "info",
-            "-i", str(input_file),
+            "-loglevel",
+            "info",
+            "-i",
+            str(input_file),
             "-vn",
-            "-map", "0:a:0?",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
-            "-f", "null",
-            "-"
+            "-map",
+            "0:a:0?",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+            "-f",
+            "null",
+            "-",
         ]
 
         if show_progress:
@@ -73,7 +86,7 @@ class Converter:
                 TextColumn("[bold blue]Analyzing audio for optimal normalization..."),
                 TimeElapsedColumn(),
                 console=console,
-                transient=False
+                transient=False,
             )
             progress_ctx.__enter__()
             task = progress_ctx.add_task("Analyzing", total=None)
@@ -84,7 +97,7 @@ class Converter:
             "measured_i": "-16",
             "measured_tp": "-1.5",
             "measured_lra": "11",
-            "measured_thresh": "-27"
+            "measured_thresh": "-27",
         }
 
         try:
@@ -95,7 +108,7 @@ class Converter:
                 analyze_command,
                 capture_output=True,
                 text=True,
-                timeout=max(60, duration * 2) if duration else 300
+                timeout=max(60, duration * 2) if duration else 300,
             )
 
             if progress_callback:
@@ -108,7 +121,7 @@ class Converter:
             json_match = re.search(
                 r'\{[^}]*"input_i"[^}]*"input_tp"[^}]*"input_lra"[^}]*"input_thresh"[^}]*\}',
                 result.stderr,
-                re.DOTALL
+                re.DOTALL,
             )
 
             if json_match:
@@ -118,9 +131,11 @@ class Converter:
                         "measured_i": loudnorm_data.get("input_i", "-16"),
                         "measured_tp": loudnorm_data.get("input_tp", "-1.5"),
                         "measured_lra": loudnorm_data.get("input_lra", "11"),
-                        "measured_thresh": loudnorm_data.get("input_thresh", "-27")
+                        "measured_thresh": loudnorm_data.get("input_thresh", "-27"),
                     }
-                    logger.info(f"Audio analysis complete: I={measured['measured_i']}, TP={measured['measured_tp']}")
+                    logger.info(
+                        f"Audio analysis complete: I={measured['measured_i']}, TP={measured['measured_tp']}"
+                    )
                     if show_progress and progress_ctx:
                         progress_ctx.update(task, description="Analysis complete")
                     return measured
@@ -148,19 +163,24 @@ class Converter:
         output_file: Path,
         sample_rate: int,
         channels: int,
-        loudness_params: dict
-    ) -> list:
+        loudness_params: dict[str, str],
+    ) -> list[str]:
         """Build ffmpeg command for audio conversion with normalization."""
         return [
             str(self.ffmpeg_path),
             "-hide_banner",
-            "-loglevel", "error",
-            "-threads", "0",
+            "-loglevel",
+            "error",
+            "-threads",
+            "0",
             "-y",
-            "-i", str(input_file),
+            "-i",
+            str(input_file),
             "-vn",
-            "-map", "0:a:0?",
-            "-af", (
+            "-map",
+            "0:a:0?",
+            "-af",
+            (
                 f"loudnorm=I=-16:TP=-1.5:LRA=11:"
                 f"measured_I={loudness_params['measured_i']}:"
                 f"measured_TP={loudness_params['measured_tp']}:"
@@ -169,19 +189,22 @@ class Converter:
                 f"linear=true,acompressor=threshold=-18dB:ratio=4:attack=5:release=50,"
                 f"alimiter=limit=0.95"
             ),
-            "-ac", str(channels),
-            "-ar", str(sample_rate),
-            "-c:a", "pcm_s16le",
-            str(output_file)
+            "-ac",
+            str(channels),
+            "-ar",
+            str(sample_rate),
+            "-c:a",
+            "pcm_s16le",
+            str(output_file),
         ]
 
     def _execute_conversion_with_progress(
         self,
-        command: list,
+        command: list[str],
         input_file: Path,
         duration: float | None,
         show_progress: bool,
-        progress_callback: Callable[[float], None] | None
+        progress_callback: Callable[[float], None] | None,
     ) -> None:
         """Execute ffmpeg conversion with progress monitoring."""
         start_time = time.time()
@@ -196,10 +219,12 @@ class Converter:
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 console=console,
-                transient=False
+                transient=False,
             )
             progress_ctx.__enter__()
-            task = progress_ctx.add_task("Converting to WAV (with audio normalization)", total=100)
+            task: TaskID | None = progress_ctx.add_task(
+                "Converting to WAV (with audio normalization)", total=100
+            )
         else:
             progress_ctx = None
             task = None
@@ -211,7 +236,7 @@ class Converter:
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
             )
 
             last_update = time.time()
@@ -224,7 +249,7 @@ class Converter:
                     process.kill()
                     raise ProcessError(
                         f"Conversion timed out after {timeout_seconds}s",
-                        context={"timeout": timeout_seconds, "input_file": str(input_file)}
+                        context={"timeout": timeout_seconds, "input_file": str(input_file)},
                     )
 
                 if current_time - last_update > 1.0:
@@ -233,7 +258,7 @@ class Converter:
                         progress_ratio = 0.50 + (conversion_progress * 0.50)
                         overall_progress = progress_ratio * 100
 
-                        if show_progress and progress_ctx:
+                        if show_progress and progress_ctx is not None and task is not None:
                             progress_ctx.update(task, completed=overall_progress)
                         if progress_callback:
                             progress_callback(progress_ratio)
@@ -252,14 +277,17 @@ class Converter:
                 stdout, stderr = process.communicate()
                 raise ProcessError("Process hung during final communication")
 
-            if show_progress and progress_ctx:
+            if show_progress and progress_ctx is not None and task is not None:
                 progress_ctx.update(task, description="Converted to WAV", completed=100)
                 progress_ctx.__exit__(None, None, None)
 
             if process.returncode != 0:
                 raise ProcessError(
                     f"ffmpeg conversion failed with return code {process.returncode}",
-                    context={"return_code": process.returncode, "stderr": stderr[-500:] if stderr else None}
+                    context={
+                        "return_code": process.returncode,
+                        "stderr": stderr[-500:] if stderr else None,
+                    },
                 )
 
         except ProcessError:
@@ -274,7 +302,7 @@ class Converter:
         sample_rate: int = 16000,
         channels: int = 1,
         show_progress: bool = True,
-        progress_callback: Callable[[float], None] | None = None
+        progress_callback: Callable[[float], None] | None = None,
     ) -> Path:
         """
         Convert audio/video to optimized WAV for transcription.
@@ -300,8 +328,7 @@ class Converter:
         # Validate input
         if not input_file.exists():
             raise AudioFormatError(
-                f"Input file does not exist: {input_file}",
-                context={"path": str(input_file)}
+                f"Input file does not exist: {input_file}", context={"path": str(input_file)}
             )
 
         # Generate output filename if not provided
@@ -345,7 +372,7 @@ class Converter:
             if not output_file.exists():
                 raise ProcessError(
                     "Conversion completed but output file not found",
-                    context={"output_file": str(output_file)}
+                    context={"output_file": str(output_file)},
                 )
 
             verify_file_content(output_file, min_size=1024)
@@ -363,17 +390,16 @@ class Converter:
             raise
         except Exception as e:
             raise ProcessError(
-                f"Conversion failed: {e}",
-                context={"input": str(input_file), "error": str(e)}
+                f"Conversion failed: {e}", context={"input": str(input_file), "error": str(e)}
             )
 
     def _execute_simple_conversion(
         self,
-        command: list,
+        command: list[str],
         input_file: Path,
         output_file: Path,
         duration: float | None,
-        format_name: str
+        format_name: str,
     ) -> None:
         """Execute simple ffmpeg conversion with spinner progress."""
         start_time = time.time()
@@ -384,7 +410,7 @@ class Converter:
             TextColumn(f"[bold blue]Converting to {format_name}..."),
             TimeElapsedColumn(),
             console=console,
-            transient=False
+            transient=False,
         ) as progress:
             task = progress.add_task("Converting", total=None)
 
@@ -393,7 +419,7 @@ class Converter:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
             )
 
             while process.poll() is None:
@@ -403,7 +429,7 @@ class Converter:
                     process.kill()
                     raise ProcessError(
                         f"{format_name} conversion timed out after {timeout_seconds}s",
-                        context={"timeout": timeout_seconds, "input_file": str(input_file)}
+                        context={"timeout": timeout_seconds, "input_file": str(input_file)},
                     )
 
                 time.sleep(0.1)
@@ -416,7 +442,7 @@ class Converter:
                 stdout, stderr = process.communicate()
                 raise ProcessError(
                     f"{format_name} process hung during final communication",
-                    context={"input_file": str(input_file)}
+                    context={"input_file": str(input_file)},
                 )
 
             if process.returncode != 0:
@@ -424,15 +450,12 @@ class Converter:
                     f"{format_name} conversion failed with return code {process.returncode}",
                     context={
                         "return_code": process.returncode,
-                        "stderr": stderr[-500:] if stderr else None
-                    }
+                        "stderr": stderr[-500:] if stderr else None,
+                    },
                 )
 
     def convert_to_mp3(
-        self,
-        input_file: Path,
-        output_file: Path | None = None,
-        bitrate: int = 48
+        self, input_file: Path, output_file: Path | None = None, bitrate: int = 48
     ) -> Path:
         """
         Convert audio to optimized MP3 for OpenAI API.
@@ -453,8 +476,7 @@ class Converter:
         """
         if not input_file.exists():
             raise AudioFormatError(
-                f"Input file does not exist: {input_file}",
-                context={"path": str(input_file)}
+                f"Input file does not exist: {input_file}", context={"path": str(input_file)}
             )
 
         if output_file is None:
@@ -471,17 +493,25 @@ class Converter:
         command = [
             str(self.ffmpeg_path),
             "-hide_banner",
-            "-loglevel", "error",
-            "-threads", "0",
+            "-loglevel",
+            "error",
+            "-threads",
+            "0",
             "-y",
-            "-i", str(input_file),
+            "-i",
+            str(input_file),
             "-vn",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-ac", "1",
-            "-ar", "16000",
-            "-codec:a", "libmp3lame",
-            "-b:a", f"{bitrate}k",
-            str(output_file)
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-codec:a",
+            "libmp3lame",
+            "-b:a",
+            f"{bitrate}k",
+            str(output_file),
         ]
 
         duration = get_audio_duration(input_file)
@@ -505,12 +535,11 @@ class Converter:
             raise
         except Exception as e:
             raise ProcessError(
-                f"MP3 conversion failed: {e}",
-                context={"input": str(input_file), "error": str(e)}
+                f"MP3 conversion failed: {e}", context={"input": str(input_file), "error": str(e)}
             )
 
 
-def convert_to_wav(input_file: Path, **kwargs) -> Path:
+def convert_to_wav(input_file: Path, **kwargs: Any) -> Path:
     """
     Convenience function for WAV conversion.
 
@@ -525,7 +554,7 @@ def convert_to_wav(input_file: Path, **kwargs) -> Path:
     return converter.convert_to_wav(input_file, **kwargs)
 
 
-def convert_to_mp3(input_file: Path, **kwargs) -> Path:
+def convert_to_mp3(input_file: Path, **kwargs: Any) -> Path:
     """
     Convenience function for MP3 conversion.
 

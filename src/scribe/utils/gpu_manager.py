@@ -122,6 +122,7 @@ common GPU failure mode (OOM) through simple, automatic resource management.
 """
 
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, Optional
 
@@ -142,9 +143,10 @@ class GPUResourceManager:
     """
 
     _instance: Optional["GPUResourceManager"] = None
+    _initialized = False
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls) -> "GPUResourceManager":
         """Singleton pattern - only one instance allowed."""
         if cls._instance is None:
             with cls._lock:
@@ -153,7 +155,7 @@ class GPUResourceManager:
                     cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize GPU resource manager."""
         if self._initialized:
             return
@@ -166,7 +168,9 @@ class GPUResourceManager:
         logger.debug("GPU resource manager initialized")
 
     @contextmanager
-    def acquire_gpu(self, model_name: str, model_obj: Any | None = None):
+    def acquire_gpu(
+        self, model_name: str, model_obj: Any | None = None
+    ) -> Generator[None, None, None]:
         """
         Acquire GPU for model loading.
 
@@ -188,9 +192,7 @@ class GPUResourceManager:
         with self._model_lock:
             # Check if we need to unload previous model
             if self._current_model and self._current_model != model_name:
-                logger.info(
-                    f"Switching GPU model: {self._current_model} → {model_name}"
-                )
+                logger.info(f"Switching GPU model: {self._current_model} → {model_name}")
 
                 # Unload previous model
                 if self._current_model_obj is not None:

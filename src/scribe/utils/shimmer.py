@@ -60,4 +60,3 @@ def shimmer_markup(
         rendered.append(f"[{_rgb_to_hex(rgb)}]{escape(ch)}[/]")
 
     return "".join(rendered)
-

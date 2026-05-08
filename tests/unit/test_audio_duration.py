@@ -29,11 +29,11 @@ class TestAudioDurationDetection:
         duration_seconds = 5.0
         num_frames = int(sample_rate * duration_seconds)
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(sample_rate)
-            wav.writeframes(b'\x00' * (num_frames * 2))
+            wav.writeframes(b"\x00" * (num_frames * 2))
 
         duration = get_audio_duration(wav_path)
 
@@ -43,21 +43,21 @@ class TestAudioDurationDetection:
     def test_get_duration_from_different_sample_rates(self, tmp_path):
         """Test duration detection with different sample rates."""
         test_cases = [
-            (8000, 3.0),   # 8kHz, 3 seconds
+            (8000, 3.0),  # 8kHz, 3 seconds
             (16000, 5.0),  # 16kHz, 5 seconds
             (44100, 2.5),  # 44.1kHz, 2.5 seconds
-            (48000, 10.0), # 48kHz, 10 seconds
+            (48000, 10.0),  # 48kHz, 10 seconds
         ]
 
         for sample_rate, duration_seconds in test_cases:
             wav_path = tmp_path / f"test_{sample_rate}.wav"
             num_frames = int(sample_rate * duration_seconds)
 
-            with wave.open(str(wav_path), 'wb') as wav:
+            with wave.open(str(wav_path), "wb") as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(sample_rate)
-                wav.writeframes(b'\x00' * (num_frames * 2))
+                wav.writeframes(b"\x00" * (num_frames * 2))
 
             duration = get_audio_duration(wav_path)
 
@@ -71,11 +71,11 @@ class TestAudioDurationDetection:
         duration_seconds = 3.0
         num_frames = int(sample_rate * duration_seconds)
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(2)  # Stereo
             wav.setsampwidth(2)
             wav.setframerate(sample_rate)
-            wav.writeframes(b'\x00' * (num_frames * 4))  # 2 channels * 2 bytes
+            wav.writeframes(b"\x00" * (num_frames * 4))  # 2 channels * 2 bytes
 
         duration = get_audio_duration(wav_path)
 
@@ -104,15 +104,15 @@ class TestAudioDurationDetection:
         corrupted_path = tmp_path / "corrupted.wav"
 
         # Create WAV with corrupted header
-        with wave.open(str(corrupted_path), 'wb') as wav:
+        with wave.open(str(corrupted_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * 32000)
+            wav.writeframes(b"\x00" * 32000)
 
         # Corrupt the header
         data = corrupted_path.read_bytes()
-        corrupted_data = data[:20] + b'\xFF\xFF\xFF\xFF' + data[24:]
+        corrupted_data = data[:20] + b"\xff\xff\xff\xff" + data[24:]
         corrupted_path.write_bytes(corrupted_data)
 
         # Should handle gracefully
@@ -138,14 +138,14 @@ class TestWavDurationMethod:
         """Test _get_duration_wave handles zero framerate gracefully."""
         wav_path = tmp_path / "zero_rate.wav"
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * 32000)
+            wav.writeframes(b"\x00" * 32000)
 
         # Mock to return zero framerate
-        with patch('wave.open') as mock_open:
+        with patch("wave.open") as mock_open:
             mock_wav = MagicMock()
             mock_wav.getnframes.return_value = 16000
             mock_wav.getframerate.return_value = 0
@@ -172,11 +172,11 @@ class TestTorchaudioDurationMethod:
         duration_seconds = 5.0
         num_frames = int(sample_rate * duration_seconds)
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(sample_rate)
-            wav.writeframes(b'\x00' * (num_frames * 2))
+            wav.writeframes(b"\x00" * (num_frames * 2))
 
         duration = _get_duration_torchaudio(wav_path)
 
@@ -188,7 +188,7 @@ class TestTorchaudioDurationMethod:
         """Test _get_duration_torchaudio returns None when torchaudio unavailable."""
         wav_path = tmp_path / "test.wav"
 
-        with patch.dict('sys.modules', {'torchaudio': None}):
+        with patch.dict("sys.modules", {"torchaudio": None}):
             duration = _get_duration_torchaudio(wav_path)
 
             assert duration is None
@@ -205,8 +205,8 @@ class TestFFprobeDurationMethod:
         mock_result.returncode = 0
         mock_result.stdout = '{"format": {"duration": "5.123"}}'
 
-        with patch('subprocess.run', return_value=mock_result):
-            with patch('scribe.utils.audio.get_ffprobe_path', return_value='/usr/bin/ffprobe'):
+        with patch("subprocess.run", return_value=mock_result):
+            with patch("scribe.utils.audio.get_ffprobe_path", return_value="/usr/bin/ffprobe"):
                 duration = _get_duration_ffprobe(wav_path)
 
         assert duration == 5.123
@@ -215,7 +215,7 @@ class TestFFprobeDurationMethod:
         """Test _get_duration_ffprobe returns None when ffprobe not found."""
         wav_path = tmp_path / "test.wav"
 
-        with patch('scribe.utils.audio.get_ffprobe_path', return_value=None):
+        with patch("scribe.utils.audio.get_ffprobe_path", return_value=None):
             duration = _get_duration_ffprobe(wav_path)
 
         assert duration is None
@@ -226,16 +226,16 @@ class TestFFprobeDurationMethod:
 
         mock_result = Mock()
         mock_result.returncode = 0
-        mock_result.stdout = '''
+        mock_result.stdout = """
         {
             "streams": [
                 {"codec_type": "audio", "duration": "10.5"}
             ]
         }
-        '''
+        """
 
-        with patch('subprocess.run', return_value=mock_result):
-            with patch('scribe.utils.audio.get_ffprobe_path', return_value='/usr/bin/ffprobe'):
+        with patch("subprocess.run", return_value=mock_result):
+            with patch("scribe.utils.audio.get_ffprobe_path", return_value="/usr/bin/ffprobe"):
                 duration = _get_duration_ffprobe(wav_path)
 
         assert duration == 10.5
@@ -247,8 +247,8 @@ class TestFFprobeDurationMethod:
         mock_result = Mock()
         mock_result.returncode = 1
 
-        with patch('subprocess.run', return_value=mock_result):
-            with patch('scribe.utils.audio.get_ffprobe_path', return_value='/usr/bin/ffprobe'):
+        with patch("subprocess.run", return_value=mock_result):
+            with patch("scribe.utils.audio.get_ffprobe_path", return_value="/usr/bin/ffprobe"):
                 duration = _get_duration_ffprobe(wav_path)
 
         assert duration is None
@@ -262,17 +262,17 @@ class TestDurationValidation:
         wav_path = tmp_path / "meeting_16k_mono.wav"
         mp4_path = tmp_path / "meeting.mp4"
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * (16000 * 5 * 2))
+            wav.writeframes(b"\x00" * (16000 * 5 * 2))
 
-        mp4_path.write_bytes(b'fake mp4')
+        mp4_path.write_bytes(b"fake mp4")
 
-        with patch('scribe.utils.audio._get_duration_wave', side_effect=[64801.6, None]):
-            with patch('scribe.utils.audio._get_duration_torchaudio', side_effect=[None, 1800.0]):
-                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=None):
+        with patch("scribe.utils.audio._get_duration_wave", side_effect=[64801.6, None]):
+            with patch("scribe.utils.audio._get_duration_torchaudio", side_effect=[None, 1800.0]):
+                with patch("scribe.utils.audio._get_duration_ffprobe", return_value=None):
                     duration = get_audio_duration(wav_path)
 
         assert duration == 1800.0
@@ -282,17 +282,17 @@ class TestDurationValidation:
         wav_path = tmp_path / "meeting_16k_mono.wav"
         mp4_path = tmp_path / "meeting.mp4"
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * (16000 * 5 * 2))
+            wav.writeframes(b"\x00" * (16000 * 5 * 2))
 
-        mp4_path.write_bytes(b'fake mp4')
+        mp4_path.write_bytes(b"fake mp4")
 
-        with patch('scribe.utils.audio._get_duration_wave', side_effect=[64801.6, None]):
-            with patch('scribe.utils.audio._get_duration_torchaudio', side_effect=[None, 1800.0]):
-                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=None):
+        with patch("scribe.utils.audio._get_duration_wave", side_effect=[64801.6, None]):
+            with patch("scribe.utils.audio._get_duration_torchaudio", side_effect=[None, 1800.0]):
+                with patch("scribe.utils.audio._get_duration_ffprobe", return_value=None):
                     duration = validate_audio_duration(wav_path, max_duration_hours=12.0)
 
         assert duration == 1800.0
@@ -301,15 +301,19 @@ class TestDurationValidation:
         """Test that WAV method is preferred when available."""
         wav_path = tmp_path / "test.wav"
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'\x00' * 32000)
+            wav.writeframes(b"\x00" * 32000)
 
-        with patch('scribe.utils.audio._get_duration_wave', return_value=2.0) as mock_wave:
-            with patch('scribe.utils.audio._get_duration_torchaudio', return_value=3.0) as mock_torch:
-                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=4.0) as mock_ffprobe:
+        with patch("scribe.utils.audio._get_duration_wave", return_value=2.0) as mock_wave:
+            with patch(
+                "scribe.utils.audio._get_duration_torchaudio", return_value=3.0
+            ) as mock_torch:
+                with patch(
+                    "scribe.utils.audio._get_duration_ffprobe", return_value=4.0
+                ) as mock_ffprobe:
                     duration = get_audio_duration(wav_path)
 
                     # Should use WAV method
@@ -322,9 +326,13 @@ class TestDurationValidation:
         """Test fallback to torchaudio when WAV method fails."""
         wav_path = tmp_path / "test.wav"
 
-        with patch('scribe.utils.audio._get_duration_wave', return_value=None):
-            with patch('scribe.utils.audio._get_duration_torchaudio', return_value=5.0) as mock_torch:
-                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=6.0) as mock_ffprobe:
+        with patch("scribe.utils.audio._get_duration_wave", return_value=None):
+            with patch(
+                "scribe.utils.audio._get_duration_torchaudio", return_value=5.0
+            ) as mock_torch:
+                with patch(
+                    "scribe.utils.audio._get_duration_ffprobe", return_value=6.0
+                ) as mock_ffprobe:
                     duration = get_audio_duration(wav_path)
 
                     # Should use torchaudio method
@@ -336,9 +344,11 @@ class TestDurationValidation:
         """Test fallback to ffprobe when other methods fail."""
         wav_path = tmp_path / "test.wav"
 
-        with patch('scribe.utils.audio._get_duration_wave', return_value=None):
-            with patch('scribe.utils.audio._get_duration_torchaudio', return_value=None):
-                with patch('scribe.utils.audio._get_duration_ffprobe', return_value=7.0) as mock_ffprobe:
+        with patch("scribe.utils.audio._get_duration_wave", return_value=None):
+            with patch("scribe.utils.audio._get_duration_torchaudio", return_value=None):
+                with patch(
+                    "scribe.utils.audio._get_duration_ffprobe", return_value=7.0
+                ) as mock_ffprobe:
                     duration = get_audio_duration(wav_path)
 
                     # Should use ffprobe method
@@ -356,11 +366,11 @@ class TestEdgeCases:
         duration_seconds = 0.1  # 100ms
         num_frames = int(sample_rate * duration_seconds)
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(sample_rate)
-            wav.writeframes(b'\x00' * (num_frames * 2))
+            wav.writeframes(b"\x00" * (num_frames * 2))
 
         duration = get_audio_duration(wav_path)
 
@@ -376,7 +386,7 @@ class TestEdgeCases:
         wav_path = tmp_path / "long.wav"
 
         # Mock to return correct frame count
-        with patch('scribe.utils.audio.wave.open') as mock_open:
+        with patch("scribe.utils.audio.wave.open") as mock_open:
             mock_wav = MagicMock()
             mock_wav.getnframes.return_value = num_frames
             mock_wav.getframerate.return_value = sample_rate
@@ -393,16 +403,13 @@ class TestEdgeCases:
         """Test duration detection for empty WAV file."""
         wav_path = tmp_path / "empty.wav"
 
-        with wave.open(str(wav_path), 'wb') as wav:
+        with wave.open(str(wav_path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(16000)
-            wav.writeframes(b'')  # No frames
+            wav.writeframes(b"")  # No frames
 
         duration = get_audio_duration(wav_path)
 
         assert duration is not None
         assert duration == 0.0
-
-
-
