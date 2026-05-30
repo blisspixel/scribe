@@ -35,17 +35,17 @@ class TestProviderFactory:
 
     def test_get_default_model_openai(self):
         """Test getting default OpenAI models."""
-        assert _get_default_model("openai", "joke") == "gpt-5.2"
-        assert _get_default_model("openai", "notes") == "gpt-5.2"
-        assert _get_default_model("openai", "meme") == "gpt-5.2"
+        assert _get_default_model("openai", "joke") == "gpt-5.5"
+        assert _get_default_model("openai", "notes") == "gpt-5.5"
+        assert _get_default_model("openai", "meme") == "gpt-5.5"
         assert _get_default_model("openai", "meme_image") == "gpt-image-1"
         assert _get_default_model("openai", "transcribe") == "whisper-1"
 
     def test_get_default_model_xai(self):
         """Test getting default XAI models."""
-        assert _get_default_model("xai", "joke") == "grok-4.20-non-reasoning"
+        assert _get_default_model("xai", "joke") == "grok-4.3"
         assert _get_default_model("xai", "notes") == "grok-4.3"
-        assert _get_default_model("xai", "meme") == "grok-4.20-non-reasoning"
+        assert _get_default_model("xai", "meme") == "grok-4.3"
         assert _get_default_model("xai", "meme_image") == "grok-imagine-image"
 
     def test_xai_defaults_avoid_retired_models(self):
@@ -193,9 +193,7 @@ class TestXAIProvider:
     @patch("scribe.providers.xai_provider.OpenAI")
     def test_chat_completion(self, mock_openai_class):
         """Test chat completion with XAI."""
-        config = ProviderConfig(
-            provider_name="xai", api_key="test-key", model="grok-4.20-non-reasoning"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-4.3")
 
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -204,7 +202,7 @@ class TestXAIProvider:
         mock_response.choices = [Mock(message=Mock(content="Grok response"))]
         mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
         mock_response.usage.cost_in_usd_ticks = 37_756_000
-        mock_response.model = "grok-4.20-non-reasoning"
+        mock_response.model = "grok-4.3"
         mock_client.chat.completions.create.return_value = mock_response
 
         provider = XAIProvider(config)
@@ -218,7 +216,7 @@ class TestXAIProvider:
         assert result["usage"]["cost_source"] == "provider_exact"
 
         call_args = mock_client.chat.completions.create.call_args[1]
-        assert call_args["model"] == "grok-4.20-non-reasoning"
+        assert call_args["model"] == "grok-4.3"
         assert call_args["max_completion_tokens"] == 100
 
     @patch("scribe.providers.xai_provider.OpenAI")
@@ -246,9 +244,7 @@ class TestXAIProvider:
 
     def test_transcribe_not_supported(self):
         """Test that XAI doesn't support transcription."""
-        config = ProviderConfig(
-            provider_name="xai", api_key="test-key", model="grok-4.20-non-reasoning"
-        )
+        config = ProviderConfig(provider_name="xai", api_key="test-key", model="grok-4.3")
 
         provider = XAIProvider(config)
 
@@ -269,7 +265,7 @@ class TestProviderIntegration:
         mock_response = Mock()
         mock_response.choices = [Mock(message=Mock(content="Grok joke"))]
         mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        mock_response.model = "grok-4.20-non-reasoning"
+        mock_response.model = "grok-4.3"
         mock_client.chat.completions.create.return_value = mock_response
 
         provider = get_provider(feature="joke", provider_name="xai")
@@ -277,7 +273,7 @@ class TestProviderIntegration:
 
         assert result["content"] == "Grok joke"
         call_args = mock_client.chat.completions.create.call_args[1]
-        assert call_args["model"] == "grok-4.20-non-reasoning"
+        assert call_args["model"] == "grok-4.3"
 
     @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
     @patch("scribe.providers.xai_provider.OpenAI")

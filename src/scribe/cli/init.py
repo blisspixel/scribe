@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -57,10 +58,7 @@ def _detected_keys() -> dict[str, bool]:
         env_data = {}
 
     def has(*names: str) -> bool:
-        for n in names:
-            if os.getenv(n) or env_data.get(n):
-                return True
-        return False
+        return any(os.getenv(n) or env_data.get(n) for n in names)
 
     return {
         "openai": has("OPENAI_API_KEY", "SCRIBE_OPENAI_API_KEY"),
@@ -154,7 +152,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             "[dim]Set OPENAI_API_KEY or XAI_API_KEY in .env then re-run `scribe init`.[/dim]"
         )
 
-    data: dict = {
+    data: dict[str, Any] = {
         "output": {"folder": output_folder},
         "transcription": {"method": method},
         "features": {

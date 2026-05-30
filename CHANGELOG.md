@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - OBS "not ready" (code 207) errors with proper retry and backoff.
+- CI pipeline (ruff, mypy --strict, test matrix, coverage 87% gate, pip-audit) now passes cleanly on 3.12/3.13 after consolidating config, adding pragmatic per-file ignores for hardware graceful-degradation paths (ADR-002), updating outdated test expectations for current model defaults, and excluding optional Pillow-dependent tests from the basic matrix.
 - Windows input handling for stop/quit commands during recording.
 - OBS WebSocket client cleanup, reconnect logic, and auth mismatch detection.
 - Download temp file leaks on transcription failure (now cleaned in `finally`).

@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 try:
     from PIL import Image, ImageDraw, ImageFont
 except ImportError:  # Optional dependency
-    Image = None  # type: ignore[assignment]
-    ImageDraw = None  # type: ignore[assignment]
-    ImageFont = None  # type: ignore[assignment]
+    Image = None
+    ImageDraw = None
+    ImageFont = None
 
 logger = logging.getLogger(__name__)
 

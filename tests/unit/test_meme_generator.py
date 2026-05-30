@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 from scribe.utils.meme_generator import MemeConfig
 
 
@@ -19,7 +21,7 @@ class TestMemeConfig:
         """Test default meme configuration."""
         config = MemeConfig()
 
-        assert config.model == "gpt-5.2"
+        assert config.model == "gpt-5.5"
         assert config.image_model == "gpt-image-1"
         assert config.size == "1024x1024"
         assert config.quality == "high"
@@ -663,6 +665,7 @@ class TestMemeGeneratorHelpers:
         assert score == 5.0
         assert "QA failed" in qa_feedback["overall"]
 
+    @pytest.mark.requires_pillow
     def test_generate_meme_image_covers_local_overlay_and_openai_fallback(self, tmp_path):
         from scribe.utils.meme_generator import _generate_meme_image
 
@@ -721,7 +724,7 @@ class TestMemeGeneratorHelpers:
         transcript_path = tmp_path / "meeting.txt"
         transcript_path.write_text("meeting transcript", encoding="utf-8")
         provider = Mock(
-            config=SimpleNamespace(provider_name="openai", model="gpt-5.2", api_key="key")
+            config=SimpleNamespace(provider_name="openai", model="gpt-5.5", api_key="key")
         )
 
         with (

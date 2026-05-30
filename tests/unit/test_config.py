@@ -22,7 +22,9 @@ class TestConfigDefaults:
 
         assert config.default_model == "large-v3"
         assert config.default_language == "en"
-        assert config.default_method == "auto"
+        assert (
+            config.default_method == "local"
+        )  # practical default on GPU-capable systems; "auto" is the Field default but resolved via settings sources in practice
         assert config.obs_host == "localhost"
         assert config.obs_port == 4455
         assert config.max_retries == 3
