@@ -22,9 +22,15 @@ class TestConfigDefaults:
 
         assert config.default_model == "large-v3"
         assert config.default_language == "en"
-        assert (
-            config.default_method == "local"
-        )  # practical default on GPU-capable systems; "auto" is the Field default but resolved via settings sources in practice
+
+        # default_method Field default is "auto". Real instances may pick up "local"
+        # (or other) from the user's ~/.scribe/config.toml via the custom settings source.
+        # We patch the loader here so the test is hermetic and passes on CI runners
+        # (which have no user config) as well as dev machines (which often do).
+        with patch("scribe.config_file.load_config_file", return_value={}):
+            clean_config = ScribeConfig()
+            assert clean_config.default_method == "auto"
+
         assert config.obs_host == "localhost"
         assert config.obs_port == 4455
         assert config.max_retries == 3

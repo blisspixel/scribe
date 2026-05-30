@@ -234,10 +234,11 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=scribe",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
+    # NOTE: Coverage flags are deliberately omitted here.
+    # The dedicated "Coverage (Python 3.12)" CI job passes --cov + --cov-fail-under=87 explicitly.
+    # Keeping them out of global addopts ensures the lightweight matrix "Tests (Python X)" jobs
+    # (which run only tests/unit with limited markers) stay fast and do not incorrectly enforce
+    # the full-suite coverage gate on a partial run. Local developers can still pass --cov manually.
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
