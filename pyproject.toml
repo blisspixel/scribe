@@ -181,6 +181,7 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.14",
+    "hypothesis>=6.0",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pip-audit>=2.7",
@@ -224,7 +225,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 85
+fail_under = 87  # Raised in Step 3; target 90%+ in later steps as more pure logic gets property tests
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

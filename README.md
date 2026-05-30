@@ -619,8 +619,8 @@ pytest
 # Unit tests only
 pytest tests/unit/
 
-# With coverage (gate is enforced in CI at 85%; local target ≥85%)
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
+# With coverage (gate is enforced in CI at 87%; local target ≥87%)
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=87
 
 # Quick check
 pytest tests/unit/ --tb=no -q

@@ -78,7 +78,7 @@ pytest
 ### With Coverage
 ```bash
 # Recommended
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=87
 uv run pytest --cov=scribe --cov-report=html
 ```
 
@@ -148,7 +148,7 @@ uv run pytest tests/unit -m "not gpu and not slow" -q
 ### 4. Full Verification
 ```bash
 uv run scribe doctor --full
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=87
 ```
 
 ### 5. Commit
