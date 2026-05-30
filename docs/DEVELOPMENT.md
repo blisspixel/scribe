@@ -1,36 +1,46 @@
 # Development Guide
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2026-05-30 (Step 1 Engineering Excellence foundation complete: uv, pre-commit, CI)
 
 ## Getting Started
 
 ### Prerequisites
-- Python 3.10 or newer
+- Python 3.12 or newer (3.12+ strongly recommended)
 - Git
 - FFmpeg
 - (Optional) NVIDIA GPU with CUDA 12.4+
+- **uv** (recommended for development — https://docs.astral.sh/uv/)
 
-### Clone and Setup
+### Clone and Setup (Recommended — uv)
+
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
+uv sync
+uv run scribe init          # first-run wizard
+uv run scribe doctor
+```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+**Classic pip path** (still supported but not recommended for development):
 
-# Install dependencies
+```bash
+git clone https://github.com/blisspixel/scribe.git
+cd scribe
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-
-# Install in editable mode
 pip install -e .
 ```
+
+> **Note:** The requirements*.txt files are now legacy. The single source of truth is `pyproject.toml` + `uv.lock`. The legacy files may drift.
+
+See [ROADMAP.md](ROADMAP.md) Step 1 (Reproducible Environment Foundation — now complete) for the rationale and current state.
 
 ### Configuration
 ```bash
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (or let `scribe init` guide you)
 ```
 
 ## Project Structure
@@ -67,9 +77,9 @@ pytest
 
 ### With Coverage
 ```bash
-pytest --cov=scribe --cov-report=term-missing
-pytest --cov=scribe --cov-report=html
-pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
+# Recommended
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
+uv run pytest --cov=scribe --cov-report=html
 ```
 
 ### Specific Tests
@@ -85,37 +95,36 @@ pytest -m "not gpu"
 ```
 
 ### Test Status
-- 589 tests passing (100% pass rate)
-- Zero failures
-- Execution time: ~72 seconds
+- 1,143 tests (unit + integration + e2e)
+- Very high pass rate; comprehensive error-path coverage (especially recorder)
+- Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
 
-## Code Quality Standards
+## Code Quality & Engineering Standards
+
+We are actively elevating the codebase toward 2026-grade verifiable Python practices. See the Engineering Excellence section of [ROADMAP.md](../ROADMAP.md) for the ordered forward plan, definitions of done, and explicit non-goals.
+
+### Current Expectations (following the ordered plan in ROADMAP.md)
+- Prefer `uv run` for all development commands once uv is adopted
+- New code must have type annotations on public symbols
+- Run `ruff check` and `ruff format` before committing (enforced locally via pre-commit and in CI)
+- Add or update tests for any changed behavior; use existing markers
+- Follow the established defensive patterns: Pydantic validators, `ScribeError` subclasses with context, structured logging via `get_logger`
+- No new bare `print()` in user-facing or library paths (debug/bake-off paths are the exception)
 
 ### Documentation
-- PhD-level docstrings for core modules
-- Module-level architecture documentation
-- Class and method documentation with examples
-- Type hints throughout
+- Clear module and public API docstrings
+- Architecture notes in long modules (see transcriber.py, recorder.py for examples)
+- Type hints on all new public functions/classes
 
-### Logging
-- Structured logging with context
-- Appropriate log levels (DEBUG, INFO, WARNING, ERROR)
-- No sensitive data in logs
-- Consistent formatting
-
-### Error Handling
-- Use custom exception hierarchy
-- Always include context in exceptions
-- Graceful degradation
-- Clear error messages
+### Logging & Errors
+- Dual-output logging (Rich console for humans, detailed files for post-mortems)
+- Always use the custom exception hierarchy with structured `context`
+- Graceful degradation and actionable messages are non-negotiable
 
 ### Testing
-- Unit tests for all new code
-- Defensive tests for edge cases
-- Mock external dependencies
-- 100% pass rate required
-
-See `docs/CODE_QUALITY_STANDARDS.md` for detailed guidelines.
+- Unit tests for new logic
+- Exercise error paths and edge cases
+- 100% pass rate on the CI-safe subset
 
 ## Development Workflow
 
@@ -125,22 +134,21 @@ git checkout -b feature/your-feature-name
 ```
 
 ### 2. Make Changes
-- Write code following standards
+- Write code following the standards above and the ordered Engineering Excellence plan in ROADMAP.md
 - Add tests
 - Update documentation
 
-### 3. Run Tests
+### 3. Run Quality Gates (local)
 ```bash
-pytest
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pytest tests/unit -m "not gpu and not slow" -q
 ```
 
-### 4. Check Code Quality
+### 4. Full Verification
 ```bash
-# Run diagnostics
-scribe doctor
-
-# Check for issues
-python -m py_compile src/scribe/**/*.py
+uv run scribe doctor --full
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
 ```
 
 ### 5. Commit
@@ -148,6 +156,10 @@ python -m py_compile src/scribe/**/*.py
 git add .
 git commit -m "feat: add your feature"
 ```
+
+**Local gates:** `pre-commit install --install-hooks` (enforces ruff + mypy + yaml/toml checks on every commit). The same gates run in CI via [.github/workflows/ci.yml](https://github.com/blisspixel/scribe/blob/main/.github/workflows/ci.yml).
+
+See [ROADMAP.md](../ROADMAP.md) Step 1 for the reproducible environment foundation that is now in place.
 
 ### 6. Push and PR
 ```bash
@@ -361,9 +373,7 @@ __version__ = "2.4.0"
 ```
 
 ### 2. Update Changelog
-```bash
-# Create docs/CHANGELOG_v2.4.0.md
-```
+Add a new section at the top of the root `CHANGELOG.md` following the existing format (Unreleased section becomes the new versioned release).
 
 ### 3. Run Full Test Suite
 ```bash

@@ -9,29 +9,26 @@ Scribe converts spoken content into transcripts, notes, and optional humor outpu
 ## Quickstart
 
 ```bash
-# Install
+# Install (recommended)
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-pip install -r requirements.txt
-pip install -e .
+uv sync
+uv run scribe init
+
+# Or with classic pip (see Development section for details)
+# pip install -r requirements.txt && pip install -e .
 
 # Configure (optional for transcript-only local GPU)
 cp .env.example .env
 # Add OPENAI_API_KEY only for API transcription, notes, jokes, or memes
 
-# First run prompts a wizard that writes ~/.scribe/config.toml.
-# Run anytime with: scribe init  (env vars and CLI flags still override)
-
 # Verify local GPU detection
-scribe info
+uv run scribe info
 
 # Use
-scribe meeting.mp4                    # Transcribe single file
-scribe transcribe meeting.mp4 --method local
-scribe batch *.mp4                    # Process multiple files
-scribe music song.mp3                 # Extract lyrics
-scribe rec "Team Meeting"             # Record and transcribe
-scribe doctor                         # System diagnostics
+uv run scribe meeting.mp4
+uv run scribe transcribe meeting.mp4 --method local
+uv run scribe doctor
 ```
 
 ---
@@ -52,19 +49,12 @@ scribe doctor                         # System diagnostics
 
 See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
 
-## Unreleased (Current Workspace)
+## Recent Changes
 
-- **OBS Self-Healing**: Complete overhaul of OBS recording lifecycle — automatic process cleanup, crash sentinel removal, safe-mode bypass, stale recording detection, WebSocket reconnect mid-recording, deadman timers, auth mismatch detection, and actionable error messages for every failure path
-- **URL Transcription**: New `scribe url <link>` command — download and transcribe from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
-- **YouTube 403 Fix**: Upgraded yt-dlp, added browser cookie support (`--cookies`), hardened retries and User-Agent
-- **Animated Banner**: Bold ANSI Shadow block font with animated gradient sweep (blue→purple), cross-platform (Windows, macOS, Linux)
-- **CLI Polish**: Cleaner panel headers across all commands — lowercase branding, compact info lines
-- **Doctor**: Added yt-dlp check to system diagnostics
-- Added terminal UI configuration: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
-- Added `scribe info` UI diagnostics (resolved mode, fps, terminal capabilities)
-- Added optional `full` mode shimmer for spinner/status lines
-- Added optional gradient branding for header lines in capable terminals
-- Added conservative fallback behavior for non-interactive terminals
+All historical changes and the full version history live in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog format).
+
+The current workspace is executing the **Engineering Excellence Roadmap** (see [ROADMAP.md](ROADMAP.md)):
+- Step 1 complete: reproducible uv foundation, .python-version pin, consolidated pyproject.toml, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 85% cov gate, pip-audit security, aggregator job).
 
 ---
 
@@ -198,13 +188,22 @@ scribe --banner
 - Stable internet connection
 
 **Common:**
-- Python 3.10 or newer
+- Python 3.12 or newer (3.12+ strongly recommended for full toolchain and dependency compatibility)
 - FFmpeg for media conversion
 - OBS Studio (optional, for recording)
 
 ### Install Steps
 
-**Option A: API-Only (No GPU)**
+**Recommended (2026+): uv (fast, reproducible, modern)**
+```bash
+git clone https://github.com/blisspixel/scribe.git
+cd scribe
+uv sync
+uv run scribe init
+uv run scribe info
+```
+
+**Option A: pip (widely compatible, classic)**
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
@@ -212,7 +211,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-**Option B: Local GPU Transcription**
+**Option B: Local GPU Transcription (pip path)**
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
@@ -611,53 +610,59 @@ See [Architecture Guide](docs/ARCHITECTURE.md) for detailed technical discussion
 ### Running Tests
 
 ```bash
-# All tests
+# Recommended with uv
+uv run pytest
+
+# Or classic
 pytest
 
 # Unit tests only
 pytest tests/unit/
 
-# With coverage
-pytest --cov=scribe --cov-report=term-missing
-# Coverage must stay at or above 80%
-pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
+# With coverage (gate is enforced in CI at 85%; local target ≥85%)
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=85
 
 # Quick check
 pytest tests/unit/ --tb=no -q
 
-# Skip end-to-end tests that require external API access
-pytest -q -k 'not e2e'
+# Skip slow / external / GPU tests
+pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Large unit/integration/e2e test suite
-- Platform-specific skips in some environments
+- 1,143 tests collected (large, high-quality suite with unit + integration + e2e)
+- Excellent coverage of error paths (especially OBS recorder)
+- Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`
-- Use the commands above to verify in your environment
+
+See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the ordered plan to raise gates (uv foundation, ruff, strict types, property testing, coverage, and hygiene).
 
 ### Code Quality
 
 **Standards:**
-- Structured logging with context
-- Error handling with fallback paths
-- Type hints in core modules
-- Test coverage for key workflows
+- Structured dual-output logging (Rich console for users + detailed files for debugging)
+- Comprehensive, typed exception hierarchy with context for every failure domain
+- Defensive design with automatic fallbacks and self-healing (see OBS recorder)
+- Type hints on public APIs and core logic
 
-**Tools:**
-- pytest for testing
-- pytest-cov for coverage
-- Rich for terminal output
-- Typer for CLI
+**Primary Tools:**
+- **uv** — sole package + project manager (uv sync, uv run, uv.lock for reproducibility)
+- **ruff** — universal linter + formatter (replaced Black + isort)
+- **mypy --strict** on src/ (enforced in CI)
+- **pre-commit** — local gates before every commit (ruff + mypy + basic checks)
+- pytest + pytest-cov (85% gate enforced in CI)
+
+See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml) for the ordered plan and current gates.
 
 ### Contributing
 
 Priority areas:
-1. Test coverage improvements
-2. Performance optimizations
-3. Documentation enhancements
-4. Bug fixes and stability
+1. Following the ordered Engineering Excellence plan (foundation, gates, types, testing, hygiene)
+2. Test coverage and property-based tests for core invariants
+3. Performance / UX polish on existing features
+4. Documentation and error message clarity
 
-See [Development Guide](docs/DEVELOPMENT.md) for detailed guidelines.
+See [Development Guide](docs/DEVELOPMENT.md) and the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for current standards and the ordered forward plan.
 
 ---
 

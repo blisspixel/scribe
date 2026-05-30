@@ -1,5 +1,14 @@
-# Development dependencies for Scribe
-# Install with: pip install -r requirements-dev.txt
+# DEPRECATED — Legacy pip dev requirements file.
+# Scribe now uses uv + [dependency-groups] in pyproject.toml.
+#
+# Modern:            uv sync --group dev
+# Legacy pip path:   pip install -r requirements-dev.txt (after requirements.txt)
+#
+# This file is kept only for reference. It is no longer maintained in sync
+# with the authoritative dev dependencies. Prefer uv for all development and CI.
+#
+# Development dependencies for Scribe (historical)
+# Install with: pip install -r requirements-dev.txt (legacy path)
 
 # Include core dependencies
 -r requirements.txt

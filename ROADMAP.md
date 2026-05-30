@@ -2,181 +2,177 @@
 
 **Philosophy:** Reliability over feature count. Releases prioritize predictable behavior, clearer output, and maintainable code.
 
----
-
-## Current Version: 2.4.3
-
-**Focus: OBS Recording Reliability + Code Quality**
-
-- **OBS Not Ready Fix**: Fixed error code 207 when OBS is starting up - now properly retries connection with backoff
-- **Windows Input Fix**: Fixed stop commands (stop, q, quit, s, exit) not working during recording on Windows - now uses native keyboard input
-- **Better Error Handling**: Improved client cleanup and retry logic for OBS WebSocket connections
-- **Code Quality**: Fixed 2 runtime bugs (undefined variables), cleaned up 40+ unused imports/variables, fixed f-strings missing placeholders
-- **Test Fixes**: Fixed 8 failing tests (mock paths, Rich display conflicts, environment variable isolation)
-- **New Tests**: Added 2 new tests for OBS "not ready" scenario
+See [CHANGELOG.md](CHANGELOG.md) for the complete history of changes, fixes, and releases.
 
 ---
 
-## Unreleased (Current Workspace)
+## Current Focus
 
-**Focus: OBS Self-Healing + URL Transcription + CLI Polish + Animated Banner + Provider Lifecycle**
+The project is currently focused on two tracks that run in parallel:
 
-- **OBS Self-Healing Recording**: Complete overhaul of OBS recording lifecycle
-  - Kills stale OBS processes before launching fresh (prevents safe-mode dialog)
-  - Cleans OBS crash sentinel files (`global.ini` flags) that trigger safe-mode
-  - Launches with `--disable-shutdown-check` to bypass crash recovery prompt
-  - Verifies process is actually dead after kill (retries with `/T` tree kill)
-  - Stops leftover recordings before starting a new one (with verification)
-  - Auto-reconnects WebSocket if connection drops mid-recording
-  - Deadman timer (30s) prevents infinite hang if OBS never confirms stop
-  - Ctrl-C handler works even without interactive terminal (piped stdin, CI)
-  - SIGINT handler properly restored after recording completes
-  - Retries full kill→clean→launch cycle up to 2 times
-  - File search retries for 15s after recording stops (OBS may still be flushing)
-  - Waits for file to stabilize before finalizing (was missing in WebSocket path)
-  - Auth mismatch detection with specific warning about SCRIBE_OBS_PASSWORD
-  - Connection error messages include actionable WebSocket setup guidance
-  - `start_record` failures wrapped in user-friendly messages
-  - Directory set failures surfaced to user (warns OBS may record elsewhere)
-  - File finalization timeout now warns instead of silently continuing
-  - CLI stop signal verified (checks exit code, handles timeout)
-  - FFmpeg remux failures logged with actual stderr output
-  - Fixed `os.path.getctime` → `getmtime` (reliable cross-platform)
-  - Fixed ProcessError double-wrapping in `record()`
-  - Fixed duplicate hosts in connection list (wasted double timeouts)
-  - 89% test coverage (126 tests), all ruff clean
-- **URL Transcription**: New `scribe url <link>` command for downloading and transcribing from YouTube, Vimeo, Twitter/X, direct media links, and 1000+ sites via yt-dlp
-  - Audio-only download by default (saves bandwidth)
-  - Progress tracking, size/duration limits, automatic cleanup
-  - Configurable via `SCRIBE_DOWNLOAD_TIMEOUT`, `SCRIBE_KEEP_DOWNLOADS`, `SCRIBE_DOWNLOAD_FOLDER`
-- **Animated Banner**: ASCII wordmark with gradient sweep animation on help screen (`scribe` with no args)
-  - `scribe --banner` for standalone display
-  - Progressive degradation: full sweep → quick sweep → static gradient → plain text
-  - Respects `SCRIBE_ANIMATIONS`, `SCRIBE_BANNER`, `NO_COLOR` env vars
-- **CLI Polish**: Cleaner branding across all commands — lowercase scribe headers, muted version, compact info lines
-- **Transcript Input Expansion**: scribe notes|joke|meme now accept .txt, .md, and .docx transcript files
-- **Doctor**: Added yt-dlp availability check to system diagnostics
-- **Bug Fix**: Download cleanup now runs in `finally` block (no leaked temp files on transcription failure)
-- Added terminal UI controls: `SCRIBE_ANIMATIONS`, `SCRIBE_COLOR`, `SCRIBE_FPS`
-- Added optional shimmer status effect in `full` mode with capability fallback
-- Added optional gradient branding for command headers in `full` mode
-- Added UI diagnostics output in `scribe info`
-- Added tests for terminal UI config, shimmer, spinner, branding, banner, and downloader
-- **xAI Model Retirement Mitigation** (completed before 2026-05-15):
-  - Migrated all xAI text defaults to `grok-4.3` for joke, meme, and notes
-  - Dropped `grok-4.20-non-reasoning`, `grok-4-fast`, `grok-4-1-fast`, `grok-4`, `grok-imagine-image-pro` from defaults
-  - Use `grok-imagine-image` for xAI image generation defaults
-  - Capture xAI `cost_in_usd_ticks` when available and fall back to local budget estimates for known defaults
-  - Refreshed README/Architecture/CLI module headers so stale model IDs do not re-enter defaults
-- **OpenAI Model Bump** (2026-05):
-  - Defaulted `joke`, `meme`, `notes` to `gpt-5.5` (April 2026 release)
-  - Updated `openai_models` filter lists in `joke_generator.py` and `meme_generator.py` so `gpt-5.4` and `gpt-5.5` are recognized as OpenAI-specific
-- **First-Run Config Wizard** (2026-05):
-  - Added `scribe init` and auto-prompt on first run
-  - Writes `~/.scribe/config.toml` (output folder, transcription method, default features, AI vendor)
-  - Inserted as a Pydantic settings source between dotenv and built-in defaults
-  - Wizard detects conflicting `SCRIBE_ENABLE_*` lines in `.env` and offers to comment them out
-  - Fixed `_find_env_file()` to walk up to project root in editable installs
-- **Progress Bar Honesty** (2026-05):
-  - Capped mid-flight progress at 99% so 100% only appears on actual completion
-  - Renamed default post-transcription label from "Finishing" to "Finalizing" for clearer phase transitions
+1. **Product reliability and polish** — continuing to harden the core transcription, recording, and intelligence features (see the Unreleased section of CHANGELOG.md for work in flight).
+2. **Engineering excellence** — systematically raising the quality, reproducibility, and verifiability of the codebase itself so the project remains maintainable for years.
+
+The remainder of this document addresses the second track.
 
 ---
 
-## Recent Releases
+## Scope and Focus
 
-### v2.4.2 - Code Quality + Bug Fixes
+Scribe is a **local-first desktop CLI** for high-quality speech transcription, meeting notes, and optional context-aware humor. It excels at GPU-accelerated local processing with graceful fallback to API providers, professional OBS recording integration, and music transcription with vocal separation.
 
-- Smart .env loading from any directory
-- Cleaner output, removed unnecessary warnings
-- Fixed undefined ValidationError
-- Upgraded ctranslate2 to 4.6.3
+**We intentionally do not pursue:**
+- Web UIs, servers, or multi-user/enterprise features.
+- Real-time or streaming transcription (batch file processing is simpler and more reliable).
+- Cloud storage, account sync, or data exfiltration features (users control their own transcripts).
+- Library-first packaging or monorepo extraction — this remains a cohesive end-user product.
+- Chasing the absolute newest Python runtime or heavy observability stacks that would complicate local GPU usage or CLI UX.
+- Broad expansion into adjacent domains that would dilute the focused value of accurate, private, offline-capable transcription and analysis.
 
-### v2.4.1 - OBS Recording Reliability
-
-- Enhanced WebSocket connection with graceful hostname validation error suppression
-- IPv4 prioritization, improved host fallback strategies
-- 46 new OBS recorder tests covering all error paths
-
-### v2.4.0 - User Experience Polish
-
-- Cleaner recording UI with professional formatting
-- Text-based indicators (DONE, ERROR, WARNING) for consistency
-- Performance tracker outlier detection for better time estimates
-
-### v2.3.1 - Gemini 3 + Joke Bake-off
-
-- Gemini 3 Pro integration with 1M token context
-- Joke bake-off mode where all providers compete
-
-### v2.3.0 - Production-Grade Music Transcription
-
-- Segment-based transcription with VAD timestamps
-- Complete lyrics capture (no missing verses)
-- Hallucination filtering
-- Separation-first architecture with Hybrid Transformer Demucs
-- 99 language support
+These boundaries exist so Scribe stays excellent at what it does rather than becoming a general-purpose media or AI platform.
 
 ---
 
 ## Version History
 
-| Version | Focus | Status |
-|---------|-------|--------|
-| 2.4.3 | OBS Recording Reliability | Current |
-| 2.4.2 | Code Quality + Bug Fixes | Production |
-| 2.4.1 | OBS Reliability | Production |
-| 2.4.0 | UX Polish | Production |
-| 2.3.1 | Gemini + Bake-off | Production |
-| 2.3.0 | Music Transcription | Production |
-| 2.2.x | Multi-Provider | Production |
-| 2.1.x | Provider Abstraction | Production |
-| 2.0.x | GPU Acceleration | Production |
+High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
+
+| Version | Primary Focus                  | Status    |
+|---------|--------------------------------|-----------|
+| 2.4.3   | OBS recording reliability      | Current   |
+| 2.4.2   | Code quality + .env handling   | Released  |
+| 2.4.1   | OBS WebSocket hardening        | Released  |
+| 2.4.0   | Recording UX polish            | Released  |
+| 2.3.x   | Multi-provider AI + music mode | Released  |
+| 2.0–2.2 | GPU acceleration + providers   | Released  |
 
 ---
 
 ## Design Principles
 
 ### Quality Over Speed
-
-- Uses Whisper large-v3 by default for strong accuracy
-- Audio normalization is enabled for consistency
-- Faster models remain available when speed is preferred
+- Uses Whisper large-v3 by default for strong accuracy.
+- Audio normalization is enabled for consistency.
+- Faster models remain available when speed is preferred.
 
 ### Defensive by Design
+- All external inputs validated at the boundary.
+- Atomic file operations prevent corruption.
+- Comprehensive error handling with automatic fallback.
+- Rich, typed exception hierarchy with structured context for every failure domain.
 
-- All external inputs validated
-- Atomic file operations prevent corruption
-- Comprehensive error handling with automatic fallback
+### Clean Code and Modern Engineering
+- Ongoing removal of unused symbols and dead paths.
+- Functions kept focused and testable.
+- Large, high-quality test suite run on every change.
+- Tooling and process upgrades follow the ordered plan below rather than ad-hoc adoption.
 
-### Clean Code
-
-- Ongoing cleanup of unused variables/imports
-- 2 intentional pyflakes warnings (re-exports in providers/__init__.py)
-- Functions focused and testable
-- Test suite is run continuously during development
-
----
-
-## Scope
-
-### What Scribe Does Well
-
-- GPU-accelerated transcription (11x real-time on RTX 4090)
-- Multi-provider AI support (OpenAI, XAI/Grok, Anthropic, Gemini)
-- OBS recording integration
-- Music transcription with vocal separation
-- Meeting notes, jokes, and memes
-- Batch processing and custom vocabulary
-
-### Intentionally Excluded
-
-- Multi-user/enterprise features (local-first tool)
-- Web UI (CLI-first design)
-- Real-time transcription (batch is simpler and more reliable)
-- Cloud storage sync (users control their data)
+See the Engineering Excellence section for the concrete, sequenced work required to raise the baseline.
 
 ---
 
-**Last Updated:** 2026-02-14
+## Engineering Excellence — Ordered Work Plan
+
+The goal is a codebase that is reproducible, statically verifiable, and easy to maintain for the long term, while remaining pragmatic for a GPU-heavy CLI with complex ML dependencies (torch, faster-whisper, demucs, yt-dlp, etc.).
+
+We follow a strict logical order. Each step builds the foundation the next step requires. Work is complete only when the Definition of Done for that step is met and the gates are enforced in CI and local development.
+
+### 1. Reproducible Environment Foundation
+Establish a single source of truth for Python version, dependencies, and development environment before changing anything else.
+
+**Work in this step:**
+- Add `.python-version` pinned to 3.12 and set `requires-python = ">=3.12"` in pyproject.toml. Update classifiers and all documentation.
+- Adopt uv as the canonical package and project manager. Generate and commit `uv.lock`. Update all development and CI commands to use `uv sync` and `uv run`.
+- Consolidate configuration into pyproject.toml: remove duplicate settings from pytest.ini, retire the Black configuration, and expand the Ruff configuration with preview rules, security rules, and appropriate complexity limits.
+- Add `.pre-commit-config.yaml` with ruff (lint + format), mypy, and basic test hooks. Make `pre-commit install` part of the documented onboarding.
+- Overhaul CI to use uv for all jobs, expand the Python matrix to 3.12 and 3.13, add a dedicated lint + types job, a coverage gate job, and a dependency vulnerability scan step.
+- Update README, DEVELOPMENT.md, and related docs to present the uv workflow first while retaining pip instructions for accessibility.
+- Mark `requirements.txt` and `requirements-dev.txt` as legacy compatibility shims with clear pointers to the pyproject/uv approach.
+
+**Definition of Done:**
+- A fresh clone on Windows, macOS, or Linux followed by `uv sync` and `uv run scribe doctor` produces a working, identical environment.
+- All CI jobs pass using the new uv-based pipeline.
+- `pre-commit run --all-files` passes cleanly for any contributor who has run the install step.
+- No developer or CI runner can accidentally use an inconsistent Python version or dependency set.
+
+This step must be finished before meaningful progress on later steps. Reproducible environments are the prerequisite for reliable type checking, testing, and security scanning.
+
+### 2. Automated Static Quality Gates
+Lock in consistent formatting and strong linting with fast local and CI feedback before investing in stricter type checking.
+
+**Work in this step:**
+- Finalize the expanded Ruff configuration (line length, target version, full preview rule set, security plugins, selected flake8 extensions, and tuned complexity / cognitive complexity caps).
+- Enforce `ruff format` and `ruff check` in pre-commit and in every CI run. Treat violations as hard failures.
+- Remove any remaining Black or isort configuration and usage.
+- Add a clear CONTRIBUTING or development section that states the formatting and linting expectations for all new code.
+
+**Definition of Done:**
+- `ruff format --check` and `ruff check` pass on the entire tree in CI and locally via pre-commit.
+- The project has a single, documented style enforced by the toolchain (no more "we use Black for this and Ruff for that").
+- New pull requests cannot introduce formatting or lint drift.
+
+Only after this step is solid does it make sense to raise the cost of type checking.
+
+### 3. Type Safety and Static Verification
+Make the public surface and core logic statically verifiable.
+
+**Work in this step:**
+- Drive the codebase to a clean `mypy --strict` (or equivalent high-performance checker) result across src/, with only minimal, documented overrides for third-party ML libraries that lack stubs.
+- Complete type annotations on all public functions, classes, and module boundaries in the CLI, providers, core orchestration, and widely used utilities.
+- Progressively enable stricter Ruff rules that become valuable once formatting is locked (unused arguments, comprehensions, simplification rules, etc.).
+- Introduce hypothesis for property-based testing on pure logic modules (vocabulary handling, cost calculation, validation helpers, progress and segment math, etc.).
+- Raise the coverage fail-under threshold and enable branch coverage reporting on core modules where it provides signal.
+
+**Definition of Done:**
+- `uv run mypy --strict src/scribe` (or equivalent) exits zero with no new ignores or untyped public symbols.
+- New code cannot be merged if it reduces type coverage or introduces unannotated public APIs.
+- Property-based tests run in CI under an appropriate marker and have demonstrated value by surfacing at least one invariant violation.
+- Coverage gate in CI reflects the new higher threshold.
+
+### 4. Error Handling, Security, and Operational Hygiene
+Tighten runtime behavior and add security scanning only after the static foundations are in place.
+
+**Work in this step:**
+- Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.
+- Add blocking dependency vulnerability scanning to CI (fail on high or critical findings).
+- Document and optionally implement SBOM generation for users who require compliance artifacts.
+- Add a security / environment surface check to `scribe doctor` (Python version, known vulnerable packages, CUDA driver age where detectable).
+- Evaluate minimal structured logging additions only behind an opt-in flag that does not change the default excellent Rich console + detailed file log experience.
+- Establish a lightweight `docs/adr/` practice for any future major tooling, dependency, or architectural decisions.
+
+**Definition of Done:**
+- No high or critical vulnerabilities reported by the scanner on main.
+- All new code follows the explicit error handling + logging rule (reviewable and preferably machine-checkable).
+- The security model of the tool (local data, optional API transmission, user-controlled outputs) is clearly documented.
+
+### 5. Governance and Long-Term Sustainability
+Put the processes and artifacts in place that let the elevated standards survive beyond any single contributor.
+
+**Work in this step:**
+- When the PyTorch, CTranslate2, and demucs ecosystems publish reliable Python 3.14 wheels (including CUDA variants), evaluate promoting 3.14 in the matrix and potentially raising the minimum. Do not do this earlier.
+- Produce or derive a minimal external template (Copier or GitHub template) from the final pyproject.toml, pre-commit config, and CI workflow so future projects can inherit the standards without copying by hand.
+- Keep the Engineering Excellence section of this roadmap and the contributor documentation living and accurate so anyone joining the project knows exactly which gates apply.
+
+**Definition of Done:**
+- The elevated baseline is the default for any new work and is described in one place that is kept current.
+- Future contributors can stand up a correctly configured environment and pass all gates with the documented commands.
+
+---
+
+## Explicit Non-Goals (Protecting Focus)
+
+These are deliberate decisions to keep Scribe a focused, high-quality tool rather than a general platform:
+
+- We will not declare Python 3.14 (or any future version) as a hard minimum until the full CUDA/ML dependency stack has mature, widely available wheels. User hardware compatibility comes before chasing runtime features.
+- We will not impose strict function length caps or require a fixed number of asserts in every public function. We use Ruff complexity rules, code review, and the existing strong defensive boundaries (Pydantic validators, exception hierarchy, circuit breakers) instead.
+- We will not replace the current dual-output logging (clean Rich console for users + rich file logs for debugging) with a heavy structured logging or OpenTelemetry stack by default.
+- We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
+- We will not add web UIs, multi-user features, real-time streaming, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above).
+- We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
+
+Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
+
+---
+
+**Last Updated:** 2026-05-09
 

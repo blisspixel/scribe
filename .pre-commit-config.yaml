@@ -1,0 +1,52 @@
+# Pre-commit configuration for Scribe
+# Run `pre-commit install` after cloning to enable hooks.
+#
+# This enforces the Engineering Excellence standards from the start:
+# - Consistent formatting and linting via Ruff
+# - Type checking via mypy (strict mode)
+# - Basic test smoke checks
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.10
+          - typer>=0.15
+          - rich>=13.9
+        args:
+          - --strict
+          - --no-error-summary
+        files: ^src/
+        exclude: ^(archive|build|dist)/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: debug-statements
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+# Optional: You can add a pytest hook for fast local smoke tests, but it is
+# intentionally not enabled by default because the full test suite is large.
+# Example (uncomment if desired for very fast feedback):
+#
+#   - repo: local
+#     hooks:
+#       - id: pytest-fast
+#         name: pytest (fast subset)
+#         entry: uv run pytest -x -q -m "not slow and not gpu and not e2e"
+#         language: system
+#         pass_filenames: false
+#         always_run: true

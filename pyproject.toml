@@ -7,7 +7,7 @@ name = "scribe"
 version = "2.4.3"
 description = "Professional GPU-accelerated speech-to-text transcription system"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 authors = [
     {name = "blissplixel", email = "blissplixel@users.noreply.github.com"}
@@ -19,9 +19,9 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -48,14 +48,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-mock>=3.11.0",
-    "black>=23.7.0",
-    "ruff>=0.0.285",
-    "mypy>=1.5.0",
-    "pre-commit>=3.3.3",
+    "ruff>=0.9",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
     "types-tqdm",
     "types-requests",
 ]
@@ -79,28 +74,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 scribe = ["py.typed"]
 
-[tool.black]
-line-length = 100
-target-version = ["py310", "py311", "py312"]
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-  | archive
-)/
-'''
-
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 exclude = [
     ".git",
     ".mypy_cache",
@@ -113,20 +89,22 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "ARG", # flake8-unused-arguments
-    "SIM", # flake8-simplify
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "S",      # flake8-bandit (security)
+    "RUF",    # Ruff-specific rules
 ]
 ignore = [
-    "E501",   # line too long (handled by black)
+    "E501",   # line too long (handled by ruff format)
     "B008",   # do not perform function calls in argument defaults
-    "C901",   # too complex
+    "C901",   # too complex (use with care; prefer focused functions)
     "ARG001", # unused function argument (legacy test/style debt)
     "ARG002", # unused method argument (legacy test/style debt)
     "B017",   # broad exception assertion in tests
@@ -138,11 +116,19 @@ ignore = [
     "SIM116", # dict-lookup simplification preference
     "SIM117", # combine nested with statements
 ]
+extend-select = ["I", "UP", "B", "S"]
+
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # unused imports in __init__.py
+"__init__.py" = ["F401"]  # unused imports in __init__.py (intentional re-exports)
+"tests/**/*" = ["S101"]  # allow assert in tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -174,6 +160,26 @@ module = [
     "torchaudio.*",
 ]
 ignore_missing_imports = true
+
+[tool.uv]
+python-preference = "only-managed"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pip-audit>=2.7",
+    "types-tqdm",
+    "types-requests",
+]
+
+[tool.uv.sources]
+# Add any private indexes or workspace members here when needed.
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -208,7 +214,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 85
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

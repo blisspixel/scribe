@@ -1,5 +1,15 @@
-# Core dependencies for Scribe transcription system
-# Install with: pip install -r requirements.txt
+# DEPRECATED — Legacy pip requirements file.
+# Scribe now uses uv as the sole package manager (pyproject.toml + uv.lock).
+#
+# For development:   uv sync
+# For classic pip:   pip install -e .
+#                    (uv will still manage the lockfile for reproducibility)
+#
+# This file is kept only for reference / one-off pip installs.
+# Do not use for new development or CI. See README.md and ROADMAP.md.
+#
+# Core dependencies for Scribe transcription system (historical)
+# Install with: pip install -r requirements.txt (legacy path)
 
 # Deep Learning and Audio
 torch>=2.0.0
