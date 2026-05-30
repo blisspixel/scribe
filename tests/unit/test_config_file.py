@@ -55,7 +55,10 @@ def test_save_config_file_writes_sections_and_escaped_values(monkeypatch, tmp_pa
 
     saved_path = config_file.save_config_file(
         {
-            "output": {"folder": Path("C:/Users/Nick/Scribe Output")},
+            # Use an explicit backslash string (not a Path) so the escaping
+            # assertion is identical on Windows and POSIX runners; str(Path)
+            # would otherwise normalize separators per platform.
+            "output": {"folder": "C:\\Users\\Nick\\Scribe Output"},
             "transcription": {"method": "auto", "model": "large-v3"},
             "features": {"generate_notes": False, "generate_joke": True},
             "providers": {"joke_provider": 'open"ai'},
