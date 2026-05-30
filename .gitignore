@@ -299,7 +299,7 @@ site/
 # Keep test data
 !tests/data/**
 !tests/fixtures/**
-# Claude Code
+# Local agent/editor working dirs
 .claude/
 
 /.kiro

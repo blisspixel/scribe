@@ -7,7 +7,7 @@ building on Scribe's existing branding and terminal UI systems.
 The animation engine bypasses Rich's rendering pipeline during playback,
 writing pre-rendered ANSI escape strings directly to stdout at 60fps
 with precise timing (hybrid sleep + busy-wait to defeat Windows timer
-granularity). Inspired by GitHub Copilot CLI's animation approach.
+granularity).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from scribe.utils.terminal_ui import TerminalUIConfig, get_terminal_ui_config
 from scribe.utils.theme import ScribeTheme
 
 # ─── ASCII Wordmark ─────────────────────────────────────────────────────
-# ANSI Shadow block font — bold 6-line design inspired by GitHub Copilot CLI.
+# ANSI Shadow block font — bold 6-line design.
 # Uses █ (full block) for fills and ╔═╗║╚╝ (double-line box-drawing) for edges.
 
 BANNER_ART = (

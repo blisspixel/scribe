@@ -2,7 +2,7 @@
 Scribe CLI Theme System - 2026 Modern Design Language
 
 A minimal, monochromatic design system inspired by modern CLI tools
-like Claude Code, GitHub CLI, and Warp.
+like GitHub CLI and Warp.
 
 DESIGN PHILOSOPHY:
 ──────────────────
@@ -13,7 +13,6 @@ DESIGN PHILOSOPHY:
 - Terminal-native aesthetic
 
 This theme draws inspiration from:
-- Claude Code (minimal, blue accent)
 - GitHub CLI (gray scale, subtle highlights)
 - Warp (modern terminal, restrained palette)
 - Vercel CLI (black/white with minimal accent)
@@ -38,7 +37,7 @@ class ScribeTheme:
     # ═══════════════════════════════════════════════════════════════════════
 
     # Blue accent - modern, professional, universal
-    # Similar to Claude Code, GitHub, VS Code
+    # Similar to GitHub and VS Code
     ACCENT = "#6b9fff"  # Soft blue - primary accent
     ACCENT_DIM = "#4a7fd4"  # Dimmed accent for borders
 
