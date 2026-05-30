@@ -90,10 +90,9 @@ def test_estimate_text_cost_usd_never_negative(model: str, prompt: float, comple
 def test_estimate_text_cost_usd_matches_pricing_math(model: str, prompt: int, completion: int):
     """For known models the estimate exactly follows the pricing table math."""
     pricing = TEXT_MODEL_PRICING[model.lower()]
-    expected = (
-        (prompt / 1_000_000) * pricing.input_per_million
-        + (completion / 1_000_000) * pricing.output_per_million
-    )
+    expected = (prompt / 1_000_000) * pricing.input_per_million + (
+        completion / 1_000_000
+    ) * pricing.output_per_million
     actual = estimate_text_cost_usd(model, prompt, completion)
     assert actual == expected
 

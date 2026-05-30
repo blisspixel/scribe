@@ -27,6 +27,24 @@ from scribe.utils.platform import get_ffmpeg_path, get_obs_executable_path
 
 logger = get_logger(__name__)
 
+# NOTE ON ERROR HANDLING IN THIS MODULE
+# --------------------------------------
+# This module intentionally uses broader exception handling (catching Exception
+# in specific places) + explicit fallbacks for the following reasons:
+#   - OBS Studio is external desktop software that may or may not be running,
+#     may use WebSocket or CLI control, and can be in any state.
+#   - Hardware variability (Windows primary target, multiple OBS versions,
+#     permission differences, path differences) requires graceful degradation.
+#   - The design prioritizes "recording still succeeds" over "fail fast on any
+#     unexpected state".
+# All such sites log at appropriate levels (debug/warning) and either:
+#   - Fall back to a secondary strategy (WebSocket → CLI), or
+#   - Raise a typed ScribeError (ProcessError) with context for the caller.
+# See ROADMAP.md Step 4 and future docs/adr/ for the exception taxonomy rationale.
+# This is NOT a violation of defensive programming — it is a deliberate
+# reliability choice for local-first desktop tools interacting with flaky
+# external processes.
+
 # Try to import OBS WebSocket library
 try:
     from obsws_python import error as obs_error
@@ -313,7 +331,9 @@ class OBSRecorder:
                         stderr=subprocess.DEVNULL,
                     )
             except Exception:
-                pass
+                # Best-effort cleanup only — OBS may already be dead or permissions
+                # may prevent kill on this platform. Non-fatal; proceed to sentinel clean.
+                logger.debug("Secondary kill attempt failed (non-fatal during OBS cleanup)")
             time.sleep(1.0)
 
         # Clean OBS crash sentinel so it won't ask about safe mode
