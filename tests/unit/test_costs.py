@@ -1,5 +1,8 @@
 """Tests for provider cost helpers."""
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from scribe.utils.costs import (
     TEXT_MODEL_PRICING,
     USD_TICKS_PER_DOLLAR,
@@ -51,8 +54,6 @@ def test_add_cost_fields_estimates_known_model_without_exact_cost():
 
 # --- Hypothesis property tests (Step 3 Engineering Excellence) ---
 
-from hypothesis import given, strategies as st
-
 # Known models from the pricing table (for targeted testing)
 KNOWN_MODELS = list(TEXT_MODEL_PRICING.keys())
 
@@ -71,7 +72,7 @@ def test_usd_from_ticks_is_non_negative_and_inverts(ticks: int):
 
 
 @given(
-    model=st.sampled_from(KNOWN_MODELS + ["unknown-model-xyz"]),
+    model=st.sampled_from([*KNOWN_MODELS, "unknown-model-xyz"]),
     prompt=st.floats(min_value=0, max_value=10_000_000),
     completion=st.floats(min_value=0, max_value=10_000_000),
 )

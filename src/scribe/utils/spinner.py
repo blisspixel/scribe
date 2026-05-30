@@ -15,8 +15,8 @@ from scribe.utils.theme import ScribeTheme
 class SpinnerProgress:
     """Consistent spinner progress display with elapsed time."""
 
-    # Modern color scheme using ScribeTheme
-    COLORS = {
+    # Modern color scheme using ScribeTheme (class constant, intentionally mutable dict)
+    COLORS: dict[str, str] = {  # noqa: RUF012
         "process": ScribeTheme.PRIMARY,  # Sophisticated teal for ongoing ops
         "success": ScribeTheme.SUCCESS,  # Soft green for completion
         "warning": ScribeTheme.WARNING,  # Amber for warnings

@@ -67,6 +67,25 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 - Large, high-quality test suite run on every change.
 - Tooling and process upgrades follow the ordered plan below rather than ad-hoc adoption.
 
+### High-Assurance Practices (Adapted for This Project)
+We draw from strong engineering standards (type safety, Design by Contract, property-based testing, supply-chain hygiene, and architectural discipline) while remaining pragmatic for a local-first Windows GPU CLI with heavy ML dependencies.
+
+Adopted where they add verifiable value:
+- Design by Contract (via the `deal` library) on pure critical modules.
+- Strict "Parse, Don't Validate" at system boundaries.
+- Hypothesis (including state machines) on complex logic and lifecycles.
+- Mutation testing and lightweight fault injection as advanced verification.
+- Explicit pure-Python preference for new dependencies, with architecture review for any C extension.
+- Free-threaded Python discipline (no implicit shared mutable state; message passing preferred).
+
+Deliberately not adopted (or deferred):
+- Rigid function-length caps or mandatory asserts in every public API.
+- Default structured logging / OpenTelemetry stack (current dual Rich + file logging remains a strength for desktop UX).
+- Full SLSA Level 3 provenance ceremony for a local desktop tool.
+- Immediate 95%+ branch coverage gate or free-threaded 3.14t matrix (wheels for the core GPU stack are not yet reliable on Windows).
+
+These choices are documented so the project stays focused and the roadmap cannot drift into purity theater. See Explicit Non-Goals below and the ADRs in `docs/adr/`.
+
 See the Engineering Excellence section for the concrete, sequenced work required to raise the baseline.
 
 ---
@@ -120,14 +139,17 @@ Make the public surface and core logic statically verifiable.
 - Drive the codebase to a clean `mypy --strict` (or equivalent high-performance checker) result across src/, with only minimal, documented overrides for third-party ML libraries that lack stubs.
 - Complete type annotations on all public functions, classes, and module boundaries in the CLI, providers, core orchestration, and widely used utilities.
 - Progressively enable stricter Ruff rules that become valuable once formatting is locked (unused arguments, comprehensions, simplification rules, etc.).
-- Introduce hypothesis for property-based testing on pure logic modules (vocabulary handling, cost calculation, validation helpers, progress and segment math, etc.).
+- Introduce Hypothesis for property-based testing on pure logic modules (vocabulary handling, cost calculation, validation helpers, etc.), including state machines for complex object lifecycles (recorder state, session management, provider health).
+- Introduce Design by Contract (`deal`) on pure critical modules for preconditions, postconditions, and invariants. Contracts run in dev/test and are stripped in production builds.
+- Strengthen "Parse, Don't Validate": audit Pydantic models for `strict=True` + `extra='forbid'`, prefer domain types (frozen dataclasses, NewTypes) at boundaries so illegal states are unrepresentable.
 - Raise the coverage fail-under threshold and enable branch coverage reporting on core modules where it provides signal.
 
 **Definition of Done:**
 - `uv run mypy --strict src/scribe` (or equivalent) exits zero with no new ignores or untyped public symbols.
 - New code cannot be merged if it reduces type coverage or introduces unannotated public APIs.
-- Property-based tests run in CI under an appropriate marker and have demonstrated value by surfacing at least one invariant violation.
-- Coverage gate in CI reflects the new higher threshold.
+- Property-based tests (including at least one state machine test for a complex lifecycle) run in CI under an appropriate marker.
+- Design by Contract is in use on at least the core pure modules (costs, validation, atomic operations) with tests exercising the contracts.
+- Coverage gate in CI reflects the current threshold (pragmatically raised over time toward higher branch coverage).
 
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
@@ -151,7 +173,10 @@ Tighten runtime behavior and add security scanning only after the static foundat
 Put the processes and artifacts in place that let the elevated standards survive beyond any single contributor.
 
 **Work in this step:**
-- When the PyTorch, CTranslate2, and demucs ecosystems publish reliable Python 3.14 wheels (including CUDA variants), evaluate promoting 3.14 in the matrix and potentially raising the minimum. Do not do this earlier.
+- When the PyTorch, CTranslate2, and demucs ecosystems publish reliable Python 3.14 wheels (including CUDA variants), evaluate promoting 3.14 as the primary development and static-analysis baseline (while keeping `requires-python = ">=3.12"` until wheels are widely available on Windows). Do not do this earlier.
+- Add periodic mutation testing (mutmut or equivalent) as a non-blocking verification job to demonstrate that the test suite actually detects injected faults.
+- Add lightweight fault-injection / chaos testing at I/O and external-process boundaries (malformed input, simulated timeouts, missing OBS, disk pressure on atomic writes, etc.).
+- Formalize a pure-Python preference policy for new dependencies: high-quality pure-Python packages are required unless no viable alternative exists; any new C extension requires explicit architecture review and cp314t compatibility consideration.
 - Produce or derive a minimal external template (Copier or GitHub template) from the final pyproject.toml, pre-commit config, and CI workflow so future projects can inherit the standards without copying by hand.
 - Keep the Engineering Excellence section of this roadmap and the contributor documentation living and accurate so anyone joining the project knows exactly which gates apply.
 
@@ -165,12 +190,17 @@ Put the processes and artifacts in place that let the elevated standards survive
 
 These are deliberate decisions to keep Scribe a focused, high-quality tool rather than a general platform:
 
-- We will not declare Python 3.14 (or any future version) as a hard minimum until the full CUDA/ML dependency stack has mature, widely available wheels. User hardware compatibility comes before chasing runtime features.
-- We will not impose strict function length caps or require a fixed number of asserts in every public function. We use Ruff complexity rules, code review, and the existing strong defensive boundaries (Pydantic validators, exception hierarchy, circuit breakers) instead.
-- We will not replace the current dual-output logging (clean Rich console for users + rich file logs for debugging) with a heavy structured logging or OpenTelemetry stack by default.
+- We will not declare Python 3.14 (or any future version) as a hard minimum until the full CUDA/ML dependency stack has mature, widely available wheels on Windows. User hardware compatibility and the primary GPU path come before chasing runtime features.
+- We will not impose rigid function-length caps (<50 lines) or require a fixed number of asserts/validators in every public function. We use Ruff complexity + cognitive complexity rules, code review, Pydantic validators, the ScribeError hierarchy, and circuit breakers instead.
+- We will not replace the current dual-output logging (clean Rich console for users + detailed rotating file logs for debugging) with a heavy structured logging or OpenTelemetry stack by default. The existing approach is a deliberate strength for desktop CLI UX.
+- We will not pursue full SLSA Level 3 + in-toto + Sigstore provenance attestation for a local desktop CLI. These are high-ceremony measures with limited value until the project has a published package with many external dependents.
+- We will not run the free-threaded 3.14t build in CI while the core GPU/ML wheels lack reliable support on Windows.
+- We will not apply Design by Contract or strict parsing rules uniformly across CLI glue, UI layers, or provider code. These techniques are reserved for pure, critical business logic where they add clear value.
 - We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
 - We will not add web UIs, multi-user features, real-time streaming, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above).
 - We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
+
+Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
 
 Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
 
