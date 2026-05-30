@@ -86,6 +86,9 @@ def test_ffmpeg_and_ffprobe_detection_use_path_env_and_common_locations(tmp_path
     with (
         patch("shutil.which", return_value=None),
         patch("scribe.utils.platform.get_ffmpeg_path", return_value=ffmpeg_file),
+        # Pin Windows so the sibling lookup targets ffprobe.exe deterministically;
+        # on POSIX runners the code would otherwise search for bare "ffprobe".
+        patch("scribe.utils.platform.is_windows", return_value=True),
     ):
         assert get_ffprobe_path() == ffprobe_path
 
