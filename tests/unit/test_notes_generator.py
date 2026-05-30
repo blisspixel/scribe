@@ -30,7 +30,7 @@ class TestNotesGeneratorInit:
         generator = NotesGenerator(api_key="sk-test123")
         assert generator.api_key == "sk-test123"
         # Model may vary depending on the selected provider.
-        assert generator.config.model in ["gpt-5.2", "grok-4.3"]
+        assert generator.config.model in ["gpt-5.5", "grok-4.3"]
 
     def test_init_with_custom_model(self):
         """Test initialization with custom model."""

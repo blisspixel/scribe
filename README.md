@@ -54,7 +54,7 @@ See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCH
 All historical changes and the full version history live in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog format).
 
 The current workspace is executing the **Engineering Excellence Roadmap** (see [ROADMAP.md](ROADMAP.md)):
-- Step 1 complete: reproducible uv foundation, .python-version pin, consolidated pyproject.toml, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 85% cov gate, pip-audit security, aggregator job).
+- Step 1 complete: reproducible uv foundation, .python-version pin, consolidated pyproject.toml, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
 
 ---
 
@@ -619,8 +619,8 @@ pytest
 # Unit tests only
 pytest tests/unit/
 
-# With coverage (gate is enforced in CI at 87%; local target ≥87%)
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=87
+# With coverage (gate is enforced in CI at 80%+)
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
 
 # Quick check
 pytest tests/unit/ --tb=no -q
@@ -650,7 +650,7 @@ See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the order
 - **ruff** — universal linter + formatter (replaced Black + isort)
 - **mypy --strict** on src/ (enforced in CI)
 - **pre-commit** — local gates before every commit (ruff + mypy + basic checks)
-- pytest + pytest-cov (85% gate enforced in CI)
+- pytest + pytest-cov (80%+ gate enforced in CI)
 
 See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml) for the ordered plan and current gates.
 

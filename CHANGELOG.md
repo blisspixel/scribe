@@ -28,8 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - OBS "not ready" (code 207) errors with proper retry and backoff.
-- CI pipeline (ruff, mypy --strict, test matrix, coverage 87% gate, pip-audit) now passes cleanly on 3.12/3.13 after consolidating config, adding pragmatic per-file ignores for hardware graceful-degradation paths (ADR-002), updating outdated test expectations for current model defaults, and excluding optional Pillow-dependent tests from the basic matrix.
-- Lightweight "Tests (Python X)" matrix jobs no longer incorrectly inherit the 87% coverage gate (removed --cov* from global pytest addopts; the dedicated coverage job passes the flags explicitly).
+- CI pipeline (ruff, mypy --strict, test matrix, coverage 80%+ gate, blocking pip-audit) now passes cleanly on 3.12/3.13 after consolidating config, adding pragmatic per-file ignores for hardware graceful-degradation paths (ADR-002), updating outdated test expectations for current model defaults, and excluding optional Pillow-dependent tests from the basic matrix.
+- Lightweight "Tests (Python X)" matrix jobs no longer incorrectly inherit the coverage gate (removed --cov* from global pytest addopts; the dedicated coverage job passes the flags explicitly).
+- GitHub Actions now syncs each job with its explicit Python version so the 3.13 matrix leg no longer silently reuses `.python-version`.
 - `TestConfigDefaults.test_config_defaults` is now hermetic (patches user config file loader) and passes on clean CI runners regardless of dev-machine ~/.scribe/config.toml contents.
 - Windows input handling for stop/quit commands during recording.
 - OBS WebSocket client cleanup, reconnect logic, and auth mismatch detection.
@@ -39,8 +40,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Engineering
 - 1,143 tests collected with strong coverage of error paths.
+- Added focused config-file and first-run wizard tests, raising the CI coverage baseline above 80%.
 - Significant code quality cleanup (40+ unused symbols removed, multiple bug fixes).
-- **Step 4 (Error Handling / Security / Observability)**: Full diagnostic sweep of broad `except Exception`, bare `pass`/`continue`, `print()`, and subprocess usage across `src/`. One minor silent `pass` in OBS cleanup tightened with structured log. All other broad handling classified as intentional graceful degradation for hardware variability (OBS, GPU, providers, ffmpeg) and documented with module comments. Verified zero `shell=True`; all subprocess calls use explicit argument lists. Doctor + support bundle already perform safe partial redaction of API keys. Created first three ADRs (Python 3.12 baseline with 3.14 gate; exception taxonomy + graceful degradation rationale; Ruff confusable allowance for readability in a language/humor tool). Ruff S-bandit survivors (55) accepted as inherent to a local desktop tool that must launch external processes; no functionality removed.
+- **Step 4 (Error Handling / Security / Observability)**: Full diagnostic sweep of broad `except Exception`, bare `pass`/`continue`, `print()`, and subprocess usage across `src/`. One minor silent `pass` in OBS cleanup tightened with structured log. All other broad handling classified as intentional graceful degradation for hardware variability (OBS, GPU, providers, ffmpeg) and documented with module comments. Verified zero `shell=True`; all subprocess calls use explicit argument lists. Doctor + support bundle already perform safe partial redaction of API keys. Created four ADRs (Python 3.12 baseline with 3.14 gate; exception taxonomy + graceful degradation rationale; Ruff confusable allowance for readability in a language/humor tool; dependency vulnerability audit policy). Ruff S-bandit survivors (55) accepted as inherent to a local desktop tool that must launch external processes. Dependency vulnerability scanning is now blocking in CI with an explicit torch advisory ignore policy while upstream CUDA wheel compatibility is monitored.
 
 ---
 

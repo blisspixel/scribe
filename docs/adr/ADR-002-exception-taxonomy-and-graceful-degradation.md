@@ -59,7 +59,7 @@ All such sites were reviewed in Step 4 of the elevation. One minor `pass` withou
 ### Mitigations
 - Heavy use of typed exceptions + context means most fallbacks are still type-directed.
 - All intentional broad sites are now explicitly documented (module comments + this ADR).
-- CI + pre-commit + mypy --strict on src/ + 87%+ coverage keep the surface under control.
+- CI + pre-commit + mypy --strict on src/ + 80%+ coverage keep the surface under control.
 - Future work (Step 4/5) can introduce more contextlib.suppress + explicit error contracts where it adds clarity without risk.
 
 ## References

@@ -427,7 +427,10 @@ def open_file_with_default_app(file_path: Path) -> bool:
     """
     try:
         if is_windows():
-            os.startfile(str(file_path))
+            startfile = getattr(os, "startfile", None)
+            if startfile is None:
+                return False
+            startfile(str(file_path))
         elif is_macos():
             import subprocess
 
@@ -517,9 +520,10 @@ def check_disk_space(path: Path, required_gb: float = 1.0) -> bool:
             import ctypes
 
             free_bytes = ctypes.c_ulonglong(0)
-            ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-                str(path), None, None, ctypes.pointer(free_bytes)
-            )
+            windll = getattr(ctypes, "windll", None)
+            if windll is None:
+                return True
+            windll.kernel32.GetDiskFreeSpaceExW(str(path), None, None, ctypes.pointer(free_bytes))
             free_gb = free_bytes.value / (1024**3)
         else:
             import os
