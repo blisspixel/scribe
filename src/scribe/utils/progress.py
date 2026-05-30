@@ -365,7 +365,7 @@ class ProgressTracker:
 
             logger = logging.getLogger("scribe")
             logger.info(
-                f"{self.operation} completed in {elapsed:.1f}s " f"({speed_ratio:.1f}x realtime)"
+                f"{self.operation} completed in {elapsed:.1f}s ({speed_ratio:.1f}x realtime)"
             )
 
 

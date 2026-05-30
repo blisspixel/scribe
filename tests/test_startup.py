@@ -21,9 +21,9 @@ init(autoreset=True)
 
 def print_header(title: str):
     """Print a formatted test section header."""
-    print(f"\n{Fore.CYAN}{'='*60}")
+    print(f"\n{Fore.CYAN}{'=' * 60}")
     print(f"{Fore.CYAN}{title:^60}")
-    print(f"{Fore.CYAN}{'='*60}")
+    print(f"{Fore.CYAN}{'=' * 60}")
 
 
 def print_test(name: str, status: str, details: str = ""):
@@ -92,15 +92,17 @@ def test_path_handling():
                 cleaned_path = str(cleaned_path)
 
                 if os.path.exists(cleaned_path):
-                    print_test(f"Path format {i+1}: {test_path[:30]}...", "PASS")
+                    print_test(f"Path format {i + 1}: {test_path[:30]}...", "PASS")
                 else:
                     print_test(
-                        f"Path format {i+1}: {test_path[:30]}...", "FAIL", "Cleaned path not found"
+                        f"Path format {i + 1}: {test_path[:30]}...",
+                        "FAIL",
+                        "Cleaned path not found",
                     )
                     all_passed = False
 
             except Exception as e:
-                print_test(f"Path format {i+1}: {test_path[:30]}...", "FAIL", str(e))
+                print_test(f"Path format {i + 1}: {test_path[:30]}...", "FAIL", str(e))
                 all_passed = False
 
         return all_passed

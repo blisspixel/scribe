@@ -1,3 +1,3 @@
 """Data models and types for Scribe."""
 
-__all__ = ["config", "session", "gpu"]
+__all__ = ["config", "gpu", "session"]

@@ -629,7 +629,7 @@ class TestIntegration:
         result = generate_transcript_joke(transcript_path, "test-key")
 
         assert result is not None
-        joke_text, archetype = result
+        _joke_text, archetype = result
 
         # archetype is the display name (e.g., "The Trickster-Employee")
         # Just verify it's a valid string

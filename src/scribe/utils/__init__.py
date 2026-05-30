@@ -2,11 +2,11 @@
 
 __all__ = [
     "audio",
+    "docx_converter",
     "files",
     "gpu",
     "logging",
-    "progress",
     "platform",
+    "progress",
     "validation",
-    "docx_converter",
 ]

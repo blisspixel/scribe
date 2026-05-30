@@ -551,8 +551,7 @@ def validate_audio_file(path: Path) -> None:
         import logging
 
         logging.warning(
-            f"Large file size ({file_size / (1024**3):.2f} GB). "
-            f"Processing may take a while: {path}"
+            f"Large file size ({file_size / (1024**3):.2f} GB). Processing may take a while: {path}"
         )
 
     # Check file extension

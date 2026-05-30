@@ -103,7 +103,6 @@ class TestProviderHealthMonitor:
 
         # Mock all checks to succeed
         with patch.object(monitor, "_check_openai"), patch.object(monitor, "_check_xai"):
-
             api_keys = {
                 "openai": "key1",
                 "xai": "key2",
@@ -124,7 +123,6 @@ class TestProviderHealthMonitor:
             patch.object(monitor, "_check_openai"),
             patch.object(monitor, "_check_xai", side_effect=Exception("Error")),
         ):
-
             api_keys = {
                 "openai": "key1",
                 "xai": "key2",

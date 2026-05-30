@@ -32,6 +32,7 @@ class _ScribeUserConfigSource(PydanticBaseSettingsSource):
     def __call__(self) -> dict[str, Any]:
         return dict(self._data)
 
+
 TranscriptionMethod = Literal["auto", "local", "openai"]
 ModelSize = Literal[
     "tiny",
@@ -168,11 +169,15 @@ class ScribeConfig(BaseSettings):
     )
 
     process_timeout: int = Field(
-        default=14400, ge=60, description="Maximum timeout for processes in seconds"  # 4 hours
+        default=14400,
+        ge=60,
+        description="Maximum timeout for processes in seconds",  # 4 hours
     )
 
     file_wait_timeout: int = Field(
-        default=300, ge=10, description="Maximum time to wait for files in seconds"  # 5 minutes
+        default=300,
+        ge=10,
+        description="Maximum time to wait for files in seconds",  # 5 minutes
     )
 
     max_recording_hours: float = Field(
@@ -219,13 +224,9 @@ class ScribeConfig(BaseSettings):
         default=True, description="Enable automatic meeting notes generation"
     )
 
-    enable_joke: bool = Field(
-        default=True, description="Enable automatic joke generation"
-    )
+    enable_joke: bool = Field(default=True, description="Enable automatic joke generation")
 
-    enable_meme: bool = Field(
-        default=True, description="Enable automatic meme generation"
-    )
+    enable_meme: bool = Field(default=True, description="Enable automatic meme generation")
 
     notes_model: str = Field(default="gpt-5.5", description="GPT model to use for notes generation")
 

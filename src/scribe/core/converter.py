@@ -271,10 +271,10 @@ class Converter:
                 time.sleep(0.5)
 
             try:
-                stdout, stderr = process.communicate(timeout=10)
+                _stdout, stderr = process.communicate(timeout=10)
             except subprocess.TimeoutExpired:
                 process.kill()
-                stdout, stderr = process.communicate()
+                _stdout, stderr = process.communicate()
                 raise ProcessError("Process hung during final communication")
 
             if show_progress and progress_ctx is not None and task is not None:
@@ -345,7 +345,7 @@ class Converter:
         # Get duration for progress estimation
         duration = get_audio_duration(input_file)
         if duration:
-            logger.debug(f"Input duration: {duration:.1f}s ({duration/3600:.2f}h)")
+            logger.debug(f"Input duration: {duration:.1f}s ({duration / 3600:.2f}h)")
 
         start_time = time.time()
 
@@ -380,8 +380,7 @@ class Converter:
             elapsed = time.time() - start_time
             output_size_mb = output_file.stat().st_size / (1024 * 1024)
             logger.info(
-                f"Conversion complete: {output_file.name} "
-                f"({output_size_mb:.1f}MB, {elapsed:.1f}s)"
+                f"Conversion complete: {output_file.name} ({output_size_mb:.1f}MB, {elapsed:.1f}s)"
             )
 
             return output_file
@@ -436,10 +435,10 @@ class Converter:
                 progress.update(task)
 
             try:
-                stdout, stderr = process.communicate(timeout=10)
+                _stdout, stderr = process.communicate(timeout=10)
             except subprocess.TimeoutExpired:
                 process.kill()
-                stdout, stderr = process.communicate()
+                _stdout, stderr = process.communicate()
                 raise ProcessError(
                     f"{format_name} process hung during final communication",
                     context={"input_file": str(input_file)},

@@ -514,17 +514,17 @@ def _refine_prompt_from_feedback(
     refinement_prompt = f"""You are a meme generation expert. Analyze this QA feedback and refine the image generation prompt to fix the issues.
 
 ORIGINAL MEME CONCEPT:
-- Template: {meme_concept.get('template', 'N/A')}
-- Top Text: {meme_concept.get('top_text', 'N/A')}
-- Bottom Text: {meme_concept.get('bottom_text', 'N/A')}
-- Original Image Prompt: {meme_concept.get('image_prompt', 'N/A')}
+- Template: {meme_concept.get("template", "N/A")}
+- Top Text: {meme_concept.get("top_text", "N/A")}
+- Bottom Text: {meme_concept.get("bottom_text", "N/A")}
+- Original Image Prompt: {meme_concept.get("image_prompt", "N/A")}
 
-QA FEEDBACK (Score: {qa_feedback.get('score', 0)}/10):
-- Visual Quality: {qa_feedback.get('visual_quality', 'N/A')}
-- Template Accuracy: {qa_feedback.get('template_accuracy', 'N/A')}
-- Text Integration: {qa_feedback.get('text_integration', 'N/A')}
-- Overall: {qa_feedback.get('overall', 'N/A')}
-- Issues: {', '.join(qa_feedback.get('issues', []))}
+QA FEEDBACK (Score: {qa_feedback.get("score", 0)}/10):
+- Visual Quality: {qa_feedback.get("visual_quality", "N/A")}
+- Template Accuracy: {qa_feedback.get("template_accuracy", "N/A")}
+- Text Integration: {qa_feedback.get("text_integration", "N/A")}
+- Overall: {qa_feedback.get("overall", "N/A")}
+- Issues: {", ".join(qa_feedback.get("issues", []))}
 
 YOUR TASK:
 Analyze the feedback and create a REFINED image prompt that addresses ALL issues. Be specific about:
@@ -573,9 +573,9 @@ Be surgical and specific. We need a 9+/10 meme.
     except Exception as e:
         logger.error(f"Failed to refine prompt: {e}")
         # Fallback: just append feedback to original prompt
-        meme_concept[
-            "image_prompt"
-        ] += f"\n\nIMPROVEMENT NEEDED (Attempt {attempt}): {qa_feedback.get('overall', 'Improve quality')}"
+        meme_concept["image_prompt"] += (
+            f"\n\nIMPROVEMENT NEEDED (Attempt {attempt}): {qa_feedback.get('overall', 'Improve quality')}"
+        )
         return meme_concept
 
 
@@ -609,10 +609,10 @@ def _qa_grade_meme(
         qa_prompt = f"""You are a strict meme quality expert. Grade this meme on a scale of 1-10.
 
 ORIGINAL CONCEPT:
-- Template: {meme_concept.get('template', 'N/A')}
-- Top Text: {meme_concept.get('top_text', 'N/A')}
-- Bottom Text: {meme_concept.get('bottom_text', 'N/A')}
-- Why It's Funny: {meme_concept.get('concept', 'N/A')}
+- Template: {meme_concept.get("template", "N/A")}
+- Top Text: {meme_concept.get("top_text", "N/A")}
+- Bottom Text: {meme_concept.get("bottom_text", "N/A")}
+- Why It's Funny: {meme_concept.get("concept", "N/A")}
 
 GRADING CRITERIA (Focus on image quality - text is overlaid separately):
 

@@ -104,8 +104,7 @@ class ProviderHealthMonitor:
             )
 
             logger.warning(
-                f"{provider_name} health check failed "
-                f"(attempt {status.consecutive_failures}): {e}"
+                f"{provider_name} health check failed (attempt {status.consecutive_failures}): {e}"
             )
 
         # Cache status

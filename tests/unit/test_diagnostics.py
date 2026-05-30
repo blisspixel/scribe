@@ -293,7 +293,7 @@ class TestAdditionalProviders:
         with patch.dict(os.environ, {"XAI_API_KEY": "xai-test-key"}, clear=True):
             results = diagnostics.check_additional_providers()
 
-            xai = [r for r in results if "XAI" in r.name][0]
+            xai = next(r for r in results if "XAI" in r.name)
             assert xai.status == "pass"
             assert "Valid" in xai.message
 
@@ -315,7 +315,7 @@ class TestAdditionalProviders:
         with patch.dict(os.environ, {"XAI_API_KEY": "xai-bad-key"}, clear=True):
             results = diagnostics.check_additional_providers()
 
-            xai = [r for r in results if "XAI" in r.name][0]
+            xai = next(r for r in results if "XAI" in r.name)
             assert xai.status == "fail"
             assert "401" in xai.message
 

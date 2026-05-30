@@ -99,10 +99,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     )
 
     # 1. Output folder
-    default_output = (
-        os.getenv("SCRIBE_OUTPUT_FOLDER")
-        or str(Path.cwd() / "output")
-    )
+    default_output = os.getenv("SCRIBE_OUTPUT_FOLDER") or str(Path.cwd() / "output")
     output_folder = Prompt.ask(
         "[bold]Output folder[/bold]",
         default=default_output,
@@ -131,12 +128,8 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     generate_notes = Confirm.ask(
         "  Generate meeting notes by default?", default=False, console=console
     )
-    generate_joke = Confirm.ask(
-        "  Generate a joke by default?", default=True, console=console
-    )
-    generate_meme = Confirm.ask(
-        "  Generate a meme by default?", default=True, console=console
-    )
+    generate_joke = Confirm.ask("  Generate a joke by default?", default=True, console=console)
+    generate_meme = Confirm.ask("  Generate a meme by default?", default=True, console=console)
 
     # 4. AI vendor
     keys = _detected_keys()
@@ -178,9 +171,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         }
 
     path = save_config_file(data)
-    console.print(
-        f"\n[green]Saved.[/green] [dim]Edit anytime at[/dim] [cyan]{path}[/cyan]"
-    )
+    console.print(f"\n[green]Saved.[/green] [dim]Edit anytime at[/dim] [cyan]{path}[/cyan]")
 
     _resolve_env_conflicts(
         console=console,

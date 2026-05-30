@@ -47,7 +47,7 @@ class TestGeminiProvider:
 
     def test_size_to_aspect_ratio(self, gemini_config, mock_google_genai):
         """Test size to aspect ratio conversion."""
-        mock_genai, mock_types = mock_google_genai
+        mock_genai, _mock_types = mock_google_genai
 
         # Force reimport to use mocked modules
         if "scribe.providers.gemini_provider" in sys.modules:
@@ -70,7 +70,7 @@ class TestGeminiProvider:
 
     def test_transcribe_audio_not_supported(self, gemini_config, mock_google_genai):
         """Test that audio transcription is not supported."""
-        mock_genai, mock_types = mock_google_genai
+        mock_genai, _mock_types = mock_google_genai
 
         if "scribe.providers.gemini_provider" in sys.modules:
             del sys.modules["scribe.providers.gemini_provider"]
@@ -87,7 +87,7 @@ class TestGeminiProvider:
 
     def test_chat_completion_converts_messages(self, gemini_config, mock_google_genai):
         """Test that chat completion converts OpenAI-style messages."""
-        mock_genai, mock_types = mock_google_genai
+        mock_genai, _mock_types = mock_google_genai
 
         if "scribe.providers.gemini_provider" in sys.modules:
             del sys.modules["scribe.providers.gemini_provider"]
@@ -121,7 +121,7 @@ class TestGeminiProvider:
 
     def test_generate_image_converts_size(self, gemini_config, mock_google_genai):
         """Test that image generation converts size to aspect ratio."""
-        mock_genai, mock_types = mock_google_genai
+        mock_genai, _mock_types = mock_google_genai
 
         if "scribe.providers.gemini_provider" in sys.modules:
             del sys.modules["scribe.providers.gemini_provider"]
@@ -158,7 +158,7 @@ class TestGeminiProvider:
 
     def test_generate_image_no_images_error(self, gemini_config, mock_google_genai):
         """Test error when no images are returned."""
-        mock_genai, mock_types = mock_google_genai
+        mock_genai, _mock_types = mock_google_genai
 
         if "scribe.providers.gemini_provider" in sys.modules:
             del sys.modules["scribe.providers.gemini_provider"]

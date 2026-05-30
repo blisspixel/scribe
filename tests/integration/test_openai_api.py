@@ -332,9 +332,7 @@ class TestTranscriptFormatting:
         from tests.conftest import create_mock_transcription_response
 
         mock_openai.audio.transcriptions.create.return_value = create_mock_transcription_response(
-            "[00:00:05] First statement.\n"
-            "[00:00:15] Second statement.\n"
-            "[00:00:25] Third statement."
+            "[00:00:05] First statement.\n[00:00:15] Second statement.\n[00:00:25] Third statement."
         )
 
         transcriber = OpenAITranscriber(

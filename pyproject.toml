@@ -118,9 +118,19 @@ ignore = [
 ]
 extend-select = ["I", "UP", "B", "S"]
 
+# Intentional typographic characters (kept for professional CLI output and docs)
+allowed-confusables = ["×", "–", "—"]
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports in __init__.py (intentional re-exports)
-"tests/**/*" = ["S101"]  # allow assert in tests
+"tests/**/*" = [
+    "S101",  # allow assert in tests
+    "S108",  # hardcoded temp paths are fine and common in test fixtures
+    "S110",  # bare except: pass is common in test setup/teardown for expected side effects
+    "S112",  # except: continue same pattern
+    "S603",  # subprocess calls when testing real CLI/device startup paths
+    "S607",  # partial executable paths in the same test contexts
+]  # Test-only security lints that do not reflect production risk
 
 [tool.ruff.format]
 quote-style = "double"

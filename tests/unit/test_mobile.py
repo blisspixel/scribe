@@ -19,7 +19,7 @@ def test_find_wav_file_raises_when_candidates_missing(tmp_path: Path) -> None:
     input_file = tmp_path / "meeting.mp4"
     input_file.write_text("video")
 
-    with pytest.raises(FileNotFoundError, match="meeting_converted.wav"):
+    with pytest.raises(FileNotFoundError, match=r"meeting_converted.wav"):
         mobile.find_wav_file(input_file)
 
 

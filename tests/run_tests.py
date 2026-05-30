@@ -62,7 +62,7 @@ def run_test_module(module_path: Path, test_name: str) -> tuple[bool, str, float
 
     except Exception as e:
         duration = time.time() - start_time
-        return False, f"Test execution failed: {str(e)}", duration
+        return False, f"Test execution failed: {e!s}", duration
 
 
 def print_test_result(test_name: str, success: bool, duration: float, details: str = ""):
@@ -105,9 +105,9 @@ def run_all_tests(tests_dir: Path, verbose: bool = False) -> dict:
     for _, name in test_modules:
         print(f"{Fore.WHITE}  • {name}")
 
-    print(f"\n{Fore.BLUE}{'='*60}")
+    print(f"\n{Fore.BLUE}{'=' * 60}")
     print(f"{Fore.BLUE}RUNNING TESTS")
-    print(f"{Fore.BLUE}{'='*60}")
+    print(f"{Fore.BLUE}{'=' * 60}")
 
     results = {}
     total_duration = 0
@@ -135,9 +135,9 @@ def run_all_tests(tests_dir: Path, verbose: bool = False) -> dict:
 
 def print_summary(results: dict, total_duration: float):
     """Print comprehensive test summary."""
-    print(f"\n{Fore.BLUE}{'='*60}")
+    print(f"\n{Fore.BLUE}{'=' * 60}")
     print(f"{Fore.BLUE}TEST SUMMARY")
-    print(f"{Fore.BLUE}{'='*60}")
+    print(f"{Fore.BLUE}{'=' * 60}")
 
     passed_tests = sum(1 for r in results.values() if r["success"])
     total_tests = len(results)

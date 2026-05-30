@@ -19,9 +19,9 @@ init(autoreset=True)
 
 def print_header(title: str):
     """Print a formatted test section header."""
-    print(f"\n{Fore.CYAN}{'='*60}")
+    print(f"\n{Fore.CYAN}{'=' * 60}")
     print(f"{Fore.CYAN}{title:^60}")
-    print(f"{Fore.CYAN}{'='*60}")
+    print(f"{Fore.CYAN}{'=' * 60}")
 
 
 def print_test(name: str, status: str, details: str = ""):
@@ -138,10 +138,10 @@ def test_audio_device_detection():
         method = device.get("method", "unknown")
         status = "DEFAULT" if is_default else "AVAILABLE"
 
-        print_test(f"Device {i+1}", status, f"{device['name']} ({method})")
+        print_test(f"Device {i + 1}", status, f"{device['name']} ({method})")
 
     if len(devices) > 5:
-        print_test("Additional devices", "INFO", f"{len(devices)-5} more devices found")
+        print_test("Additional devices", "INFO", f"{len(devices) - 5} more devices found")
 
     return True
 

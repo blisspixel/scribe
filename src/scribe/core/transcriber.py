@@ -656,6 +656,6 @@ class Transcriber:
             total_size_mb = sum(f.stat().st_size for f in deleted_files if f.exists()) / (
                 1024 * 1024
             )
-            logger.info(f"Cleaned up {len(deleted_files)} files " f"({total_size_mb:.1f}MB freed)")
+            logger.info(f"Cleaned up {len(deleted_files)} files ({total_size_mb:.1f}MB freed)")
 
         return deleted_files

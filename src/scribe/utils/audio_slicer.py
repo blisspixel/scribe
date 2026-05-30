@@ -230,7 +230,7 @@ def slice_audio_by_segments(
 
             sliced_paths.append(segment_path)
             logger.debug(
-                f"Sliced segment {i+1}/{len(segments)}: {segment['start']:.2f}s - {segment['end']:.2f}s"
+                f"Sliced segment {i + 1}/{len(segments)}: {segment['start']:.2f}s - {segment['end']:.2f}s"
             )
 
         logger.info(f"Created {len(sliced_paths)} audio slices in {output_dir_path}")

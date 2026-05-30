@@ -205,7 +205,7 @@ class TestURLDownloader:
 
         with patch("yt_dlp.YoutubeDL", return_value=mock_ydl):
             dl = URLDownloader(output_dir=tmp_path)
-            with pytest.raises(DownloadError, match="403.*cookies"):
+            with pytest.raises(DownloadError, match=r"403.*cookies"):
                 dl.download("https://youtube.com/watch?v=blocked")
 
 

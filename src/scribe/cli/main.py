@@ -284,7 +284,7 @@ def transcribe_command(
             gpu_reason = getattr(
                 getattr(transcriber, "gpu_config", None), "reason", "local GPU not detected"
             )
-            console.print(f"[yellow]Auto-selected OpenAI[/yellow] " f"[dim]({gpu_reason})[/dim]")
+            console.print(f"[yellow]Auto-selected OpenAI[/yellow] [dim]({gpu_reason})[/dim]")
             console.print(
                 "[dim]Run `scribe info` if you expected local faster-whisper on your GPU.[/dim]"
             )
@@ -1852,7 +1852,7 @@ def music_transcribe(
                                 segment_transcript.unlink()
 
                             except Exception as e:
-                                logger.debug(f"Segment {i+1} transcription failed: {e}")
+                                logger.debug(f"Segment {i + 1} transcription failed: {e}")
                                 continue
 
                         # Combine all segments
@@ -2267,7 +2267,7 @@ def joke(
                 console.print()
 
                 if result:
-                    joke_text, comedy_style = result
+                    joke_text, _comedy_style = result
                     console.print(f"[bold cyan]Joke:[/bold cyan] {joke_text}")
                     console.print()
                 else:
@@ -2889,7 +2889,7 @@ def support_bundle(
         "--output",
         "-o",
         help="Output directory for support bundle (default: current directory)",
-    )
+    ),
 ) -> None:
     """
     Generate a support bundle for troubleshooting.
@@ -3039,7 +3039,9 @@ def clean(
 
                 console.print()
                 console.print("[bold green]Success![/bold green]")
-                console.print(f"  Original: {original_mins} minutes ({original_mins/60:.1f} hours)")
+                console.print(
+                    f"  Original: {original_mins} minutes ({original_mins / 60:.1f} hours)"
+                )
                 console.print(f"  Trimmed:  {new_mins} minutes ({new_hours:.1f} hours)")
                 console.print()
                 console.print(f"[bold]Output:[/bold] {output_path}")

@@ -158,9 +158,7 @@ class URLDownloader:
                     context={"url": url, "detail": error_msg},
                 ) from e
             if "403" in error_msg or "Forbidden" in error_msg:
-                hint = (
-                    "\nTry: pip install --upgrade yt-dlp" "\n  or: scribe url <link> --cookies edge"
-                )
+                hint = "\nTry: pip install --upgrade yt-dlp\n  or: scribe url <link> --cookies edge"
                 raise DownloadError(
                     f"Download blocked (HTTP 403). YouTube may require browser cookies.{hint}",
                     context={"url": url, "detail": error_msg},

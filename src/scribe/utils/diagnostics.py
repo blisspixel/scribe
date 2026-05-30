@@ -900,7 +900,7 @@ class SystemDiagnostics:
             cpu_count = psutil.cpu_count()
 
             details_lines = [
-                f"RAM: {ram_gb:.1f} GB total, {ram_available_gb:.1f} GB available ({100-ram_percent:.1f}% free)",
+                f"RAM: {ram_gb:.1f} GB total, {ram_available_gb:.1f} GB available ({100 - ram_percent:.1f}% free)",
                 f"CPU: {cpu_count} cores",
             ]
 

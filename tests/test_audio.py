@@ -21,9 +21,9 @@ init(autoreset=True)
 
 def print_header(title: str):
     """Print a formatted test section header."""
-    print(f"\n{Fore.CYAN}{'='*60}")
+    print(f"\n{Fore.CYAN}{'=' * 60}")
     print(f"{Fore.CYAN}{title:^60}")
-    print(f"{Fore.CYAN}{'='*60}")
+    print(f"{Fore.CYAN}{'=' * 60}")
 
 
 def print_test(name: str, status: str, details: str = ""):
@@ -88,7 +88,7 @@ def test_audio_file_handling():
                     duration_actual = frames / framerate
 
                 details = (
-                    f"{channels}ch, {sample_width*8}bit, {framerate}Hz, {duration_actual:.1f}s"
+                    f"{channels}ch, {sample_width * 8}bit, {framerate}Hz, {duration_actual:.1f}s"
                 )
                 print_test(f"Create {name}", "PASS", details)
 

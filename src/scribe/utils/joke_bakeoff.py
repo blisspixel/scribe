@@ -226,14 +226,10 @@ def run_joke_bakeoff(
     available_providers = []
     for provider_name in providers:
         if (
-            provider_name == "xai"
-            and os.getenv("XAI_API_KEY")
-            or provider_name == "openai"
-            and os.getenv("OPENAI_API_KEY")
-            or provider_name == "gemini"
-            and os.getenv("GEMINI_API_KEY")
-            or provider_name == "anthropic"
-            and os.getenv("ANTHROPIC_API_KEY")
+            (provider_name == "xai" and os.getenv("XAI_API_KEY"))
+            or (provider_name == "openai" and os.getenv("OPENAI_API_KEY"))
+            or (provider_name == "gemini" and os.getenv("GEMINI_API_KEY"))
+            or (provider_name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"))
         ):
             available_providers.append(provider_name)
 

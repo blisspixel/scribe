@@ -22,12 +22,12 @@ from scribe.exceptions import (
 )
 
 __all__ = [
-    "__version__",
+    "FileOperationError",
+    "ProcessError",
+    "ScribeError",
+    "TranscriptionError",
+    "ValidationError",
     "__author__",
     "__license__",
-    "ScribeError",
-    "ValidationError",
-    "ProcessError",
-    "TranscriptionError",
-    "FileOperationError",
+    "__version__",
 ]

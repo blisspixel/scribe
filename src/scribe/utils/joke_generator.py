@@ -888,7 +888,7 @@ def generate_transcript_joke(
                     logger.debug(f"OpenAI fallback unavailable: {fallback_err}")
 
             last_err = e
-            logger.warning(f"API call failed (attempt {attempt+1}): {e}")
+            logger.warning(f"API call failed (attempt {attempt + 1}): {e}")
             if attempt < len(backoffs):
                 next_tokens = token_ramp[min(attempt + 1, len(token_ramp) - 1)]
                 logger.info(

@@ -293,7 +293,7 @@ class MusicDetector:
             # Validate tempo is reasonable
             if tempo > 0 and 40 <= tempo <= 220:
                 metadata["tempo"] = round(float(tempo), 1)
-                metadata["beat_count"] = int(len(beats))
+                metadata["beat_count"] = len(beats)
             else:
                 # Try alternative method with aggregation
                 tempo_alt = librosa.beat.tempo(onset_envelope=onset_env, sr=sr, aggregate=None)

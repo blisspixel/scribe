@@ -294,7 +294,7 @@ class NotesGenerator:
             summaries: list[str] = []
             breakdowns: list[dict[str, Any]] = []
             for i, seg in enumerate(segments):
-                logger.info(f"Processing segment {i+1}/{len(segments)}")
+                logger.info(f"Processing segment {i + 1}/{len(segments)}")
                 seg_summary = self._generate_detailed_summary(seg)
                 summaries.append(seg_summary)
                 seg_breakdown = self._generate_analytical_breakdown(seg, seg_summary)

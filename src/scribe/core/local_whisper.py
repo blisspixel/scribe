@@ -322,7 +322,7 @@ class LocalWhisperTranscriber:
         if model is None:
             raise TranscriptionError("Whisper model failed to load")
 
-        segments_iter, info = model.transcribe(
+        segments_iter, _info = model.transcribe(
             str(audio_path),
             language=self.language,
             vad_filter=True,

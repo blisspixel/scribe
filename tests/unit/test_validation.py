@@ -291,15 +291,15 @@ class TestValidatePositiveNumber:
         assert validate_positive_number(0) == 0.0
 
         # But can be rejected with min_value > 0
-        with pytest.raises(ValidationError, match="must be >= 0.1"):
+        with pytest.raises(ValidationError, match=r"must be >= 0.1"):
             validate_positive_number(0, min_value=0.1)
 
     def test_validate_negative_number(self):
         """Test validation fails for negative numbers."""
-        with pytest.raises(ValidationError, match="must be >= 0.0"):
+        with pytest.raises(ValidationError, match=r"must be >= 0.0"):
             validate_positive_number(-1)
 
-        with pytest.raises(ValidationError, match="must be >= 0.0"):
+        with pytest.raises(ValidationError, match=r"must be >= 0.0"):
             validate_positive_number(-3.14)
 
 

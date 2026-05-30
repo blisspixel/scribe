@@ -39,7 +39,7 @@ class GeminiProvider(AIProvider):
             from google.genai import types
         except ImportError:
             raise ImportError(
-                "google-genai package not installed. " "Install with: pip install google-genai"
+                "google-genai package not installed. Install with: pip install google-genai"
             )
 
         self.genai: Any = genai

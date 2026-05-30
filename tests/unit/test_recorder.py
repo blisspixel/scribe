@@ -510,7 +510,7 @@ class TestFileDetection:
             time.sleep(0.05)
 
         start_time = time.time() - 10
-        mp4, mkv = recorder._newest_media_since(str(tmp_path), start_time)
+        mp4, mkv = recorder._newest_media_since(str(tmp_path), start_time)  # noqa: RUF059 - only mp4 matters in this test
 
         assert mp4 == str(files[-1])
 
@@ -606,7 +606,7 @@ class TestCLIFallback:
         recording.write_bytes(b"fake recording")
 
         start_time = time.time() - 5
-        mp4, mkv = recorder._newest_media_since(str(tmp_path), start_time)
+        mp4, mkv = recorder._newest_media_since(str(tmp_path), start_time)  # noqa: RUF059 - only mp4 matters in this test
 
         assert mp4 == str(recording)
 
@@ -1271,7 +1271,7 @@ class TestStartStopListener:
         import signal
 
         original = signal.getsignal(signal.SIGINT)
-        ev, restore = recorder._start_stop_listener()
+        ev, restore = recorder._start_stop_listener()  # noqa: RUF059 - only restore matters
         # handler is now custom
         restore()
         # should be restored
@@ -1280,7 +1280,7 @@ class TestStartStopListener:
 
     def test_double_restore_safe(self, recorder):
         """Calling restore twice does not raise."""
-        ev, restore = recorder._start_stop_listener()
+        ev, restore = recorder._start_stop_listener()  # noqa: RUF059 - only restore matters
         restore()
         restore()  # should not raise
 
@@ -1474,7 +1474,7 @@ class TestNewestMediaSince:
         f2.write_bytes(b"new")
 
         # since_ts set to recent time
-        mp4, mkv = recorder._newest_media_since(str(tmp_path), time.time() - 10)
+        mp4, mkv = recorder._newest_media_since(str(tmp_path), time.time() - 10)  # noqa: RUF059 - only mp4 matters
         assert mp4 == str(f2)
 
     def test_mkv_tracked_separately(self, recorder, tmp_path):

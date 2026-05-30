@@ -51,8 +51,8 @@ def main():
     start = time.time()
     wav_file = converter.convert_to_wav(test_file, show_progress=True)
     preparing_time = time.time() - start
-    print(f"✓ Completed in {preparing_time:.1f}s ({preparing_time/60:.2f} minutes)")
-    print(f"  Speed: {audio_duration/preparing_time:.1f}x real-time")
+    print(f"✓ Completed in {preparing_time:.1f}s ({preparing_time / 60:.2f} minutes)")
+    print(f"  Speed: {audio_duration / preparing_time:.1f}x real-time")
     print()
 
     # Phase 2: Transcription
@@ -83,8 +83,8 @@ def main():
     progress_thread.join(timeout=2.0)
 
     transcription_time = time.time() - start
-    print(f"\r✓ Completed in {transcription_time:.1f}s ({transcription_time/60:.2f} minutes)")
-    print(f"  Speed: {audio_duration/transcription_time:.1f}x real-time")
+    print(f"\r✓ Completed in {transcription_time:.1f}s ({transcription_time / 60:.2f} minutes)")
+    print(f"  Speed: {audio_duration / transcription_time:.1f}x real-time")
     print()
 
     # Phase 3: Post-processing
@@ -129,7 +129,7 @@ def main():
         print("⊘ Meme: skipped (no API key)")
 
     post_time = docx_time + notes_time + joke_time + meme_time
-    print(f"Total post-processing: {post_time:.1f}s ({post_time/60:.2f} minutes)")
+    print(f"Total post-processing: {post_time:.1f}s ({post_time / 60:.2f} minutes)")
     print()
 
     # Summary
@@ -139,16 +139,18 @@ def main():
     total_time = preparing_time + transcription_time + post_time
 
     print(f"Audio duration: {duration_mins:.1f} min ({audio_duration:.0f}s)")
-    print(f"Total processing: {total_time/60:.2f} min ({total_time:.0f}s)")
+    print(f"Total processing: {total_time / 60:.2f} min ({total_time:.0f}s)")
     print()
-    print(f"Preparing:     {preparing_time:6.1f}s ({preparing_time/total_time*100:5.1f}%)")
-    print(f"Transcribing:  {transcription_time:6.1f}s ({transcription_time/total_time*100:5.1f}%)")
-    print(f"Post-process:  {post_time:6.1f}s ({post_time/total_time*100:5.1f}%)")
+    print(f"Preparing:     {preparing_time:6.1f}s ({preparing_time / total_time * 100:5.1f}%)")
+    print(
+        f"Transcribing:  {transcription_time:6.1f}s ({transcription_time / total_time * 100:5.1f}%)"
+    )
+    print(f"Post-process:  {post_time:6.1f}s ({post_time / total_time * 100:5.1f}%)")
     print()
     print("Time multipliers (for unified_progress.py):")
-    print(f"  preparing: {preparing_time/audio_duration:.4f}")
-    print(f"  transcribing: {transcription_time/audio_duration:.4f}")
-    print(f"  finishing: {post_time/audio_duration:.4f}")
+    print(f"  preparing: {preparing_time / audio_duration:.4f}")
+    print(f"  transcribing: {transcription_time / audio_duration:.4f}")
+    print(f"  finishing: {post_time / audio_duration:.4f}")
 
 
 if __name__ == "__main__":

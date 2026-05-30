@@ -256,9 +256,7 @@ class OpenAITranscriber:
         )
 
         audio = AudioSegment.from_file(str(input_path))
-        logger.debug(
-            f"Source: {len(audio)/1000:.1f}s, " f"{audio.channels}ch, " f"{audio.frame_rate}Hz"
-        )
+        logger.debug(f"Source: {len(audio) / 1000:.1f}s, {audio.channels}ch, {audio.frame_rate}Hz")
 
         use_channel = None
 
@@ -478,7 +476,7 @@ class OpenAITranscriber:
         # OpenAI has an undocumented ~1400 second (23 minute) limit per file
         # Use client-side chunking for longer files
         if duration and duration > 1300:  # 21.6 minutes, leave buffer
-            logger.info(f"Audio is {duration/60:.1f} minutes, using client-side chunking")
+            logger.info(f"Audio is {duration / 60:.1f} minutes, using client-side chunking")
             self.use_server_chunking = False
 
         # Use initial_prompt if provided, otherwise fall back to prompt

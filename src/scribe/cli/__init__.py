@@ -1,3 +1,3 @@
 """CLI interface layer for Scribe."""
 
-__all__ = ["main", "mobile", "commands"]
+__all__ = ["commands", "main", "mobile"]
