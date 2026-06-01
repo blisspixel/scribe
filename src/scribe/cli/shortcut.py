@@ -84,7 +84,7 @@ def _windows_desktop_dir() -> Path:
     ``~/Desktop`` is wrong when the Desktop is redirected into OneDrive, so read the
     actual location from the per-user shell-folders registry key and expand it.
     """
-    if is_windows():
+    if sys.platform == "win32":
         import winreg
 
         with suppress(OSError):
