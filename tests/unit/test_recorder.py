@@ -2013,3 +2013,57 @@ class TestConnectObsPhase1Console:
                 with patch("scribe.core.recorder.time.sleep"):
                     with recorder._connect_obs() as client:
                         assert client is mock_obs_client
+
+
+class TestObsConfigDir:
+    """Cross-platform OBS config dir (regression: macOS used the wrong path)."""
+
+    def test_macos_uses_application_support(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "macos")
+        assert (
+            recorder._obs_config_dir()
+            == Path.home() / "Library" / "Application Support" / "obs-studio"
+        )
+
+    def test_linux_uses_xdg_config(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "linux")
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        assert recorder._obs_config_dir() == Path.home() / ".config" / "obs-studio"
+
+    def test_windows_uses_appdata(self, recorder, monkeypatch, tmp_path):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+        assert recorder._obs_config_dir() == Path(str(tmp_path / "Roaming")) / "obs-studio"
+
+
+class TestLaunchObs:
+    """Platform-aware OBS launch (macOS must use `open -a`, no tray flag)."""
+
+    def test_macos_launches_via_open(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "macos")
+        calls: list[list[str]] = []
+
+        def fake_popen(args, **kwargs):
+            calls.append(args)
+            return MagicMock()
+
+        monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
+        recorder._launch_obs(Path("/Applications/OBS.app/Contents/MacOS/OBS"))
+        args = calls[0]
+        assert args[0] == "open" and "-a" in args
+        assert any("OBS.app" in a for a in args)
+        assert "--minimize-to-tray" not in args
+        assert "--disable-shutdown-check" in args
+
+    def test_windows_runs_exe_with_flags(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
+        calls: list[list[str]] = []
+
+        def fake_popen(args, **kwargs):
+            calls.append(args)
+            return MagicMock()
+
+        monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
+        recorder._launch_obs(Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"))
+        assert "--minimize-to-tray" in calls[0]
+        assert "--disable-shutdown-check" in calls[0]
