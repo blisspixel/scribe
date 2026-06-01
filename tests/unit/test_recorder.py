@@ -951,13 +951,17 @@ class TestCleanObsCrashSentinel:
         with patch.dict(os.environ, {"APPDATA": ""}, clear=False):
             recorder._clean_obs_crash_sentinel()  # should not raise
 
+    @patch("scribe.utils.platform.is_macos", return_value=False)
     @patch("scribe.utils.platform.is_windows", return_value=False)
-    def test_linux_sentinel(self, _w, recorder, tmp_path):
+    def test_linux_sentinel(self, _w, _m, recorder, tmp_path):
         sentinel = tmp_path / ".config" / "obs-studio" / "global.ini"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_text("LastCrash=yes\nKeep=1\n")
-        with patch("pathlib.Path.home", return_value=tmp_path):
-            recorder._clean_obs_crash_sentinel()
+        # Force the ~/.config branch: an empty XDG_CONFIG_HOME is treated as unset
+        # (CI runners often set XDG_CONFIG_HOME, which would otherwise win).
+        with patch.dict(os.environ, {"XDG_CONFIG_HOME": ""}):
+            with patch("pathlib.Path.home", return_value=tmp_path):
+                recorder._clean_obs_crash_sentinel()
         assert "LastCrash" not in sentinel.read_text()
         assert "Keep=1" in sentinel.read_text()
 
