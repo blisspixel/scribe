@@ -2,9 +2,9 @@
 Cross-platform "Quick Record" launcher installer.
 
 Creates a native, double-clickable launcher that runs ``scribe rec`` so users can
-start a recording without opening a terminal — the first-class replacement for the
-old hand-made Windows ``.bat`` workaround. Works on Windows (Start Menu ``.lnk``),
-macOS (``~/Applications/*.command``) and Linux (XDG ``*.desktop``).
+start a recording without opening a terminal. It replaces the old hand-made Windows
+``.bat`` workaround and works on Windows (Start Menu ``.lnk``), macOS
+(``~/Applications/*.command``) and Linux (XDG ``*.desktop``).
 
 The launcher invokes whatever ``scribe`` resolves to at install time (preferring a
 ``scribe`` on PATH, e.g. one installed via ``uv tool install``), falling back to
@@ -263,7 +263,7 @@ def remove_quick_record_launcher() -> list[Path]:
 
 def _pin_hint() -> str:
     if is_windows():
-        return "Find 'Scribe Quick Record' in the Start Menu — right-click to pin to Start/taskbar."
+        return "Find 'Scribe Quick Record' in the Start Menu, then right-click to pin to Start or the taskbar."
     if is_macos():
         return "Open it from ~/Applications (or Launchpad); drag to the Dock to keep it handy."
     return "Find 'Scribe Quick Record' in your applications menu; some desktops need you to mark a Desktop copy as trusted."
@@ -311,4 +311,4 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
         cprint(f"  [dim]{p}[/dim]")
     cprint()
     cprint(f"[cyan]{_pin_hint()}[/cyan]")
-    cprint("[dim]It runs `scribe rec` — start talking, type 'stop' when done.[/dim]")
+    cprint("[dim]It runs `scribe rec`. Start talking, then type 'stop' when done.[/dim]")

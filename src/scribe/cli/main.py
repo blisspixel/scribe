@@ -3312,7 +3312,7 @@ def shortcut_command(
     """
     Install a 'Quick Record' launcher in your OS app menu (Windows/macOS/Linux).
 
-    Creates a native, double-clickable shortcut that runs `scribe rec` — the
+    Creates a native, double-clickable shortcut that runs `scribe rec`, the
     cross-platform replacement for a hand-made batch file. Use --remove to undo.
 
     Examples:

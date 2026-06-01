@@ -53,8 +53,8 @@ try:
 
     OBS_AVAILABLE = True
 
-    # obsws_python logs expected, scribe-handled failures via logger.exception()
-    # — e.g. the code 207 "OBS not ready" retries during startup and the IPv6
+    # obsws_python logs expected, scribe-handled failures via logger.exception(),
+    # e.g. the code 207 "OBS not ready" retries during startup and the IPv6
     # "hostname is invalid" probe. Because scribe's handlers live on the "scribe"
     # logger tree, these records propagate to the root logger and get dumped raw
     # to stderr by logging's last-resort handler, scaring users about conditions
@@ -425,9 +425,9 @@ class OBSRecorder:
         """Launch OBS for the current platform.
 
         On macOS, OBS is an app bundle that must be started via ``open`` so it
-        finds its bundle resources — Popen-ing the inner binary is unreliable —
-        and ``--minimize-to-tray`` has no meaning there. On Windows/Linux we run
-        the executable directly with the appropriate flags.
+        finds its bundle resources (Popen-ing the inner binary is unreliable),
+        and ``--minimize-to-tray`` has no meaning there. On Windows and Linux we
+        run the executable directly with the appropriate flags.
         """
         from scribe.utils.platform import is_macos, is_windows
 
