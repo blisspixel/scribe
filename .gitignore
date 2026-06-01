@@ -85,6 +85,7 @@ htmlcov/
 .tox/
 .nox/
 coverage.xml
+coverage.json
 *.cover
 .hypothesis/
 .pytest_cache/
@@ -305,3 +306,7 @@ site/
 /.kiro
 /docs/research
 /working
+
+# Personal launcher artifacts — use `scribe shortcut` to generate these locally.
+*.lnk
+/Scribe Quick Record.bat
