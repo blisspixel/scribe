@@ -62,8 +62,8 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 
 **Core Value:**
 - Record or import audio/video files
-- Get accurate transcripts with speaker identification
-- Receive structured meeting notes with decisions and action items
+- Get accurate transcripts (speaker identification in API mode; local diarization is on the roadmap)
+- Receive structured meeting notes with decisions and action items (currently via a cloud AI provider)
 - Optional context-aware humor (jokes and memes)
 - Output in TXT, DOCX, Markdown, and PNG formats
 
@@ -833,6 +833,6 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 **Current Version:** 2.4.3 (workspace ahead of release: setup wizard, gpt-5.5 / grok-4.3 defaults, progress-bar fix)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-05-08
+**Last Updated:** 2026-06-01
 
 

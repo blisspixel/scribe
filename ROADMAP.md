@@ -48,6 +48,24 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Product Direction (Competitive Gaps — Under Active Consideration)
+
+As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscribe, Meetily, OpenWhispr, transcriptionstream, WhisperX) surfaced capabilities that are now table stakes and where Scribe has gaps. These are candidate product directions, recorded so the roadmap reflects reality. The Engineering Excellence track below is unaffected by them.
+
+1. **Local-only summarization (close the offline gap).** Notes and humor currently require a cloud provider (OpenAI/xAI/Anthropic/Gemini), so the "local-first, private, offline-capable" promise only holds for transcript-only use. Add an **Ollama / OpenAI-compatible local LLM provider** to the existing provider abstraction so notes can be generated fully offline. Highest priority — this reconciles a claim/reality gap rather than expanding scope, and slots into the current architecture cleanly.
+
+2. **Local speaker diarization.** Diarization is currently API-only (`gpt-4o-transcribe-diarize`); the local GPU path produces no speaker labels. Evaluate **WhisperX + pyannote.audio** for word-level alignment and local "who said what." Pairs with the hardware-backend work below (item 4).
+
+3. **Structured, queryable output.** Emit machine-readable artifacts (YAML frontmatter / JSON with timestamps, speakers, decisions, action items, confidence, provenance) so notes are both ingestible by sibling tools and queryable ("ask across my meetings"). Cheapest high-value item; in-scope regardless of the rest.
+
+4. **Hardware-adaptive transcription backends.** Generalize the existing VRAM-based auto-selection from CUDA-only to `(vendor, memory)`: faster-whisper on NVIDIA, mlx-whisper / whisper.cpp (Metal) on Apple Silicon, whisper.cpp (Vulkan/ROCm) on AMD/Intel, int8 CPU fallback. Prerequisite for a credible cross-platform public release rather than a 4090/Windows-optimized tool.
+
+5. **Voice I/O (deliberate mode decision).** Global-hotkey speech-to-type and read-aloud (local TTS) are strong QOL ideas but require real-time/streaming, which is an explicit non-goal below. Treat as a separate product mode to be adopted intentionally, not bolted onto the batch pipeline.
+
+Priority order: 1 → 3 → 2 → 4 → 5. Items 1 and 3 are low-risk and strengthen the local-first promise; 2 and 4 are larger lifts tied to going public; 5 is a conscious scope decision (see Explicit Non-Goals).
+
+---
+
 ## Design Principles
 
 ### Quality Over Speed
@@ -197,7 +215,8 @@ These are deliberate decisions to keep Scribe a focused, high-quality tool rathe
 - We will not run the free-threaded 3.14t build in CI while the core GPU/ML wheels lack reliable support on Windows.
 - We will not apply Design by Contract or strict parsing rules uniformly across CLI glue, UI layers, or provider code. These techniques are reserved for pure, critical business logic where they add clear value.
 - We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
-- We will not add web UIs, multi-user features, real-time streaming, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above).
+- We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation, read-aloud) is under active consideration as a distinct product surface — see Product Direction item 5. Adopting it would be a deliberate decision, not a drift.
+- "Local-first, private, offline-capable" is the goal, but note generation and humor currently require a cloud provider. Until the local LLM provider lands (Product Direction item 1), the fully-offline guarantee holds for transcript-only use; with a cloud provider, transcripts/notes are transmitted for analysis. This is documented honestly rather than overstated.
 - We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
 
 Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
@@ -206,5 +225,5 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-05-09
+**Last Updated:** 2026-06-01
 
