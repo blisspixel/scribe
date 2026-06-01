@@ -226,6 +226,15 @@ class TestValidateLanguageCode:
         assert validate_language_code("japanese") == "ja"
         assert validate_language_code("chinese") == "zh"
 
+    def test_validate_native_script_names_resolve_to_iso(self):
+        """Non-ASCII 2-char native names must resolve via aliases, not pass through.
+
+        Regression: the 2-letter shortcut used only len()==2 and .isalpha(), so a
+        CJK name like the native word for Chinese (2 chars, alphabetic) was returned
+        verbatim as a bogus 'code' instead of resolving to its ISO 639-1 value.
+        """
+        assert validate_language_code("中文") == "zh"  # Chinese (Zhōngwén)
+
     def test_validate_auto_language(self):
         """Test validation rejects 'auto' (not a valid language)."""
         with pytest.raises(ValidationError, match="Unknown language"):

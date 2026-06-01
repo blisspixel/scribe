@@ -6,6 +6,7 @@ with fallback to CLI control. The original implementation worked well,
 so it's been preserved with minimal changes.
 """
 
+import logging
 import os
 import shutil
 import socket
@@ -51,6 +52,15 @@ try:
     from obsws_python import reqs as obs_reqs
 
     OBS_AVAILABLE = True
+
+    # obsws_python logs expected, scribe-handled failures via logger.exception(),
+    # e.g. the code 207 "OBS not ready" retries during startup and the IPv6
+    # "hostname is invalid" probe. Because scribe's handlers live on the "scribe"
+    # logger tree, these records propagate to the root logger and get dumped raw
+    # to stderr by logging's last-resort handler, scaring users about conditions
+    # scribe already recovers from. Silence the library; genuine failures are
+    # surfaced by scribe's own typed errors with actionable guidance.
+    logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 except ImportError:
     OBS_AVAILABLE = False
     logger.warning("obsws_python not installed. OBS integration will use CLI fallback only.")
@@ -363,6 +373,24 @@ class OBSRecorder:
         except Exception:
             return False
 
+    def _obs_config_dir(self) -> Path | None:
+        """Return OBS Studio's per-user config directory for this platform.
+
+        Windows: %APPDATA%/obs-studio
+        macOS:   ~/Library/Application Support/obs-studio
+        Linux:   ~/.config/obs-studio   (or $XDG_CONFIG_HOME)
+        """
+        from scribe.utils.platform import is_macos, is_windows
+
+        if is_windows():
+            appdata = os.environ.get("APPDATA", "")
+            return Path(appdata) / "obs-studio" if appdata else None
+        if is_macos():
+            return Path.home() / "Library" / "Application Support" / "obs-studio"
+        xdg = os.environ.get("XDG_CONFIG_HOME", "")
+        config_home = Path(xdg) if xdg else Path.home() / ".config"
+        return config_home / "obs-studio"
+
     def _clean_obs_crash_sentinel(self) -> None:
         """Remove OBS crash/unclean-shutdown markers.
 
@@ -370,17 +398,11 @@ class OBSRecorder:
         it on clean shutdown.  If the process was killed, the flag remains and
         triggers the safe-mode dialog on next launch.  We clear it here.
         """
-        from scribe.utils.platform import is_windows
-
         try:
-            if is_windows():
-                appdata = os.environ.get("APPDATA", "")
-                if appdata:
-                    sentinel = Path(appdata) / "obs-studio" / "global.ini"
-                else:
-                    return
-            else:
-                sentinel = Path.home() / ".config" / "obs-studio" / "global.ini"
+            config_dir = self._obs_config_dir()
+            if config_dir is None:
+                return
+            sentinel = config_dir / "global.ini"
 
             if not sentinel.exists():
                 return
@@ -398,6 +420,38 @@ class OBSRecorder:
             logger.debug("Cleaned OBS crash sentinel")
         except Exception as e:
             logger.debug(f"Could not clean OBS crash sentinel: {e}")
+
+    def _launch_obs(self, obs_exe: Path) -> None:
+        """Launch OBS for the current platform.
+
+        On macOS, OBS is an app bundle that must be started via ``open`` so it
+        finds its bundle resources (Popen-ing the inner binary is unreliable),
+        and ``--minimize-to-tray`` has no meaning there. On Windows and Linux we
+        run the executable directly with the appropriate flags.
+        """
+        from scribe.utils.platform import is_macos, is_windows
+
+        if is_macos():
+            bundle = next((p for p in obs_exe.parents if p.suffix == ".app"), None)
+            app_ref = str(bundle) if bundle is not None else "OBS"
+            subprocess.Popen(
+                ["open", "-a", app_ref, "--args", "--disable-shutdown-check"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+
+        flags = (
+            ["--minimize-to-tray", "--disable-shutdown-check"]
+            if is_windows()
+            else ["--disable-shutdown-check"]
+        )
+        subprocess.Popen(
+            [str(obs_exe), *flags],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(obs_exe.parent),
+        )
 
     def _try_connect_to_running_obs(self, hosts: list[str], ports: list[int]) -> Any | None:
         """
@@ -578,12 +632,7 @@ class OBSRecorder:
             console.print("[cyan]Starting OBS Studio...[/cyan]")
             logger.info("Starting OBS (attempt %d)...", attempt)
             try:
-                subprocess.Popen(
-                    [str(obs_exe), "--minimize-to-tray", "--disable-shutdown-check"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    cwd=str(obs_exe.parent),
-                )
+                self._launch_obs(obs_exe)
             except Exception as e:
                 logger.warning(f"Could not launch OBS: {e}")
                 continue
@@ -1034,9 +1083,18 @@ class OBSRecorder:
         obs_exe = get_obs_executable_path()
         if obs_exe:
             try:
+                from scribe.utils.platform import is_macos
+
                 obs_dir = obs_exe.parent
+                if is_macos():
+                    # macOS: forward the flag to the running instance via the bundle.
+                    bundle = next((p for p in obs_exe.parents if p.suffix == ".app"), None)
+                    app_ref = str(bundle) if bundle is not None else "OBS"
+                    stop_cmd = ["open", "-a", app_ref, "--args", "--stoprecording"]
+                else:
+                    stop_cmd = [str(obs_exe), "--stoprecording"]
                 proc = subprocess.run(
-                    [str(obs_exe), "--stoprecording"],
+                    stop_cmd,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     cwd=str(obs_dir),

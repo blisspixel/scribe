@@ -225,6 +225,19 @@ class TestDateExtraction:
 
         assert result == "2025-11-06"
 
+    def test_extract_date_ignores_arbitrary_digit_runs(self):
+        """An 8-digit ID that is not a real date must not be parsed as one."""
+        # Regression: a bare \d{4}\d{2}\d{2} match turned Zoom IDs into "dates".
+        assert extract_date_from_filename("Zoom_12345678.mp4") is None
+
+    def test_extract_date_rejects_invalid_calendar_date(self):
+        """A compact run with an impossible month/day must be rejected."""
+        assert extract_date_from_filename("call_20251332.wav") is None
+
+    def test_extract_date_compact_not_matched_inside_longer_run(self):
+        """A YYYYMMDD must not be picked out of the middle of a longer digit run."""
+        assert extract_date_from_filename("clip_920251106999.mp4") is None
+
 
 class TestFormatDate:
     """Test date formatting."""

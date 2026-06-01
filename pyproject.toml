@@ -157,6 +157,7 @@ allowed-confusables = ["×", "–", "—"]
 "src/scribe/models/config.py" = ["S110"]
 "src/scribe/core/openai_api.py" = ["S311"]  # jitter only
 "src/scribe/cli/main.py" = ["S324"]  # md5 for stable non-crypto machine ID (two sites)
+"src/scribe/cli/shortcut.py" = ["S603", "S607"]  # launches trusted local tools (powershell, update-desktop-database) to create OS launchers
 
 [tool.ruff.format]
 quote-style = "double"

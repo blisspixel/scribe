@@ -3300,6 +3300,32 @@ def init_command(
     run_wizard(console=console, force=force)
 
 
+@app.command(name="shortcut")
+def shortcut_command(
+    desktop: bool | None = typer.Option(
+        None,
+        "--desktop/--no-desktop",
+        help="Also place a launcher on the Desktop (otherwise you're asked)",
+    ),
+    remove: bool = typer.Option(False, "--remove", help="Remove installed launchers"),
+) -> None:
+    """
+    Install a 'Quick Record' launcher in your OS app menu (Windows/macOS/Linux).
+
+    Creates a native, double-clickable shortcut that runs `scribe rec`, the
+    cross-platform replacement for a hand-made batch file. Use --remove to undo.
+
+    Examples:
+
+      scribe shortcut             # install to the app menu (offers a Desktop copy)
+      scribe shortcut --desktop   # also drop one on the Desktop
+      scribe shortcut --remove    # remove installed launchers
+    """
+    from scribe.cli.shortcut import run_shortcut
+
+    run_shortcut(console=console, desktop=desktop, remove=remove)
+
+
 def main() -> None:
     """Main entry point with smart command detection."""
     import sys

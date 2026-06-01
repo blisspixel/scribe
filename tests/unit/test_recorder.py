@@ -951,13 +951,17 @@ class TestCleanObsCrashSentinel:
         with patch.dict(os.environ, {"APPDATA": ""}, clear=False):
             recorder._clean_obs_crash_sentinel()  # should not raise
 
+    @patch("scribe.utils.platform.is_macos", return_value=False)
     @patch("scribe.utils.platform.is_windows", return_value=False)
-    def test_linux_sentinel(self, _w, recorder, tmp_path):
+    def test_linux_sentinel(self, _w, _m, recorder, tmp_path):
         sentinel = tmp_path / ".config" / "obs-studio" / "global.ini"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_text("LastCrash=yes\nKeep=1\n")
-        with patch("pathlib.Path.home", return_value=tmp_path):
-            recorder._clean_obs_crash_sentinel()
+        # Force the ~/.config branch: an empty XDG_CONFIG_HOME is treated as unset
+        # (CI runners often set XDG_CONFIG_HOME, which would otherwise win).
+        with patch.dict(os.environ, {"XDG_CONFIG_HOME": ""}):
+            with patch("pathlib.Path.home", return_value=tmp_path):
+                recorder._clean_obs_crash_sentinel()
         assert "LastCrash" not in sentinel.read_text()
         assert "Keep=1" in sentinel.read_text()
 
@@ -2013,3 +2017,57 @@ class TestConnectObsPhase1Console:
                 with patch("scribe.core.recorder.time.sleep"):
                     with recorder._connect_obs() as client:
                         assert client is mock_obs_client
+
+
+class TestObsConfigDir:
+    """Cross-platform OBS config dir (regression: macOS used the wrong path)."""
+
+    def test_macos_uses_application_support(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "macos")
+        assert (
+            recorder._obs_config_dir()
+            == Path.home() / "Library" / "Application Support" / "obs-studio"
+        )
+
+    def test_linux_uses_xdg_config(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "linux")
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        assert recorder._obs_config_dir() == Path.home() / ".config" / "obs-studio"
+
+    def test_windows_uses_appdata(self, recorder, monkeypatch, tmp_path):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+        assert recorder._obs_config_dir() == Path(str(tmp_path / "Roaming")) / "obs-studio"
+
+
+class TestLaunchObs:
+    """Platform-aware OBS launch (macOS must use `open -a`, no tray flag)."""
+
+    def test_macos_launches_via_open(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "macos")
+        calls: list[list[str]] = []
+
+        def fake_popen(args, **kwargs):
+            calls.append(args)
+            return MagicMock()
+
+        monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
+        recorder._launch_obs(Path("/Applications/OBS.app/Contents/MacOS/OBS"))
+        args = calls[0]
+        assert args[0] == "open" and "-a" in args
+        assert any("OBS.app" in a for a in args)
+        assert "--minimize-to-tray" not in args
+        assert "--disable-shutdown-check" in args
+
+    def test_windows_runs_exe_with_flags(self, recorder, monkeypatch):
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
+        calls: list[list[str]] = []
+
+        def fake_popen(args, **kwargs):
+            calls.append(args)
+            return MagicMock()
+
+        monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
+        recorder._launch_obs(Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"))
+        assert "--minimize-to-tray" in calls[0]
+        assert "--disable-shutdown-check" in calls[0]

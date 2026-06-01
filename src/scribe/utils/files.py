@@ -459,10 +459,16 @@ def extract_date_from_filename(filename: str) -> str | None:
     if match:
         return match.group(1)
 
-    # Try to find YYYYMMDD pattern
-    match = re.search(r"(\d{4})(\d{2})(\d{2})", filename)
+    # Try to find a YYYYMMDD pattern. Bound it with non-digit lookarounds and
+    # validate it as a real calendar date, otherwise an 8-digit run from an
+    # unrelated ID (e.g. "Zoom_12345678") would yield a bogus "1234-56-78".
+    match = re.search(r"(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)", filename)
     if match:
         year, month, day = match.groups()
+        try:
+            datetime.strptime(f"{year}{month}{day}", "%Y%m%d")
+        except ValueError:
+            return None
         return f"{year}-{month}-{day}"
 
     return None

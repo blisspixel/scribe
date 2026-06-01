@@ -416,7 +416,13 @@ class OpenAITranscriber:
 
                     return True, text
 
-            except (APIConnectionError, RateLimitError, APIStatusError, AuthenticationError) as e:
+            except AuthenticationError as e:
+                # A bad API key can never succeed on retry — fail fast instead of
+                # sleeping through the full backoff schedule for every chunk.
+                logger.error(f"Authentication failed ({chunk_path.name}): {e}")
+                return False, None
+
+            except (APIConnectionError, RateLimitError, APIStatusError) as e:
                 logger.warning(f"API error ({chunk_path.name}, attempt {attempt + 1}): {e}")
 
                 if attempt < retries - 1:

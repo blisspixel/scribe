@@ -8,28 +8,28 @@ Scribe converts spoken content into transcripts, notes, and optional humor outpu
 
 ## Quickstart
 
+Install Scribe as a real `scribe` command, the same steps on **Windows, macOS, and Linux**. (Needs [uv](https://docs.astral.sh/uv/); install that first if you don't have it.)
+
 ```bash
-# Install (recommended)
-git clone https://github.com/blisspixel/scribe.git
-cd scribe
-uv sync
-uv run scribe init
+# 1. Install scribe globally (no clone needed)
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git
+uv tool update-shell      # one-time PATH setup, then open a NEW terminal
 
-# Or with classic pip (see Development section for details)
-# pip install -r requirements.txt && pip install -e .
+# 2. First-run setup + verify (these now work from ANY folder)
+scribe init               # interactive wizard; writes ~/.scribe/config.toml
+scribe info               # shows GPU detection and configured providers
 
-# Configure (optional for transcript-only local GPU)
-cp .env.example .env
-# Add OPENAI_API_KEY only for API transcription, notes, jokes, or memes
-
-# Verify local GPU detection
-uv run scribe info
-
-# Use
-uv run scribe meeting.mp4
-uv run scribe transcribe meeting.mp4 --method local
-uv run scribe doctor
+# 3. Use it from anywhere
+scribe meeting.mp4
+scribe transcribe meeting.mp4 --method local
+scribe doctor
 ```
+
+That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or taskbar shortcut, or scheduled job. Transcript-only local GPU use needs no API key; notes/jokes/memes and API transcription do, so set `OPENAI_API_KEY` (and friends) in your environment or a `.env` file, or let `scribe init` walk you through it.
+
+> **Cloud-synced home folder (OneDrive, Dropbox)?** If the install errors with a hardlink failure (Windows `os error 396`), add `--link-mode=copy` to the install command.
+>
+> **Want to hack on Scribe instead?** Clone the repo and use the project-local dev workflow (`uv sync`, then `uv run scribe ...`), or do an editable global install: `uv tool install --editable . --python 3.12`. See [Installation](#installation).
 
 ---
 
@@ -119,6 +119,12 @@ scribe record --name "Board Meeting"
 
 # Record only (no transcription)
 scribe record --no-auto-transcribe
+
+# Install a double-clickable "Quick Record" launcher in your OS app menu
+# (Windows Start Menu, macOS ~/Applications, Linux app menu); runs `scribe rec`
+scribe shortcut
+scribe shortcut --desktop   # also drop one on the Desktop
+scribe shortcut --remove    # remove it
 ```
 
 ### Intelligence
@@ -139,6 +145,10 @@ Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md
 # First-run setup wizard (auto-prompts on first run; rerun anytime)
 scribe init
 scribe init --force                # Overwrite existing ~/.scribe/config.toml
+
+# Install a cross-platform "Quick Record" launcher (Windows/macOS/Linux)
+scribe shortcut
+scribe shortcut --remove
 
 # System diagnostics
 scribe doctor
@@ -194,7 +204,33 @@ scribe --banner
 
 ### Install Steps
 
-**Recommended (2026+): uv (fast, reproducible, modern)**
+**Recommended (2026+): install `scribe` as a global command (uv)**
+
+This puts a `scribe` command on your PATH that works from any directory, identically on **Windows, macOS, and Linux**. It uses [uv](https://docs.astral.sh/uv/) (install that first), which builds one isolated environment for the tool, separate from any project `.venv` (uv's equivalent of `pipx`).
+
+```bash
+# Straight from GitHub, no clone needed (for anyone who just wants to use Scribe)
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git
+
+# ...or from a cloned repo, tracking your local source (for machines where you edit Scribe)
+#   git clone https://github.com/blisspixel/scribe.git && cd scribe
+#   uv tool install --editable . --python 3.12
+
+# One-time: ensure uv's tool-bin dir is on PATH, then open a NEW terminal
+uv tool update-shell
+
+# Verify (works from any folder now)
+scribe init
+scribe info
+```
+
+Now `scribe rec`, `scribe doctor`, etc. work from anywhere, and OS shortcuts that call a bare `scribe` work too.
+
+- **Cloud-synced home folder (OneDrive, Dropbox, iCloud):** if the install fails with a hardlink error (Windows `os error 396`), add `--link-mode=copy`. uv's tool directory lives under your synced profile and cannot always be hardlinked.
+- **Updating:** an `--editable` install picks up source changes automatically; a git install updates with `uv tool upgrade scribe`.
+- **Uninstall:** `uv tool uninstall scribe`.
+
+**For development / contributing: project-local with uv**
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
@@ -202,6 +238,8 @@ uv sync
 uv run scribe init
 uv run scribe info
 ```
+
+`uv sync` keeps everything project-local: you invoke it with `uv run scribe ...` from inside the repo. This is the right setup for hacking on Scribe, but note it creates **no global `scribe` command**: a bare `scribe` in another folder or a shortcut will fail with `'scribe' is not recognized` / `command not found`. Use the global install above for daily use.
 
 **Option A: pip (widely compatible, classic)**
 ```bash
@@ -519,7 +557,26 @@ scribe batch *.mp4 --vocabulary company-names.json
 **Output:**
 - Clickable file paths (Windows Terminal, iTerm2, VS Code)
 - Full paths for easy copy/paste
-- Cross-platform support
+- Cross-platform support (OBS config/launch handled per-OS on Windows, macOS, Linux)
+
+### Quick Record launcher
+
+`scribe shortcut` installs a native, double-clickable "Quick Record" launcher in your
+OS application menu that runs `scribe rec` with no terminal required:
+
+- **Windows**: a Start Menu shortcut (`--desktop` also adds a Desktop one)
+- **macOS**: `~/Applications/Scribe Quick Record.command` (shows in Finder/Launchpad)
+- **Linux**: an XDG `.desktop` entry in your applications menu
+
+```bash
+scribe shortcut            # install to the app menu (offers a Desktop copy)
+scribe shortcut --desktop  # also place one on the Desktop
+scribe shortcut --remove   # remove installed launchers
+```
+
+The launcher calls whatever `scribe` resolves to at install time (preferring a `scribe`
+on your PATH, e.g. from `uv tool install`), falling back to `python -m scribe`. This is
+the cross-platform replacement for any hand-made `.bat`/shell shortcut.
 
 ---
 
