@@ -449,8 +449,10 @@ def validate_language_code(language: str) -> str:
 
     language = language.strip().lower()
 
-    # Check if it's already a valid 2-letter code
-    if len(language) == 2 and language.isalpha():
+    # Check if it's already a valid 2-letter ISO code. Require ASCII: without it,
+    # CJK native names like "中文" are 2 chars and .isalpha() is True, so they would
+    # be returned verbatim as a bogus "code" instead of resolving via the aliases.
+    if len(language) == 2 and language.isascii() and language.isalpha():
         return language
 
     # Check aliases

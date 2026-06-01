@@ -648,14 +648,21 @@ class Transcriber:
         if keep_patterns:
             default_keep_patterns.extend(keep_patterns)
 
+        # Capture sizes BEFORE deleting — cleanup_files unlinks the files, so a
+        # stat() afterwards always sees them gone and would report 0 bytes freed.
+        to_delete = cleanup_files(
+            directory=directory,
+            patterns=delete_patterns,
+            keep_patterns=default_keep_patterns,
+            dry_run=True,
+        )
+        total_size_mb = sum(f.stat().st_size for f in to_delete if f.exists()) / (1024 * 1024)
+
         deleted_files = cleanup_files(
             directory=directory, patterns=delete_patterns, keep_patterns=default_keep_patterns
         )
 
         if deleted_files:
-            total_size_mb = sum(f.stat().st_size for f in deleted_files if f.exists()) / (
-                1024 * 1024
-            )
             logger.info(f"Cleaned up {len(deleted_files)} files ({total_size_mb:.1f}MB freed)")
 
         return deleted_files
