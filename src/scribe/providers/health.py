@@ -74,6 +74,8 @@ class ProviderHealthMonitor:
                 self._check_anthropic(api_key)
             elif provider_name == "gemini":
                 self._check_gemini(api_key)
+            elif provider_name == "ollama":
+                self._check_ollama()
             else:
                 raise ValueError(f"Unknown provider: {provider_name}")
 
@@ -124,10 +126,10 @@ class ProviderHealthMonitor:
         """
         # Define which providers support which features
         feature_support = {
-            "joke": ["openai", "xai", "anthropic", "gemini"],
-            "meme": ["openai", "xai", "anthropic", "gemini"],
+            "joke": ["openai", "xai", "anthropic", "gemini", "ollama"],
+            "meme": ["openai", "xai", "anthropic", "gemini", "ollama"],
             "meme_image": ["openai", "xai", "gemini"],
-            "notes": ["openai", "xai", "anthropic", "gemini"],
+            "notes": ["openai", "xai", "anthropic", "gemini", "ollama"],
             "transcribe": ["openai"],
         }
 
@@ -241,6 +243,20 @@ class ProviderHealthMonitor:
 
         if not response.text:
             raise ValueError("No response from Gemini")
+
+    def _check_ollama(self) -> None:
+        """Check that a local Ollama server is reachable and has a model installed."""
+        import os
+
+        from scribe.utils.ollama_models import list_installed_models
+
+        base_url = os.getenv("SCRIBE_OLLAMA_BASE_URL")
+        models = list_installed_models(base_url)
+        if not models:
+            raise ValueError(
+                "Ollama server not reachable or no models installed. "
+                "Start Ollama and run e.g. `ollama pull llama3.2`."
+            )
 
 
 # Global health monitor instance

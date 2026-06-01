@@ -396,6 +396,40 @@ Mix and match AI providers based on cost, performance, and features.
 - **XAI/Grok:** Grok 4.3 (default for joke/meme/notes), Grok Imagine Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
 - **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 — optional, not part of fallback chain by default
+- **Ollama (local):** any installed model — free, fully offline notes; runs on Linux/macOS/Windows. The model is auto-selected to fit your GPU/VRAM (override with `SCRIBE_OLLAMA_MODEL`).
+
+### Local, Free Notes with Ollama
+
+Generate meeting notes entirely on your machine — no API key, no cost, nothing leaves your device. Requires a running [Ollama](https://ollama.com) server with at least one model pulled.
+
+```bash
+# Use your best installed local model (auto-selected for your VRAM)
+scribe notes meeting.md --provider ollama
+
+# Or pin a specific model
+scribe notes meeting.md --provider ollama --model qwen2.5:14b
+```
+
+Scribe probes the Ollama server for installed models and picks the largest general-purpose model that fits your detected memory budget (mirroring how it auto-selects the Whisper model). `scribe info` shows the auto-selected local model.
+
+### Comparing Providers ("is local worth it?")
+
+Run the same transcript through several providers and get a cost / latency / quality scorecard. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric:
+
+```bash
+# Objective scoring only (free, offline)
+scribe notes meeting.md --compare ollama:qwen2.5:14b,ollama:gemma4:26b
+
+# Add a cloud baseline and an LLM judge for a quality verdict
+scribe notes meeting.md --compare openai,ollama:qwen2.5:14b --judge openai
+```
+
+```
+model                                    cost     time   struct  judge
+-----------------------------------------------------------------------
+openai:gpt-5.5                          $0.0120    4.2s   100.0%    9.1
+ollama:qwen2.5:14b                       $0.00    18.7s    94.0%    7.8
+```
 
 **Configuration:**
 ```bash

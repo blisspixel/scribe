@@ -6,8 +6,10 @@ import logging
 import os
 
 from scribe.providers.base import AIProvider, ProviderConfig
+from scribe.providers.ollama_provider import OLLAMA_PLACEHOLDER_KEY, OllamaProvider
 from scribe.providers.openai_provider import OpenAIProvider
 from scribe.providers.xai_provider import XAIProvider
+from scribe.utils.ollama_models import DEFAULT_OLLAMA_MODEL
 
 try:
     from scribe.providers.anthropic_provider import AnthropicProvider
@@ -90,6 +92,13 @@ def get_provider(
             api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
         elif provider_name == "gemini":
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
+        elif provider_name == "ollama":
+            # Ollama runs locally and ignores the key, but the SDK needs a value.
+            api_key = (
+                os.getenv("OLLAMA_API_KEY")
+                or os.getenv("SCRIBE_OLLAMA_API_KEY")
+                or OLLAMA_PLACEHOLDER_KEY
+            )
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
 
@@ -115,14 +124,28 @@ def get_provider(
 
     # Determine model
     if model is None or model == "":
-        model = _get_default_model(provider_name, feature)
+        if provider_name == "ollama":
+            # Pick the best installed local model for this machine's memory budget.
+            from scribe.utils.ollama_models import select_default_ollama_model
 
-    # Create config
+            model = select_default_ollama_model(os.getenv("SCRIBE_OLLAMA_BASE_URL"))
+        else:
+            model = _get_default_model(provider_name, feature)
+
+    # Create config. Local models can be much slower than cloud APIs (cold
+    # loads, CPU offload on modest hardware), so Ollama gets a generous default
+    # timeout that keeps notes generation working on "any machine".
+    if provider_name == "ollama":
+        timeout = int(os.getenv("SCRIBE_OLLAMA_TIMEOUT", "600"))
+    else:
+        timeout = int(os.getenv("SCRIBE_API_TIMEOUT", "120"))
+
     config = ProviderConfig(
         provider_name=provider_name,
         api_key=api_key,
         model=model,
-        timeout=int(os.getenv("SCRIBE_API_TIMEOUT", "120")),
+        base_url=os.getenv("SCRIBE_OLLAMA_BASE_URL") if provider_name == "ollama" else None,
+        timeout=timeout,
     )
 
     # Create provider
@@ -142,6 +165,8 @@ def get_provider(
                 "google-genai package not installed. Install with: pip install google-genai"
             )
         return GeminiProvider(config)
+    elif provider_name == "ollama":
+        return OllamaProvider(config)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
 
@@ -177,6 +202,15 @@ def _get_default_model(provider_name: str, feature: str) -> str:
             "meme_image": "imagen-4.0-generate-001",
             "notes": "gemini-3-pro-preview",  # Gemini 3 for structured analysis
             "transcribe": None,  # Gemini doesn't support dedicated transcription yet
+        },
+        # Ollama models are machine-dependent; get_provider() picks the best
+        # installed model by VRAM. These are only last-resort fallbacks.
+        "ollama": {
+            "joke": DEFAULT_OLLAMA_MODEL,
+            "meme": DEFAULT_OLLAMA_MODEL,
+            "meme_image": None,  # Ollama does not generate images
+            "notes": DEFAULT_OLLAMA_MODEL,
+            "transcribe": None,  # Ollama does not transcribe audio
         },
     }
 

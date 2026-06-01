@@ -2459,15 +2459,33 @@ def notes(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Output path for notes (default: same directory as transcript)"
     ),
-    model: str | None = typer.Option(None, "--model", help="GPT model to use (default: gpt-5)"),
+    model: str | None = typer.Option(
+        None, "--model", help="Model to use (default: provider's notes default)"
+    ),
     provider: str | None = typer.Option(
-        None, "--provider", help="AI provider to use (openai, xai)"
+        None, "--provider", help="AI provider to use (openai, xai, anthropic, gemini, ollama)"
+    ),
+    compare: str | None = typer.Option(
+        None,
+        "--compare",
+        help=(
+            "Compare providers instead of generating. Comma-separated specs, e.g. "
+            "'openai,ollama:qwen2.5:14b'. Prints a cost/latency/quality scorecard."
+        ),
+    ),
+    judge: str | None = typer.Option(
+        None,
+        "--judge",
+        help=(
+            "Optional judge provider for an LLM-rubric quality score in --compare "
+            "(e.g. 'openai' or 'ollama:gemma4:26b'). Objective scoring always runs."
+        ),
     ),
 ) -> None:
     """
     Generate structured meeting notes from a transcript.
 
-    Uses AI (OpenAI, XAI/Grok, etc.) to analyze the transcript and create comprehensive notes with:
+    Uses AI (OpenAI, XAI/Grok, Ollama, etc.) to analyze the transcript and create comprehensive notes with:
     - Detailed summary
     - Current state (business & technical)
     - Drivers and blockers
@@ -2475,7 +2493,8 @@ def notes(
 
     Example: scribe notes transcript.txt
     Example: scribe notes transcript.txt --output ./notes/meeting.md
-    Example: scribe notes transcript.txt --provider xai
+    Example: scribe notes transcript.txt --provider ollama          # free, local, offline
+    Example: scribe notes transcript.txt --compare openai,ollama:qwen2.5:14b --judge openai
     """
     try:
         # Validate file is a text file
@@ -2487,7 +2506,11 @@ def notes(
 
         config = ScribeConfig()
 
-        if not config.openai_api_key:
+        # Local-only (Ollama) and comparison runs do not need a cloud key; each
+        # cloud provider validates its own key when it is actually used.
+        single_provider = (provider or "openai").lower()
+        needs_cloud_key = compare is None and single_provider not in ("ollama",)
+        if needs_cloud_key and not config.openai_api_key:
             console.print("[bold red]Error:[/bold red] OpenAI API key not configured")
             console.print("[dim]Set OPENAI_API_KEY in your .env file[/dim]")
             raise typer.Exit(1)
@@ -2495,14 +2518,44 @@ def notes(
         # Display header
         _show_command_banner(console)
         panel_lines = [f"[white]{transcript_file.name}[/white]"]
-        panel_lines.append("[dim]notes[/dim]")
+        panel_lines.append("[dim]notes · compare[/dim]" if compare else "[dim]notes[/dim]")
 
         console.print(Panel.fit("\n".join(panel_lines), border_style="cyan", padding=(0, 1)))
         console.print()
 
-        # Generate notes with progress
         from rich.progress import Progress, SpinnerColumn, TextColumn
 
+        # Comparison / eval mode: score providers side by side and return.
+        if compare:
+            specs = [s.strip() for s in compare.split(",") if s.strip()]
+            if not specs:
+                console.print("[bold red]Error:[/bold red] --compare needs at least one provider")
+                raise typer.Exit(1)
+
+            from scribe.utils.notes_eval import format_scorecard, run_notes_eval
+            from scribe.utils.transcript_loader import load_transcript_text
+
+            transcript_text = load_transcript_text(transcript_file)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[cyan]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                desc = f"Comparing {len(specs)} providers" + (" + judge" if judge else "")
+                progress.add_task(f"{desc}...", total=None)
+                results = run_notes_eval(transcript_text, specs, judge_spec=judge)
+
+            console.print(format_scorecard(results))
+            console.print()
+            failures = [r for r in results if not r.ok]
+            for r in failures:
+                console.print(f"[yellow]{r.spec} failed:[/yellow] {r.error}")
+            if failures:
+                console.print()
+            return
+
+        # Generate notes with progress
         from scribe.utils.notes_generator import NotesGenerator
 
         notes_model = model or config.notes_model
@@ -2656,6 +2709,36 @@ def info() -> None:
         console.print(
             f"  [{ScribeTheme.TEXT_PRIMARY}]anthropic[/{ScribeTheme.TEXT_PRIMARY}] {anthropic_status}"
         )
+        console.print()
+
+        # Local LLM (Ollama) section — free, offline notes. Surfaces the smart
+        # default model auto-selected for this machine's memory budget.
+        from scribe.utils.ollama_models import (
+            available_model_memory_gb,
+            list_installed_models,
+            select_default_ollama_model,
+        )
+
+        console.print(f"[bold {ScribeTheme.SECONDARY}]local llm[/bold {ScribeTheme.SECONDARY}]")
+        ollama_models = list_installed_models(os.getenv("SCRIBE_OLLAMA_BASE_URL"))
+        if ollama_models:
+            budget = available_model_memory_gb()
+            chosen = select_default_ollama_model(os.getenv("SCRIBE_OLLAMA_BASE_URL"))
+            budget_label = f"{budget:.0f}GB budget" if budget > 0 else "conservative (cpu)"
+            console.print(
+                f"  [{ScribeTheme.TEXT_PRIMARY}]ollama[/{ScribeTheme.TEXT_PRIMARY}]    "
+                f"[{ScribeTheme.SUCCESS}]{len(ollama_models)} models[/{ScribeTheme.SUCCESS}] "
+                f"[{ScribeTheme.TEXT_MUTED}]· {budget_label}[/{ScribeTheme.TEXT_MUTED}]"
+            )
+            console.print(
+                f"  [{ScribeTheme.TEXT_PRIMARY}]auto[/{ScribeTheme.TEXT_PRIMARY}]      "
+                f"[{ScribeTheme.TEXT_MUTED}]{chosen} (notes --provider ollama)[/{ScribeTheme.TEXT_MUTED}]"
+            )
+        else:
+            console.print(
+                f"  [{ScribeTheme.TEXT_PRIMARY}]ollama[/{ScribeTheme.TEXT_PRIMARY}]    "
+                f"[{ScribeTheme.TEXT_MUTED}]not running (optional, for free local notes)[/{ScribeTheme.TEXT_MUTED}]"
+            )
         console.print()
 
         # Recommendation

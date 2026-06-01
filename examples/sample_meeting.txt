@@ -1,0 +1,28 @@
+Team Sync - Platform Migration
+Date: 2026-06-01
+
+Alice: Okay, let's get started. The main thing today is the v2 platform migration. Where are we?
+
+Bob: Backend is basically done. The new API is deployed to staging and passing all the integration tests. The one open risk is the database migration - we still need to run the big schema change on the production replica before cutover.
+
+Carol: On the frontend side, I've migrated about 80 percent of the components. The dashboard and settings pages are done. The reporting page is the last big one and it's blocked because it depends on the new metrics endpoint that Bob's team hasn't shipped yet.
+
+Bob: Right, the metrics endpoint. We deprioritized it last sprint. I can have it ready by Wednesday.
+
+Alice: Let's make that the priority then. Carol, if Bob gets you the metrics endpoint Wednesday, can you finish the reporting page by Friday?
+
+Carol: Yes, Friday is doable if I get it Wednesday.
+
+Alice: Great. So the decision is: we ship v2 to production next Monday, assuming the reporting page lands Friday and the database migration goes clean over the weekend.
+
+Bob: I'll own the database migration. I'll run it on the replica Thursday night so we have a full day to validate before the weekend.
+
+Alice: Perfect. One more thing - we agreed we are NOT going to support the legacy export format in v2. Customers on the old format will get a deprecation notice. Carol, can you add that banner to the export page?
+
+Carol: Sure, I'll add the deprecation banner this week.
+
+Alice: And we're holding off on the mobile app changes until after the v2 launch. That's out of scope for now.
+
+Bob: Sounds good. The other blocker I want to flag - our CI is flaky on Windows runners. It's been failing intermittently and slowing everyone down. We should fix that soon but it's not blocking the launch.
+
+Alice: Agreed, let's track the CI flakiness separately. Okay, action items: Bob ships the metrics endpoint Wednesday and runs the DB migration Thursday night. Carol finishes the reporting page Friday and adds the deprecation banner this week. We launch v2 Monday. Thanks everyone.
