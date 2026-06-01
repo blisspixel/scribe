@@ -5,11 +5,33 @@ import json
 from scribe.utils import notes_eval
 from scribe.utils.notes_eval import (
     EvalResult,
+    ProviderAvailability,
     format_scorecard,
     objective_struct_score,
     parse_provider_spec,
+    resolve_compare_plan,
     run_notes_eval,
+    summarize_verdict,
 )
+
+
+def _avail(cloud=None, models=None, auto=None) -> ProviderAvailability:
+    return ProviderAvailability(cloud=cloud or [], ollama_models=models or [], ollama_auto=auto)
+
+
+def _result(provider, model, struct, judge=None, cost=None, ok=True) -> EvalResult:
+    return EvalResult(
+        spec=f"{provider}:{model}",
+        provider=provider,
+        model=model,
+        ok=ok,
+        latency_sec=1.0,
+        cost_usd=cost,
+        cost_source="local" if provider == "ollama" else "local_estimate",
+        struct_score=struct,
+        judge_score=judge,
+    )
+
 
 _FULL = json.dumps(
     {
@@ -130,6 +152,100 @@ class TestGenerateAndRun:
         results = run_notes_eval("t", ["ollama:qwen2.5:14b"], judge_spec="openai")
         assert results[0].judge_score == 9.0  # (9+8+10)/3 = 9.0
         assert results[0].judge_detail is not None
+
+
+class TestResolveComparePlan:
+    def test_smart_is_cloud_vs_best_local(self):
+        avail = _avail(cloud=["openai", "xai"], models=["a:7b"], auto="a:7b")
+        specs, judge = resolve_compare_plan("smart", "auto", avail)
+        assert specs == ["openai", "ollama:a:7b"]
+        assert judge == "openai"  # auto judge = preferred cloud
+
+    def test_blank_defaults_to_smart(self):
+        avail = _avail(cloud=["openai"], models=["a:7b"], auto="a:7b")
+        specs, _ = resolve_compare_plan("", None, avail)
+        assert specs == ["openai", "ollama:a:7b"]
+
+    def test_local_preset_lists_all_and_stays_offline(self):
+        avail = _avail(cloud=["openai"], models=["a:7b", "b:14b"], auto="b:14b")
+        specs, judge = resolve_compare_plan("local", "auto", avail)
+        assert specs == ["ollama:a:7b", "ollama:b:14b"]
+        assert judge is None  # fully local -> no cloud judge by default
+
+    def test_all_preset(self):
+        avail = _avail(cloud=["openai", "gemini"], models=["a:7b"], auto="a:7b")
+        specs, judge = resolve_compare_plan("all", "auto", avail)
+        assert specs == ["openai", "gemini", "ollama:a:7b"]
+        assert judge == "openai"
+
+    def test_explicit_list_preserved(self):
+        avail = _avail(cloud=["openai"])
+        specs, _ = resolve_compare_plan("openai,ollama:gemma4:26b", "auto", avail)
+        assert specs == ["openai", "ollama:gemma4:26b"]
+
+    def test_explicit_judge_wins(self):
+        avail = _avail(cloud=["openai"], auto="a:7b", models=["a:7b"])
+        _, judge = resolve_compare_plan("smart", "gemini", avail)
+        assert judge == "gemini"
+
+    def test_judge_none_disables(self):
+        avail = _avail(cloud=["openai"], auto="a:7b", models=["a:7b"])
+        _, judge = resolve_compare_plan("smart", "none", avail)
+        assert judge is None
+
+    def test_no_cloud_no_judge(self):
+        avail = _avail(cloud=[], models=["a:7b"], auto="a:7b")
+        specs, judge = resolve_compare_plan("smart", "auto", avail)
+        assert specs == ["ollama:a:7b"]
+        assert judge is None
+
+
+class TestSummarizeVerdict:
+    def test_no_locals_returns_none(self):
+        assert summarize_verdict([_result("openai", "gpt-5.5", 100.0, judge=9.0)]) is None
+
+    def test_local_only_reports_offline(self):
+        verdict = summarize_verdict([_result("ollama", "qwen2.5:14b", 94.0)])
+        assert "fully offline" in verdict
+        assert "94%" in verdict
+
+    def test_local_worth_it_when_close(self):
+        results = [
+            _result("openai", "gpt-5.5", 100.0, judge=9.0, cost=0.012),
+            _result("ollama", "qwen2.5:14b", 94.0, judge=8.2),
+        ]
+        verdict = summarize_verdict(results)
+        assert "worth it" in verdict
+        assert "qwen2.5:14b" in verdict
+
+    def test_cloud_leads_when_gap_large(self):
+        results = [
+            _result("openai", "gpt-5.5", 100.0, judge=9.5, cost=0.012),
+            _result("ollama", "tiny:1b", 60.0, judge=4.0),
+        ]
+        verdict = summarize_verdict(results)
+        assert "still leads" in verdict
+
+
+class TestDetectAvailability:
+    def test_detects_cloud_keys_and_ollama(self, monkeypatch):
+        for var in ("OPENAI_API_KEY", "XAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
+
+        from scribe.utils import ollama_models
+
+        monkeypatch.setattr(
+            ollama_models,
+            "list_installed_models",
+            lambda _base_url=None: [ollama_models.OllamaModel("a:7b", 5.0)],
+        )
+        monkeypatch.setattr(ollama_models, "available_model_memory_gb", lambda: 24.0)
+
+        avail = notes_eval.detect_availability()
+        assert avail.cloud == ["openai"]
+        assert avail.ollama_models == ["a:7b"]
+        assert avail.ollama_auto == "a:7b"
 
 
 class TestFormatScorecard:

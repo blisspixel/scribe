@@ -2469,17 +2469,15 @@ def notes(
         None,
         "--compare",
         help=(
-            "Compare providers instead of generating. Comma-separated specs, e.g. "
-            "'openai,ollama:qwen2.5:14b'. Prints a cost/latency/quality scorecard."
+            "Compare providers instead of generating. Use a preset ('smart', 'local', "
+            "'all') or a list like 'openai,ollama:qwen2.5:14b'. Tip: `scribe compare` is "
+            "the shorter way to do this."
         ),
     ),
     judge: str | None = typer.Option(
         None,
         "--judge",
-        help=(
-            "Optional judge provider for an LLM-rubric quality score in --compare "
-            "(e.g. 'openai' or 'ollama:gemma4:26b'). Objective scoring always runs."
-        ),
+        help="Judge for --compare: 'auto' (default), 'none', or e.g. 'openai'.",
     ),
 ) -> None:
     """
@@ -2523,39 +2521,14 @@ def notes(
         console.print(Panel.fit("\n".join(panel_lines), border_style="cyan", padding=(0, 1)))
         console.print()
 
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-
         # Comparison / eval mode: score providers side by side and return.
         if compare:
-            specs = [s.strip() for s in compare.split(",") if s.strip()]
-            if not specs:
-                console.print("[bold red]Error:[/bold red] --compare needs at least one provider")
-                raise typer.Exit(1)
-
-            from scribe.utils.notes_eval import format_scorecard, run_notes_eval
-            from scribe.utils.transcript_loader import load_transcript_text
-
-            transcript_text = load_transcript_text(transcript_file)
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[cyan]{task.description}"),
-                console=console,
-                transient=True,
-            ) as progress:
-                desc = f"Comparing {len(specs)} providers" + (" + judge" if judge else "")
-                progress.add_task(f"{desc}...", total=None)
-                results = run_notes_eval(transcript_text, specs, judge_spec=judge)
-
-            console.print(format_scorecard(results))
-            console.print()
-            failures = [r for r in results if not r.ok]
-            for r in failures:
-                console.print(f"[yellow]{r.spec} failed:[/yellow] {r.error}")
-            if failures:
-                console.print()
+            _run_notes_comparison(transcript_file, compare, judge)
             return
 
         # Generate notes with progress
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+
         from scribe.utils.notes_generator import NotesGenerator
 
         notes_model = model or config.notes_model
@@ -2587,6 +2560,116 @@ def notes(
     except Exception as e:
         console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
         logger.exception("Unexpected error in notes command")
+        raise typer.Exit(1)
+
+
+def _run_notes_comparison(
+    transcript_file: Path, providers_arg: str | None, judge_arg: str | None
+) -> None:
+    """Shared comparison runner for `scribe compare` and `scribe notes --compare`."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from scribe.utils.notes_eval import (
+        detect_availability,
+        format_scorecard,
+        resolve_compare_plan,
+        run_notes_eval,
+        summarize_verdict,
+    )
+    from scribe.utils.transcript_loader import load_transcript_text
+
+    avail = detect_availability()
+    specs, judge = resolve_compare_plan(providers_arg, judge_arg, avail)
+    if not specs:
+        console.print(
+            "[bold red]Error:[/bold red] nothing to compare — no cloud API keys and "
+            "no local Ollama models found."
+        )
+        console.print(
+            "[dim]Pull a local model (e.g. `ollama pull qwen2.5:14b`) or set an API key.[/dim]"
+        )
+        raise typer.Exit(1)
+
+    transcript_text = load_transcript_text(transcript_file)
+    plan = ", ".join(specs) + (f"   judge={judge}" if judge else "   (objective only)")
+    console.print(f"[dim]comparing:[/dim] {plan}")
+    console.print()
+
+    with Progress(
+        SpinnerColumn(), TextColumn("[cyan]{task.description}"), console=console, transient=True
+    ) as progress:
+        progress.add_task("Scoring providers...", total=None)
+        results = run_notes_eval(transcript_text, specs, judge_spec=judge)
+
+    console.print(format_scorecard(results))
+    console.print()
+
+    verdict = summarize_verdict(results)
+    if verdict:
+        console.print(f"[bold cyan]→[/bold cyan] {verdict}")
+        console.print()
+
+    for r in results:
+        if not r.ok:
+            console.print(f"[yellow]{r.spec} failed:[/yellow] {r.error}")
+
+
+@app.command()
+def compare(
+    transcript_file: Path = typer.Argument(
+        ..., help="Transcript to compare on (.txt, .md, .docx)", exists=True
+    ),
+    providers: str = typer.Argument(
+        "smart",
+        help=(
+            "What to compare: 'smart' (your cloud default vs the best local model), "
+            "'local' (every installed Ollama model, free/offline), 'all' (every "
+            "provider you have), or an explicit list like 'openai,ollama:gemma4:26b'."
+        ),
+    ),
+    judge: str = typer.Option(
+        "auto",
+        "--judge",
+        help="Judge provider: 'auto' (a cloud model you have), 'none', or e.g. 'openai'.",
+    ),
+) -> None:
+    """
+    Compare note-generation providers and print a cost / latency / quality scorecard.
+
+    Quality is scored objectively (free, offline) plus an optional LLM judge, and a
+    one-line verdict tells you whether the free local model is worth it.
+
+    Examples:
+        scribe compare meeting.md                 # smart: cloud vs best local, auto-judged
+        scribe compare meeting.md local           # every local model, free and offline
+        scribe compare meeting.md all             # everything you have keys/models for
+        scribe compare meeting.md openai,ollama:gemma4:26b --judge openai
+    """
+    try:
+        if not is_supported_transcript_file(transcript_file):
+            console.print(
+                "[bold red]Error:[/bold red] File must be a text file (.txt, .md, or .docx)"
+            )
+            raise typer.Exit(1)
+
+        _show_command_banner(console)
+        console.print(
+            Panel.fit(
+                f"[white]{transcript_file.name}[/white]\n[dim]compare[/dim]",
+                border_style="cyan",
+                padding=(0, 1),
+            )
+        )
+        console.print()
+
+        _run_notes_comparison(transcript_file, providers, judge)
+
+    except ScribeError as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
+        logger.exception("Unexpected error in compare command")
         raise typer.Exit(1)
 
 

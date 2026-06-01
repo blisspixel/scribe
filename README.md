@@ -427,14 +427,13 @@ Tuning knobs (all optional):
 
 ### Comparing Providers ("is local worth it?")
 
-Run the same transcript through several providers and get a cost / latency / quality scorecard. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric:
+One short command runs the same transcript through several providers and prints a cost / latency / quality scorecard plus a plain-English verdict. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric — and the judge is chosen automatically.
 
 ```bash
-# Objective scoring only (free, offline)
-scribe notes meeting.md --compare ollama:qwen2.5:14b,ollama:gemma4:26b
-
-# Add a cloud baseline and an LLM judge for a quality verdict
-scribe notes meeting.md --compare openai,ollama:qwen2.5:14b --judge openai
+scribe compare meeting.md            # smart: your cloud default vs the best local model, auto-judged
+scribe compare meeting.md local      # every installed local model — free and offline
+scribe compare meeting.md all        # everything you have keys/models for
+scribe compare meeting.md openai,ollama:gemma4:26b --judge openai   # explicit
 ```
 
 ```
@@ -442,7 +441,11 @@ model                                    cost     time   struct  judge
 -----------------------------------------------------------------------
 openai:gpt-5.5                          $0.0120    4.2s   100.0%    9.1
 ollama:qwen2.5:14b                       $0.00    18.7s    94.0%    7.8
+
+→ Local qwen2.5:14b is worth it — comparable quality to gpt-5.5 (~$0.0120/run) at $0.00.
 ```
+
+(`scribe notes meeting.md --compare …` does the same thing if you prefer a flag.)
 
 **Configuration:**
 ```bash
