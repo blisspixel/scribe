@@ -209,6 +209,7 @@ python-preference = "only-managed"
 [dependency-groups]
 dev = [
     "ruff>=0.9",
+    "colorama>=0.4.6",  # Used by legacy standalone test scripts (test_audio/devices/startup, run_tests); transitive copy is win32-only, so declare it directly for cross-platform CI
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.23",

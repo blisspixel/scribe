@@ -3314,6 +3314,7 @@ whisperx = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "colorama" },
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -3358,6 +3359,7 @@ provides-extras = ["dev", "whisperx"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "colorama", specifier = ">=0.4.6" },
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pip-audit", specifier = ">=2.7" },
