@@ -400,3 +400,12 @@ def mock_file_size(monkeypatch):
     monkeypatch.setattr(Path, "stat", mock_stat)
 
     return mock_stat
+
+
+def pytest_runtest_setup(item):
+    """Skip tests marked with 'requires_pillow' if Pillow is not installed."""
+    if any(mark.name == "requires_pillow" for mark in item.iter_markers()):
+        try:
+            import PIL.Image  # noqa: F401
+        except ImportError:
+            pytest.skip("Pillow is not installed")

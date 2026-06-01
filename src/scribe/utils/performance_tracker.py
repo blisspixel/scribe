@@ -160,23 +160,26 @@ class PerformanceMetrics:
         Update metrics based on actual performance.
 
         Args:
-            phase: Phase name (analysis, conversion, transcription, etc.)
+            phase: Phase name (preparing, transcribing, finishing, etc.)
             audio_duration: Audio duration in seconds
             actual_time: Actual processing time in seconds
         """
-        if phase == "analysis":
-            # Calculate speed as ratio of actual time to audio duration
-            new_speed = actual_time / audio_duration if audio_duration > 0 else 1.0
-            self.analysis_speed = self._weighted_average(self.analysis_speed, new_speed)
-        elif phase == "conversion":
+        if phase in ["analysis", "preparing"]:
+            # 'preparing' in UnifiedProgress maps to 'conversion_speed' (including analysis)
             new_speed = actual_time / audio_duration if audio_duration > 0 else 1.0
             self.conversion_speed = self._weighted_average(self.conversion_speed, new_speed)
-        elif phase == "transcription":
+        elif phase in ["transcription", "transcribing"]:
             # Calculate as real-time multiplier (audio_duration / actual_time)
             new_speed = audio_duration / actual_time if actual_time > 0 else 11.0
             self.transcription_speed = self._weighted_average(self.transcription_speed, new_speed)
+        elif phase == "finishing":
+            # 'finishing' is a complex phase, we update docx/notes/joke/meme
+            # but since we don't have individual times here, we just use a heuristic
+            # or skip updating if we don't have granular data.
+            # For now, let's treat it as a generic post-processing update if we can.
+            pass
         elif phase in ["docx", "notes", "joke", "meme"]:
-            # Fixed time operations
+            # Granular updates from components that track their own time
             attr_name = f"{phase}_time"
             current_value = getattr(self, attr_name)
             setattr(self, attr_name, self._weighted_average(current_value, actual_time))

@@ -160,14 +160,18 @@ class TestTranscribeCommand:
         mock_transcriber.cleanup_intermediate_files.return_value = []
         mock_transcriber_class.return_value = mock_transcriber
 
+        mock_progress_inst = mock_progress.return_value
+        mock_progress_inst.frame_delay = 0.1
+        mock_progress_inst.update_phase = Mock()
+        mock_progress_inst.refresh = Mock()
+        mock_progress_inst.complete = Mock()
+        mock_progress_inst.start = Mock()
+        mock_progress_inst.stop = Mock()
+
         mock_duration.return_value = 600.0  # 10 minutes
 
         docx_path = tmp_path / "transcript.docx"
         mock_docx.return_value = docx_path
-
-        # Mock unified progress
-        mock_progress_inst = Mock()
-        mock_progress.return_value = mock_progress_inst
 
         # Run command with flags to disable optional features
         result = cli_runner.invoke(

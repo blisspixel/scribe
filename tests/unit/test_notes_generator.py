@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.scribe.utils.notes_generator import (
+from scribe.utils.notes_generator import (
     NotesGenerationError,
     NotesGenerator,
     TranscriptTooShortError,
@@ -272,7 +272,7 @@ class TestNotesGeneratorPipeline:
         with patch(
             "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
         ):
-            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+            with patch("scribe.utils.notes_generator.OpenAI", return_value=Mock()):
                 return NotesGenerator(api_key="sk-test123")
 
     def test_generate_notes_single_pass(self, tmp_path):
@@ -374,7 +374,7 @@ class TestNotesGeneratorPipeline:
         }
 
         with patch("scribe.providers.get_provider", return_value=provider):
-            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+            with patch("scribe.utils.notes_generator.OpenAI", return_value=Mock()):
                 generator = NotesGenerator(api_key="sk-test123", provider_name="xai")
 
         content, metrics = generator._call_gpt5_api(
@@ -389,7 +389,7 @@ class TestNotesGeneratorPipeline:
         with patch(
             "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
         ):
-            with patch("src.scribe.utils.notes_generator.OpenAI") as mock_openai:
+            with patch("scribe.utils.notes_generator.OpenAI") as mock_openai:
                 first_response = SimpleNamespace(
                     status="incomplete",
                     incomplete_details=SimpleNamespace(reason="max_output_tokens"),
@@ -430,7 +430,7 @@ class TestNotesGeneratorHelpers:
         with patch(
             "scribe.providers.get_provider", side_effect=RuntimeError("provider unavailable")
         ):
-            with patch("src.scribe.utils.notes_generator.OpenAI", return_value=Mock()):
+            with patch("scribe.utils.notes_generator.OpenAI", return_value=Mock()):
                 return NotesGenerator(api_key="sk-test123")
 
     def test_extract_output_text_and_repair_json_helpers(self):
@@ -461,7 +461,7 @@ class TestNotesGeneratorHelpers:
         transcript_path = tmp_path / "meeting.txt"
         transcript_path.write_text("content", encoding="utf-8")
         with patch(
-            "src.scribe.utils.notes_generator.load_transcript_text",
+            "scribe.utils.notes_generator.load_transcript_text",
             side_effect=OSError("decode failed"),
         ):
             with pytest.raises(NotesGenerationError, match="Failed to read transcript"):

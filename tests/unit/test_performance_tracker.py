@@ -108,12 +108,12 @@ class TestPerformanceTracker:
         """Test recording phase performance."""
         tracker = PerformanceTracker("test_machine", config_dir=tmp_path)
 
-        # Record analysis phase
+        # Record analysis phase (the "analysis"/"preparing" phase feeds conversion_speed)
         tracker.record_phase("analysis", 3600, 70)
 
         # Check metrics were updated
         assert tracker.metrics.sample_count == 1
-        assert tracker.metrics.analysis_speed != 1.0
+        assert tracker.metrics.conversion_speed != 1.0
 
         # Check file was saved
         assert tracker.metrics_file.exists()
@@ -123,13 +123,13 @@ class TestPerformanceTracker:
         # Create first tracker and record data
         tracker1 = PerformanceTracker("test_machine", config_dir=tmp_path)
         tracker1.record_phase("analysis", 3600, 70)
-        original_speed = tracker1.metrics.analysis_speed
+        original_speed = tracker1.metrics.conversion_speed
 
         # Create second tracker with same machine ID
         tracker2 = PerformanceTracker("test_machine", config_dir=tmp_path)
 
         # Should load saved metrics
-        assert tracker2.metrics.analysis_speed == original_speed
+        assert tracker2.metrics.conversion_speed == original_speed
         assert tracker2.metrics.sample_count == 1
 
     def test_estimate_total_time(self, tmp_path):
@@ -165,7 +165,7 @@ class TestPerformanceTracker:
         # Speed should converge toward actual measurements
         # All measurements are around 0.019 (70/3600)
         # Allow generous tolerance for timing variations
-        assert tracker.metrics.analysis_speed < 1.5  # Much more lenient
+        assert tracker.metrics.conversion_speed < 1.5  # Much more lenient
 
 
 class TestGetPerformanceTracker:

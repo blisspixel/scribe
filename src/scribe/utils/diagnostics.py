@@ -233,28 +233,28 @@ class SystemDiagnostics:
         version = sys.version_info
         version_str = f"{version.major}.{version.minor}.{version.micro}"
 
-        if version.major == 3 and version.minor >= 10:
+        if version.major == 3 and version.minor >= 12:
             result = DiagnosticResult(
                 name="Python Version",
                 status="pass",
                 message=f"Python {version_str}",
-                details="Python 3.10+ detected",
+                details="Python 3.12+ detected",
             )
-        elif version.major == 3 and version.minor >= 8:
+        elif version.major == 3 and version.minor >= 10:
             result = DiagnosticResult(
                 name="Python Version",
                 status="warn",
                 message=f"Python {version_str}",
-                details="Python 3.10+ recommended",
-                fix_suggestion="Upgrade to Python 3.10 or newer for best compatibility",
+                details="Python 3.12+ recommended",
+                fix_suggestion="Upgrade to Python 3.12 or newer for full feature support",
             )
         else:
             result = DiagnosticResult(
                 name="Python Version",
                 status="fail",
                 message=f"Python {version_str}",
-                details="Python 3.10+ required",
-                fix_suggestion="Install Python 3.10 or newer from python.org",
+                details="Python 3.12+ required",
+                fix_suggestion="Install Python 3.12 or newer from python.org",
             )
 
         self.results.append(result)

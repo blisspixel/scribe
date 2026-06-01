@@ -42,21 +42,34 @@ class TestDiagnosticResult:
 class TestPythonVersionCheck:
     """Test Python version checking."""
 
-    def test_python_310_or_higher(self):
-        """Test Python 3.10+ passes."""
+    def test_python_312_or_higher(self):
+        """Test Python 3.12+ passes."""
         diagnostics = SystemDiagnostics()
 
         # Create a mock version_info with named tuple attributes
-        mock_version = type("version_info", (), {"major": 3, "minor": 10, "micro": 11})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 12, "micro": 11})()
 
         with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
             assert result.status == "pass"
-            assert "3.10.11" in result.message
+            assert "3.12.11" in result.message
 
-    def test_python_38_or_39(self):
-        """Test Python 3.8-3.9 warns."""
+    def test_python_310_or_311(self):
+        """Test Python 3.10-3.11 warns (below the 3.12 floor)."""
+        diagnostics = SystemDiagnostics()
+
+        mock_version = type("version_info", (), {"major": 3, "minor": 11, "micro": 0})()
+
+        with patch("sys.version_info", mock_version):
+            result = diagnostics.check_python_version()
+
+            assert result.status == "warn"
+            assert "3.11.0" in result.message
+            assert result.fix_suggestion is not None
+
+    def test_python_too_old(self):
+        """Test Python < 3.10 fails."""
         diagnostics = SystemDiagnostics()
 
         mock_version = type("version_info", (), {"major": 3, "minor": 9, "micro": 0})()
@@ -64,21 +77,8 @@ class TestPythonVersionCheck:
         with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
-            assert result.status == "warn"
-            assert "3.9.0" in result.message
-            assert result.fix_suggestion is not None
-
-    def test_python_too_old(self):
-        """Test Python < 3.8 fails."""
-        diagnostics = SystemDiagnostics()
-
-        mock_version = type("version_info", (), {"major": 3, "minor": 7, "micro": 0})()
-
-        with patch("sys.version_info", mock_version):
-            result = diagnostics.check_python_version()
-
             assert result.status == "fail"
-            assert "3.7.0" in result.message
+            assert "3.9.0" in result.message
             assert result.fix_suggestion is not None
 
 
