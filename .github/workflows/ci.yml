@@ -124,6 +124,12 @@ jobs:
       - name: Setup Python 3.12
         run: uv python install 3.12
 
+      - name: Install ffmpeg
+        # The full tests/ tree (e2e + conversion tests) drives the real Converter,
+        # which shells out to ffmpeg. The ubuntu-latest image does not ship it, so
+        # install it here; the lighter matrix "Tests" job stays ffmpeg-free.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Sync environment (dev group)
         run: uv sync --python 3.12 --group dev
 
@@ -134,7 +140,7 @@ jobs:
             --cov-report=xml \
             --cov-report=term-missing \
             --cov-fail-under=80 \
-            -m "not gpu and not slow and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" \
+            -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" \
             --maxfail=1 -q
 
       - name: Upload coverage report
