@@ -412,6 +412,19 @@ scribe notes meeting.md --provider ollama --model qwen2.5:14b
 
 Scribe probes the Ollama server for installed models and picks the largest general-purpose model that fits your detected memory budget (mirroring how it auto-selects the Whisper model). `scribe info` shows the auto-selected local model.
 
+**GPU-aware, no CPU spill.** Scribe talks to Ollama's native API and sizes the context window (`num_ctx`) to the actual transcript, then caps it. Some models ship a huge default context (e.g. 262K tokens ≈ 28GB of KV cache) that would push half the model onto the CPU and crawl; capping it keeps the whole model on the GPU. Selection also reserves headroom so weights + KV cache fit in VRAM. Structured notes use Ollama's constrained decoding (the JSON schema is passed to `format`), which guarantees valid JSON even from thinking models like Gemma 4 and Qwen3 (whose output would otherwise land in the reasoning channel).
+
+Tuning knobs (all optional):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `SCRIBE_OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `SCRIBE_OLLAMA_MODEL` | auto | Pin a specific model (skips auto-select) |
+| `SCRIBE_OLLAMA_MAX_CTX` | `16384` | Upper bound on the context window |
+| `SCRIBE_OLLAMA_NUM_CTX` | auto | Pin an exact context window |
+| `SCRIBE_OLLAMA_NUM_GPU` | auto | Force N layers onto the GPU (e.g. `999` = all) |
+| `SCRIBE_OLLAMA_TIMEOUT` | `600` | Request timeout (s) for slow local inference |
+
 ### Comparing Providers ("is local worth it?")
 
 Run the same transcript through several providers and get a cost / latency / quality scorecard. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric:

@@ -37,9 +37,11 @@ DEFAULT_OLLAMA_MODEL = "llama3.2"
 # hardware; Ollama offloads to CPU beyond this.
 UNKNOWN_BUDGET_CAP_GB = 9.0
 
-# Fraction of a memory budget a model is allowed to occupy (headroom for KV
-# cache, context, and the OS).
-FIT_FRACTION = 0.92
+# Fraction of the memory budget a model's *weights* may occupy. The remainder
+# is headroom for the KV cache (the context window is capped in the provider so
+# it stays small), compute buffers, and the OS — so the chosen model loads
+# fully onto the GPU instead of spilling layers to the CPU.
+FIT_FRACTION = 0.85
 
 # Substrings that mark a model as specialized (not ideal for general meeting
 # notes). Deprioritized, not excluded.
