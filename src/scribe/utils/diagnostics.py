@@ -266,8 +266,10 @@ class SystemDiagnostics:
 
         if ffmpeg_path:
             try:
+                # Invoke the resolved absolute path, not the bare name, so the check
+                # cannot be answered by a stray ffmpeg earlier on PATH.
                 output = subprocess.check_output(
-                    ["ffmpeg", "-version"], stderr=subprocess.STDOUT, text=True, timeout=5
+                    [ffmpeg_path, "-version"], stderr=subprocess.STDOUT, text=True, timeout=5
                 )
                 version_line = output.split("\n")[0]
 

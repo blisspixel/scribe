@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+- Hardening from an adversarial security review (no critical issues were found; these are defense-in-depth):
+  - `scribe url` now refuses loopback and internal addresses (localhost, 127.0.0.1, RFC1918, link-local, and the cloud metadata endpoint) and URLs with embedded credentials, to prevent SSRF if a link ever comes from an untrusted source. Set `SCRIBE_ALLOW_LOCAL_URLS=1` to allow a local media server.
+  - `--cookies` accepts only a known browser keyword and warns that it reads that browser's cookie jar.
+  - Named glossaries (`--vocab <name>`) are confined to a safe token, glossary files are size-capped, and one-character aliases are dropped, so a hostile or oversized glossary cannot read outside the glossary directory or stall normalization.
+  - The transcript model rejects non-finite (NaN/inf) timings that could otherwise crash the SRT/VTT writers; `scribe query` skips oversized JSON; `sanitize_meeting_name` handles Windows reserved device names and trailing dots.
+  - `silence_remover` and `doctor` invoke ffmpeg by resolved absolute path (matching the converter) to avoid PATH hijack; `~/.scribe` and its files are created owner-only on POSIX.
+  - Voice dictation restores your clipboard on exit instead of clobbering it, shows a clear "DICTATION LIVE" indicator, and warns against dictating near terminals or password fields.
+  - Provider failover is now surfaced at the console so you can see when a request is sent to a different cloud provider than you selected.
+
 ### Added
 - Responsible-use guardrails: a one-time recording-consent notice on the first `record`/`rec` run (recording laws vary; some places require all-party consent), a `DISCLAIMER.md` and README "Responsible Use and Legal" section covering regulated/sensitive data, cloud data-sharing, output accuracy, and the no-warranty terms. The consent prompt is interactive-only and shown once; non-interactive runs print a one-line reminder, and `SCRIBE_ASSUME_CONSENT=1` silences it. None of this is legal advice.
 - Domain glossaries for recurring jargon (finance, tech, and your own). Use a named glossary with `--vocab finance` (or any `.txt`/`.json` path) on `transcribe`/`url`/`batch`; `scribe vocab` lists and shows them. Glossaries do two things: bias recognition toward your terms (now trimmed to fit Whisper's prompt budget with a warning instead of being silently truncated), and deterministically rewrite known misrecognitions to the canonical form after transcription (alias syntax `Canonical = variant1, variant2` in `.txt`, or `{"terms": [...], "aliases": {...}}` in JSON). Starter `finance` and `tech` presets ship with Scribe; add your own under `~/.scribe/vocab/`.

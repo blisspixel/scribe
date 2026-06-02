@@ -12,6 +12,14 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _ffmpeg() -> str:
+    """Resolve ffmpeg to a full path (matching the converter) to avoid PATH hijack."""
+    from scribe.utils.platform import get_ffmpeg_path
+
+    resolved = get_ffmpeg_path()
+    return str(resolved) if resolved else "ffmpeg"
+
+
 def remove_silence(
     input_path: Path,
     output_path: Path | None = None,
@@ -72,7 +80,7 @@ def remove_silence(
 
     # Build FFmpeg command
     cmd = [
-        "ffmpeg",
+        _ffmpeg(),
         "-i",
         str(input_path),
         "-af",
@@ -128,7 +136,7 @@ def analyze_silence(
 
     # Use silencedetect filter to analyze
     cmd = [
-        "ffmpeg",
+        _ffmpeg(),
         "-i",
         str(input_path),
         "-af",
@@ -224,7 +232,7 @@ def trim_file(
     # Build FFmpeg command
     # Using -t for duration or -to for end time
     cmd = [
-        "ffmpeg",
+        _ffmpeg(),
         "-i",
         str(input_path),
         "-ss",

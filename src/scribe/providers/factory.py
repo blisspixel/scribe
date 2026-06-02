@@ -140,7 +140,12 @@ def get_provider(
             # Try to get a fallback provider
             fallback = _get_fallback_provider(feature, provider_name, api_key)
             if fallback:
-                logger.info(f"Using fallback provider: {fallback}")
+                # Visible at the console (WARNING), not buried at INFO: the user's data
+                # is being sent to a different cloud provider than they selected.
+                logger.warning(
+                    f"Provider {provider_name} is unhealthy; failing over to {fallback}. "
+                    f"Your request will be sent to {fallback} instead."
+                )
                 return get_provider(feature, provider_name=fallback, enable_health_check=False)
             else:
                 logger.warning(f"No fallback available, proceeding with {provider_name}")
