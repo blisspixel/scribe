@@ -139,6 +139,14 @@ class ScribeConfig(BaseSettings):
         default="auto", description="Default transcription method"
     )
 
+    output_formats: str = Field(
+        default="json",
+        description=(
+            "Comma-separated structured outputs to write alongside the .txt "
+            "(json, vtt, srt, md). Set empty to write only the .txt."
+        ),
+    )
+
     # OpenAI settings
     openai_api_key: str | None = Field(
         default=None,
