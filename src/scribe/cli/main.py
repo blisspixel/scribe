@@ -278,9 +278,12 @@ def transcribe_command(
 
         # Determine transcription method (local GPU vs OpenAI API)
         transcriber = Transcriber(config)
-        chosen_method = transcriber.choose_method(method)
+        # Honor a configured default (SCRIBE_DEFAULT_METHOD / config.toml) when the
+        # caller did not pass --method. An explicit --method always wins.
+        effective_method = config.default_method if method == "auto" else method
+        chosen_method = transcriber.choose_method(effective_method)
 
-        if method == "auto" and chosen_method == "openai":
+        if effective_method == "auto" and chosen_method == "openai":
             gpu_reason = getattr(
                 getattr(transcriber, "gpu_config", None), "reason", "local GPU not detected"
             )
@@ -775,7 +778,8 @@ def url_command(
 
         # Determine transcription method
         transcriber = Transcriber(config)
-        chosen_method = transcriber.choose_method(method)
+        effective_method = config.default_method if method == "auto" else method
+        chosen_method = transcriber.choose_method(effective_method)
 
         # Phase 1: Preparing audio (0-15%)
         if chosen_method == "local":
@@ -1108,7 +1112,8 @@ def record(
 
             # Determine method and convert
             transcriber = Transcriber(config)
-            chosen_method = transcriber.choose_method(method)
+            effective_method = config.default_method if method == "auto" else method
+            chosen_method = transcriber.choose_method(effective_method)
 
             # Convert audio to optimal format based on transcription method
             if chosen_method == "local":
@@ -1456,7 +1461,8 @@ def batch_transcribe(
 
                 # Transcribe
                 transcriber = Transcriber(config)
-                chosen_method = transcriber.choose_method(method)
+                effective_method = config.default_method if method == "auto" else method
+                chosen_method = transcriber.choose_method(effective_method)
 
                 # Convert audio if needed
                 if chosen_method == "local":

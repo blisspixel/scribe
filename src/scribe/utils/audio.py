@@ -611,13 +611,16 @@ def format_duration(seconds: float) -> str:
     """
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
 
     if hours > 0 and minutes > 0:
         return f"{hours}h {minutes}m"
     elif hours > 0:
         return f"{hours}h"
-    else:
+    elif minutes > 0:
         return f"{minutes}m"
+    else:
+        return f"{secs}s"
 
 
 def get_audio_info(path: Path) -> dict[str, Any]:

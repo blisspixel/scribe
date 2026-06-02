@@ -274,12 +274,21 @@ class AIProvider(ABC):
                 "Do not include any explanations, markdown, or code fences. Only the JSON object."
             )
 
-            # Add schema instruction to the last user message
+            # Add schema instruction to the last user message. Text messages are plain
+            # strings, but multimodal (image) messages carry a list of content parts, so
+            # append a text part there rather than concatenating a string onto a list.
             modified_messages = messages.copy()
             for i in range(len(modified_messages) - 1, -1, -1):
                 if modified_messages[i]["role"] == "user":
                     modified_messages[i] = modified_messages[i].copy()
-                    modified_messages[i]["content"] += schema_instruction
+                    content = modified_messages[i]["content"]
+                    if isinstance(content, list):
+                        modified_messages[i]["content"] = [
+                            *content,
+                            {"type": "text", "text": schema_instruction},
+                        ]
+                    else:
+                        modified_messages[i]["content"] = content + schema_instruction
                     break
 
             return self.chat_completion(
