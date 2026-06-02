@@ -108,7 +108,16 @@ def _yaml_scalar(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     text = str(value)
-    if any(c in text for c in ":#[]{}\n\"'") or text != text.strip():
+    # Quote when the value contains a structural character, has surrounding
+    # whitespace, is empty, or begins with a YAML indicator character (which would
+    # otherwise be parsed as an anchor, alias, tag, block scalar, directive, etc.).
+    needs_quote = (
+        not text
+        or text != text.strip()
+        or any(c in text for c in ":#[]{}\n\"'")
+        or text[0] in "!&*?|>%@`,-"
+    )
+    if needs_quote:
         return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return text
 

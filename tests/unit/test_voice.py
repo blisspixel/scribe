@@ -102,6 +102,14 @@ def test_speakable_strips_frontmatter_and_markdown():
     assert "Follow up with the team" in spoken
 
 
+def test_speakable_strips_crlf_frontmatter():
+    # Windows CRLF frontmatter must still be stripped, not spoken.
+    md = "---\r\nbackend: faster-whisper\r\n---\r\n# Title\r\n\r\nHello world\r\n"
+    spoken = speakable_from_markdown(md)
+    assert "backend:" not in spoken
+    assert "Title" in spoken and "Hello world" in spoken
+
+
 def test_speakable_skips_rules_and_code_fences():
     text = "Title\n" + "-" * 80 + "\n```\nprint(1)\n```\nBody line"
     spoken = speakable_from_markdown(text)

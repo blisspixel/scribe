@@ -37,6 +37,30 @@ def test_search_by_speaker(tmp_path):
     assert "plan" in results[0][3]
 
 
+def test_search_by_speaker_is_case_insensitive_substring(tmp_path):
+    _make(tmp_path)
+    # Lowercase substring matches the stored "SPEAKER_01", mirroring text search.
+    assert len(search_transcripts(tmp_path, speaker="speaker_01")) == 1
+    assert len(search_transcripts(tmp_path, speaker="01")) == 1
+
+
+def test_malformed_start_does_not_crash_search(tmp_path):
+    (tmp_path / "bad.json").write_text(
+        '{"schema": "scribe.transcript/v1", "segments": '
+        '[{"start": "oops", "text": "hello world", "speaker": null}]}',
+        encoding="utf-8",
+    )
+    results = search_transcripts(tmp_path, text="hello")
+    assert len(results) == 1
+    assert results[0][1] == 0.0  # coerced safely
+
+
+def test_non_positive_limit_returns_all(tmp_path):
+    _make(tmp_path)
+    assert len(search_transcripts(tmp_path, limit=0)) == 2
+    assert len(search_transcripts(tmp_path, limit=-1)) == 2
+
+
 def test_search_no_match_and_limit(tmp_path):
     _make(tmp_path)
     assert search_transcripts(tmp_path, text="zzz") == []

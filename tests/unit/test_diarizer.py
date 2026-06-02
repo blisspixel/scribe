@@ -49,6 +49,18 @@ def test_dominant_speaker_sums_overlap_across_turns():
     assert dominant_speaker(0.0, 3.4, turns) == "A"
 
 
+def test_overlapping_same_speaker_turns_counted_once():
+    # A's two overlapping turns cover only 0..5 as a union (5s), so a naive sum
+    # (which would give A 7s) must not beat B's genuine 5s. They tie at 5s and the
+    # earliest turn (A) wins the tie, so use a B turn that is strictly longer.
+    turns = [
+        SpeakerTurn(0.0, 4.0, "A"),
+        SpeakerTurn(3.0, 5.0, "A"),
+        SpeakerTurn(5.0, 11.0, "B"),
+    ]
+    assert dominant_speaker(0.0, 11.0, turns) == "B"
+
+
 def test_assign_speakers_labels_every_segment():
     transcript = _transcript((0.0, 1.0, "hi"), (1.0, 3.0, "there"), (9.0, 10.0, "gap"))
     turns = [SpeakerTurn(0.0, 1.2, "SPEAKER_00"), SpeakerTurn(1.2, 3.0, "SPEAKER_01")]
