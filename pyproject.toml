@@ -60,6 +60,18 @@ whisperx = [
     "pyannote.audio>=3.0.0",
 ]
 
+# Apple Silicon: run Whisper on the Metal GPU via Apple's MLX. Wheels are
+# arm64-macOS only, so this is an opt-in extra rather than a base dependency.
+mlx = [
+    "mlx-whisper>=0.4.0",
+]
+
+# Portable whisper.cpp engine (Metal / Vulkan / ROCm / CPU) via pywhispercpp, for
+# Apple, AMD, and Intel machines that are not served by faster-whisper's CUDA path.
+whispercpp = [
+    "pywhispercpp>=1.2.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/blissplixel/scribe"
 Repository = "https://github.com/blissplixel/scribe"
@@ -144,6 +156,7 @@ allowed-confusables = ["×", "–", "—"]
 "src/scribe/utils/platform.py" = ["S603", "S606", "S607"]
 "src/scribe/utils/audio.py" = ["S110", "S603"]
 "src/scribe/utils/gpu.py" = ["S110"]
+"src/scribe/core/backends/hardware.py" = ["S110", "S607"]  # best-effort accelerator probes; sysctl/torch may be absent or fail
 "src/scribe/utils/silence_remover.py" = ["S603"]
 "src/scribe/utils/diagnostics.py" = ["S607"]
 "src/scribe/models/gpu.py" = ["S607"]
@@ -201,6 +214,8 @@ module = [
     "demucs.*",
     "librosa.*",
     "click.*",
+    "mlx_whisper.*",
+    "pywhispercpp.*",
 ]
 ignore_missing_imports = true
 

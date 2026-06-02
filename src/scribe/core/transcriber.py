@@ -135,6 +135,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
 if TYPE_CHECKING:
+    from scribe.core.backends import TranscriptionBackend
     from scribe.utils.vocabulary import CustomVocabulary
 
 from scribe.core.converter import Converter
@@ -531,14 +532,19 @@ class Transcriber:
         music_mode: bool = False,
         language_override: str | None = None,
     ) -> Path:
-        """Transcribe using local GPU."""
+        """Transcribe locally, picking the engine that fits the hardware."""
+        from scribe.core.backends import (
+            CPU,
+            FASTER_WHISPER,
+            build_backend,
+            detect_hardware,
+            select_backend,
+        )
+
         language = (
             language_override if language_override is not None else self.config.default_language
         )
         model_size = self._get_effective_local_model()
-        transcriber = LocalWhisperTranscriber(
-            model_size=model_size, language=language, gpu_config=self.gpu_config
-        )
 
         # Convert vocabulary to Whisper prompt format
         initial_prompt = None
@@ -549,19 +555,87 @@ class Transcriber:
             # Use music-specific prompt
             initial_prompt = "Song lyrics."
 
+        hardware = detect_hardware()
+        backend_name = select_backend(
+            hardware, override=getattr(self.config, "local_backend", "auto")
+        )
+        logger.info(
+            f"Local backend: {backend_name} "
+            f"(hardware: {hardware.vendor}, {hardware.accelerator_name or 'cpu'})"
+        )
+
+        # NVIDIA and the CPU floor stay on the production faster-whisper engine,
+        # which also runs the silence pre-pass. Other vendors route to mlx-whisper
+        # or whisper.cpp, which produce the same Transcript written by the same
+        # shared writer.
+        if backend_name in (FASTER_WHISPER, CPU):
+            transcript_path = self._transcribe_faster_whisper(
+                audio_path, model_size, language, initial_prompt
+            )
+        else:
+            transcript_path = self._transcribe_alt_backend(
+                build_backend(backend_name), audio_path, model_size, language, initial_prompt
+            )
+
+        if session:
+            session.transcription_method = "local"
+            session.model_used = f"{backend_name}-{model_size}"
+            session.gpu_info = self.gpu_config.to_dict()
+
+        return transcript_path
+
+    def _transcribe_faster_whisper(
+        self,
+        audio_path: Path,
+        model_size: str,
+        language: str | None,
+        initial_prompt: str | None,
+    ) -> Path:
+        """Run the production faster-whisper engine (CUDA or CPU int8)."""
+        transcriber = LocalWhisperTranscriber(
+            model_size=model_size, language=language, gpu_config=self.gpu_config
+        )
         transcript_path = transcriber.transcribe(
             audio_path,
             detect_silence=self.config.enable_silence_detection,
             initial_prompt=initial_prompt,
         )
         self.last_transcript = transcriber.last_transcript
-
-        if session:
-            session.transcription_method = "local"
-            session.model_used = f"faster-whisper-{model_size}"
-            session.gpu_info = self.gpu_config.to_dict()
-
         return transcript_path
+
+    def _transcribe_alt_backend(
+        self,
+        backend: "TranscriptionBackend",
+        audio_path: Path,
+        model_size: str,
+        language: str | None,
+        initial_prompt: str | None,
+    ) -> Path:
+        """Run a non-CUDA backend (mlx-whisper, whisper.cpp) and write the .txt."""
+        from scribe.core.local_whisper import write_clean_transcript
+
+        transcript = backend.transcribe(
+            audio_path,
+            language=language,
+            model_size=model_size,
+            beam_size=self.gpu_config.beam_size,
+            initial_prompt=initial_prompt,
+        )
+        if not transcript.segments:
+            raise TranscriptionError(
+                "No speech detected in audio (file may be silent or contain only noise)",
+                context={"audio_path": str(audio_path), "backend": backend.name},
+            )
+
+        clean_stem = audio_path.stem
+        for suffix in ("_16k_mono", "_standardized", "_converted"):
+            clean_stem = clean_stem.replace(suffix, "")
+        output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
+
+        write_clean_transcript(transcript, output_path, audio_path, [])
+        self.last_transcript = transcript
+        logger.info(f"Transcript saved: {output_path}")
+        return output_path
 
     def _transcribe_openai(
         self,

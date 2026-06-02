@@ -445,76 +445,90 @@ class LocalWhisperTranscriber:
         audio_path: Path,
         silence_periods: list[tuple[float, float]],
     ) -> None:
-        """
-        Write clean transcript with minimal metadata.
+        """Write the clean ``.txt`` transcript (delegates to the shared writer)."""
+        write_clean_transcript(transcript, output_path, audio_path, silence_periods)
 
-        Format:
-        - 3-line header: Meeting name, Date, Duration
-        - Separator line
-        - Clean transcript with timestamps
-        - Silence markers for gaps
-        - NO technical metadata
-        """
-        duration = transcript.duration
-        with open(output_path, "w", encoding="utf-8") as f:
-            # Extract meeting info
-            meeting_name = audio_path.stem.replace("_16k_mono", "").replace("_converted", "")
-            date_str = extract_date_from_filename(audio_path.name)
 
-            # Write header
-            f.write(f"Meeting: {meeting_name}\n")
-            if date_str:
-                f.write(f"Date: {format_date(date_str)}\n")
-            else:
-                f.write(f"Date: {datetime.now().strftime('%B %d, %Y')}\n")
+def write_clean_transcript(
+    transcript: Transcript,
+    output_path: Path,
+    audio_path: Path,
+    silence_periods: list[tuple[float, float]],
+) -> None:
+    """
+    Write clean transcript with minimal metadata.
 
-            if duration:
-                f.write(f"Duration: {format_duration_minutes(duration)}\n")
-            else:
-                f.write("Duration: Unknown\n")
+    Shared by every local backend (faster-whisper, mlx-whisper, whisper.cpp) so
+    the plain-text output is identical regardless of which engine produced the
+    Transcript.
 
-            f.write("\n")
-            f.write("─" * 80 + "\n")
-            f.write("\n")
-            f.flush()
+    Format:
+    - 3-line header: Meeting name, Date, Duration
+    - Separator line
+    - Clean transcript with timestamps
+    - Silence markers for gaps
+    - NO technical metadata
+    """
+    duration = transcript.duration
+    with open(output_path, "w", encoding="utf-8") as f:
+        # Extract meeting info
+        meeting_name = audio_path.stem.replace("_16k_mono", "").replace("_converted", "")
+        date_str = extract_date_from_filename(audio_path.name)
 
-            # Write transcript with silence markers
-            last_end = 0.0
+        # Write header
+        f.write(f"Meeting: {meeting_name}\n")
+        if date_str:
+            f.write(f"Date: {format_date(date_str)}\n")
+        else:
+            f.write(f"Date: {datetime.now().strftime('%B %d, %Y')}\n")
 
-            for segment in transcript.segments:
-                # Check for silence gaps
-                if silence_periods:
-                    for silence_start, silence_end in silence_periods:
-                        if last_end < silence_start < segment.start:
-                            silence_duration = silence_end - silence_start
-                            if silence_duration > 120:  # 2+ minutes
-                                silence_mins = silence_duration / 60
-                                if silence_mins > 60:
-                                    silence_hours = silence_mins / 60
-                                    marker = (
-                                        f"[NO AUDIO FOR {silence_hours:.1f} HOURS - "
-                                        f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
-                                    )
-                                else:
-                                    marker = (
-                                        f"[NO AUDIO FOR {silence_mins:.0f} MINUTES - "
-                                        f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
-                                    )
-                                f.write(marker)
-                                f.flush()
-                                break
+        if duration:
+            f.write(f"Duration: {format_duration_minutes(duration)}\n")
+        else:
+            f.write("Duration: Unknown\n")
 
-                # Write segment (without timestamp)
-                text = segment.text.strip()
+        f.write("\n")
+        f.write("─" * 80 + "\n")
+        f.write("\n")
+        f.flush()
 
-                if text:
-                    f.write(f"{text}\n\n")
-                    f.flush()
+        # Write transcript with silence markers
+        last_end = 0.0
 
-                last_end = segment.end
+        for segment in transcript.segments:
+            # Check for silence gaps
+            if silence_periods:
+                for silence_start, silence_end in silence_periods:
+                    if last_end < silence_start < segment.start:
+                        silence_duration = silence_end - silence_start
+                        if silence_duration > 120:  # 2+ minutes
+                            silence_mins = silence_duration / 60
+                            if silence_mins > 60:
+                                silence_hours = silence_mins / 60
+                                marker = (
+                                    f"[NO AUDIO FOR {silence_hours:.1f} HOURS - "
+                                    f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
+                                )
+                            else:
+                                marker = (
+                                    f"[NO AUDIO FOR {silence_mins:.0f} MINUTES - "
+                                    f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
+                                )
+                            f.write(marker)
+                            f.flush()
+                            break
 
-            # Final flush
-            f.flush()
+            # Write segment (without timestamp)
+            text = segment.text.strip()
+
+            if text:
+                f.write(f"{text}\n\n")
+                f.flush()
+
+            last_end = segment.end
+
+        # Final flush
+        f.flush()
 
 
 def transcribe_with_local_whisper(
