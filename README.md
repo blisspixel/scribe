@@ -593,6 +593,32 @@ the cross-platform replacement for any hand-made `.bat`/shell shortcut.
 
 **Note:** Audio preprocessing adds ~10% of recording duration. We prioritize quality over speed.
 
+### Local Backends (hardware-adaptive)
+
+Local transcription picks the engine that fits your machine. The base install
+covers NVIDIA and CPU; Apple Silicon and AMD/Intel get faster local paths through
+optional extras.
+
+| Vendor | Engine used | Install |
+|--------|-------------|---------|
+| NVIDIA | faster-whisper (CUDA) | included |
+| CPU (any) | faster-whisper (int8) | included |
+| Apple Silicon | mlx-whisper (Metal) | `pip install "scribe[mlx]"` |
+| AMD / Intel / Apple | whisper.cpp (Metal/Vulkan/ROCm) | `pip install "scribe[whispercpp]"` |
+
+Selection is automatic by detected vendor and always falls back to a working CPU
+path. Override it with `SCRIBE_LOCAL_BACKEND=mlx|whispercpp|faster-whisper|cpu` or
+`local_backend` in `~/.scribe/config.toml`. `scribe info` shows the detected vendor,
+the selected backend, and which optional engines are installed.
+
+On an Apple Silicon Mac, the fast path is:
+
+```bash
+uv tool install --editable ".[mlx]" --python 3.12   # or: pip install "scribe[mlx]"
+scribe info                                          # local backend: selected mlx, vendor apple
+scribe transcribe meeting.m4a --method local         # runs on the Metal GPU via MLX
+```
+
 ### API Mode
 
 - gpt-4o-transcribe handles long files with server-side chunking

@@ -147,6 +147,14 @@ class ScribeConfig(BaseSettings):
         ),
     )
 
+    local_backend: str = Field(
+        default="auto",
+        description=(
+            "Local transcription engine: auto (pick by hardware), faster-whisper, "
+            "mlx (Apple Silicon), whispercpp, or cpu. Env: SCRIBE_LOCAL_BACKEND."
+        ),
+    )
+
     # OpenAI settings
     openai_api_key: str | None = Field(
         default=None,

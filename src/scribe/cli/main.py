@@ -2771,6 +2771,33 @@ def info() -> None:
             )
         console.print()
 
+        # Local backend section: which engine the hardware-adaptive selector will
+        # use for `--method local`, plus which optional engines are installed.
+        from scribe.core.backends import (
+            backend_availability,
+            detect_hardware,
+            select_backend,
+        )
+
+        hardware = detect_hardware()
+        availability = backend_availability()
+        chosen_backend = select_backend(
+            hardware, override=config.local_backend, available=availability
+        )
+        installed = ", ".join(sorted(name for name, ok in availability.items() if ok)) or "none"
+
+        console.print(f"[bold {ScribeTheme.SECONDARY}]local backend[/bold {ScribeTheme.SECONDARY}]")
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]selected[/{ScribeTheme.TEXT_PRIMARY}]  "
+            f"[{ScribeTheme.SUCCESS}]{chosen_backend}[/{ScribeTheme.SUCCESS}] "
+            f"[{ScribeTheme.TEXT_MUTED}]· vendor {hardware.vendor}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]installed[/{ScribeTheme.TEXT_PRIMARY}] "
+            f"[{ScribeTheme.TEXT_MUTED}]{installed}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print()
+
         # Config section
         console.print(f"[bold {ScribeTheme.SECONDARY}]config[/bold {ScribeTheme.SECONDARY}]")
         console.print(
