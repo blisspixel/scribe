@@ -164,27 +164,124 @@ def write_wav(path: Path, pcm16: bytes, sample_rate: int) -> None:
         wav.writeframes(pcm16)
 
 
+# --- Pure option resolution --------------------------------------------------
+
+LISTEN_MODES = ("hold", "continuous")
+INJECT_METHODS = ("paste", "type")
+
+
+def resolve_listen_mode(value: str | None) -> str:
+    """Validate the dictation mode. ``hold`` (push-to-talk) is the default."""
+    resolved = (value or "hold").strip().lower()
+    if resolved not in LISTEN_MODES:
+        raise ValueError(f"--mode must be one of {', '.join(LISTEN_MODES)}, got '{value}'")
+    return resolved
+
+
+def resolve_inject_method(value: str | None) -> str:
+    """Validate the text-injection method. ``paste`` is the default."""
+    resolved = (value or "paste").strip().lower()
+    if resolved not in INJECT_METHODS:
+        raise ValueError(f"--inject must be one of {', '.join(INJECT_METHODS)}, got '{value}'")
+    return resolved
+
+
+def resolve_say_source(path: Path | None, use_selection: bool, use_clipboard: bool) -> str:
+    """Pick exactly one read-aloud source: a file, the selection, or the clipboard."""
+    chosen = [
+        name
+        for name, on in (
+            ("file", path is not None),
+            ("selection", use_selection),
+            ("clipboard", use_clipboard),
+        )
+        if on
+    ]
+    if not chosen:
+        raise ValueError("Provide a file to read, or use --selection or --clipboard.")
+    if len(chosen) > 1:
+        raise ValueError("Choose only one of: a file, --selection, or --clipboard.")
+    return chosen[0]
+
+
+def clean_spoken_text(text: str) -> str:
+    """Collapse whitespace so selected/clipboard text reads naturally."""
+    return " ".join(text.split())
+
+
 # --- Runtime: read-aloud -----------------------------------------------------
 
 
 def run_say(
     console: Console,
-    path: Path,
+    path: Path | None = None,
     *,
     rate: int | None = None,
     voice: str | None = None,
+    use_selection: bool = False,
+    use_clipboard: bool = False,
 ) -> int:
-    """Read a transcript or notes file aloud with a local TTS engine."""
-    if not path.exists():
-        console.print(f"[red]File not found: {path}[/red]")
+    """Read a file, the current selection, or the clipboard aloud with a local voice."""
+    try:
+        source = resolve_say_source(path, use_selection, use_clipboard)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
         return 1
 
-    text = extract_speakable_text(path)
+    if source == "file":
+        if path is None or not path.exists():
+            console.print(f"[red]File not found: {path}[/red]")
+            return 1
+        title = path.name
+        text = extract_speakable_text(path)
+    elif source == "clipboard":
+        title = "clipboard"
+        text = _read_clipboard(console)
+    else:
+        title = "selection"
+        text = _read_selection(console)
+
     if not text:
-        console.print("[yellow]Nothing to read (the file had no speakable text).[/yellow]")
+        console.print("[yellow]Nothing to read.[/yellow]")
         return 1
 
-    return _speak(console, path.name, text, rate=rate, voice=voice)
+    return _speak(console, title, text, rate=rate, voice=voice)
+
+
+def _read_clipboard(console: Console) -> str:  # pragma: no cover - clipboard I/O
+    try:
+        import pyperclip
+    except ImportError:
+        console.print(VOICE_INSTALL_HINT, markup=False)
+        return ""
+    try:
+        return clean_spoken_text(pyperclip.paste() or "")
+    except Exception:
+        return ""
+
+
+def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/clipboard I/O
+    """Copy the current selection (Ctrl+C / Cmd+C) and return it as speakable text."""
+    try:
+        import platform
+        import time
+
+        import pyperclip
+        from pynput import keyboard
+    except ImportError:
+        console.print(VOICE_INSTALL_HINT, markup=False)
+        return ""
+
+    controller = keyboard.Controller()
+    modifier = keyboard.Key.cmd if platform.system() == "Darwin" else keyboard.Key.ctrl
+    with controller.pressed(modifier):
+        controller.press("c")
+        controller.release("c")
+    time.sleep(0.15)  # give the OS a moment to populate the clipboard
+    try:
+        return clean_spoken_text(pyperclip.paste() or "")
+    except Exception:
+        return ""
 
 
 def _speak(  # pragma: no cover - drives the local TTS engine; no audio device in CI
@@ -212,9 +309,27 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
                 engine.setProperty("voice", candidate.id)
                 break
 
+    # Esc stops playback mid-sentence. The pynput listener runs on its own thread, so
+    # engine.stop() interrupts the blocking runAndWait below.
+    listener = None
+    try:
+        from pynput import keyboard
+
+        def _on_press(key: object) -> None:
+            if key == keyboard.Key.esc:
+                engine.stop()
+
+        listener = keyboard.Listener(on_press=_on_press)
+        listener.start()
+        console.print("[dim](Esc to stop)[/dim]")
+    except ImportError:
+        pass
+
     console.print(f"[cyan]Reading {title} aloud...[/cyan]")
     engine.say(text)
     engine.runAndWait()
+    if listener is not None:
+        listener.stop()
     console.print("[green]Done.[/green]")
     return 0
 
@@ -227,17 +342,27 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     *,
     model: str | None = None,
     language: str | None = None,
+    mode: str = "hold",
+    inject: str = "paste",
     threshold: float = 0.012,
     sample_rate: int = 16000,
     frame_ms: int = 30,
 ) -> int:
-    """Dictate: capture the microphone, transcribe each utterance, type the text.
+    """Dictate: capture the microphone, transcribe, and inject the text at the cursor.
 
-    Uses a persistent faster-whisper model (loaded once) for low latency, the pure
-    UtteranceSegmenter for endpointing, and the clipboard to inject text into the
-    focused window. F9 toggles listening, Esc quits. This path needs a microphone
-    and the voice extra, so it is exercised manually rather than in CI.
+    Two modes: ``hold`` (push-to-talk; hold F9, speak, release to transcribe) and
+    ``continuous`` (always listening with silence endpointing; F9 pauses). Injection
+    is ``paste`` (via the clipboard, restored on exit) or ``type`` (keystrokes at the
+    cursor). A persistent faster-whisper model keeps latency low. This path needs a
+    microphone and the voice extra, so it is exercised manually rather than in CI.
     """
+    try:
+        mode = resolve_listen_mode(mode)
+        inject = resolve_inject_method(inject)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        return 1
+
     try:
         import numpy as np
         import sounddevice as sd
@@ -251,6 +376,10 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     except ImportError:
         pyperclip = None
 
+    if inject == "paste" and pyperclip is None:
+        console.print(VOICE_INSTALL_HINT, markup=False)
+        return 1
+
     model_obj = _load_dictation_model(console, model)
     if model_obj is None:
         return 1
@@ -259,23 +388,34 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
 
     from scribe.utils.theme import ScribeTheme
 
-    toggle = HotkeyToggle(active=True)
+    controller = keyboard.Controller()
+    frame_samples = int(sample_rate * frame_ms / 1000)
+    buffer: list[bytes] = []
+    frame_index = 0
+    # In hold mode we capture only while the key is held; continuous starts active.
+    state = {"quit": False, "recording": mode == "continuous"}
     segmenter = UtteranceSegmenter(
         min_speech_frames=max(1, 90 // frame_ms),  # ~90 ms of speech to open
         min_silence_frames=max(1, 600 // frame_ms),  # ~600 ms of silence to close
     )
-    frame_samples = int(sample_rate * frame_ms / 1000)
-    buffer: list[bytes] = []
-    frame_index = 0
-    stop = {"quit": False}
 
-    def reset_buffer() -> None:
+    def reset_capture() -> None:
         nonlocal frame_index
         buffer.clear()
         frame_index = 0
         segmenter.reset()
 
-    def transcribe_and_inject(pcm: bytes) -> None:
+    def inject_text(text: str) -> None:
+        if inject == "type":
+            controller.type(text + " ")
+            return
+        if pyperclip is not None:
+            pyperclip.copy(text + " ")
+            with controller.pressed(keyboard.Key.ctrl):
+                controller.press("v")
+                controller.release("v")
+
+    def transcribe(pcm: bytes) -> None:
         if not pcm:
             return
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -289,40 +429,49 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         if not text:
             return
         console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{text}[/{ScribeTheme.TEXT_PRIMARY}]")
-        if pyperclip is not None:
-            pyperclip.copy(text + " ")
-            controller = keyboard.Controller()
-            with controller.pressed(keyboard.Key.ctrl):
-                controller.press("v")
-                controller.release("v")
+        inject_text(text)
 
     def on_press(key: object) -> None:
-        if key == keyboard.Key.f9:
-            state = toggle.toggle()
-            if not state:
-                # Drop any half-captured audio so it does not prepend to the next
-                # utterance when dictation resumes.
-                reset_buffer()
-            console.print(f"[cyan]Dictation {'on' if state else 'paused'}[/cyan]")
-        elif key == keyboard.Key.esc:
-            stop["quit"] = True
+        if key == keyboard.Key.esc:
+            state["quit"] = True
+            return
+        if mode == "hold" and key == keyboard.Key.f9 and not state["recording"]:
+            state["recording"] = True
+            reset_capture()
+        elif mode == "continuous" and key == keyboard.Key.f9:
+            state["recording"] = not state["recording"]
+            if not state["recording"]:
+                reset_capture()
+            console.print(f"[cyan]Dictation {'on' if state['recording'] else 'paused'}[/cyan]")
 
-    listener = keyboard.Listener(on_press=on_press)
+    def on_release(key: object) -> None:
+        if mode == "hold" and key == keyboard.Key.f9 and state["recording"]:
+            state["recording"] = False
+            transcribe(b"".join(buffer))
+            reset_capture()
+
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
 
-    # Dictation owns the clipboard while running; remember the user's contents so we
-    # can put them back on exit instead of silently clobbering them.
+    # When pasting, dictation owns the clipboard; remember the user's contents so we
+    # can restore them on exit instead of silently clobbering them.
     prior_clipboard: str | None = None
-    if pyperclip is not None:
+    if inject == "paste" and pyperclip is not None:
         try:
             prior_clipboard = pyperclip.paste()
         except Exception:
             prior_clipboard = None
 
-    console.print(
-        "[bold cyan]DICTATION LIVE[/bold cyan] - your speech is typed into the focused "
-        "window. F9 pauses, Esc quits."
-    )
+    if mode == "hold":
+        console.print(
+            "[bold cyan]DICTATION READY[/bold cyan] - hold F9 to talk, release to insert. "
+            "Esc quits."
+        )
+    else:
+        console.print(
+            "[bold cyan]DICTATION LIVE[/bold cyan] - your speech is inserted into the focused "
+            "window. F9 pauses, Esc quits."
+        )
     console.print(
         "[yellow]Keep focus on a text field; do not dictate near a terminal or "
         "password field.[/yellow]"
@@ -331,33 +480,35 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         with sd.RawInputStream(
             samplerate=sample_rate, blocksize=frame_samples, dtype="int16", channels=1
         ) as stream:
-            while not stop["quit"]:
+            while not state["quit"]:
                 data, _ = stream.read(frame_samples)
-                if not toggle.active:
+                if not state["recording"]:
                     continue
                 pcm = bytes(data)
+                if mode == "hold":
+                    # The key press/release defines the utterance; just accumulate.
+                    buffer.append(pcm)
+                    continue
                 samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
                 rms = float(np.sqrt(np.mean(samples**2))) if samples.size else 0.0
                 buffer.append(pcm)
                 span = segmenter.push(frame_index, frame_is_speech(rms, threshold))
                 frame_index += 1
                 if span is not None:
-                    start, end = span
-                    # end is exclusive (one past the last speech frame).
-                    transcribe_and_inject(b"".join(buffer[start:end]))
-                    reset_buffer()
-            # Flush a final in-progress utterance so the last words are not lost
-            # when the user quits mid-sentence.
-            tail = segmenter.flush()
-            if tail is not None:
-                start, end = tail
-                transcribe_and_inject(b"".join(buffer[start:end]))
+                    start, end = span  # end is exclusive (one past last speech frame)
+                    transcribe(b"".join(buffer[start:end]))
+                    reset_capture()
+            # Continuous mode: flush a final in-progress utterance on quit.
+            if mode == "continuous":
+                tail = segmenter.flush()
+                if tail is not None:
+                    start, end = tail
+                    transcribe(b"".join(buffer[start:end]))
     except KeyboardInterrupt:
         pass
     finally:
         listener.stop()
-        # Restore whatever the user had on the clipboard before dictation.
-        if pyperclip is not None and prior_clipboard is not None:
+        if inject == "paste" and pyperclip is not None and prior_clipboard is not None:
             import contextlib
 
             with contextlib.suppress(Exception):

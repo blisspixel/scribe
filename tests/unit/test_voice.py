@@ -8,6 +8,7 @@ toggle, and turning a transcript or notes file into speakable text.
 
 import wave
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -75,6 +76,46 @@ def test_segmenter_spans_are_well_formed(flags):
         assert 0 <= start <= end <= len(flags)
 
 
+def test_resolve_listen_mode():
+    from scribe.cli.voice import resolve_listen_mode
+
+    assert resolve_listen_mode(None) == "hold"  # default
+    assert resolve_listen_mode("HOLD") == "hold"
+    assert resolve_listen_mode("continuous") == "continuous"
+    with pytest.raises(ValueError, match="--mode"):
+        resolve_listen_mode("toggle")
+
+
+def test_resolve_inject_method():
+    from scribe.cli.voice import resolve_inject_method
+
+    assert resolve_inject_method(None) == "paste"  # default
+    assert resolve_inject_method("Type") == "type"
+    with pytest.raises(ValueError, match="--inject"):
+        resolve_inject_method("magic")
+
+
+def test_resolve_say_source():
+    from pathlib import Path
+
+    from scribe.cli.voice import resolve_say_source
+
+    assert resolve_say_source(Path("x.md"), False, False) == "file"
+    assert resolve_say_source(None, True, False) == "selection"
+    assert resolve_say_source(None, False, True) == "clipboard"
+    with pytest.raises(ValueError, match="Provide a file"):
+        resolve_say_source(None, False, False)
+    with pytest.raises(ValueError, match="only one"):
+        resolve_say_source(Path("x.md"), True, False)
+
+
+def test_clean_spoken_text():
+    from scribe.cli.voice import clean_spoken_text
+
+    assert clean_spoken_text("  hello\n\n  world \t") == "hello world"
+    assert clean_spoken_text("") == ""
+
+
 def test_hotkey_toggle():
     t = HotkeyToggle(active=True)
     assert t.toggle() is False
@@ -131,6 +172,24 @@ def test_run_say_missing_file(tmp_path):
     from scribe.cli.voice import run_say
 
     assert run_say(Console(), tmp_path / "nope.txt") == 1
+
+
+def test_run_say_clipboard_dispatch(monkeypatch):
+    from rich.console import Console
+
+    from scribe.cli import voice
+
+    monkeypatch.setattr(voice, "_read_clipboard", lambda console: "")
+    assert voice.run_say(Console(), None, use_clipboard=True) == 1
+
+
+def test_run_say_selection_dispatch(monkeypatch):
+    from rich.console import Console
+
+    from scribe.cli import voice
+
+    monkeypatch.setattr(voice, "_read_selection", lambda console: "")
+    assert voice.run_say(Console(), None, use_selection=True) == 1
 
 
 def test_run_say_empty_text_returns_before_tts(tmp_path):

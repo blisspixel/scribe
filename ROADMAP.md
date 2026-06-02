@@ -39,7 +39,8 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Primary Focus                  | Status    |
 |---------|--------------------------------|-----------|
-| 2.5.0   | Cross-platform launcher + icon | Current   |
+| 2.6.0   | Roadmap product items 2-5 + structured output, glossaries | Current   |
+| 2.5.0   | Cross-platform launcher + icon | Released  |
 | 2.4.3   | OBS recording reliability      | Released  |
 | 2.4.2   | Code quality + .env handling   | Released  |
 | 2.4.1   | OBS WebSocket hardening        | Released  |
@@ -62,6 +63,13 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 4. **Hardware-adaptive transcription backends.** Generalize the existing VRAM-based auto-selection from CUDA-only to `(vendor, memory)`: faster-whisper on NVIDIA, mlx-whisper / whisper.cpp (Metal) on Apple Silicon, whisper.cpp (Vulkan/ROCm) on AMD/Intel, int8 CPU fallback. Prerequisite for a credible cross-platform public release rather than a 4090/Windows-optimized tool.
 
 5. **Voice I/O (deliberate mode decision).** Shipped as a separate opt-in mode: `scribe listen` (global-hotkey speech-to-type) and `scribe say` (read-aloud via local TTS), behind the `scribe[voice]` extra. It is intentionally outside the batch pipeline, so the streaming non-goal there still holds; see ADR-008.
+
+   **v2 refinement (in progress).** A review of the established voice-typing and read-aloud tools (Wispr Flow, superwhisper, WhisperWriter, OpenWhispr, the macOS Speak-Selection feature) points to a few patterns worth adopting, and the first version's always-on mic was the one piece the security review flagged:
+   - **Dictation modes.** Add **push-to-hold** as the default (hold the hotkey, speak, release to transcribe and inject) with the original always-listening behavior available as `--mode continuous`. Push-to-hold is the common default in those tools and removes the hot-mic exposure.
+   - **Injection method.** Add `--inject paste|type`: `paste` (clipboard then paste, clipboard restored) stays the default for reliability; `type` inserts at the cursor via keystrokes and never touches the clipboard.
+   - **Read selection aloud.** Make `scribe say`'s file optional and add `--selection` (copy the current selection, then read it, the macOS Speak-Selection pattern) and `--clipboard`, with Esc to stop playback. This is the genuinely useful read-aloud hotkey the first version lacked.
+
+   The pure pieces (mode and injection resolution, say-source resolution) are unit-tested; the live microphone, keyboard, and TTS paths remain behind the manual marker since CI has no audio device.
 
 Priority order: 1 → 3 → 2 → 4 → 5. Items 1 and 3 are low-risk and strengthen the local-first promise; 2 and 4 are larger lifts tied to going public; 5 is a conscious scope decision (see Explicit Non-Goals).
 
