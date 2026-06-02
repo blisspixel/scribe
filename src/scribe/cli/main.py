@@ -277,6 +277,16 @@ def transcribe_command(
         if output_dir is not None:
             config.output_folder = output_dir
 
+        # Fail fast on an explicit OpenAI request with no key, before the banner,
+        # conversion, and progress all start and the error surfaces deep in the run.
+        if method == "openai" and not config.openai_api_key:
+            console.print(
+                "[red]--method openai needs an OpenAI API key.[/red] "
+                "Set OPENAI_API_KEY in your environment or .env, or run `scribe init`. "
+                "For local transcription use --method local."
+            )
+            raise typer.Exit(1)
+
         # Load custom vocabulary if provided
         custom_vocab = None
         if vocabulary:
@@ -1840,6 +1850,7 @@ def music_transcribe(
             track_name = audio_path.stem
             vocals_path = None  # Initialize for cleanup in exception handler
             vocal_segments: list[dict[str, float]] | None = None
+            slice_dir: Path | None = None  # cleaned in the finally regardless of outcome
 
             try:
                 # Setup logging for this track
@@ -2005,12 +2016,7 @@ def music_transcribe(
 
                         # Combine all segments
                         lyrics = "\n\n".join(all_lyrics)
-
-                        # Clean up sliced audio files
-                        if slice_dir and slice_dir.exists():
-                            import shutil
-
-                            shutil.rmtree(slice_dir, ignore_errors=True)
+                        # (sliced audio is cleaned in the per-file finally below)
                     else:
                         # Fallback: transcribe full audio
                         transcript_path = transcriber.transcribe(
@@ -2244,6 +2250,14 @@ def music_transcribe(
 
                 if not continue_on_error:
                     raise typer.Exit(1)
+            finally:
+                # Remove the per-track temp slice directory on every outcome
+                # (success, instrumental, or failure), so a many-file run does not
+                # accumulate vocal_slices_* directories.
+                if slice_dir and slice_dir.exists():
+                    import shutil
+
+                    shutil.rmtree(slice_dir, ignore_errors=True)
 
         # Print summary
         console.print()

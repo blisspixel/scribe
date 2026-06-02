@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from docx import Document
-
 SUPPORTED_TRANSCRIPT_EXTENSIONS = {".txt", ".md", ".docx"}
 
 
@@ -26,6 +24,9 @@ def _read_text_with_fallback(path: Path) -> str:
 
 
 def _read_docx(path: Path) -> str:
+    # Imported lazily so .txt/.md loading never depends on python-docx being present.
+    from docx import Document
+
     try:
         doc = Document(str(path))
     except Exception as e:
