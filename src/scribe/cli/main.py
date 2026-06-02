@@ -195,6 +195,11 @@ def transcribe_command(
         "--format",
         help="Structured outputs alongside the .txt: json,vtt,srt,md (default: json)",
     ),
+    diarize: bool | None = typer.Option(
+        None,
+        "--diarize/--no-diarize",
+        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
+    ),
 ) -> None:
     """
     Transcribe an audio or video file.
@@ -237,6 +242,8 @@ def transcribe_command(
                 raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
+        if diarize is not None:
+            config.enable_speaker_diarization = diarize
 
         # Load custom vocabulary if provided
         custom_vocab = None

@@ -106,26 +106,28 @@ class TestLocalWhisperTranscriber:
         # Just verify it doesn't crash
         assert len(content) > 0
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("whisperx", reason="WhisperX not available"),
-        reason="WhisperX not available",
-    )
     def test_transcribe_with_speaker_diarization(
         self, sample_audio: Path, temp_config: ScribeConfig, mock_gpu
     ):
-        """Test transcription with speaker diarization."""
+        """Local diarization labels the transcript when pyannote and a token exist."""
         import os
 
-        # Skip if no HF token
+        pytest.importorskip("pyannote.audio", reason="pyannote.audio not installed")
         if not os.getenv("HF_TOKEN"):
             pytest.skip("HF_TOKEN not available")
 
-        transcriber = LocalWhisperTranscriber(temp_config, enable_diarization=True)
+        from scribe.core.diarizer import LocalDiarizer
 
-        result = transcriber.transcribe(sample_audio, "meeting")
+        transcriber = LocalWhisperTranscriber(
+            model_size="base", language="en", gpu_config=GPUConfig.detect()
+        )
+        diarizer = LocalDiarizer(os.environ["HF_TOKEN"], device="cpu")
+
+        result = transcriber.transcribe(sample_audio, diarizer=diarizer)
         content = result.read_text(encoding="utf-8")
 
-        # May have speaker labels if diarization worked
+        # May have "SPEAKER_xx:" labels if diarization succeeded; at minimum it
+        # produces a valid transcript rather than failing.
         assert len(content) > 0
 
     def test_transcribe_long_audio(self, long_audio: Path, temp_config: ScribeConfig, mock_gpu):
