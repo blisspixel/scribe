@@ -3562,6 +3562,14 @@ def vocab_command(
 
 @app.command(name="listen")
 def listen_command(
+    mode: str = typer.Option(
+        "hold",
+        "--mode",
+        help="hold (push-to-talk: hold F9, speak, release) or continuous (always listening)",
+    ),
+    inject: str = typer.Option(
+        "paste", "--inject", help="How to insert text: paste (clipboard) or type (keystrokes)"
+    ),
     model: str | None = typer.Option(
         None, "--model", help="Whisper model for dictation (default: small on GPU, base on CPU)"
     ),
@@ -3570,30 +3578,47 @@ def listen_command(
     ),
 ) -> None:
     """
-    Dictate: speak and have your words typed into the focused window.
+    Dictate: speak and have your words inserted into the focused window.
 
-    A real-time mode separate from the batch pipeline. F9 toggles listening,
-    Esc quits. Needs a microphone and the voice extra (pip install "scribe[voice]").
+    A real-time mode separate from the batch pipeline. Default is push-to-talk:
+    hold F9 to speak, release to insert; Esc quits. Use --mode continuous for
+    always-listening. Needs a microphone and the voice extra (pip install "scribe[voice]").
     """
     from scribe.cli.voice import run_listen
 
-    raise typer.Exit(run_listen(console, model=model, language=language))
+    raise typer.Exit(run_listen(console, model=model, language=language, mode=mode, inject=inject))
 
 
 @app.command(name="say")
 def say_command(
-    file: Path = typer.Argument(..., help="Transcript or notes file to read aloud", exists=True),
+    file: Path | None = typer.Argument(
+        None, help="Transcript or notes file to read aloud", exists=True
+    ),
+    selection: bool = typer.Option(
+        False, "--selection", "-s", help="Read the currently selected text aloud"
+    ),
+    clipboard: bool = typer.Option(False, "--clipboard", help="Read the clipboard contents aloud"),
     rate: int | None = typer.Option(None, "--rate", help="Speech rate in words per minute"),
     voice: str | None = typer.Option(None, "--voice", help="Voice name or id substring to use"),
 ) -> None:
     """
-    Read a transcript or notes file aloud with a local, offline TTS engine.
+    Read a file, the current selection, or the clipboard aloud with a local voice.
 
-    Needs the voice extra (pip install "scribe[voice]").
+    Examples: `scribe say notes.md`, `scribe say --selection`, `scribe say --clipboard`.
+    Esc stops playback. Needs the voice extra (pip install "scribe[voice]").
     """
     from scribe.cli.voice import run_say
 
-    raise typer.Exit(run_say(console, file, rate=rate, voice=voice))
+    raise typer.Exit(
+        run_say(
+            console,
+            file,
+            rate=rate,
+            voice=voice,
+            use_selection=selection,
+            use_clipboard=clipboard,
+        )
+    )
 
 
 def main() -> None:

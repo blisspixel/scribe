@@ -46,3 +46,24 @@ pipeline**; voice I/O is a distinct surface adopted on purpose, not drift.
   routing it through the mlx-whisper and whisper.cpp backends is future work.
   Read-aloud uses the offline pyttsx3 voice; a higher-quality online voice
   (for example edge-tts) can be added later behind a flag without changing the mode.
+
+## Update (2026-06): v2 refinement
+
+A review of established voice-typing and read-aloud tools (Wispr Flow, superwhisper,
+WhisperWriter, OpenWhispr, the macOS Speak-Selection feature) and the security review
+of v1 led to three changes, none of which alter the mode's place outside the batch
+pipeline:
+
+- Dictation defaults to **push-to-hold** (`--mode hold`: hold F9, speak, release to
+  insert), with the original always-listening behavior available as
+  `--mode continuous`. Push-to-hold is the common default in those tools and removes
+  the always-on-microphone exposure the security review flagged.
+- Text injection is selectable with `--inject paste|type`: `paste` (via the
+  clipboard, restored on exit) stays the reliable default; `type` inserts at the
+  cursor with keystrokes and never touches the clipboard.
+- `scribe say` gained `--selection` (copy the current selection, then read it, the
+  macOS Speak-Selection pattern) and `--clipboard`, with Esc to stop playback. The
+  file argument is now optional.
+
+The option-resolution logic is pure and unit-tested; the live microphone, keyboard,
+and TTS paths remain manual-only.

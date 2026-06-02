@@ -141,14 +141,18 @@ Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md
 ### Voice (opt-in mode)
 ```bash
 # Needs: pip install "scribe[voice]"
-# Dictate: speak and have your words typed into the focused window
-#   F9 toggles listening, Esc quits
+
+# Dictate (push-to-talk by default): hold F9, speak, release to insert at the cursor
 scribe listen
+scribe listen --mode continuous          # always listening, F9 pauses
+scribe listen --inject type              # type keystrokes instead of paste
 scribe listen --model small --language en
 
-# Read a transcript or notes file aloud with a local offline voice
-scribe say meeting_transcription.txt
-scribe say notes.md --rate 180
+# Read aloud with a local offline voice
+scribe say meeting_transcription.txt     # a file
+scribe say --selection                   # the currently selected text
+scribe say --clipboard                   # the clipboard contents
+scribe say notes.md --rate 180           # Esc stops playback
 ```
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
 
