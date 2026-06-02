@@ -54,6 +54,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The Anthropic provider no longer sends a null temperature (which the API rejects) on the structured-output path.
 - Requesting JSON output alongside an image no longer raises a TypeError.
 - Sub-minute durations render in seconds (for example `45s`) instead of `0m`.
+- The `batch` and `music` error handlers no longer raise `UnboundLocalError` (masking the real error) when a file fails before its per-file logger is set up.
+- A successful MKV to MP4 remux now removes the source MKV instead of leaving a full-size duplicate in the recording folder.
+- Map-reduce notes segmentation actually overlaps its chunks now; the overlap was a no-op, so context could be lost at every chunk boundary.
+- `convert_to_mp3` no longer returns an already-`.mp3` input unconverted (which skipped loudness normalization, 16k, and mono).
+- Vocal-activity segment merging no longer truncates a segment when a later, padded segment ends earlier than the running one.
+- The joke retry loop no longer sleeps after its final attempt.
+- The notes judge accepts an integer candidate index returned as a float (for example `1.0`) instead of silently dropping that score.
 
 ### Engineering
 - 1,143 tests collected with strong coverage of error paths.

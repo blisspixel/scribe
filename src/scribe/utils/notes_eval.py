@@ -314,8 +314,15 @@ def _judge_results(results: list[EvalResult], transcript: str, judge_spec: str) 
 
     by_candidate: dict[int, dict[str, Any]] = {}
     for entry in parsed.get("scores", []):
-        if isinstance(entry, dict) and isinstance(entry.get("candidate"), int):
-            by_candidate[entry["candidate"]] = entry
+        if not isinstance(entry, dict):
+            continue
+        # Models often emit the integer candidate index as a float (1.0, 2.0);
+        # accept those instead of silently dropping the score.
+        cand = entry.get("candidate")
+        if isinstance(cand, bool):
+            continue
+        if isinstance(cand, int) or (isinstance(cand, float) and cand.is_integer()):
+            by_candidate[int(cand)] = entry
 
     for i, result in enumerate(judged):
         entry = by_candidate.get(i + 1)

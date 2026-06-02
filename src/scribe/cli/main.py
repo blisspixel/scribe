@@ -1442,6 +1442,9 @@ def batch_transcribe(
         # Process each file
         results: list[BatchResult] = []
         for idx, audio_file in enumerate(valid_files, 1):
+            # Bound before the try so the except handler never hits an unbound
+            # logger if validation fails before per-file setup_logging runs.
+            logger = get_logger(__name__)
             console.print(
                 f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {audio_file.name}"
             )
@@ -1634,6 +1637,9 @@ def music_transcribe(
 
       scribe music track1.mp3 track2.mp3 track3.mp3
     """
+    # Bound up front so the outer except never hits an unbound logger if an error
+    # occurs before the per-track setup_logging runs.
+    logger = get_logger(__name__)
     try:
         # Load configuration
         config = ScribeConfig()

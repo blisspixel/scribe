@@ -889,7 +889,8 @@ def generate_transcript_joke(
 
             last_err = e
             logger.warning(f"API call failed (attempt {attempt + 1}): {e}")
-            if attempt < len(backoffs):
+            # Only sleep before a real retry, not after the final attempt.
+            if attempt < len(backoffs) - 1:
                 next_tokens = token_ramp[min(attempt + 1, len(token_ramp) - 1)]
                 logger.info(
                     f"Retrying in {backoffs[attempt]:.1f}s with max_output_tokens={next_tokens}"

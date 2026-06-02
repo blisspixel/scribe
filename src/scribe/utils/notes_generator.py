@@ -863,7 +863,10 @@ Each bullet should be a complete sentence with maximum detail density."""
             chunks.append(slice_)
             if end == n:
                 break
-            i = max(end - overlap, end)
+            # Step back by `overlap` for context continuity, but always move forward
+            # at least one character (max(end - overlap, end) was a no-op: it always
+            # returned end, so chunks never actually overlapped).
+            i = max(end - overlap, i + 1)
         return chunks
 
     def _merge_breakdowns(self, parts: list[dict[str, Any]]) -> dict[str, Any]:

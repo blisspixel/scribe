@@ -317,8 +317,9 @@ class VocalActivityDetector:
             gap = seg["start"] - last["end"]
 
             if gap < gap_threshold:
-                # Merge with previous segment
-                last["end"] = seg["end"]
+                # Merge with previous segment. Use max so a shorter segment nested
+                # inside the previous one's padded span never truncates it.
+                last["end"] = max(last["end"], seg["end"])
             else:
                 # Add as new segment
                 merged.append(seg.copy())

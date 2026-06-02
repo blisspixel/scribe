@@ -626,3 +626,16 @@ class TestNotesGeneratorIntegration:
 
         print(f"\n✅ Successfully generated notes: {notes_path}")
         print(f"📄 Content length: {len(content)} characters")
+
+
+def test_segment_for_full_coverage_chunks_overlap():
+    from scribe.utils.notes_generator import NotesGenerator
+
+    gen = NotesGenerator.__new__(NotesGenerator)
+    text = "abcdefghij" * 12  # 120 chars, no newlines
+    chunks = gen._segment_for_full_coverage(text, approx_token_per_chunk=5, overlap_tokens=2)
+    assert chunks is not None and len(chunks) > 1
+    # Overlap means the chunks together carry more characters than the source. The old
+    # code (i = max(end - overlap, end)) produced contiguous, non-overlapping chunks
+    # summing to exactly len(text).
+    assert sum(len(c) for c in chunks) > len(text)
