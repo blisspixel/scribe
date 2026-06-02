@@ -746,7 +746,9 @@ class SystemDiagnostics:
             try:
                 import google.genai as genai
 
-                gemini_client = genai.Client(api_key=gemini_key)
+                # Bound the call so a network stall cannot hang `scribe doctor`
+                # (the OpenAI/XAI checks already pass a 10s timeout).
+                gemini_client = genai.Client(api_key=gemini_key, http_options={"timeout": 10_000})
                 list_models = cast(Any, gemini_client.models).list
                 list(list_models(config={"page_size": 1}))
                 results.append(

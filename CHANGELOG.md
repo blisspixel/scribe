@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `scribe transcribe --method openai` with no API key now fails fast with a clear hint instead of erroring deep in the run.
 - `scribe --version` / `-V` prints the version and exits.
 - `scribe info` now shows the config file path (and whether it exists) plus which AI features (notes/joke/meme) are enabled.
 - `scribe transcribe -o/--output-dir DIR` writes output to a chosen folder for that run.
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `scribe doctor` no longer aborts the whole run if a single check raises an unexpected error; each check is isolated.
   - `normalize_path` strips only a balanced pair of surrounding quotes, so a path that legitimately contains a quote is not corrupted; `get_ffmpeg_path`/`get_ffprobe_path` only accept an executable file, not a directory or stub.
   - Filename date parsing validates the `YYYY-MM-DD` form (an impossible date is rejected, not echoed), and duration formatting clamps negative input.
+  - `scribe music` no longer leaks a per-track temp slice directory on error/instrumental paths (cleaned in a finally on every outcome); the Gemini key check in `scribe doctor` has a network timeout; and `python-docx` is imported lazily so plain-text transcript loading does not depend on it.
 - A second adversarial QA pass over the older core (recorder/OBS, audio conversion, providers, notes/joke/meme, music) fixed:
   - OBS process cleanup matched processes by substring (`pkill -f obs`), which could kill unrelated apps like obsidian or any process with "obs" in its command line; it now matches the exact process name, and the MKV-to-MP4 remux has a timeout so a locked file cannot hang the CLI.
   - Near-silent or instrumental audio made ffmpeg report `-inf` loudness, which then failed the conversion; Scribe now falls back to default normalization in that case.
