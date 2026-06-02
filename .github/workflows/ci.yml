@@ -232,6 +232,7 @@ jobs:
     name: Mutation Testing (advisory)
     runs-on: ubuntu-latest
     continue-on-error: true
+    timeout-minutes: 25  # hard ceiling so an advisory job never churns for hours
     needs: [lint-and-types]
 
     steps:
@@ -253,10 +254,11 @@ jobs:
       - name: Sync environment (dev group)
         run: uv sync --python 3.12 --group dev
 
-      - name: Run mutmut over the pure core (advisory)
-        # Scope, tests, and runner are configured in [tool.mutmut]. Guarded so a
-        # mutmut hiccup never turns this advisory job into a hard failure.
-        run: uv run mutmut run || true
+      - name: Run mutmut over the pure core (advisory, time-boxed)
+        # Scope, tests, and runner are configured in [tool.mutmut]. Wrapped in a
+        # 15-minute timeout and guarded so a long or misbehaving run degrades to a
+        # partial advisory result instead of churning or turning this job red.
+        run: timeout 900 uv run mutmut run || true
 
       - name: Show mutation results
         run: uv run mutmut results || true
