@@ -162,10 +162,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         },
     }
     if vendor_choice:
+        # Use the vendor the user actually has a key for. Hardcoding "openai" here
+        # made notes fail for an xai-only setup (no openai key -> "No API key found").
         data["providers"] = {
             "joke_provider": vendor_choice,
             "meme_provider": vendor_choice,
-            "notes_provider": "openai",  # notes work best on openai/xai both; default openai
+            "notes_provider": vendor_choice,
         }
 
     path = save_config_file(data)

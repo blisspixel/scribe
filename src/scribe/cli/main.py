@@ -189,6 +189,9 @@ def transcribe_command(
     audio_file: Path = typer.Argument(
         ..., help="Path to audio/video file to transcribe", exists=True
     ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", "-o", help="Write output here instead of the configured folder"
+    ),
     method: TranscriptionMethod = typer.Option(
         "auto",
         "--method",
@@ -271,6 +274,8 @@ def transcribe_command(
             config.keep_intermediate_files = True
         if diarize is not None:
             config.enable_speaker_diarization = diarize
+        if output_dir is not None:
+            config.output_folder = output_dir
 
         # Load custom vocabulary if provided
         custom_vocab = None

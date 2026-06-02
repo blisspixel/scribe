@@ -75,7 +75,9 @@ def test_ffmpeg_and_ffprobe_detection_use_path_env_and_common_locations(tmp_path
         patch("shutil.which", return_value=None),
         patch("scribe.utils.platform.is_windows", return_value=False),
         patch("scribe.utils.platform.is_macos", return_value=False),
-        patch("pathlib.Path.exists", side_effect=[True, False, False]),
+        # Candidates are now accepted only if they are executable files; mock that
+        # predicate so the first common Linux dir matches.
+        patch("scribe.utils.platform._is_executable_file", side_effect=[True, False, False]),
     ):
         detected_path = str(get_ffmpeg_path()).lower()
     assert "usr" in detected_path

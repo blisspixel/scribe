@@ -454,10 +454,15 @@ def extract_date_from_filename(filename: str) -> str | None:
     Returns:
         Date string in YYYY-MM-DD format, or None if not found
     """
-    # Try to find YYYY-MM-DD pattern
+    # Try to find a YYYY-MM-DD pattern, validating it is a real calendar date so an
+    # impossible value like 2025-13-45 is not echoed downstream as a bogus date.
     match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
     if match:
-        return match.group(1)
+        try:
+            datetime.strptime(match.group(1), "%Y-%m-%d")
+            return match.group(1)
+        except ValueError:
+            pass
 
     # Try to find a YYYYMMDD pattern. Bound it with non-digit lookarounds and
     # validate it as a real calendar date, otherwise an 8-digit run from an
@@ -501,6 +506,7 @@ def format_duration_minutes(seconds: float) -> str:
     Returns:
         Formatted duration string
     """
+    seconds = max(0.0, seconds)  # clamp so a negative never floors to "59 minutes"
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
 
