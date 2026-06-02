@@ -146,6 +146,10 @@ scribe init --force                # Overwrite existing ~/.scribe/config.toml
 scribe shortcut
 scribe shortcut --remove
 
+# Search across your structured (.json) transcripts
+scribe query "budget"
+scribe query "action item" --speaker SPEAKER_01
+
 # System diagnostics
 scribe doctor
 
@@ -168,6 +172,7 @@ scribe --banner
 - `--model large-v3|large-v2|medium|small|base|turbo` - Whisper model
 - `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
 - `--vocabulary FILE` - Custom vocabulary
+- `--format json,vtt,srt,md` - Structured outputs written alongside the .txt (default: json)
 - `--provider openai|xai|anthropic|gemini` - AI provider
 - `--cookies BROWSER` - Use browser cookies for URL downloads (edge, chrome, firefox)
 - `--no-docx` - Skip DOCX generation (just .txt transcript)

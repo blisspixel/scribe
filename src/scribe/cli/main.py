@@ -21,6 +21,7 @@ from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
 from scribe.models.gpu import GPUConfig
 from scribe.models.session import TranscriptionSession
+from scribe.models.transcript import Transcript
 from scribe.utils.branding import brand_header_markup
 from scribe.utils.docx_converter import txt_to_docx
 from scribe.utils.joke_generator import (
@@ -50,6 +51,40 @@ class MusicResult(TypedDict, total=False):
     status: str
     lyrics: Path
     error: str
+
+
+def _write_structured_outputs(
+    transcriber: Transcriber,
+    transcript_path: Path,
+    config: ScribeConfig,
+    format_override: str | None,
+    session: TranscriptionSession | None = None,
+) -> None:
+    """Write the requested structured artifacts (json/vtt/srt/md) next to the .txt.
+
+    Best-effort: a configured-but-empty format list, an absent structured transcript
+    (some legacy API paths), or a writer error never fails the transcription.
+    """
+    try:
+        transcript = transcriber.last_transcript
+        if not isinstance(transcript, Transcript):
+            return
+        raw = format_override if format_override is not None else config.output_formats
+        formats = [
+            f.strip().lower()
+            for f in str(raw).split(",")
+            if f.strip() and f.strip().lower() != "txt"
+        ]
+        if not formats:
+            return
+
+        from scribe.utils.transcript_writers import write_formats
+
+        for path in write_formats(transcript, transcript_path, formats):
+            if session is not None:
+                session.add_file(path, path.suffix.lstrip("."))
+    except Exception as e:
+        logger.warning(f"Could not write structured outputs: {e}")
 
 
 # Create Typer app with custom help
@@ -154,6 +189,11 @@ def transcribe_command(
         "--vocabulary",
         "--vocab",
         help="Custom vocabulary file (.txt or .json) for improved accuracy",
+    ),
+    output_format: str | None = typer.Option(
+        None,
+        "--format",
+        help="Structured outputs alongside the .txt: json,vtt,srt,md (default: json)",
     ),
 ) -> None:
     """
@@ -400,6 +440,9 @@ def transcribe_command(
         if transcript_path.stat().st_size < 10:
             console.print("[red]Error: Transcription failed - output file is empty[/red]")
             raise typer.Exit(1)
+
+        # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
+        _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
 
         # Phase 3: Finishing (85-100%)
         unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
@@ -866,6 +909,9 @@ def url_command(
         if transcript_path.stat().st_size < 10:
             console.print("[red]Error: Transcription failed - output file is empty[/red]")
             raise typer.Exit(1)
+
+        # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
+        _write_structured_outputs(transcriber, transcript_path, config, None, session)
 
         # Phase 3: Finishing (85-100%)
         unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
@@ -3336,6 +3382,33 @@ def shortcut_command(
     from scribe.cli.shortcut import run_shortcut
 
     run_shortcut(console=console, desktop=desktop, remove=remove)
+
+
+@app.command(name="query")
+def query_command(
+    text: str | None = typer.Argument(None, help="Text to search for in transcript segments"),
+    speaker: str | None = typer.Option(None, "--speaker", help="Filter by speaker label"),
+    folder: Path | None = typer.Option(
+        None, "--folder", help="Folder to search (default: your configured output folder)"
+    ),
+    limit: int = typer.Option(50, "--limit", help="Maximum matches to show"),
+) -> None:
+    """
+    Search across your structured (.json) transcripts.
+
+    Keyword and speaker search over the JSON transcripts written next to each
+    transcript, so you can find a moment across past meetings.
+
+    Examples:
+
+      scribe query "budget"
+      scribe query "action item" --speaker SPEAKER_01
+    """
+    from scribe.cli.query import run_query
+
+    config = ScribeConfig()
+    search_folder = folder or config.output_folder
+    run_query(console=console, folder=search_folder, text=text, speaker=speaker, limit=limit)
 
 
 def main() -> None:

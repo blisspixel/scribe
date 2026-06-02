@@ -144,6 +144,7 @@ from scribe.exceptions import TranscriptionError, ValidationError
 from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
 from scribe.models.gpu import GPUConfig
 from scribe.models.session import TranscriptionSession
+from scribe.models.transcript import Transcript
 from scribe.utils.files import cleanup_files
 from scribe.utils.logging import get_logger
 from scribe.utils.resource_limits import validate_audio_file
@@ -218,6 +219,9 @@ class Transcriber:
         self.config = config
         self.gpu_config = GPUConfig.detect()
         self.converter = Converter()
+        # Structured transcript from the most recent transcribe(), so the CLI can
+        # write JSON/VTT/SRT/Markdown artifacts without re-parsing the .txt.
+        self.last_transcript: Transcript | None = None
 
         logger.info(
             f"Transcriber initialized - GPU: {self.gpu_config.has_gpu}, "
@@ -550,6 +554,7 @@ class Transcriber:
             detect_silence=self.config.enable_silence_detection,
             initial_prompt=initial_prompt,
         )
+        self.last_transcript = transcriber.last_transcript
 
         if session:
             session.transcription_method = "local"
@@ -583,6 +588,7 @@ class Transcriber:
             cleanup_temp=not self.config.keep_intermediate_files,
             initial_prompt=initial_prompt,
         )
+        self.last_transcript = transcriber.last_transcript
 
         if session:
             session.transcription_method = "openai"
