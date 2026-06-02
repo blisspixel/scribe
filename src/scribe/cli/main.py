@@ -1133,6 +1133,12 @@ def record(
         # Display header first
         _show_command_banner(console)
 
+        # One-time recording-consent acknowledgement (responsible use, not legal advice)
+        from scribe.cli.consent import ensure_recording_consent
+
+        if not ensure_recording_consent(console):
+            raise typer.Exit(0)
+
         # Show configuration settings
         settings_table = Table(title="Recording Settings", show_header=False, box=None)
         settings_table.add_column("Setting", style=ScribeTheme.PRIMARY, no_wrap=True)
