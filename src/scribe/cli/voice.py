@@ -176,6 +176,18 @@ def run_say(
         console.print("[yellow]Nothing to read (the file had no speakable text).[/yellow]")
         return 1
 
+    return _speak(console, path.name, text, rate=rate, voice=voice)
+
+
+def _speak(  # pragma: no cover - drives the local TTS engine; no audio device in CI
+    console: Console,
+    title: str,
+    text: str,
+    *,
+    rate: int | None,
+    voice: str | None,
+) -> int:
+    """Speak ``text`` with pyttsx3 (isolated so the engine I/O stays out of CI)."""
     try:
         import pyttsx3
     except ImportError:
@@ -192,7 +204,7 @@ def run_say(
                 engine.setProperty("voice", candidate.id)
                 break
 
-    console.print(f"[cyan]Reading {path.name} aloud...[/cyan]")
+    console.print(f"[cyan]Reading {title} aloud...[/cyan]")
     engine.say(text)
     engine.runAndWait()
     console.print("[green]Done.[/green]")
@@ -202,7 +214,7 @@ def run_say(
 # --- Runtime: dictation ------------------------------------------------------
 
 
-def run_listen(
+def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercised by hand
     console: Console,
     *,
     model: str | None = None,
@@ -309,7 +321,9 @@ def run_listen(
     return 0
 
 
-def _load_dictation_model(console: Console, model: str | None) -> Any | None:
+def _load_dictation_model(  # pragma: no cover - loads a real model, hardware dependent
+    console: Console, model: str | None
+) -> Any | None:
     """Load a persistent faster-whisper model for dictation, or report why not."""
     try:
         from faster_whisper import WhisperModel
