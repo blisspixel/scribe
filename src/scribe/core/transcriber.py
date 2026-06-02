@@ -487,6 +487,8 @@ class Transcriber:
             else:
                 transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
 
+            self._apply_term_normalization(transcript_path, custom_vocabulary)
+
             if session:
                 session.add_file(transcript_path, "transcript")
 
@@ -515,6 +517,7 @@ class Transcriber:
                     e,
                     local_language_override,
                 )
+                self._apply_term_normalization(transcript_path, custom_vocabulary)
                 return transcript_path
 
             except Exception as fallback_error:
@@ -529,6 +532,32 @@ class Transcriber:
                         "fallback_error": str(fallback_error),
                     },
                 )
+
+    def _apply_term_normalization(
+        self, transcript_path: Path, custom_vocabulary: Optional["CustomVocabulary"]
+    ) -> None:
+        """Rewrite known misrecognitions to canonical terms in the .txt and Transcript.
+
+        Deterministic, offline glossary normalization applied to every path so the
+        .txt on disk and the structured outputs (built from last_transcript) come out
+        consistent. A no-op when the vocabulary carries no aliases.
+        """
+        aliases = getattr(custom_vocabulary, "aliases", None)
+        if not aliases:
+            return
+
+        from scribe.utils.term_normalize import build_replacements, normalize_txt_body
+
+        replacements = build_replacements(aliases)
+        if not replacements:
+            return
+        try:
+            body = transcript_path.read_text(encoding="utf-8")
+            transcript_path.write_text(normalize_txt_body(body, replacements), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Term normalization of transcript text failed: {e}")
+        if self.last_transcript is not None and custom_vocabulary is not None:
+            self.last_transcript = custom_vocabulary.normalize_transcript(self.last_transcript)
 
     def _transcribe_local(
         self,
@@ -555,7 +584,7 @@ class Transcriber:
         # Convert vocabulary to Whisper prompt format
         initial_prompt = None
         if custom_vocabulary:
-            initial_prompt = custom_vocabulary.to_whisper_format()
+            initial_prompt = custom_vocabulary.to_prompt()
             logger.info(f"Using custom vocabulary with {len(custom_vocabulary)} terms")
         elif music_mode:
             # Use music-specific prompt
@@ -735,7 +764,7 @@ class Transcriber:
         # Convert vocabulary to Whisper prompt format
         initial_prompt = None
         if custom_vocabulary:
-            initial_prompt = custom_vocabulary.to_whisper_format()
+            initial_prompt = custom_vocabulary.to_prompt()
             logger.info(f"Using custom vocabulary with {len(custom_vocabulary)} terms")
 
         transcript_path = transcriber.transcribe(

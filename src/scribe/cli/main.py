@@ -131,6 +131,7 @@ class CleanGroup(typer.core.TyperGroup):
             ("joke TRANSCRIPT ", "generate joke"),
             ("meme TRANSCRIPT ", "generate meme"),
             ("query TEXT       ", "search transcripts"),
+            ("vocab            ", "domain glossaries"),
             ("listen           ", "dictate (speech to type)"),
             ("say FILE         ", "read a file aloud"),
             ("doctor           ", "diagnostics"),
@@ -187,11 +188,11 @@ def transcribe_command(
     ),
     no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
     no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
-    vocabulary: Path | None = typer.Option(
+    vocabulary: str | None = typer.Option(
         None,
         "--vocabulary",
         "--vocab",
-        help="Custom vocabulary file (.txt or .json) for improved accuracy",
+        help="Glossary name (e.g. finance, tech) or a .txt/.json file for domain terms",
     ),
     output_format: str | None = typer.Option(
         None,
@@ -252,7 +253,7 @@ def transcribe_command(
         custom_vocab = None
         if vocabulary:
             try:
-                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                custom_vocab = CustomVocabulary.load(vocabulary)
                 console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
                 console.print()
             except Exception as e:
@@ -644,11 +645,11 @@ def url_command(
     ),
     no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
     no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
-    vocabulary: Path | None = typer.Option(
+    vocabulary: str | None = typer.Option(
         None,
         "--vocabulary",
         "--vocab",
-        help="Custom vocabulary file (.txt or .json) for improved accuracy",
+        help="Glossary name (e.g. finance, tech) or a .txt/.json file for domain terms",
     ),
     keep_download: bool = typer.Option(
         False, "--keep-download", help="Keep the downloaded file after transcription"
@@ -729,7 +730,7 @@ def url_command(
         custom_vocab = None
         if vocabulary:
             try:
-                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                custom_vocab = CustomVocabulary.load(vocabulary)
                 console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
                 console.print()
             except Exception as e:
@@ -1433,8 +1434,11 @@ def batch_transcribe(
     no_notes: bool = typer.Option(False, "--no-notes", help="Skip meeting notes"),
     no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
     no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
-    vocabulary: Path | None = typer.Option(
-        None, "--vocabulary", "--vocab", help="Custom vocabulary file (.txt or .json)"
+    vocabulary: str | None = typer.Option(
+        None,
+        "--vocabulary",
+        "--vocab",
+        help="Glossary name (e.g. finance, tech) or a .txt/.json file for domain terms",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -1481,7 +1485,7 @@ def batch_transcribe(
         custom_vocab = None
         if vocabulary:
             try:
-                custom_vocab = CustomVocabulary.from_file(vocabulary)
+                custom_vocab = CustomVocabulary.load(vocabulary)
                 console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
             except Exception as e:
                 console.print(f"[red]Failed to load vocabulary: {e}[/red]")
@@ -3464,6 +3468,66 @@ def query_command(
     config = ScribeConfig()
     search_folder = folder or config.output_folder
     run_query(console=console, folder=search_folder, text=text, speaker=speaker, limit=limit)
+
+
+@app.command(name="vocab")
+def vocab_command(
+    name: str | None = typer.Argument(
+        None, help="Glossary to show (name or .txt/.json path); omit to list all"
+    ),
+) -> None:
+    """
+    List available domain glossaries, or show one glossary's terms.
+
+    Glossaries bias transcription toward your domain terms and rewrite known
+    misrecognitions to the canonical form. Use one with `--vocab <name>` on
+    transcribe/url/batch. Add your own under ~/.scribe/vocab/.
+    """
+    from scribe.utils.theme import ScribeTheme
+    from scribe.utils.vocabulary import CustomVocabulary, _bundled_glossary_dir
+
+    if name:
+        try:
+            vocab = CustomVocabulary.load(name)
+        except FileNotFoundError as e:
+            console.print(f"[{ScribeTheme.ERROR}]{e}[/{ScribeTheme.ERROR}]")
+            raise typer.Exit(1)
+        console.print(
+            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]{name}[/bold {ScribeTheme.PRIMARY_BRIGHT}] "
+            f"[{ScribeTheme.TEXT_MUTED}]{len(vocab)} terms, "
+            f"{len(vocab.aliases)} with aliases[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        for term in vocab.words:
+            variants = vocab.aliases.get(term)
+            if variants:
+                console.print(
+                    f"  [{ScribeTheme.TEXT_PRIMARY}]{term}[/{ScribeTheme.TEXT_PRIMARY}] "
+                    f"[{ScribeTheme.TEXT_MUTED}]<- {', '.join(variants)}[/{ScribeTheme.TEXT_MUTED}]"
+                )
+            else:
+                console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{term}[/{ScribeTheme.TEXT_PRIMARY}]")
+        return
+
+    console.print(f"[bold {ScribeTheme.SECONDARY}]glossaries[/bold {ScribeTheme.SECONDARY}]")
+    found = False
+    sources = [
+        ("user", Path.home() / ".scribe" / "vocab"),
+        ("bundled", _bundled_glossary_dir()),
+    ]
+    for label, root in sources:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.txt")) + sorted(root.glob("*.json")):
+            found = True
+            console.print(
+                f"  [{ScribeTheme.PRIMARY}]{path.stem}[/{ScribeTheme.PRIMARY}] "
+                f"[{ScribeTheme.TEXT_MUTED}]({label})[/{ScribeTheme.TEXT_MUTED}]"
+            )
+    if not found:
+        console.print(
+            f"  [{ScribeTheme.TEXT_MUTED}]none; add .txt/.json files under "
+            f"~/.scribe/vocab/[/{ScribeTheme.TEXT_MUTED}]"
+        )
 
 
 @app.command(name="listen")

@@ -99,7 +99,7 @@ scribe = "scribe.cli.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-scribe = ["py.typed", "assets/icons/*"]
+scribe = ["py.typed", "assets/icons/*", "assets/glossaries/*"]
 
 [tool.ruff]
 line-length = 100

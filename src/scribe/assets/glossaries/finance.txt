@@ -1,0 +1,39 @@
+# Scribe glossary preset: finance
+#
+# One term per line. A line of the form
+#   Canonical = misrecognition1, misrecognition2
+# also records known misrecognitions, which are rewritten to the canonical form
+# after transcription. Plain term lines just bias recognition.
+
+# Metrics and reporting
+EBITDA = e bit duh, ebit duh, e bitda
+ARR
+MRR
+CAGR = C A G R
+COGS = cogs, c o g s
+GAAP = gap
+EPS
+free cash flow
+
+# Instruments and markets
+equities
+fixed income
+derivatives
+ETF = E T F
+IPO = I P O
+SPAC = spack
+basis points = bips, bps
+
+# Roles and entities
+CFO
+LBO = L B O
+private equity
+venture capital = VC
+hedge fund
+
+# Compliance
+SEC filing
+10-K = ten K
+10-Q = ten Q
+KYC = K Y C
+AML = A M L

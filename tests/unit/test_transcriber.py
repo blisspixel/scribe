@@ -518,3 +518,44 @@ class TestMusicMode:
         assert temp_config.default_language is None
         assert mock_local_class.call_args is not None
         assert mock_local_class.call_args.kwargs["language"] == "es"
+
+
+class TestTermNormalization:
+    """Glossary-driven term normalization applied after transcription."""
+
+    def test_rewrites_txt_body_and_transcript(self, temp_config: ScribeConfig, tmp_path: Path):
+        from scribe.models.transcript import Transcript, TranscriptSegment
+        from scribe.utils.vocabulary import CustomVocabulary
+
+        transcriber = Transcriber(temp_config)
+        txt = tmp_path / "m_transcription.txt"
+        txt.write_text(
+            "Meeting: post gray sequel demo\nDate: x\n\n"
+            + "─" * 80
+            + "\n\nwe use post gray sequel here\n",
+            encoding="utf-8",
+        )
+        transcriber.last_transcript = Transcript(
+            segments=[TranscriptSegment(0.0, 1.0, "post gray sequel")], backend="x"
+        )
+        vocab = CustomVocabulary(["PostgreSQL"], {"PostgreSQL": ["post gray sequel"]})
+
+        transcriber._apply_term_normalization(txt, vocab)
+
+        body = txt.read_text(encoding="utf-8")
+        assert "we use PostgreSQL here" in body
+        # The header (meeting name) is left untouched.
+        assert "Meeting: post gray sequel demo" in body
+        assert transcriber.last_transcript.segments[0].text == "PostgreSQL"
+
+    def test_noop_without_aliases_or_vocab(self, temp_config: ScribeConfig, tmp_path: Path):
+        from scribe.utils.vocabulary import CustomVocabulary
+
+        transcriber = Transcriber(temp_config)
+        txt = tmp_path / "m.txt"
+        txt.write_text("hello world", encoding="utf-8")
+
+        transcriber._apply_term_normalization(txt, CustomVocabulary(["Term"]))  # no aliases
+        assert txt.read_text(encoding="utf-8") == "hello world"
+        transcriber._apply_term_normalization(txt, None)  # no vocab
+        assert txt.read_text(encoding="utf-8") == "hello world"

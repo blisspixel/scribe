@@ -233,6 +233,110 @@ class TestExampleFiles:
             assert bool(vocab)
 
 
+class TestGlossaryExtensions:
+    """Aliases, budgeted prompt, and name resolution."""
+
+    def test_txt_alias_syntax(self, tmp_path):
+        f = tmp_path / "g.txt"
+        f.write_text(
+            "# domain\nPostgreSQL = post gray sequel, postgres sql\nKubernetes\n",
+            encoding="utf-8",
+        )
+        vocab = CustomVocabulary.from_file(f)
+        assert "PostgreSQL" in vocab.words
+        assert "Kubernetes" in vocab.words
+        assert vocab.aliases["PostgreSQL"] == ["post gray sequel", "postgres sql"]
+        assert "Kubernetes" not in vocab.aliases
+
+    def test_json_terms_and_aliases_object(self, tmp_path):
+        f = tmp_path / "g.json"
+        f.write_text(
+            json.dumps({"terms": ["EBITDA"], "aliases": {"EBITDA": ["e bit duh"]}}),
+            encoding="utf-8",
+        )
+        vocab = CustomVocabulary.from_file(f)
+        assert "EBITDA" in vocab.words
+        assert vocab.aliases["EBITDA"] == ["e bit duh"]
+
+    def test_json_non_terms_object_still_raises(self, tmp_path):
+        f = tmp_path / "g.json"
+        f.write_text('{"words": ["x"]}', encoding="utf-8")
+        with pytest.raises(ValueError, match="JSON file must contain an array"):
+            CustomVocabulary.from_file(f)
+
+    def test_to_prompt_dedups_and_budgets(self):
+        vocab = CustomVocabulary(["Alpha", "alpha", "Beta"])
+        # Case-insensitive dedup keeps the first form.
+        assert vocab.to_prompt() == "Alpha, Beta"
+        many = CustomVocabulary([f"term{i}" for i in range(500)])
+        prompt = many.to_prompt(max_chars=50)
+        assert len(prompt) <= 50
+        assert prompt.startswith("term0")
+
+    def test_load_resolves_user_glossary(self, tmp_path, monkeypatch):
+        vocab_dir = tmp_path / ".scribe" / "vocab"
+        vocab_dir.mkdir(parents=True)
+        (vocab_dir / "mine.txt").write_text("Acme\n", encoding="utf-8")
+        monkeypatch.setattr("scribe.utils.vocabulary.Path.home", lambda: tmp_path)
+        vocab = CustomVocabulary.load("mine")
+        assert "Acme" in vocab.words
+
+    def test_load_resolves_bundled_preset(self):
+        # The shipped presets resolve by bare name.
+        tech = CustomVocabulary.load("tech")
+        assert "PostgreSQL" in tech.words
+        assert tech.aliases  # presets carry aliases
+
+    def test_load_unknown_name_raises(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("scribe.utils.vocabulary.Path.home", lambda: tmp_path)
+        with pytest.raises(FileNotFoundError, match="No glossary named"):
+            CustomVocabulary.load("does-not-exist")
+
+    def test_load_path_still_works(self, tmp_path):
+        f = tmp_path / "terms.txt"
+        f.write_text("Acme\n", encoding="utf-8")
+        vocab = CustomVocabulary.load(str(f))
+        assert "Acme" in vocab.words
+
+    def test_normalize_transcript_via_vocab(self):
+        from scribe.models.transcript import Transcript, TranscriptSegment
+
+        vocab = CustomVocabulary(["PostgreSQL"], {"PostgreSQL": ["post gray sequel"]})
+        t = Transcript(segments=[TranscriptSegment(0.0, 1.0, "post gray sequel")], backend="x")
+        out = vocab.normalize_transcript(t)
+        assert out.segments[0].text == "PostgreSQL"
+
+
+class TestVocabCommand:
+    """The `scribe vocab` listing/show command."""
+
+    def test_vocab_list_shows_presets(self):
+        from typer.testing import CliRunner
+
+        from scribe.cli.main import app
+
+        result = CliRunner().invoke(app, ["vocab"])
+        assert result.exit_code == 0
+        assert "tech" in result.output and "finance" in result.output
+
+    def test_vocab_show_lists_terms_and_aliases(self):
+        from typer.testing import CliRunner
+
+        from scribe.cli.main import app
+
+        result = CliRunner().invoke(app, ["vocab", "tech"])
+        assert result.exit_code == 0
+        assert "PostgreSQL" in result.output
+
+    def test_vocab_show_unknown_exits_nonzero(self):
+        from typer.testing import CliRunner
+
+        from scribe.cli.main import app
+
+        result = CliRunner().invoke(app, ["vocab", "definitely-not-a-glossary-xyz"])
+        assert result.exit_code == 1
+
+
 class TestEdgeCases:
     """Test edge cases and error conditions."""
 
