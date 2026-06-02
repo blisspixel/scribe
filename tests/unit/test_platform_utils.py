@@ -105,7 +105,8 @@ def test_obs_and_open_file_helpers_cover_all_platforms(tmp_path):
     with (
         patch.dict(os.environ, {}, clear=True),
         patch("scribe.utils.platform.is_windows", return_value=True),
-        patch("pathlib.Path.exists", side_effect=[True, False, False]),
+        # OBS candidates are now accepted only if they are executable files.
+        patch("scribe.utils.platform._is_executable_file", side_effect=[True, False, False]),
     ):
         assert str(get_obs_executable_path()).endswith("obs64.exe")
 
