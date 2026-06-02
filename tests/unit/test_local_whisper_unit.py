@@ -7,6 +7,7 @@ import pytest
 from scribe.core.local_whisper import LocalWhisperTranscriber, transcribe_with_local_whisper
 from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
+from scribe.models.transcript import Transcript, TranscriptSegment
 
 
 def _gpu_config() -> GPUConfig:
@@ -138,7 +139,7 @@ def test_prepare_initial_prompt_respects_modes() -> None:
     )
 
 
-def test_execute_transcription_returns_segment_dicts(tmp_path: Path) -> None:
+def test_execute_transcription_returns_transcript(tmp_path: Path) -> None:
     audio_path = tmp_path / "meeting.wav"
     audio_path.write_text("audio")
     transcriber = LocalWhisperTranscriber(gpu_config=_gpu_config())
@@ -151,11 +152,14 @@ def test_execute_transcription_returns_segment_dicts(tmp_path: Path) -> None:
         SimpleNamespace(),
     )
 
-    segments = transcriber._execute_transcription(audio_path, 60.0, "prompt")
+    transcript = transcriber._execute_transcription(audio_path, 60.0, "prompt")
 
-    assert segments == [
-        {"start": 0.0, "end": 1.5, "text": " Hello "},
-        {"start": 2.0, "end": 3.5, "text": " world "},
+    assert isinstance(transcript, Transcript)
+    assert transcript.backend == "faster-whisper"
+    assert transcript.duration == 60.0
+    assert [(s.start, s.end, s.text) for s in transcript.segments] == [
+        (0.0, 1.5, " Hello "),
+        (2.0, 3.5, " world "),
     ]
 
 
@@ -172,7 +176,9 @@ def test_transcribe_success_and_error_paths(tmp_path: Path) -> None:
         patch.object(
             transcriber,
             "_execute_transcription",
-            return_value=[{"start": 0.0, "end": 1.0, "text": "Hello"}],
+            return_value=Transcript(
+                segments=[TranscriptSegment(start=0.0, end=1.0, text="Hello")], duration=120.0
+            ),
         ),
         patch.object(transcriber, "_write_clean_transcript") as mock_write,
         patch("scribe.core.local_whisper.clear_gpu_cache") as mock_clear,
@@ -187,7 +193,11 @@ def test_transcribe_success_and_error_paths(tmp_path: Path) -> None:
         patch("scribe.core.local_whisper.get_audio_duration", return_value=0.5),
         patch.object(transcriber, "_load_model"),
         patch.object(transcriber, "_detect_silence_if_needed", return_value=[]),
-        patch.object(transcriber, "_execute_transcription", return_value=[]),
+        patch.object(
+            transcriber,
+            "_execute_transcription",
+            return_value=Transcript(segments=[], duration=0.5),
+        ),
         pytest.raises(TranscriptionError, match="too short"),
     ):
         transcriber.transcribe(audio_path, output_path=output_path)
@@ -206,10 +216,12 @@ def test_write_clean_transcript_includes_header_and_silence_marker(tmp_path: Pat
         patch("scribe.core.local_whisper.format_timestamp", side_effect=["00:02:00", "00:04:40"]),
     ):
         transcriber._write_clean_transcript(
-            segments=[{"start": 300.0, "end": 330.0, "text": " Hello world "}],
+            transcript=Transcript(
+                segments=[TranscriptSegment(start=300.0, end=330.0, text=" Hello world ")],
+                duration=120.0,
+            ),
             output_path=output_path,
             audio_path=audio_path,
-            duration=120.0,
             silence_periods=[(120.0, 280.0)],
         )
 
