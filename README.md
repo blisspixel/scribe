@@ -140,6 +140,20 @@ scribe meme transcript.md --qa-threshold 8.5
 ```
 Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md`, `.docx`
 
+### Voice (opt-in mode)
+```bash
+# Needs: pip install "scribe[voice]"
+# Dictate: speak and have your words typed into the focused window
+#   F9 toggles listening, Esc quits
+scribe listen
+scribe listen --model small --language en
+
+# Read a transcript or notes file aloud with a local offline voice
+scribe say meeting_transcription.txt
+scribe say notes.md --rate 180
+```
+This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
+
 ### Utilities
 ```bash
 # First-run setup wizard (auto-prompts on first run; rerun anytime)

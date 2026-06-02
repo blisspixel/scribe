@@ -130,6 +130,9 @@ class CleanGroup(typer.core.TyperGroup):
             ("notes TRANSCRIPT ", "meeting notes"),
             ("joke TRANSCRIPT ", "generate joke"),
             ("meme TRANSCRIPT ", "generate meme"),
+            ("query TEXT       ", "search transcripts"),
+            ("listen           ", "dictate (speech to type)"),
+            ("say FILE         ", "read a file aloud"),
             ("doctor           ", "diagnostics"),
             ("info             ", "configuration"),
             ("help             ", "show this help"),
@@ -3445,6 +3448,42 @@ def query_command(
     run_query(console=console, folder=search_folder, text=text, speaker=speaker, limit=limit)
 
 
+@app.command(name="listen")
+def listen_command(
+    model: str | None = typer.Option(
+        None, "--model", help="Whisper model for dictation (default: small on GPU, base on CPU)"
+    ),
+    language: str | None = typer.Option(
+        None, "--language", "-l", help="Spoken language (ISO 639-1); auto-detect if omitted"
+    ),
+) -> None:
+    """
+    Dictate: speak and have your words typed into the focused window.
+
+    A real-time mode separate from the batch pipeline. F9 toggles listening,
+    Esc quits. Needs a microphone and the voice extra (pip install "scribe[voice]").
+    """
+    from scribe.cli.voice import run_listen
+
+    raise typer.Exit(run_listen(console, model=model, language=language))
+
+
+@app.command(name="say")
+def say_command(
+    file: Path = typer.Argument(..., help="Transcript or notes file to read aloud", exists=True),
+    rate: int | None = typer.Option(None, "--rate", help="Speech rate in words per minute"),
+    voice: str | None = typer.Option(None, "--voice", help="Voice name or id substring to use"),
+) -> None:
+    """
+    Read a transcript or notes file aloud with a local, offline TTS engine.
+
+    Needs the voice extra (pip install "scribe[voice]").
+    """
+    from scribe.cli.voice import run_say
+
+    raise typer.Exit(run_say(console, file, rate=rate, voice=voice))
+
+
 def main() -> None:
     """Main entry point with smart command detection."""
     import sys
@@ -3473,6 +3512,9 @@ def main() -> None:
             "init",
             "version",
             "doctor",
+            "query",
+            "listen",
+            "say",
             "support-bundle",
             "diagnose",
             "--help",
