@@ -96,13 +96,15 @@ class AnthropicProvider(AIProvider):
                 role = "user" if msg["role"] in ["user", "developer"] else "assistant"
                 user_messages.append({"role": role, "content": msg["content"]})
 
-        # Call Claude API
+        # Call Claude API. Only send temperature when set: the Anthropic API rejects
+        # an explicit null, and the structured-JSON path defaults temperature to None.
         params: dict[str, Any] = {
             "model": self.model,
             "max_tokens": max_tokens or 4096,
-            "temperature": temperature,
             "messages": user_messages,
         }
+        if temperature is not None:
+            params["temperature"] = temperature
 
         if system_message:
             params["system"] = system_message

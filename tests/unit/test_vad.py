@@ -56,3 +56,14 @@ def test_vad_load_model_and_convenience_function_propagate_failures(tmp_path):
         return_value=[{"start": 0.0, "end": 1.0}],
     ):
         assert detect_vocal_segments(tmp_path / "vocals.wav") == [{"start": 0.0, "end": 1.0}]
+
+
+def test_merge_close_segments_does_not_truncate_nested_segment():
+    # A short segment nested inside the previous one's (padded) span must extend the
+    # merged segment, never shrink it.
+    det = VocalActivityDetector.__new__(VocalActivityDetector)
+    merged = det._merge_close_segments(
+        [{"start": 0.0, "end": 10.0}, {"start": 0.2, "end": 5.0}], gap_threshold=0.5
+    )
+    assert len(merged) == 1
+    assert merged[0]["end"] == 10.0

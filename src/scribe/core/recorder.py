@@ -1321,6 +1321,9 @@ class OBSRecorder:
                     meeting_name, start_ts, ".mp4"
                 )
                 if self._remux_mkv_to_mp4(src_path, str(tmp_mp4)):
+                    # Drop the now-redundant source MKV; the MP4 is what we keep.
+                    with suppress(Exception):
+                        os.remove(str(media_path))
                     src_path = str(tmp_mp4)
                     logger.info("MKV to MP4 conversion complete")
                 else:

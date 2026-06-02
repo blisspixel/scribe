@@ -480,9 +480,14 @@ class Converter:
 
         if output_file is None:
             output_file = input_file.with_suffix(".mp3")
+            # If the input is itself an .mp3, the derived name collides with it.
+            # Use a distinct name so we never "convert in place" and return the
+            # untouched input (which skips loudnorm / 16k / mono / bitrate).
+            if output_file == input_file:
+                output_file = input_file.with_name(f"{input_file.stem}_converted.mp3")
 
-        # Check if already converted
-        if output_file.exists():
+        # Reuse an existing, distinct output only if it is newer than the input.
+        if output_file != input_file and output_file.exists():
             if output_file.stat().st_mtime >= input_file.stat().st_mtime:
                 logger.info(f"Already converted: {output_file.name}")
                 return output_file

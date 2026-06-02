@@ -99,6 +99,9 @@ def test_detect_silence_periods_and_format_helpers():
     assert format_duration(3661) == "1h 1m"
     assert format_duration(7200) == "2h"
     assert format_duration(1800) == "30m"
+    # Sub-minute durations must render seconds, not a misleading "0m".
+    assert format_duration(45) == "45s"
+    assert format_duration(0) == "0s"
 
 
 def test_detect_silence_periods_returns_empty_on_processing_failures():

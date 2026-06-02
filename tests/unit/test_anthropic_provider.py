@@ -80,6 +80,28 @@ class TestAnthropicProvider:
         assert call_args["messages"][0]["role"] == "user"
         assert call_args["messages"][0]["content"] == "Hello"
 
+    def test_chat_completion_omits_none_temperature(self, mock_anthropic_client):
+        """temperature=None must not be sent (the Anthropic API rejects an explicit null)."""
+        try:
+            from scribe.providers.anthropic_provider import AnthropicProvider
+        except ImportError:
+            pytest.skip("anthropic package not installed")
+
+        mock_response = Mock()
+        mock_response.content = [Mock(text="ok")]
+        mock_response.usage = Mock(input_tokens=1, output_tokens=1)
+        mock_client_instance = Mock()
+        mock_client_instance.messages.create.return_value = mock_response
+        mock_anthropic_client.return_value = mock_client_instance
+
+        provider = AnthropicProvider(api_key="test-key")
+
+        provider.chat_completion([{"role": "user", "content": "hi"}], temperature=None)
+        assert "temperature" not in mock_client_instance.messages.create.call_args[1]
+
+        provider.chat_completion([{"role": "user", "content": "hi"}], temperature=0.5)
+        assert mock_client_instance.messages.create.call_args[1]["temperature"] == 0.5
+
     def test_chat_completion_without_system_message(self, mock_anthropic_client):
         """Test chat completion without system message."""
         try:

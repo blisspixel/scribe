@@ -28,6 +28,24 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _config_provider(feature: str) -> str | None:
+    """Provider chosen in ~/.scribe/config.toml [providers] for a feature, if set.
+
+    Bridges the setup wizard's vendor choice (written as ``<feature>_provider``)
+    to provider selection. Env vars still win; this sits between the env var and
+    the built-in default, so precedence is env > config.toml > default. Any
+    failure reading the config (missing home, unreadable file) falls back to None.
+    """
+    try:
+        from scribe.config_file import load_config_file
+
+        providers = load_config_file().get("providers", {})
+        value = providers.get(f"{feature}_provider")
+        return str(value).lower() if value else None
+    except Exception:
+        return None
+
+
 def get_provider(
     feature: str,
     api_key: str | None = None,
@@ -69,16 +87,21 @@ def get_provider(
     if provider_name is None:
         # Special handling for meme_image - check dedicated env var first
         if feature == "meme_image":
-            provider_name = os.getenv("SCRIBE_MEME_IMAGE_PROVIDER")
-            if not provider_name:
-                # Fall back to SCRIBE_MEME_PROVIDER
-                provider_name = os.getenv("SCRIBE_MEME_PROVIDER", "xai")
+            # Env var, then config.toml, then the SCRIBE_MEME_PROVIDER fallbacks.
+            provider_name = (
+                os.getenv("SCRIBE_MEME_IMAGE_PROVIDER")
+                or _config_provider("meme_image")
+                or os.getenv("SCRIBE_MEME_PROVIDER")
+                or _config_provider("meme")
+                or "xai"
+            )
         else:
             env_var = f"SCRIBE_{feature.upper()}_PROVIDER"
             # Default to XAI for jokes and memes (cheaper, faster, less restrictive)
-            # OpenAI for everything else
+            # OpenAI for everything else. Honor a wizard choice in config.toml between
+            # the env var and the default so `scribe init` actually takes effect.
             default_provider = "xai" if feature in ["joke", "meme"] else "openai"
-            provider_name = os.getenv(env_var, default_provider)
+            provider_name = os.getenv(env_var) or _config_provider(feature) or default_provider
 
         provider_name = provider_name.lower()
 
