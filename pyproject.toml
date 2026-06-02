@@ -78,6 +78,15 @@ diarize = [
     "pyannote.audio>=3.0.0",
 ]
 
+# Voice I/O: global-hotkey dictation (speech to type) and read-aloud (local TTS).
+# A deliberate opt-in real-time mode, separate from the batch pipeline (ADR-008).
+voice = [
+    "sounddevice>=0.4.6",
+    "pynput>=1.7.6",
+    "pyperclip>=1.8.2",
+    "pyttsx3>=2.90",
+]
+
 [project.urls]
 Homepage = "https://github.com/blissplixel/scribe"
 Repository = "https://github.com/blissplixel/scribe"
@@ -223,6 +232,10 @@ module = [
     "mlx_whisper.*",
     "pywhispercpp.*",
     "pyannote.*",
+    "sounddevice.*",
+    "pynput.*",
+    "pyperclip.*",
+    "pyttsx3.*",
 ]
 ignore_missing_imports = true
 

@@ -23,7 +23,7 @@ Scribe is a **local-first desktop CLI** for high-quality speech transcription, m
 
 **We intentionally do not pursue:**
 - Web UIs, servers, or multi-user/enterprise features.
-- Real-time or streaming transcription (batch file processing is simpler and more reliable).
+- Real-time or streaming transcription in the batch pipeline (batch file processing is simpler and more reliable). The separate, opt-in voice-I/O mode (`scribe listen` / `scribe say`) is the one deliberate exception and does not touch the batch pipeline (see ADR-008).
 - Cloud storage, account sync, or data exfiltration features (users control their own transcripts).
 - Library-first packaging or monorepo extraction — this remains a cohesive end-user product.
 - Chasing the absolute newest Python runtime or heavy observability stacks that would complicate local GPU usage or CLI UX.
@@ -61,7 +61,7 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 
 4. **Hardware-adaptive transcription backends.** Generalize the existing VRAM-based auto-selection from CUDA-only to `(vendor, memory)`: faster-whisper on NVIDIA, mlx-whisper / whisper.cpp (Metal) on Apple Silicon, whisper.cpp (Vulkan/ROCm) on AMD/Intel, int8 CPU fallback. Prerequisite for a credible cross-platform public release rather than a 4090/Windows-optimized tool.
 
-5. **Voice I/O (deliberate mode decision).** Global-hotkey speech-to-type and read-aloud (local TTS) are strong QOL ideas but require real-time/streaming, which is an explicit non-goal below. Treat as a separate product mode to be adopted intentionally, not bolted onto the batch pipeline.
+5. **Voice I/O (deliberate mode decision).** Shipped as a separate opt-in mode: `scribe listen` (global-hotkey speech-to-type) and `scribe say` (read-aloud via local TTS), behind the `scribe[voice]` extra. It is intentionally outside the batch pipeline, so the streaming non-goal there still holds; see ADR-008.
 
 Priority order: 1 → 3 → 2 → 4 → 5. Items 1 and 3 are low-risk and strengthen the local-first promise; 2 and 4 are larger lifts tied to going public; 5 is a conscious scope decision (see Explicit Non-Goals).
 
@@ -216,7 +216,7 @@ These are deliberate decisions to keep Scribe a focused, high-quality tool rathe
 - We will not run the free-threaded 3.14t build in CI while the core GPU/ML wheels lack reliable support on Windows.
 - We will not apply Design by Contract or strict parsing rules uniformly across CLI glue, UI layers, or provider code. These techniques are reserved for pure, critical business logic where they add clear value.
 - We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
-- We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation, read-aloud) is under active consideration as a distinct product surface — see Product Direction item 5. Adopting it would be a deliberate decision, not a drift.
+- We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation via `scribe listen`, read-aloud via `scribe say`) has shipped as a distinct product surface — see Product Direction item 5 and ADR-008. It does not touch the batch pipeline; adopting it was a deliberate decision, not a drift.
 - "Local-first, private, offline-capable" is the goal, but note generation and humor currently require a cloud provider. Until the local LLM provider lands (Product Direction item 1), the fully-offline guarantee holds for transcript-only use; with a cloud provider, transcripts/notes are transmitted for analysis. This is documented honestly rather than overstated.
 - We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
 
