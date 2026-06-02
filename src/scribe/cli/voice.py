@@ -93,6 +93,11 @@ class UtteranceSegmenter:
         self._silence_run = 0
         self._start = None
 
+    def reset(self) -> None:
+        """Fully reset, including the frame counter, between dictation buffers."""
+        self._reset_span()
+        self._last_index = -1
+
 
 @dataclass
 class HotkeyToggle:
@@ -121,6 +126,9 @@ def speakable_from_markdown(text: str) -> str:
     Drops YAML frontmatter, code fences, horizontal rules, and the leading
     markdown markers so a TTS engine reads the words and not the syntax.
     """
+    # Normalize newlines first so the frontmatter and fence handling work the same
+    # on CRLF (Windows) files as on LF; otherwise frontmatter would leak into speech.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = _FRONTMATTER.sub("", text)
     out: list[str] = []
     in_fence = False
@@ -261,6 +269,12 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     frame_index = 0
     stop = {"quit": False}
 
+    def reset_buffer() -> None:
+        nonlocal frame_index
+        buffer.clear()
+        frame_index = 0
+        segmenter.reset()
+
     def transcribe_and_inject(pcm: bytes) -> None:
         if not pcm:
             return
@@ -285,6 +299,10 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     def on_press(key: object) -> None:
         if key == keyboard.Key.f9:
             state = toggle.toggle()
+            if not state:
+                # Drop any half-captured audio so it does not prepend to the next
+                # utterance when dictation resumes.
+                reset_buffer()
             console.print(f"[cyan]Dictation {'on' if state else 'paused'}[/cyan]")
         elif key == keyboard.Key.esc:
             stop["quit"] = True
@@ -309,9 +327,15 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
                 frame_index += 1
                 if span is not None:
                     start, end = span
-                    transcribe_and_inject(b"".join(buffer[start : end + 1]))
-                    buffer.clear()
-                    frame_index = 0
+                    # end is exclusive (one past the last speech frame).
+                    transcribe_and_inject(b"".join(buffer[start:end]))
+                    reset_buffer()
+            # Flush a final in-progress utterance so the last words are not lost
+            # when the user quits mid-sentence.
+            tail = segmenter.flush()
+            if tail is not None:
+                start, end = tail
+                transcribe_and_inject(b"".join(buffer[start:end]))
     except KeyboardInterrupt:
         pass
     finally:

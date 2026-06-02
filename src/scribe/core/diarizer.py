@@ -42,23 +42,41 @@ class SpeakerDiarizer(Protocol):
     def apply(self, audio_path: Path, transcript: Transcript) -> Transcript: ...
 
 
-def dominant_speaker(start: float, end: float, turns: list[SpeakerTurn]) -> str | None:
-    """The speaker whose turns overlap [start, end] the most, or None.
+def _union_length(intervals: list[tuple[float, float]]) -> float:
+    """Total length covered by a set of intervals, counting overlaps once."""
+    ordered = sorted(intervals)
+    total = 0.0
+    cur_lo, cur_hi = ordered[0]
+    for lo, hi in ordered[1:]:
+        if lo > cur_hi:
+            total += cur_hi - cur_lo
+            cur_lo, cur_hi = lo, hi
+        else:
+            cur_hi = max(cur_hi, hi)
+    total += cur_hi - cur_lo
+    return total
 
-    Overlap is summed per speaker so a segment that spans a short interjection is
-    still attributed to whoever holds most of it. Ties keep the earliest turn's
-    speaker, which makes the result deterministic given sorted turns.
+
+def dominant_speaker(start: float, end: float, turns: list[SpeakerTurn]) -> str | None:
+    """The speaker whose turns cover [start, end] the most, or None.
+
+    Per-speaker coverage is the union length of that speaker's turns clipped to the
+    segment, so overlapping same-speaker turns (which pyannote can emit during
+    overlapped speech) are counted once rather than double-counted. Ties keep the
+    earliest turn's speaker, which makes the result deterministic given sorted turns.
     """
-    totals: dict[str, float] = {}
+    clipped: dict[str, list[tuple[float, float]]] = {}
     order: dict[str, int] = {}
     for index, turn in enumerate(turns):
-        overlap = min(end, turn.end) - max(start, turn.start)
-        if overlap > 0:
-            totals[turn.speaker] = totals.get(turn.speaker, 0.0) + overlap
+        lo = max(start, turn.start)
+        hi = min(end, turn.end)
+        if hi > lo:
+            clipped.setdefault(turn.speaker, []).append((lo, hi))
             order.setdefault(turn.speaker, index)
-    if not totals:
+    if not clipped:
         return None
-    # Most overlap wins; earliest-appearing speaker breaks ties.
+    totals = {speaker: _union_length(intervals) for speaker, intervals in clipped.items()}
+    # Most coverage wins; earliest-appearing speaker breaks ties.
     return min(totals, key=lambda s: (-totals[s], order[s]))
 
 

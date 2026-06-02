@@ -68,6 +68,20 @@ def test_srt_is_numbered_with_comma_millis(tmp_path):
     assert "SPEAKER_01: General Kenobi" in text
 
 
+def test_markdown_frontmatter_is_valid_yaml_for_special_speakers(tmp_path):
+    # A speaker label beginning with a YAML indicator must be quoted so the
+    # frontmatter stays parseable.
+    t = Transcript(
+        segments=[TranscriptSegment(0.0, 1.0, "hi", speaker="*VIP")],
+        backend="faster-whisper",
+        model="large-v3",
+    )
+    text = tw.write_markdown(t, tmp_path / "t.md").read_text(encoding="utf-8")
+    front = text.split("---\n")[1]
+    # The bare "*VIP" would be a YAML alias; it must appear quoted.
+    assert '"*VIP"' in front
+
+
 def test_markdown_has_frontmatter_and_turns(tmp_path):
     text = tw.write_markdown(_sample(), tmp_path / "t.md").read_text(encoding="utf-8")
     assert text.startswith("---\n")

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- `batch` and `record` now write the structured JSON/VTT/SRT/Markdown sidecars too, so `scribe query` can find everything you transcribe, not just single-file `transcribe`/`url` runs.
+- `scribe url` gained `--format` and `--diarize/--no-diarize`, matching `transcribe`.
+- Local CPU transcriptions are now labeled `faster-whisper-<model>` in session metadata instead of `cpu-<model>` (the CPU floor is faster-whisper on CPU).
+- `Transcriber.last_transcript` is reset at the start of each call, so a structured sidecar can never carry over a previous file's transcript.
+- `scribe query`: speaker filter is now case-insensitive substring (like text search), a malformed `start` value no longer crashes the whole search, and a non-positive `--limit` returns all matches.
+- Markdown frontmatter quotes values that begin with a YAML indicator character, so a speaker label like `*VIP` keeps the frontmatter valid.
+- Local diarization no longer double-counts overlapping same-speaker turns when assigning a segment's speaker.
+- Non-CUDA backends (mlx-whisper, whisper.cpp) now report the real audio duration and emit the same long-silence markers as the faster-whisper path.
+- Voice dictation: the final in-progress utterance is flushed on quit instead of being dropped, the utterance audio no longer includes a trailing silence frame, CRLF transcript/notes files read aloud correctly, and paused audio is cleared instead of prepended to the next utterance.
+- The bare-filename shortcut (`scribe meeting.mp4`) derives its known-command list from the registered commands, so it stays correct as commands are added.
+
 ## [2.6.0] - 2026-06-01
 
 ### Added

@@ -658,6 +658,16 @@ def url_command(
         "--cookies",
         help="Browser to extract cookies from (chrome, firefox, edge) — fixes YouTube 403 errors",
     ),
+    output_format: str | None = typer.Option(
+        None,
+        "--format",
+        help="Structured outputs alongside the .txt: json,vtt,srt,md (default: json)",
+    ),
+    diarize: bool | None = typer.Option(
+        None,
+        "--diarize/--no-diarize",
+        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
+    ),
 ) -> None:
     """
     Download and transcribe audio/video from a URL.
@@ -693,6 +703,8 @@ def url_command(
         # Override config with CLI options
         if model:
             config.default_model = model
+        if diarize is not None:
+            config.enable_speaker_diarization = diarize
         if language:
             from scribe.exceptions import ValidationError
             from scribe.utils.validation import validate_language_code
@@ -921,7 +933,7 @@ def url_command(
             raise typer.Exit(1)
 
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
-        _write_structured_outputs(transcriber, transcript_path, config, None, session)
+        _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
 
         # Phase 3: Finishing (85-100%)
         unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
@@ -1252,6 +1264,9 @@ def record(
                 audio_file, method=chosen_method, session=session
             )
 
+            # Structured sidecars (json/vtt/srt/md) so `scribe query` can find these too
+            _write_structured_outputs(transcriber, transcript_path, config, None, session)
+
             # Generate DOCX
             try:
                 docx_path = txt_to_docx(transcript_path)
@@ -1550,6 +1565,9 @@ def batch_transcribe(
                     session=session,
                     custom_vocabulary=custom_vocab,
                 )
+
+                # Structured sidecars (json/vtt/srt/md) so `scribe query` finds batch output
+                _write_structured_outputs(transcriber, transcript_path, config, None, session)
 
                 # Generate DOCX
                 if not no_docx:
@@ -3499,29 +3517,17 @@ def main() -> None:
     # If first argument looks like a file path, inject 'transcribe' command
     if len(sys.argv) > 1:
         first_arg = sys.argv[1]
-        # Check if it's not a known command and looks like a file
-        known_commands = [
-            "transcribe",
-            "url",
-            "record",
-            "joke",
-            "meme",
-            "notes",
-            "clean",
-            "info",
-            "init",
-            "version",
-            "doctor",
-            "query",
-            "listen",
-            "say",
-            "support-bundle",
-            "diagnose",
-            "--help",
-            "-h",
-            "--version",
-            "--banner",
-        ]
+        # Derive the command set from what is actually registered so this never
+        # drifts as commands are added or renamed. Commands declared with a bare
+        # @app.command() have name=None and take their name from the function, so
+        # include the callback name (and its hyphenated form) too.
+        known_commands: set[str] = {"--help", "-h", "--version", "--banner"}
+        for cmd in app.registered_commands:
+            if cmd.name:
+                known_commands.add(cmd.name)
+            if cmd.callback is not None:
+                known_commands.add(cmd.callback.__name__)
+                known_commands.add(cmd.callback.__name__.replace("_", "-"))
         if first_arg not in known_commands and not first_arg.startswith("-"):
             # Check if it looks like a file path
             if (

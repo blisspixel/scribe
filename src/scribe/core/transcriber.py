@@ -447,6 +447,10 @@ class Transcriber:
             TranscriptionError: If all methods fail
             ValidationError: If file exceeds resource limits
         """
+        # Reset so a stale transcript from a previous call can never be written as
+        # this file's structured sidecar if a path forgets to repopulate it.
+        self.last_transcript = None
+
         # Validate resource limits
         logger.info("Validating audio file resource limits...")
         validate_audio_file(
@@ -590,7 +594,14 @@ class Transcriber:
 
         if session:
             session.transcription_method = "local"
-            session.model_used = f"{backend_name}-{model_size}"
+            # Label with the engine that actually ran (from the Transcript's own
+            # provenance) so the CPU floor reads "faster-whisper-..." not "cpu-...".
+            engine = (
+                self.last_transcript.backend
+                if self.last_transcript and self.last_transcript.backend
+                else backend_name
+            )
+            session.model_used = f"{engine}-{model_size}"
             session.gpu_info = self.gpu_config.to_dict()
 
         return transcript_path
@@ -653,29 +664,56 @@ class Transcriber:
     ) -> Path:
         """Run a non-CUDA backend (mlx-whisper, whisper.cpp) and write the .txt."""
         from scribe.core.local_whisper import write_clean_transcript
+        from scribe.utils.audio import detect_silence_periods, get_audio_duration
 
-        transcript = backend.transcribe(
-            audio_path,
-            language=language,
-            model_size=model_size,
-            beam_size=self.gpu_config.beam_size,
-            initial_prompt=initial_prompt,
-        )
+        try:
+            transcript = backend.transcribe(
+                audio_path,
+                language=language,
+                model_size=model_size,
+                beam_size=self.gpu_config.beam_size,
+                initial_prompt=initial_prompt,
+            )
+        finally:
+            # Best-effort CUDA cache release for the override case (an alt backend
+            # forced on an NVIDIA box). Metal/Vulkan memory is the engine's own.
+            if self.gpu_config.has_gpu:
+                from scribe.utils.gpu import clear_gpu_cache
+
+                clear_gpu_cache()
+
         if not transcript.segments:
             raise TranscriptionError(
                 "No speech detected in audio (file may be silent or contain only noise)",
                 context={"audio_path": str(audio_path), "backend": backend.name},
             )
 
+        # Use the real audio duration, not the last segment's end (VAD trims
+        # trailing silence), so the .txt header matches the faster-whisper path.
+        duration = get_audio_duration(audio_path)
+        if duration:
+            transcript.duration = duration
+
         if diarizer is not None:
             transcript = diarizer.apply(audio_path, transcript)
+
+        # Silence markers are engine-independent (they read the audio file), so the
+        # alt path emits them too rather than dropping them for Apple/AMD users.
+        silence_periods: list[tuple[float, float]] = []
+        if self.config.enable_silence_detection and duration and duration > 300:
+            try:
+                silence_periods = detect_silence_periods(
+                    audio_path, silence_threshold=-45.0, min_silence_duration=60.0
+                )
+            except Exception as e:
+                logger.warning(f"Silence detection failed: {e}")
 
         clean_stem = audio_path.stem
         for suffix in ("_16k_mono", "_standardized", "_converted"):
             clean_stem = clean_stem.replace(suffix, "")
         output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
 
-        write_clean_transcript(transcript, output_path, audio_path, [])
+        write_clean_transcript(transcript, output_path, audio_path, silence_periods)
         self.last_transcript = transcript
         logger.info(f"Transcript saved: {output_path}")
         return output_path

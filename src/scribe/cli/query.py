@@ -38,6 +38,7 @@ def search_transcripts(
 ) -> list[tuple[Path, float, str | None, str]]:
     """Return (file, start, speaker, text) for segments matching the filters."""
     needle = text.lower() if text else None
+    speaker_needle = speaker.lower() if speaker else None
     results: list[tuple[Path, float, str | None, str]] = []
     for path in sorted(folder.rglob("*.json")):
         data = _load_transcript(path)
@@ -48,10 +49,19 @@ def search_transcripts(
             seg_speaker = segment.get("speaker")
             if needle and needle not in seg_text.lower():
                 continue
-            if speaker and seg_speaker != speaker:
+            # Speaker match is case-insensitive substring, like the text filter,
+            # so `--speaker nick` finds "Nick" and `--speaker 01` finds "SPEAKER_01".
+            if speaker_needle and speaker_needle not in str(seg_speaker or "").lower():
                 continue
-            results.append((path, float(segment.get("start", 0) or 0), seg_speaker, seg_text))
-            if len(results) >= limit:
+            # Coerce defensively: a hand-edited or malformed start must not crash
+            # the whole search across every file.
+            try:
+                start = float(segment.get("start", 0) or 0)
+            except (TypeError, ValueError):
+                start = 0.0
+            results.append((path, start, seg_speaker, seg_text))
+            # limit <= 0 means "no cap" (return everything matched).
+            if limit > 0 and len(results) >= limit:
                 return results
     return results
 
@@ -78,6 +88,6 @@ def run_query(
         console.print(
             f"[dim]{path.name}[/dim] [cyan]{format_timestamp(start)}[/cyan] {prefix}{seg_text}"
         )
-    if len(results) >= limit:
+    if limit > 0 and len(results) >= limit:
         console.print(f"[dim](showing the first {limit} matches)[/dim]")
     return len(results)
