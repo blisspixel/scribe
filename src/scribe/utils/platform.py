@@ -297,6 +297,20 @@ def is_linux() -> bool:
     return get_platform() == "linux"
 
 
+def _is_executable_file(path: Path) -> bool:
+    """True if ``path`` is a regular file that can be executed.
+
+    Guards against accepting a directory named ``ffmpeg`` (e.g. via a crafted
+    FFMPEG_DIR) or a non-executable stub, which would otherwise be run as a
+    subprocess and fail opaquely far from here.
+    """
+    if not path.is_file():
+        return False
+    if is_windows():
+        return True  # X_OK is not meaningful on Windows; a present .exe is enough
+    return os.access(path, os.X_OK)
+
+
 def get_ffmpeg_path() -> Path | None:
     """
     Find ffmpeg executable with platform-specific search.
@@ -324,7 +338,7 @@ def get_ffmpeg_path() -> Path | None:
                 Path(env_path) / "bin" / ffmpeg_cmd,
             ]
             for candidate in candidates:
-                if candidate.exists():
+                if _is_executable_file(candidate):
                     return candidate
 
     # Platform-specific common locations
@@ -350,7 +364,7 @@ def get_ffmpeg_path() -> Path | None:
 
     for directory in common_dirs:
         candidate = directory / ffmpeg_cmd
-        if candidate.exists():
+        if _is_executable_file(candidate):
             return candidate
 
     return None
@@ -409,7 +423,7 @@ def get_obs_executable_path() -> Path | None:
         ]
 
     for candidate in candidates:
-        if candidate.exists():
+        if _is_executable_file(candidate):
             return candidate
 
     return None
@@ -566,8 +580,12 @@ def normalize_path(path: str) -> Path:
     Returns:
         Normalized Path object
     """
-    # Remove quotes
-    path = path.strip('"').strip("'")
+    # Strip only a balanced pair of surrounding quotes (drag-and-drop adds these),
+    # not every leading/trailing quote, which would corrupt a path that legitimately
+    # contains a quote character (e.g. a directory named 5'10").
+    path = path.strip()
+    if len(path) >= 2 and path[0] == path[-1] and path[0] in ("'", '"'):
+        path = path[1:-1]
 
     # Create Path object (handles platform differences)
     p = Path(path)

@@ -167,6 +167,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -194,37 +195,49 @@ class SystemDiagnostics:
     def __init__(self) -> None:
         self.results: list[DiagnosticResult] = []
 
-    def run_all_checks(self) -> list[DiagnosticResult]:
-        """Run all diagnostic checks."""
+    def run_all_checks(self, live: bool = True) -> list[DiagnosticResult]:
+        """Run all diagnostic checks.
+
+        Each check is isolated so one raising an unexpected error cannot abort the
+        whole run. When ``live`` is False the API-key checks (which make real network
+        calls and can cost money or hang) are skipped, which the support bundle uses.
+        """
         self.results = []
 
-        # Core system checks
-        self.check_python_version()
-        self.check_python_packages()
-        self.check_ffmpeg()
-        self.check_ffprobe()
-        self.check_ytdlp()
+        # The checks self-append to self.results; the return type varies (some return
+        # a single result, check_additional_providers returns a list), so type loosely.
+        checks: list[Callable[[], Any]] = [
+            self.check_python_version,
+            self.check_python_packages,
+            self.check_ffmpeg,
+            self.check_ffprobe,
+            self.check_ytdlp,
+            self.check_cuda,
+            self.check_gpu,
+            self.check_gpu_memory,
+        ]
+        if live:
+            checks += [self.check_openai_api_key, self.check_additional_providers]
+        checks += [
+            self.check_output_folder,
+            self.check_disk_space,
+            self.check_temp_space,
+            self.check_env_file,
+            self.check_configuration_conflicts,
+            self.check_system_resources,
+        ]
 
-        # GPU and compute checks
-        self.check_cuda()
-        self.check_gpu()
-        self.check_gpu_memory()
-
-        # API and provider checks
-        self.check_openai_api_key()
-        self.check_additional_providers()
-
-        # File system checks
-        self.check_output_folder()
-        self.check_disk_space()
-        self.check_temp_space()
-
-        # Configuration checks
-        self.check_env_file()
-        self.check_configuration_conflicts()
-
-        # Performance checks
-        self.check_system_resources()
+        for check in checks:
+            try:
+                check()
+            except Exception as e:
+                self.results.append(
+                    DiagnosticResult(
+                        name=getattr(check, "__name__", "check").replace("check_", ""),
+                        status="fail",
+                        message=f"Check raised an unexpected error: {e}",
+                    )
+                )
 
         return self.results
 

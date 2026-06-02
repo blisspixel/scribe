@@ -32,6 +32,23 @@ from scribe.utils.run_context import get_run_history
 logger = get_logger(__name__)
 
 
+def _redact_user(text: str) -> str:
+    """Replace the home directory and username in a path-bearing string.
+
+    The support bundle is meant to be shared, and PATH/cwd/home routinely embed the
+    account username (and sometimes host details). This keeps the structure useful
+    for diagnosis while removing the personally-identifying parts.
+    """
+    if not text:
+        return text
+    home = str(Path.home())
+    user = Path.home().name
+    text = text.replace(home, "~")
+    if user:
+        text = text.replace(user, "<user>")
+    return text
+
+
 def get_system_info() -> dict[str, Any]:
     """
     Collect comprehensive system information.
@@ -61,10 +78,10 @@ def get_system_info() -> dict[str, Any]:
             "architecture": platform.architecture()[0],
         },
         "environment": {
-            "cwd": os.getcwd(),
-            "home": str(Path.home()),
-            "path": os.environ.get("PATH", ""),
-            "pythonpath": os.environ.get("PYTHONPATH", ""),
+            "cwd": _redact_user(os.getcwd()),
+            "home": _redact_user(str(Path.home())),
+            "path": _redact_user(os.environ.get("PATH", "")),
+            "pythonpath": _redact_user(os.environ.get("PYTHONPATH", "")),
         },
     }
 
@@ -148,7 +165,9 @@ def get_diagnostics_results() -> dict[str, Any]:
         Dictionary with diagnostic results
     """
     diagnostics = SystemDiagnostics()
-    results = diagnostics.run_all_checks()
+    # Skip the live API-key network checks so generating a bundle never spends an
+    # API round trip or hangs offline.
+    results = diagnostics.run_all_checks(live=False)
 
     # Convert to serializable format
     return {

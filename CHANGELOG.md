@@ -11,8 +11,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - `scribe --version` / `-V` prints the version and exits.
 - `scribe info` now shows the config file path (and whether it exists) plus which AI features (notes/joke/meme) are enabled.
+- `scribe transcribe -o/--output-dir DIR` writes output to a chosen folder for that run.
 
 ### Fixed
+- A third QA pass over the previously-unreviewed setup/config/diagnostics code fixed:
+  - The setup wizard hardcoded `notes_provider=openai`, so an xAI-only setup hit "No API key found for openai" when generating notes; it now uses the vendor you actually configured.
+  - The support bundle leaked your home directory, working directory, and PATH (and therefore your username) despite claiming to sanitize; those are now redacted, and generating a bundle no longer makes live API network calls (`scribe doctor` still does).
+  - `scribe doctor` no longer aborts the whole run if a single check raises an unexpected error; each check is isolated.
+  - `normalize_path` strips only a balanced pair of surrounding quotes, so a path that legitimately contains a quote is not corrupted; `get_ffmpeg_path`/`get_ffprobe_path` only accept an executable file, not a directory or stub.
+  - Filename date parsing validates the `YYYY-MM-DD` form (an impossible date is rejected, not echoed), and duration formatting clamps negative input.
 - A second adversarial QA pass over the older core (recorder/OBS, audio conversion, providers, notes/joke/meme, music) fixed:
   - OBS process cleanup matched processes by substring (`pkill -f obs`), which could kill unrelated apps like obsidian or any process with "obs" in its command line; it now matches the exact process name, and the MKV-to-MP4 remux has a timeout so a locked file cannot hang the CLI.
   - Near-silent or instrumental audio made ffmpeg report `-inf` loudness, which then failed the conversion; Scribe now falls back to default normalization in that case.

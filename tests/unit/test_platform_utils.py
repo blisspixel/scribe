@@ -75,7 +75,9 @@ def test_ffmpeg_and_ffprobe_detection_use_path_env_and_common_locations(tmp_path
         patch("shutil.which", return_value=None),
         patch("scribe.utils.platform.is_windows", return_value=False),
         patch("scribe.utils.platform.is_macos", return_value=False),
-        patch("pathlib.Path.exists", side_effect=[True, False, False]),
+        # Candidates are now accepted only if they are executable files; mock that
+        # predicate so the first common Linux dir matches.
+        patch("scribe.utils.platform._is_executable_file", side_effect=[True, False, False]),
     ):
         detected_path = str(get_ffmpeg_path()).lower()
     assert "usr" in detected_path
@@ -103,7 +105,8 @@ def test_obs_and_open_file_helpers_cover_all_platforms(tmp_path):
     with (
         patch.dict(os.environ, {}, clear=True),
         patch("scribe.utils.platform.is_windows", return_value=True),
-        patch("pathlib.Path.exists", side_effect=[True, False, False]),
+        # OBS candidates are now accepted only if they are executable files.
+        patch("scribe.utils.platform._is_executable_file", side_effect=[True, False, False]),
     ):
         assert str(get_obs_executable_path()).endswith("obs64.exe")
 
