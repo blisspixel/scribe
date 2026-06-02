@@ -50,7 +50,8 @@ def test_vocal_separator_loads_model_and_reuses_it():
     demucs_module = ModuleType("demucs")
     demucs_module.pretrained = pretrained_module
 
-    separator = VocalSeparator()
+    # Pin the device so the test does not depend on the host having a GPU.
+    separator = VocalSeparator(device="cuda")
 
     with patch.dict(sys.modules, {"demucs": demucs_module, "demucs.pretrained": pretrained_module}):
         separator._load_model()

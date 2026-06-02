@@ -123,6 +123,7 @@ Despite limitations, this provides real value:
 The multi-step approach produces better notes than single-step generation.
 """
 
+import contextlib
 import json
 import os
 import time
@@ -280,8 +281,12 @@ class NotesGenerator:
         transcript_content = transcript_data["content"]
         self._validate_transcript(transcript_content)
 
-        # Step 2: Segment if needed for full coverage
-        segments = self._segment_for_full_coverage(transcript_content)
+        # Step 2: Segment if needed for full coverage. The chunk budget is sized to
+        # the active provider's context so a local (small-context) model does not
+        # silently drop most of each chunk.
+        segments = self._segment_for_full_coverage(
+            transcript_content, approx_token_per_chunk=self._chunk_token_budget()
+        )
 
         if segments is None:
             # Single-pass path
@@ -723,10 +728,16 @@ CRITICAL FORMATTING RULES:
                     logger.error(f"JSON repair failed: {e2}")
                     logger.error(f"Response preview (first 500 chars): {response_text[:500]}")
                     logger.error(f"Response preview (last 500 chars): {response_text[-500:]}")
-                    # Write full response to debug file
-                    debug_file = Path("debug_json_response.txt")
-                    debug_file.write_text(response_text, encoding="utf-8")
-                    logger.error(f"Full response written to: {debug_file.absolute()}")
+                    # Write the full response to the system temp dir (not the user's
+                    # working directory) so it cannot clobber a file there, and only
+                    # when debugging is requested.
+                    if os.getenv("SCRIBE_DEBUG_JSON"):
+                        import tempfile
+
+                        debug_file = Path(tempfile.gettempdir()) / "scribe_debug_json_response.txt"
+                        with contextlib.suppress(OSError):
+                            debug_file.write_text(response_text, encoding="utf-8")
+                            logger.error(f"Full response written to: {debug_file}")
                     raise ValidationError(f"Invalid JSON response: {e2}. Original error: {e1}")
             self._validate_breakdown_keys(breakdown)
             logger.info(f"Generated breakdown with {len(breakdown)} sections")
@@ -832,6 +843,19 @@ Each bullet should be a complete sentence with maximum detail density."""
             return breakdown
 
     # ---------------- Segmentation & Merge for Ultra-long Transcripts ----------------
+
+    def _chunk_token_budget(self) -> int:
+        """Per-chunk token budget sized to the active provider's context window.
+
+        Large-context cloud models keep the original generous budget; local Ollama
+        models use a small budget that fits a typical ~16K context with room for the
+        prompt scaffold and the generated notes, so chunk content is not truncated.
+        """
+        if self.provider is not None:
+            name = (self.provider.config.provider_name or "").lower()
+            if "ollama" in name:
+                return 10_000
+        return 220_000
 
     def _segment_for_full_coverage(
         self, text: str, approx_token_per_chunk: int = 220_000, overlap_tokens: int = 2_000

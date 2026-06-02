@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `scribe --version` / `-V` prints the version and exits.
+- `scribe info` now shows the config file path (and whether it exists) plus which AI features (notes/joke/meme) are enabled.
+
+### Fixed
+- A second adversarial QA pass over the older core (recorder/OBS, audio conversion, providers, notes/joke/meme, music) fixed:
+  - OBS process cleanup matched processes by substring (`pkill -f obs`), which could kill unrelated apps like obsidian or any process with "obs" in its command line; it now matches the exact process name, and the MKV-to-MP4 remux has a timeout so a locked file cannot hang the CLI.
+  - Near-silent or instrumental audio made ffmpeg report `-inf` loudness, which then failed the conversion; Scribe now falls back to default normalization in that case.
+  - Local Ollama notes on long transcripts silently dropped most of each chunk because the chunk size assumed a huge cloud context; the chunk budget is now sized to the provider's context window.
+  - Vocal separation was hardcoded to CUDA and silently skipped on CPU-only machines; it now auto-detects the device so the CPU path actually runs.
+  - Audio slicing now clamps to the real audio length and skips empty or reversed spans instead of writing zero-frame files; meme generation no longer permanently lowers the spice level of a run after a safety block; the bake-off judge's winner index is bounds-checked; the OpenAI provider raises a clean error instead of crashing on an empty response; and a music BPM probe no longer throws on newer librosa.
+  - The notes JSON debug dump is now opt-in (`SCRIBE_DEBUG_JSON`) and written to the temp dir instead of the working directory.
+- A missing-ffmpeg error now prints the platform-specific install command and points to `scribe doctor`.
+
 ### Security
 - Hardening from an adversarial security review (no critical issues were found; these are defense-in-depth):
   - `scribe url` now refuses loopback and internal addresses (localhost, 127.0.0.1, RFC1918, link-local, and the cloud metadata endpoint) and URLs with embedded credentials, to prevent SSRF if a link ever comes from an untrusted source. Set `SCRIBE_ALLOW_LOCAL_URLS=1` to allow a local media server.

@@ -154,10 +154,18 @@ Respond in JSON:
 
         judgment = json.loads(result)
 
+        # The judge can return a number for a concept that was not generated (it is
+        # always prompted with 1/2/3), so validate the index against the real list.
         winner_idx = int(judgment["winner"]) - 1
+        if not 0 <= winner_idx < len(concepts):
+            logger.warning(
+                f"Judge picked out-of-range winner {judgment['winner']}; "
+                f"defaulting to the first concept"
+            )
+            winner_idx = 0
         winner_concept = concepts[winner_idx]
 
-        logger.info(f"\n🎉 WINNER: {winner_concept['provider'].upper()}")
+        logger.info(f"WINNER: {winner_concept['provider'].upper()}")
         logger.info(f"   Reasoning: {judgment['reasoning']}")
 
         return {

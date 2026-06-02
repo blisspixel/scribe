@@ -146,10 +146,14 @@ def _analyze_transcript_for_meme(
         f"Analyzing transcript for meme concept... (transcript length: {transcript_length} characters)"
     )
 
-    # If previous attempt was blocked, reduce spice level and add safety guidance
+    # If previous attempt was blocked, reduce spice level and add safety guidance.
+    # Rebind a local copy rather than mutating the caller's shared config, which
+    # would permanently lower spice for the rest of the run.
     if make_safer:
+        from dataclasses import replace as _dc_replace
+
         logger.info("Generating safer meme concept after safety filter block")
-        config.spice_level = max(1, config.spice_level - 2)  # Reduce by 2 levels
+        config = _dc_replace(config, spice_level=max(1, config.spice_level - 2))
 
     # Spice level descriptions
     # 0-5: Work-safe, shareable

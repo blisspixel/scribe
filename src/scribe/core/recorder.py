@@ -312,11 +312,17 @@ class OBSRecorder:
                         stderr=subprocess.DEVNULL,
                     )
             else:
-                subprocess.run(
-                    ["pkill", "-f", "obs"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                # Match the exact process name, never a substring: "pkill -f obs"
+                # would also kill obsidian, an editor with "obs" in its path, or even
+                # this process if "obs" appears in its argv. OBS is "obs" on Linux and
+                # "OBS" on macOS.
+                for name in ("obs", "OBS"):
+                    subprocess.run(
+                        ["pkill", "-x", name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
         except Exception as e:
             logger.debug(f"Could not kill OBS processes: {e}")
 
@@ -335,11 +341,13 @@ class OBSRecorder:
                             stderr=subprocess.DEVNULL,
                         )
                 else:
-                    subprocess.run(
-                        ["pkill", "-9", "-f", "obs"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+                    for name in ("obs", "OBS"):
+                        subprocess.run(
+                            ["pkill", "-9", "-x", name],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=5,
+                        )
             except Exception:
                 # Best-effort cleanup only — OBS may already be dead or permissions
                 # may prevent kill on this platform. Non-fatal; proceed to sentinel clean.
@@ -357,19 +365,29 @@ class OBSRecorder:
 
         try:
             if is_windows():
-                result = subprocess.run(
-                    ["tasklist", "/FI", "IMAGENAME eq obs64.exe", "/NH"],
-                    capture_output=True,
-                    text=True,
-                )
-                return "obs64.exe" in result.stdout.lower()
+                for exe in ("obs64.exe", "obs32.exe"):
+                    result = subprocess.run(
+                        ["tasklist", "/FI", f"IMAGENAME eq {exe}", "/NH"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if exe in result.stdout.lower():
+                        return True
+                return False
             else:
-                result = subprocess.run(
-                    ["pgrep", "-f", "obs"],
-                    capture_output=True,
-                    text=True,
-                )
-                return result.returncode == 0
+                # Exact name match only (see _kill_existing_obs); a substring match
+                # would treat unrelated processes as OBS and trigger a SIGKILL escalation.
+                for name in ("obs", "OBS"):
+                    result = subprocess.run(
+                        ["pgrep", "-x", name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        return True
+                return False
         except Exception:
             return False
 
@@ -1368,16 +1386,22 @@ class OBSRecorder:
 
         try:
             cmd = [str(ffmpeg_path), "-y", "-i", mkv_path, "-c", "copy", mp4_path]
+            # Bounded so a corrupt or still-locked MKV cannot hang the whole CLI;
+            # on timeout we keep the original MKV rather than blocking forever.
             result = subprocess.run(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
+                timeout=600,
             )
             if result.returncode != 0:
                 stderr_tail = (result.stderr or b"")[-500:].decode("utf-8", errors="replace")
                 logger.warning(f"FFmpeg remux failed (exit {result.returncode}): {stderr_tail}")
                 return False
             return os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0
+        except subprocess.TimeoutExpired:
+            logger.warning("FFmpeg remux timed out; keeping the original MKV")
+            return False
         except Exception as e:
             logger.warning(f"FFmpeg remux exception: {e}")
             return False

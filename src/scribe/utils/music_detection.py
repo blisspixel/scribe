@@ -289,6 +289,9 @@ class MusicDetector:
             # 1. Tempo (BPM) - use onset strength for better detection
             onset_env: NDArray[Any] = librosa.onset.onset_strength(y=y, sr=sr)
             tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
+            # Modern librosa returns tempo as a 1-element array; coerce to a scalar
+            # so the comparisons below do not raise "ambiguous truth value".
+            tempo = float(np.atleast_1d(tempo)[0])
 
             # Validate tempo is reasonable
             if tempo > 0 and 40 <= tempo <= 220:

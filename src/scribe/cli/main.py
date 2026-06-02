@@ -134,6 +134,9 @@ class CleanGroup(typer.core.TyperGroup):
             ("vocab            ", "domain glossaries"),
             ("listen           ", "dictate (speech to type)"),
             ("say FILE         ", "read a file aloud"),
+            ("clean FILE       ", "remove silence / trim"),
+            ("compare          ", "compare AI providers"),
+            ("health           ", "provider health check"),
             ("doctor           ", "diagnostics"),
             ("info             ", "configuration"),
             ("help             ", "show this help"),
@@ -159,6 +162,26 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"scribe {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    version: bool = typer.Option(
+        None,
+        "--version",
+        "-V",
+        is_eager=True,
+        callback=_version_callback,
+        help="Show the Scribe version and exit",
+    ),
+) -> None:
+    """Scribe: local-first speech transcription, notes, and humor."""
 
 
 @app.command(name="transcribe")
@@ -2870,6 +2893,24 @@ def info() -> None:
         )
         console.print(
             f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  [{ScribeTheme.TEXT_MUTED}]{config.default_language or 'auto'}[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        # Where the config lives and which AI features are on, so the effective
+        # state is visible in one place (env vars can override the wizard's choices).
+        from scribe.config_file import CONFIG_PATH
+
+        cfg_state = "present" if CONFIG_PATH.exists() else "defaults"
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]file[/{ScribeTheme.TEXT_PRIMARY}]      "
+            f"[{ScribeTheme.TEXT_MUTED}]{CONFIG_PATH} ({cfg_state})[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        features = (
+            f"notes:{'on' if config.enable_notes else 'off'} "
+            f"joke:{'on' if config.enable_joke else 'off'} "
+            f"meme:{'on' if config.enable_meme else 'off'}"
+        )
+        console.print(
+            f"  [{ScribeTheme.TEXT_PRIMARY}]features[/{ScribeTheme.TEXT_PRIMARY}]  "
+            f"[{ScribeTheme.TEXT_MUTED}]{features}[/{ScribeTheme.TEXT_MUTED}]"
         )
         console.print()
 

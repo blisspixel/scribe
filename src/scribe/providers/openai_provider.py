@@ -53,12 +53,18 @@ class OpenAIProvider(AIProvider):
 
         response = cast(Any, self.client.chat.completions).create(**params)
 
+        # A content filter or an all-reasoning-budget GPT-5 response can return no
+        # choices; guard so it surfaces as a clean provider error, not IndexError.
+        if not getattr(response, "choices", None):
+            raise ValueError("OpenAI returned no choices (possibly filtered or truncated)")
+
+        usage = getattr(response, "usage", None)
         return {
             "content": response.choices[0].message.content or "",
             "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(usage, "completion_tokens", 0),
+                "total_tokens": getattr(usage, "total_tokens", 0),
             },
             "model": response.model,
         }

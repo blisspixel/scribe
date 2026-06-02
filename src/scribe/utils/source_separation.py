@@ -220,15 +220,24 @@ class VocalSeparator:
     before transcription, we eliminate hallucinations caused by instruments.
     """
 
-    def __init__(self, model_name: str = "htdemucs", device: str = "cuda") -> None:
+    def __init__(self, model_name: str = "htdemucs", device: str | None = None) -> None:
         """
         Initialize vocal separator.
 
         Args:
             model_name: Demucs model to use (htdemucs recommended)
-            device: Device for processing (cuda or cpu)
+            device: Device for processing ("cuda"/"cpu"); auto-detected when None.
         """
         self.model_name = model_name
+        if device is None:
+            # Auto-detect so a CPU-only machine actually gets the documented CPU
+            # fallback instead of crashing on model.to("cuda").
+            try:
+                import torch
+
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                device = "cpu"
         self.device = device
         self.model: Any | None = None
 

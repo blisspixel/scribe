@@ -216,10 +216,19 @@ def slice_audio_by_segments(
         waveform, sample_rate = torchaudio.load(str(audio_path))
 
         sliced_paths = []
+        total_samples = waveform.shape[1]
 
         for i, segment in enumerate(segments):
-            start_sample = int(segment["start"] * sample_rate)
-            end_sample = int(segment["end"] * sample_rate)
+            # Clamp to the real audio range and skip empty or reversed spans so a bad
+            # timestamp cannot produce a zero-frame WAV that gets passed downstream.
+            start_sample = max(0, min(int(segment["start"] * sample_rate), total_samples))
+            end_sample = max(0, min(int(segment["end"] * sample_rate), total_samples))
+            if end_sample <= start_sample:
+                logger.warning(
+                    f"Skipping segment {i} with invalid span "
+                    f"({segment['start']:.2f}s - {segment['end']:.2f}s)"
+                )
+                continue
 
             # Extract segment
             segment_waveform = waveform[:, start_sample:end_sample]
