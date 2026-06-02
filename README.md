@@ -166,6 +166,10 @@ scribe shortcut --remove
 scribe query "budget"
 scribe query "action item" --speaker SPEAKER_01
 
+# Domain glossaries (bias terms + fix known misrecognitions)
+scribe vocab                 # list available glossaries
+scribe vocab finance         # show a glossary's terms
+
 # System diagnostics
 scribe doctor
 
@@ -187,7 +191,7 @@ scribe --banner
 - `--method auto|local|openai` - Transcription method
 - `--model large-v3|large-v2|medium|small|base|turbo` - Whisper model
 - `--language en|es|fr|de|zh|ja` - Language (ISO 639-1)
-- `--vocabulary FILE` - Custom vocabulary
+- `--vocab NAME|FILE` - Domain glossary (a name like `finance`/`tech`, or a `.txt`/`.json` path)
 - `--format json,vtt,srt,md` - Structured outputs written alongside the .txt (default: json)
 - `--provider openai|xai|anthropic|gemini` - AI provider
 - `--cookies BROWSER` - Use browser cookies for URL downloads (edge, chrome, firefox)
@@ -530,31 +534,43 @@ export SCRIBE_ENABLE_MEME_BAKEOFF=true
 
 **xAI lifecycle note:** Scribe defaults to `grok-4.3` for joke/meme/notes. Older IDs retired by xAI on 2026-05-15 (`grok-4-fast`, `grok-4-1-fast`, `grok-4`, `grok-4.20-non-reasoning`, `grok-imagine-image-pro`) are no longer used. When xAI returns exact `cost_in_usd_ticks`, Scribe records the converted request cost in AI metrics.
 
-### Custom Vocabulary
+### Domain Glossaries (custom vocabulary)
 
-Improve accuracy for domain-specific terms, proper nouns, and technical jargon.
+Improve accuracy for domain-specific terms, proper nouns, and technical jargon. A
+glossary does two things: it **biases** recognition toward your terms (via Whisper's
+prompt), and it **normalizes** known misrecognitions to the canonical form *after*
+transcription (deterministic, offline find-and-replace). Biasing nudges the model;
+normalization guarantees the final text.
 
-**Formats:**
-- Plain text (.txt): One term per line, # for comments
-- JSON (.json): Array of strings
-
-**Example vocabulary.txt:**
-```
-# Cloud Services
-Kubernetes
-PostgreSQL
-AWS Lambda
-
-# Company Terms
-Acme Corporation
-Project Phoenix
-```
-
-**Usage:**
+**Use a named glossary or a file:**
 ```bash
-scribe transcribe meeting.mp4 --vocabulary tech-terms.txt
-scribe batch *.mp4 --vocabulary company-names.json
+# Bundled presets: finance, tech
+scribe transcribe earnings.mp4 --vocab finance
+scribe batch standups/*.mp4 --vocab tech
+
+# Or a path to your own .txt/.json
+scribe transcribe meeting.mp4 --vocab ./company-terms.txt
+
+# List and inspect glossaries
+scribe vocab                 # list bundled + ~/.scribe/vocab glossaries
+scribe vocab tech            # show a glossary's terms and aliases
 ```
+
+**Glossary format (`~/.scribe/vocab/<name>.txt`):**
+```
+# One term per line biases recognition.
+Kubernetes
+Acme Corporation
+
+# "Canonical = variants" also rewrites known misrecognitions after transcription:
+PostgreSQL = post gray sequel, postgres sql
+OAuth = oh auth, o auth
+```
+JSON is also supported: `["term1", "term2"]`, or `{"terms": [...], "aliases": {"PostgreSQL": ["post gray sequel"]}}`.
+
+Oversized glossaries are trimmed to fit Whisper's prompt budget (with a warning)
+rather than being silently truncated. Glossaries should match the spoken language
+(set with `--language`).
 
 ### OBS Recording Integration
 

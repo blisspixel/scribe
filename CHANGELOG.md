@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Domain glossaries for recurring jargon (finance, tech, and your own). Use a named glossary with `--vocab finance` (or any `.txt`/`.json` path) on `transcribe`/`url`/`batch`; `scribe vocab` lists and shows them. Glossaries do two things: bias recognition toward your terms (now trimmed to fit Whisper's prompt budget with a warning instead of being silently truncated), and deterministically rewrite known misrecognitions to the canonical form after transcription (alias syntax `Canonical = variant1, variant2` in `.txt`, or `{"terms": [...], "aliases": {...}}` in JSON). Starter `finance` and `tech` presets ship with Scribe; add your own under `~/.scribe/vocab/`.
+
 ### Fixed
 - `batch` and `record` now write the structured JSON/VTT/SRT/Markdown sidecars too, so `scribe query` can find everything you transcribe, not just single-file `transcribe`/`url` runs.
 - `scribe url` gained `--format` and `--diarize/--no-diarize`, matching `transcribe`.

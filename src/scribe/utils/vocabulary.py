@@ -219,10 +219,19 @@ complex post-processing.
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from scribe.utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from scribe.models.transcript import Transcript
+
 logger = get_logger(__name__)
+
+
+def _bundled_glossary_dir() -> Path:
+    """Directory of glossary presets shipped inside the package."""
+    return Path(__file__).resolve().parent.parent / "assets" / "glossaries"
 
 
 class CustomVocabulary:
@@ -249,13 +258,15 @@ class CustomVocabulary:
         - Duplicate words are preserved (user may want emphasis)
     """
 
-    def __init__(self, words: list[str] | None = None):
+    def __init__(self, words: list[str] | None = None, aliases: dict[str, list[str]] | None = None):
         """
         Initialize custom vocabulary.
 
         Args:
             words: List of custom words/phrases to recognize.
                    Defaults to empty list if not provided.
+            aliases: Optional map of canonical term -> known misrecognitions, used by
+                   deterministic post-transcription normalization. Defaults to empty.
 
         Example:
             >>> vocab = CustomVocabulary()
@@ -266,6 +277,7 @@ class CustomVocabulary:
             2
         """
         self.words = words or []
+        self.aliases = aliases or {}
         logger.debug(f"Initialized vocabulary with {len(self.words)} terms")
 
     @classmethod
@@ -306,33 +318,59 @@ class CustomVocabulary:
             raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
 
         suffix = vocab_file.suffix.lower()
+        aliases: dict[str, list[str]] = {}
 
         if suffix == ".txt":
-            # Plain text - one word per line, skip comments and empty lines
+            # Plain text - one term per line; comments (#) and blanks skipped. A line
+            # of the form "Canonical = variant1, variant2" also records aliases for
+            # post-transcription normalization while keeping the canonical as a term.
             logger.debug("Loading plain text vocabulary file")
+            words = []
             with open(vocab_file, encoding="utf-8") as f:
-                words = [
-                    line.strip() for line in f if line.strip() and not line.strip().startswith("#")
-                ]
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        canonical, _, rhs = line.partition("=")
+                        canonical = canonical.strip()
+                        variants = [v.strip() for v in rhs.split(",") if v.strip()]
+                        if canonical:
+                            words.append(canonical)
+                            if variants:
+                                aliases[canonical] = variants
+                    else:
+                        words.append(line)
             logger.debug(f"Loaded {len(words)} terms from text file (comments filtered)")
 
         elif suffix == ".json":
-            # JSON array
+            # JSON array of strings, or an object with "terms" and optional "aliases".
             logger.debug("Loading JSON vocabulary file")
             with open(vocab_file, encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, list):
-                    words = [str(w).strip() for w in data if str(w).strip()]
-                    logger.debug(f"Loaded {len(words)} terms from JSON array")
-                else:
-                    logger.error(f"Invalid JSON format: expected array, got {type(data).__name__}")
-                    raise ValueError("JSON file must contain an array of strings")
+            if isinstance(data, list):
+                words = [str(w).strip() for w in data if str(w).strip()]
+                logger.debug(f"Loaded {len(words)} terms from JSON array")
+            elif isinstance(data, dict) and "terms" in data:
+                words = [str(w).strip() for w in data.get("terms", []) if str(w).strip()]
+                for canonical, variants in (data.get("aliases") or {}).items():
+                    canonical = str(canonical).strip()
+                    cleaned = [str(v).strip() for v in variants if str(v).strip()]
+                    if canonical:
+                        if canonical not in words:
+                            words.append(canonical)
+                        if cleaned:
+                            aliases[canonical] = cleaned
+                logger.debug(f"Loaded {len(words)} terms and {len(aliases)} alias sets from JSON")
+            else:
+                logger.error(f"Invalid JSON format: expected array, got {type(data).__name__}")
+                raise ValueError("JSON file must contain an array of strings")
         else:
             logger.error(f"Unsupported file format: {suffix}")
             raise ValueError(f"Unsupported vocabulary file format: {suffix}")
 
         logger.info(f"Successfully loaded {len(words)} vocabulary terms from {vocab_file.name}")
-        return cls(words)
+        return cls(words, aliases=aliases)
 
     def to_whisper_format(self) -> str:
         """
@@ -367,6 +405,78 @@ class CustomVocabulary:
         prompt = ", ".join(self.words)
         logger.debug(f"Generated Whisper prompt with {len(self.words)} terms ({len(prompt)} chars)")
         return prompt
+
+    # Whisper only conditions on the last ~224 tokens of the initial prompt; at a
+    # rough four characters per token that is ~896 characters. Past that the bias
+    # both gets truncated and diluted, so the budgeted builder trims and warns.
+    PROMPT_BUDGET_CHARS = 896
+
+    def to_prompt(self, max_chars: int = PROMPT_BUDGET_CHARS) -> str:
+        """Whisper prompt, deduplicated and trimmed to fit the prompt budget.
+
+        Unlike ``to_whisper_format`` (which joins everything verbatim), this drops
+        case-insensitive duplicates and stops once the budget is reached, logging
+        how many terms were left out so an oversized glossary degrades predictably
+        instead of being silently truncated mid-term by the model.
+        """
+        seen: set[str] = set()
+        unique: list[str] = []
+        for word in self.words:
+            key = word.lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(word)
+
+        kept: list[str] = []
+        for word in unique:
+            candidate = ", ".join([*kept, word])
+            if kept and len(candidate) > max_chars:
+                break
+            kept.append(word)
+
+        if len(kept) < len(unique):
+            logger.warning(
+                f"Vocabulary exceeds the ~{max_chars}-char prompt budget; using "
+                f"{len(kept)} of {len(unique)} terms (dropped {len(unique) - len(kept)})."
+            )
+        return ", ".join(kept)
+
+    @classmethod
+    def load(cls, name_or_path: str) -> "CustomVocabulary":
+        """Resolve a glossary by file path or by name.
+
+        A value that exists as a file (or looks like a path) is loaded directly.
+        Otherwise it is treated as a named glossary: first ``~/.scribe/vocab/<name>``
+        (``.txt`` then ``.json``), then a bundled preset shipped with Scribe.
+        """
+        candidate = Path(name_or_path).expanduser()
+        looks_like_path = (
+            candidate.suffix.lower() in (".txt", ".json")
+            or any(sep in name_or_path for sep in ("/", "\\"))
+            or candidate.exists()
+        )
+        if looks_like_path:
+            return cls.from_file(candidate)
+
+        for root in (Path.home() / ".scribe" / "vocab", _bundled_glossary_dir()):
+            for ext in (".txt", ".json"):
+                path = root / f"{name_or_path}{ext}"
+                if path.exists():
+                    return cls.from_file(path)
+
+        raise FileNotFoundError(
+            f"No glossary named '{name_or_path}' found (looked in ~/.scribe/vocab and "
+            f"the bundled presets). Pass a .txt/.json path, or run "
+            f"`scribe vocab list` to see available glossaries."
+        )
+
+    def normalize_transcript(self, transcript: "Transcript") -> "Transcript":
+        """Rewrite canonical-term misrecognitions in a Transcript using the aliases."""
+        if not self.aliases:
+            return transcript
+        from scribe.utils.term_normalize import normalize_transcript
+
+        return normalize_transcript(transcript, self.aliases)
 
     def __len__(self) -> int:
         """
