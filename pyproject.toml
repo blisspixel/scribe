@@ -72,6 +72,12 @@ whispercpp = [
     "pywhispercpp>=1.2.0",
 ]
 
+# Local speaker diarization ("who said what") via pyannote.audio. Needs a Hugging
+# Face token with the pyannote model licenses accepted.
+diarize = [
+    "pyannote.audio>=3.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/blissplixel/scribe"
 Repository = "https://github.com/blissplixel/scribe"
@@ -216,6 +222,7 @@ module = [
     "click.*",
     "mlx_whisper.*",
     "pywhispercpp.*",
+    "pyannote.*",
 ]
 ignore_missing_imports = true
 

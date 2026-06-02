@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Structured output: every transcription writes a machine-readable JSON transcript next to the `.txt` by default, with optional WebVTT, SRT, and Markdown (YAML frontmatter) via `--format` or the `SCRIBE_OUTPUT_FORMATS` setting.
 - `scribe query`: keyword and speaker search across your stored JSON transcripts ("find a moment across past meetings").
 - Hardware-adaptive local backends: local transcription now picks the engine that fits the machine instead of being CUDA-only. NVIDIA and CPU stay on faster-whisper (unchanged), Apple Silicon can use mlx-whisper (Metal) via `pip install "scribe[mlx]"`, and AMD/Intel/Apple can use whisper.cpp via `pip install "scribe[whispercpp]"`. Selection is automatic by detected vendor, overridable with `SCRIBE_LOCAL_BACKEND` or `local_backend` in config, and always falls back to a working CPU path. `scribe info` reports the detected vendor, the selected backend, and which optional engines are installed.
+- Local speaker diarization: local transcription can now label "who said what" on-device with pyannote.audio, populating the same speaker field the cloud path uses, so the `.txt` and the JSON/VTT/SRT/Markdown outputs all show speakers. Opt in with `--diarize` (or `enable_speaker_diarization` in config); it needs an `HF_TOKEN` and the `scribe[diarize]` extra, and degrades to unlabeled output when either is missing.
 
 ## [2.5.0] - 2026-06-01
 

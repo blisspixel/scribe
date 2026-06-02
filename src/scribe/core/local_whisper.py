@@ -8,7 +8,10 @@ with RTX 4090 optimization, silence detection, and clean output formatting.
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from scribe.core.diarizer import SpeakerDiarizer
 
 from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
@@ -357,6 +360,7 @@ class LocalWhisperTranscriber:
         detect_silence: bool = True,
         initial_prompt: str | None = None,
         music_mode: bool = False,
+        diarizer: "SpeakerDiarizer | None" = None,
     ) -> Path:
         """
         Transcribe audio file with GPU acceleration.
@@ -394,6 +398,10 @@ class LocalWhisperTranscriber:
 
         try:
             transcript = self._execute_transcription(audio_path, duration, prompt)
+            if diarizer is not None:
+                # Label speakers before writing so the .txt and the structured
+                # outputs both carry them, and silence markers stay intact.
+                transcript = diarizer.apply(audio_path, transcript)
             self.last_transcript = transcript
             elapsed = time.time() - start_time
 
@@ -518,11 +526,16 @@ def write_clean_transcript(
                             f.flush()
                             break
 
-            # Write segment (without timestamp)
+            # Write segment (without timestamp). When a backend or local
+            # diarization labeled the speaker, prefix it; otherwise the line is
+            # unchanged, so non-diarized output stays byte-for-byte the same.
             text = segment.text.strip()
 
             if text:
-                f.write(f"{text}\n\n")
+                if segment.speaker:
+                    f.write(f"{segment.speaker}: {text}\n\n")
+                else:
+                    f.write(f"{text}\n\n")
                 f.flush()
 
             last_end = segment.end

@@ -105,6 +105,10 @@ scribe music album/*.flac --method local
 
 # With options
 scribe transcribe meeting.mp4 --vocabulary tech-terms.txt --language es
+
+# Local speaker labels ("who said what"), fully offline
+#   needs: pip install "scribe[diarize]"  and  HF_TOKEN set
+scribe transcribe meeting.mp4 --diarize
 ```
 
 ### Recording

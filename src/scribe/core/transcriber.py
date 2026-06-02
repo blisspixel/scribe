@@ -131,11 +131,13 @@ transcription "just work" by handling the complexity of method selection,
 format conversion, error recovery, and resource management transparently.
 """
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
 if TYPE_CHECKING:
     from scribe.core.backends import TranscriptionBackend
+    from scribe.core.diarizer import SpeakerDiarizer
     from scribe.utils.vocabulary import CustomVocabulary
 
 from scribe.core.converter import Converter
@@ -564,17 +566,26 @@ class Transcriber:
             f"(hardware: {hardware.vendor}, {hardware.accelerator_name or 'cpu'})"
         )
 
+        # Local speaker diarization (skipped for music). Resolved here so both
+        # engine paths label speakers identically before writing.
+        diarizer = None if music_mode else self._build_diarizer()
+
         # NVIDIA and the CPU floor stay on the production faster-whisper engine,
         # which also runs the silence pre-pass. Other vendors route to mlx-whisper
         # or whisper.cpp, which produce the same Transcript written by the same
         # shared writer.
         if backend_name in (FASTER_WHISPER, CPU):
             transcript_path = self._transcribe_faster_whisper(
-                audio_path, model_size, language, initial_prompt
+                audio_path, model_size, language, initial_prompt, diarizer
             )
         else:
             transcript_path = self._transcribe_alt_backend(
-                build_backend(backend_name), audio_path, model_size, language, initial_prompt
+                build_backend(backend_name),
+                audio_path,
+                model_size,
+                language,
+                initial_prompt,
+                diarizer,
             )
 
         if session:
@@ -584,12 +595,39 @@ class Transcriber:
 
         return transcript_path
 
+    def _build_diarizer(self) -> "SpeakerDiarizer | None":
+        """Build a local diarizer when enabled, a token is set, and pyannote is present.
+
+        Returns None (and logs why) in every other case, so diarization is a clean
+        opt-in that degrades to unlabeled output rather than failing.
+        """
+        if not getattr(self.config, "enable_speaker_diarization", False):
+            return None
+
+        from scribe.core.diarizer import LocalDiarizer
+
+        token = self.config.hf_token or os.getenv("HF_TOKEN")
+        if not token:
+            logger.info("Speaker diarization is enabled but no HF token is set; skipping labels")
+            return None
+        if not LocalDiarizer.is_available():
+            logger.info(
+                "Speaker diarization is enabled but pyannote.audio is not installed "
+                '(pip install "scribe[diarize]"); skipping labels'
+            )
+            return None
+
+        device = "cuda" if self.gpu_config.has_gpu else "cpu"
+        logger.info(f"Local speaker diarization enabled ({device})")
+        return LocalDiarizer(token, device=device)
+
     def _transcribe_faster_whisper(
         self,
         audio_path: Path,
         model_size: str,
         language: str | None,
         initial_prompt: str | None,
+        diarizer: "SpeakerDiarizer | None" = None,
     ) -> Path:
         """Run the production faster-whisper engine (CUDA or CPU int8)."""
         transcriber = LocalWhisperTranscriber(
@@ -599,6 +637,7 @@ class Transcriber:
             audio_path,
             detect_silence=self.config.enable_silence_detection,
             initial_prompt=initial_prompt,
+            diarizer=diarizer,
         )
         self.last_transcript = transcriber.last_transcript
         return transcript_path
@@ -610,6 +649,7 @@ class Transcriber:
         model_size: str,
         language: str | None,
         initial_prompt: str | None,
+        diarizer: "SpeakerDiarizer | None" = None,
     ) -> Path:
         """Run a non-CUDA backend (mlx-whisper, whisper.cpp) and write the .txt."""
         from scribe.core.local_whisper import write_clean_transcript
@@ -626,6 +666,9 @@ class Transcriber:
                 "No speech detected in audio (file may be silent or contain only noise)",
                 context={"audio_path": str(audio_path), "backend": backend.name},
             )
+
+        if diarizer is not None:
+            transcript = diarizer.apply(audio_path, transcript)
 
         clean_stem = audio_path.stem
         for suffix in ("_16k_mono", "_standardized", "_converted"):
