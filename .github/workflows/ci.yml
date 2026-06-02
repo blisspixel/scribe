@@ -220,6 +220,48 @@ jobs:
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
   # ---------------------------------------------------------------------------
+  # Mutation Testing (advisory, non-blocking)
+  # Runs mutmut over the pure, property-tested core (transcript model, backend
+  # selection, diarization alignment, voice endpointing, output writers). A
+  # surviving mutant means a test is missing, not that the build is broken, so
+  # this is informational: it is continue-on-error and is NOT in the CI gate
+  # aggregator. mutmut is Linux-only, which is why it lives here rather than in
+  # the local developer workflow.
+  # ---------------------------------------------------------------------------
+  mutation:
+    name: Mutation Testing (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: [lint-and-types]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --python 3.12 --group dev
+
+      - name: Run mutmut over the pure core (advisory)
+        # Scope, tests, and runner are configured in [tool.mutmut]. Guarded so a
+        # mutmut hiccup never turns this advisory job into a hard failure.
+        run: uv run mutmut run || true
+
+      - name: Show mutation results
+        run: uv run mutmut results || true
+
+  # ---------------------------------------------------------------------------
   # CI Gate Aggregator
   # Single status that can be required in branch protection rules.
   # All of lint-and-types, test (matrix), coverage (80% gate), and security must pass.

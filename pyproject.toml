@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.5.0"
+version = "2.6.0"
 description = "Professional GPU-accelerated speech-to-text transcription system"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -254,6 +254,7 @@ dev = [
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pip-audit>=2.7",
+    "mutmut>=3.0",  # mutation testing (Linux/WSL only); advisory CI job, see [tool.mutmut]
     "types-tqdm",
     "types-requests",
 ]
@@ -309,6 +310,20 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "@abstractmethod",
 ]
+
+# Mutation testing scope. Kept to the pure, property-tested core logic where a
+# surviving mutant is a real signal that a test is missing, not noise from
+# hardware glue. mutmut is Linux/WSL only, so it runs in the advisory CI job
+# (see .github/workflows/ci.yml) rather than on every developer machine.
+[tool.mutmut]
+paths_to_mutate = [
+    "src/scribe/models/transcript.py",
+    "src/scribe/core/backends/registry.py",
+    "src/scribe/core/diarizer.py",
+    "src/scribe/cli/voice.py",
+    "src/scribe/utils/transcript_writers.py",
+]
+tests_dir = "tests/unit"
 
 
 
