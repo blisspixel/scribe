@@ -974,6 +974,39 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 
 ---
 
+## Responsible Use and Legal
+
+This section is for general awareness only and is not legal advice. See
+[DISCLAIMER.md](DISCLAIMER.md) for the full notice.
+
+### Recording consent
+Scribe can record conversations and calls. Recording laws vary by jurisdiction.
+Some US states and many countries require all-party (two-party) consent, where
+everyone must agree before recording. Examples of all-party-consent US states
+include California, Florida, Illinois, Pennsylvania, Massachusetts, and
+Washington, among others; this list is not complete or guaranteed current. You
+are responsible for obtaining any required consent and complying with local law.
+The first time you record, Scribe shows a one-time notice and asks you to confirm.
+
+### Regulated and sensitive data
+Scribe is general-purpose and is not designed or certified for regulated data such
+as protected health information (HIPAA/PHI), payment card data, or
+government-classified material. Do not use it for such data unless you have
+independently ensured compliance and put appropriate safeguards in place.
+
+### Cloud data sharing
+Local transcription stays on your device. When you use cloud transcription
+(OpenAI) or cloud-based notes (OpenAI, xAI, Anthropic, Google), your audio and/or
+transcript is sent to that provider and is subject to its terms and privacy
+policy. The provider may retain that data. Review those terms first.
+
+### No warranty
+Scribe is provided "as is", without warranty of any kind. The authors are not
+liable for any claim, damages, or other liability arising from its use. You are
+solely responsible for how you use Scribe and for complying with applicable laws.
+
+---
+
 ## License
 
 MIT License. See LICENSE file.

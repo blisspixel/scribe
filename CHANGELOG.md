@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Responsible-use guardrails: a one-time recording-consent notice on the first `record`/`rec` run (recording laws vary; some places require all-party consent), a `DISCLAIMER.md` and README "Responsible Use and Legal" section covering regulated/sensitive data, cloud data-sharing, output accuracy, and the no-warranty terms. The consent prompt is interactive-only and shown once; non-interactive runs print a one-line reminder, and `SCRIBE_ASSUME_CONSENT=1` silences it. None of this is legal advice.
 - Domain glossaries for recurring jargon (finance, tech, and your own). Use a named glossary with `--vocab finance` (or any `.txt`/`.json` path) on `transcribe`/`url`/`batch`; `scribe vocab` lists and shows them. Glossaries do two things: bias recognition toward your terms (now trimmed to fit Whisper's prompt budget with a warning instead of being silently truncated), and deterministically rewrite known misrecognitions to the canonical form after transcription (alias syntax `Canonical = variant1, variant2` in `.txt`, or `{"terms": [...], "aliases": {...}}` in JSON). Starter `finance` and `tech` presets ship with Scribe; add your own under `~/.scribe/vocab/`.
 
 ### Fixed
