@@ -197,7 +197,7 @@ implements a robust multi-feature approach with clear reasoning.
 
 CODE QUALITY NOTE:
 ──────────────────
-✅ CLEANED UP: The `is_music()` method previously had 100+ lines of unreachable
+CLEANED UP: The `is_music()` method previously had 100+ lines of unreachable
 code after an early return. This was likely from refactoring where `analyze_music()`
 was added but the old code wasn't removed.
 

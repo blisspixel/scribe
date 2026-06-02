@@ -114,7 +114,7 @@ pip install --upgrade yt-dlp
 ```
 
 3. **HTTP 403 Forbidden:**
-   - Most common cause: outdated yt-dlp — update first (step 2)
+   - Most common cause: outdated yt-dlp - update first (step 2)
    - Try browser cookies to authenticate: `scribe url <link> --cookies edge`
    - Supported browsers: `edge`, `chrome`, `firefox`, `safari`, `opera`, `brave`
    - Scribe automatically retries up to 10 times with exponential backoff
@@ -354,7 +354,7 @@ SCRIBE_OBS_PASSWORD=your_password
 ```
 
 3. **Authentication mismatch:**
-- Scribe will warn: "OBS authentication failed — check SCRIBE_OBS_PASSWORD"
+- Scribe will warn: "OBS authentication failed - check SCRIBE_OBS_PASSWORD"
 - Ensure the password in `.env` matches OBS WebSocket Server Settings
 - Leave `SCRIBE_OBS_PASSWORD` empty if OBS has no password set
 

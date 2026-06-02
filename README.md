@@ -309,9 +309,9 @@ pip install google-genai Pillow
 
 Scribe reads from three layers, highest precedence first:
 
-1. **CLI flags** (`--no-joke`, `--method local`, etc.) — per-run override
-2. **Env vars / `.env` file** (`SCRIBE_*`, `OPENAI_API_KEY`, etc.) — per-machine secrets and overrides
-3. **`~/.scribe/config.toml`** — written by the first-run wizard (`scribe init`)
+1. **CLI flags** (`--no-joke`, `--method local`, etc.) - per-run override
+2. **Env vars / `.env` file** (`SCRIBE_*`, `OPENAI_API_KEY`, etc.) - per-machine secrets and overrides
+3. **`~/.scribe/config.toml`** - written by the first-run wizard (`scribe init`)
 
 **First-run wizard:**
 
@@ -454,12 +454,12 @@ Mix and match AI providers based on cost, performance, and features.
 - **OpenAI:** GPT-5.5 (default), GPT-5.4, GPT-5, GPT-Image-1, Whisper
 - **XAI/Grok:** Grok 4.3 (default for joke/meme/notes), Grok Imagine Image
 - **Anthropic:** Claude 3.5 Sonnet (text only)
-- **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 — optional, not part of fallback chain by default
-- **Ollama (local):** any installed model — free, fully offline notes; runs on Linux/macOS/Windows. The model is auto-selected to fit your GPU/VRAM (override with `SCRIBE_OLLAMA_MODEL`).
+- **Google Gemini:** Gemini 3 Pro, Gemini 3 Flash, Imagen 4 - optional, not part of fallback chain by default
+- **Ollama (local):** any installed model - free, fully offline notes; runs on Linux/macOS/Windows. The model is auto-selected to fit your GPU/VRAM (override with `SCRIBE_OLLAMA_MODEL`).
 
 ### Local, Free Notes with Ollama
 
-Generate meeting notes entirely on your machine — no API key, no cost, nothing leaves your device. Requires a running [Ollama](https://ollama.com) server with at least one model pulled.
+Generate meeting notes entirely on your machine - no API key, no cost, nothing leaves your device. Requires a running [Ollama](https://ollama.com) server with at least one model pulled.
 
 ```bash
 # Use your best installed local model (auto-selected for your VRAM)
@@ -486,11 +486,11 @@ Tuning knobs (all optional):
 
 ### Comparing Providers ("is local worth it?")
 
-One short command runs the same transcript through several providers and prints a cost / latency / quality scorecard plus a plain-English verdict. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric — and the judge is chosen automatically.
+One short command runs the same transcript through several providers and prints a cost / latency / quality scorecard plus a plain-English verdict. Quality is scored objectively (structured-fidelity, free and offline) plus an optional LLM-judge rubric - and the judge is chosen automatically.
 
 ```bash
 scribe compare meeting.md            # smart: your cloud default vs the best local model, auto-judged
-scribe compare meeting.md local      # every installed local model — free and offline
+scribe compare meeting.md local      # every installed local model - free and offline
 scribe compare meeting.md all        # everything you have keys/models for
 scribe compare meeting.md openai,ollama:gemma4:26b --judge openai   # explicit
 ```
@@ -501,10 +501,10 @@ model                                    cost     time   struct  judge
 openai:gpt-5.5                          $0.0120    4.2s   100.0%    9.1
 ollama:qwen2.5:14b                       $0.00    18.7s    94.0%    7.8
 
-→ Local qwen2.5:14b is worth it — comparable quality to gpt-5.5 (~$0.0120/run) at $0.00.
+→ Local qwen2.5:14b is worth it - comparable quality to gpt-5.5 (~$0.0120/run) at $0.00.
 ```
 
-(`scribe notes meeting.md --compare …` does the same thing if you prefer a flag.)
+(`scribe notes meeting.md --compare ...` does the same thing if you prefer a flag.)
 
 **Configuration:**
 ```bash
@@ -526,11 +526,11 @@ export SCRIBE_ENABLE_MEME_BAKEOFF=true
 
 **Images:**
 - Grok Imagine Image: priced per image by xAI; cost returned via `cost_in_usd_ticks`
-- GPT-Image-1: ~$0.04–$0.07 medium quality, ~$0.17–$0.25 high quality
+- GPT-Image-1: ~$0.04-$0.07 medium quality, ~$0.17-$0.25 high quality
 
 **Per-meme cost (default config, up to 3 QA attempts):**
-- gpt-image-1 medium: typically $0.05–$0.20
-- grok-imagine-image: typically $0.05–$0.15 (note: watermarked)
+- gpt-image-1 medium: typically $0.05-$0.20
+- grok-imagine-image: typically $0.05-$0.15 (note: watermarked)
 
 **xAI lifecycle note:** Scribe defaults to `grok-4.3` for joke/meme/notes. Older IDs retired by xAI on 2026-05-15 (`grok-4-fast`, `grok-4-1-fast`, `grok-4`, `grok-4.20-non-reasoning`, `grok-imagine-image-pro`) are no longer used. When xAI returns exact `cost_in_usd_ticks`, Scribe records the converted request cost in AI metrics.
 
@@ -812,10 +812,10 @@ See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the order
 - Type hints on public APIs and core logic
 
 **Primary Tools:**
-- **uv** — sole package + project manager (uv sync, uv run, uv.lock for reproducibility)
-- **ruff** — universal linter + formatter (replaced Black + isort)
+- **uv** - sole package + project manager (uv sync, uv run, uv.lock for reproducibility)
+- **ruff** - universal linter + formatter (replaced Black + isort)
 - **mypy --strict** on src/ (enforced in CI)
-- **pre-commit** — local gates before every commit (ruff + mypy + basic checks)
+- **pre-commit** - local gates before every commit (ruff + mypy + basic checks)
 - pytest + pytest-cov (80%+ gate enforced in CI)
 
 See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml) for the ordered plan and current gates.
@@ -916,7 +916,7 @@ Scribe automatically sets a browser User-Agent and retries with exponential back
 
 1. Ensure OBS WebSocket server is enabled: Tools → WebSocket Server Settings
 2. Check `SCRIBE_OBS_PASSWORD` in `.env` matches the OBS WebSocket password
-3. Scribe auto-launches OBS if not running — no need to start it manually
+3. Scribe auto-launches OBS if not running - no need to start it manually
 
 **"No recording file detected" error:**
 
@@ -926,7 +926,7 @@ Scribe automatically sets a browser User-Agent and retries with exponential back
 
 **OBS keeps asking about safe mode:**
 
-Scribe now handles this automatically — it kills stale OBS processes, cleans crash sentinel files, and launches with `--disable-shutdown-check`. If you still see the safe mode dialog, delete `%APPDATA%/obs-studio/global.ini` manually.
+Scribe now handles this automatically - it kills stale OBS processes, cleans crash sentinel files, and launches with `--disable-shutdown-check`. If you still see the safe mode dialog, delete `%APPDATA%/obs-studio/global.ini` manually.
 
 **To configure OBS WebSocket:**
 1. Open OBS Studio

@@ -1,7 +1,7 @@
 # ADR-002: Exception Taxonomy + Intentional Graceful Degradation for Hardware Variability
 
 ## Status
-Accepted — 2026
+Accepted - 2026
 
 ## Context
 Scribe's primary environment is a user's personal Windows desktop machine with highly variable:
@@ -38,11 +38,11 @@ However, a rigid "fail fast on any unexpected state" approach would make Scribe 
 - "Adapted NASA/JPL Power of 10" (as called for in the elevation) means applying the principles intelligently to a desktop tool, not purity theater that harms the product.
 
 ## Where Broad Catches Are Currently Accepted (with logging + recovery)
-- `src/scribe/core/recorder.py` — OBS WebSocket connection failures → CLI fallback; best-effort process cleanup; crash sentinel handling.
-- `src/scribe/utils/joke_bakeoff.py` and `meme_bakeoff.py` — individual provider or judging failures → continue or safe default.
-- `src/scribe/core/local_whisper.py` — non-critical analysis (silence detection, language ID) → safe defaults + warning.
-- `src/scribe/cli/main.py` — top-level command handlers (user UX boundary).
-- Various subprocess probes (nvidia-smi, tasklist, pgrep) — return safe "not present" state.
+- `src/scribe/core/recorder.py` - OBS WebSocket connection failures → CLI fallback; best-effort process cleanup; crash sentinel handling.
+- `src/scribe/utils/joke_bakeoff.py` and `meme_bakeoff.py` - individual provider or judging failures → continue or safe default.
+- `src/scribe/core/local_whisper.py` - non-critical analysis (silence detection, language ID) → safe defaults + warning.
+- `src/scribe/cli/main.py` - top-level command handlers (user UX boundary).
+- Various subprocess probes (nvidia-smi, tasklist, pgrep) - return safe "not present" state.
 
 All such sites were reviewed in Step 4 of the elevation. One minor `pass` without log was tightened; the rest were already correctly instrumented.
 

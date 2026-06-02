@@ -10,8 +10,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete history of changes, fixes, and
 
 The project is currently focused on two tracks that run in parallel:
 
-1. **Product reliability and polish** — continuing to harden the core transcription, recording, and intelligence features (see the Unreleased section of CHANGELOG.md for work in flight).
-2. **Engineering excellence** — systematically raising the quality, reproducibility, and verifiability of the codebase itself so the project remains maintainable for years.
+1. **Product reliability and polish** - continuing to harden the core transcription, recording, and intelligence features (see the Unreleased section of CHANGELOG.md for work in flight).
+2. **Engineering excellence** - systematically raising the quality, reproducibility, and verifiability of the codebase itself so the project remains maintainable for years.
 
 The remainder of this document addresses the second track.
 
@@ -25,7 +25,7 @@ Scribe is a **local-first desktop CLI** for high-quality speech transcription, m
 - Web UIs, servers, or multi-user/enterprise features.
 - Real-time or streaming transcription in the batch pipeline (batch file processing is simpler and more reliable). The separate, opt-in voice-I/O mode (`scribe listen` / `scribe say`) is the one deliberate exception and does not touch the batch pipeline (see ADR-008).
 - Cloud storage, account sync, or data exfiltration features (users control their own transcripts).
-- Library-first packaging or monorepo extraction — this remains a cohesive end-user product.
+- Library-first packaging or monorepo extraction - this remains a cohesive end-user product.
 - Chasing the absolute newest Python runtime or heavy observability stacks that would complicate local GPU usage or CLI UX.
 - Broad expansion into adjacent domains that would dilute the focused value of accurate, private, offline-capable transcription and analysis.
 
@@ -45,15 +45,15 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 | 2.4.1   | OBS WebSocket hardening        | Released  |
 | 2.4.0   | Recording UX polish            | Released  |
 | 2.3.x   | Multi-provider AI + music mode | Released  |
-| 2.0–2.2 | GPU acceleration + providers   | Released  |
+| 2.0-2.2 | GPU acceleration + providers   | Released  |
 
 ---
 
-## Product Direction (Competitive Gaps — Under Active Consideration)
+## Product Direction (Competitive Gaps - Under Active Consideration)
 
 As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscribe, Meetily, OpenWhispr, transcriptionstream, WhisperX) surfaced capabilities that are now table stakes and where Scribe has gaps. These are candidate product directions, recorded so the roadmap reflects reality. The Engineering Excellence track below is unaffected by them.
 
-1. **Local-only summarization (close the offline gap).** Notes and humor currently require a cloud provider (OpenAI/xAI/Anthropic/Gemini), so the "local-first, private, offline-capable" promise only holds for transcript-only use. Add an **Ollama / OpenAI-compatible local LLM provider** to the existing provider abstraction so notes can be generated fully offline. Highest priority — this reconciles a claim/reality gap rather than expanding scope, and slots into the current architecture cleanly.
+1. **Local-only summarization (close the offline gap).** Notes and humor currently require a cloud provider (OpenAI/xAI/Anthropic/Gemini), so the "local-first, private, offline-capable" promise only holds for transcript-only use. Add an **Ollama / OpenAI-compatible local LLM provider** to the existing provider abstraction so notes can be generated fully offline. Highest priority - this reconciles a claim/reality gap rather than expanding scope, and slots into the current architecture cleanly.
 
 2. **Local speaker diarization.** Diarization is currently API-only (`gpt-4o-transcribe-diarize`); the local GPU path produces no speaker labels. Evaluate **WhisperX + pyannote.audio** for word-level alignment and local "who said what." Pairs with the hardware-backend work below (item 4).
 
@@ -109,7 +109,7 @@ See the Engineering Excellence section for the concrete, sequenced work required
 
 ---
 
-## Engineering Excellence — Ordered Work Plan
+## Engineering Excellence - Ordered Work Plan
 
 The goal is a codebase that is reproducible, statically verifiable, and easy to maintain for the long term, while remaining pragmatic for a GPU-heavy CLI with complex ML dependencies (torch, faster-whisper, demucs, yt-dlp, etc.).
 
@@ -216,7 +216,7 @@ These are deliberate decisions to keep Scribe a focused, high-quality tool rathe
 - We will not run the free-threaded 3.14t build in CI while the core GPU/ML wheels lack reliable support on Windows.
 - We will not apply Design by Contract or strict parsing rules uniformly across CLI glue, UI layers, or provider code. These techniques are reserved for pure, critical business logic where they add clear value.
 - We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
-- We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation via `scribe listen`, read-aloud via `scribe say`) has shipped as a distinct product surface — see Product Direction item 5 and ADR-008. It does not touch the batch pipeline; adopting it was a deliberate decision, not a drift.
+- We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation via `scribe listen`, read-aloud via `scribe say`) has shipped as a distinct product surface - see Product Direction item 5 and ADR-008. It does not touch the batch pipeline; adopting it was a deliberate decision, not a drift.
 - "Local-first, private, offline-capable" is the goal, but note generation and humor currently require a cloud provider. Until the local LLM provider lands (Product Direction item 1), the fully-offline guarantee holds for transcript-only use; with a cloud provider, transcripts/notes are transmitted for analysis. This is documented honestly rather than overstated.
 - We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
 

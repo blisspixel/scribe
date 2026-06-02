@@ -1,7 +1,7 @@
 # ADR-001: Python 3.12 Baseline (with 3.14 Future Gate)
 
 ## Status
-Accepted — 2026
+Accepted - 2026
 
 ## Context
 The original Python Project Standards Brief (and early roadmap thinking) called for targeting Python 3.14 (or exact pin) with free-threaded builds for maximum performance and modernity.
