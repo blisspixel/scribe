@@ -33,21 +33,17 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 ---
 
-## What's New in v2.4.3
+## What's New in v2.5.0
 
-- **OBS Recording Reliability**: Fixed "OBS not ready" error (code 207) when OBS is starting up - now properly retries connection
-- **Windows Input Fix**: Fixed stop commands (stop, q, quit) not working during recording on Windows
-- **Better Error Handling**: Improved client cleanup and retry logic for OBS WebSocket connections
+- **Cross-platform Quick Record launcher**: `scribe shortcut` installs a native, icon-bearing launcher into your OS application menu (Windows Start Menu, macOS `~/Applications`, Linux app menu) that runs `scribe rec`. Supports `--desktop` and `--remove`, and replaces the old hand-made batch file.
+- **A real app icon**: a terminal prompt with a soundwave cursor, bundled for Windows, macOS, and Linux.
+- **Global install**: documented `uv tool install` so the `scribe` command works from any directory on all three platforms, plus a `python -m scribe` entry point.
+- **Cross-platform recording**: the OBS integration now resolves its config directory and launches OBS correctly on macOS and Linux, not just Windows.
+- **Cleaner startup**: connection retries the recorder recovers from no longer print tracebacks, and a noisy pydub import warning is suppressed.
+- **First-run config wizard** (`scribe init`) writes `~/.scribe/config.toml`, and its AI vendor choice is now actually used for provider selection.
+- **Correctness fixes**: a configured `default_method` is honored, language and filename-date parsing are stricter, invalid API keys fail fast, and several smaller bugs are fixed.
 
-## Unreleased — Setup Wizard, Model Bumps
-
-- **First-run config wizard** (`scribe init`) writes `~/.scribe/config.toml` with output folder, transcription method, default features (notes/joke/meme), and AI vendor preference. Auto-prompts on first run; env vars and CLI flags continue to override.
-- **OpenAI default → GPT-5.5** (was GPT-5.2). The April 2026 release supersedes 5.4 and 5.2.
-- **xAI default → Grok 4.3 across the board** (notes, joke, meme). Drops `grok-4.20-non-reasoning` ahead of its 2026-05-15 retirement.
-- **Progress bar fix**: caps mid-flight progress at 99% so the bar no longer rounds 99.98% to "100%" while finalization is still running.
-- **`.env` discovery**: walks up to project root in editable installs (was stuck at `src/`). Wizard sees existing API keys when invoked from outside the project directory.
-
-See [ROADMAP](ROADMAP.md) for version history and [Architecture Guide](docs/ARCHITECTURE.md) for technical details.
+See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for direction.
 
 ## Recent Changes
 
@@ -937,7 +933,7 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.4.3 (workspace ahead of release: setup wizard, gpt-5.5 / grok-4.3 defaults, progress-bar fix)
+**Current Version:** 2.5.0 (cross-platform Quick Record launcher and app icon, macOS/Linux recording, plus correctness fixes)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
 **Last Updated:** 2026-06-01

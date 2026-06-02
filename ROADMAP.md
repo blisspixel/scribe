@@ -39,7 +39,8 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Primary Focus                  | Status    |
 |---------|--------------------------------|-----------|
-| 2.4.3   | OBS recording reliability      | Current   |
+| 2.5.0   | Cross-platform launcher + icon | Current   |
+| 2.4.3   | OBS recording reliability      | Released  |
 | 2.4.2   | Code quality + .env handling   | Released  |
 | 2.4.1   | OBS WebSocket hardening        | Released  |
 | 2.4.0   | Recording UX polish            | Released  |

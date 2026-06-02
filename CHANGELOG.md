@@ -8,7 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-06-01
+
 ### Added
+- Cross-platform "Quick Record" launcher: `scribe shortcut` installs a native, icon-bearing launcher into the OS application menu (a Windows Start Menu shortcut, a macOS `.app` bundle, a Linux `.desktop` entry) that runs `scribe rec`, with `--desktop` and `--remove`. It replaces the hand-made Windows batch file.
+- Scribe application icon, a terminal prompt with a soundwave cursor, bundled as `.ico`, `.icns`, and `.png` and applied to the launchers.
+- `python -m scribe` entry point.
+- Documented global install via `uv tool install`, so `scribe` runs from any directory on Windows, macOS, and Linux.
 - URL transcription command (`scribe url`) supporting YouTube, Vimeo, X/Twitter, direct links, and 1000+ sites via yt-dlp.
 - Browser cookie support for yt-dlp downloads (`--cookies edge|chrome|firefox`).
 - First-run configuration wizard (`scribe init`) that writes `~/.scribe/config.toml`.
@@ -25,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `.env` discovery now walks up to project root for editable installs.
 - Transcript input for `notes`, `joke`, and `meme` now accepts `.txt`, `.md`, and `.docx`.
 - Cleaner CLI branding and panel headers across commands.
+- Recorder now works correctly on macOS and Linux: the OBS configuration directory is resolved per platform (fixing the macOS path used for safe-mode handling), and OBS is launched via `open` on macOS.
+- The CLI starts cleanly: connection retries the recorder already recovers from no longer print obsws-python tracebacks, and pydub's first-import warnings are suppressed.
 
 ### Fixed
 - OBS "not ready" (code 207) errors with proper retry and backoff.
@@ -37,6 +45,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Download temp file leaks on transcription failure (now cleaned in `finally`).
 - Various runtime bugs, undefined variables, missing f-string placeholders, and unused imports.
 - Test isolation issues (mocks, environment variables, Rich display conflicts).
+- `default_method` from `SCRIBE_DEFAULT_METHOD` or `config.toml` is now honored when no `--method` flag is given; it was previously ignored.
+- The setup wizard's AI vendor choice in `config.toml [providers]` is now used for provider selection; it was written but never read.
+- Language validation resolves non-ASCII native language names to their ISO code instead of returning them unchanged.
+- Filename date parsing rejects unrelated digit runs and impossible dates instead of producing a bogus date.
+- OpenAI transcription fails fast on an invalid API key instead of retrying through the full backoff for every chunk.
+- The cleanup summary reports the real space freed instead of always reporting 0.0 MB.
+- The Anthropic provider no longer sends a null temperature (which the API rejects) on the structured-output path.
+- Requesting JSON output alongside an image no longer raises a TypeError.
+- Sub-minute durations render in seconds (for example `45s`) instead of `0m`.
 
 ### Engineering
 - 1,143 tests collected with strong coverage of error paths.
