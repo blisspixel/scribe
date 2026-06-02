@@ -20,6 +20,7 @@ from pydub.silence import split_on_silence
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from scribe.exceptions import APIError, TranscriptionError
+from scribe.models.transcript import Transcript, TranscriptSegment
 from scribe.utils.files import (
     extract_date_from_filename,
     format_date,
@@ -57,6 +58,9 @@ class OpenAITranscriber:
         self.model = model
         self.use_server_chunking = use_server_chunking
         self.client = OpenAI(api_key=api_key)
+        # Structured transcript from the most recent transcription, for reuse by the
+        # structured-output writers without re-parsing the rendered text.
+        self.last_transcript: Transcript | None = None
 
         logger.debug(f"Initialized OpenAI transcriber with model: {model}")
 
@@ -120,8 +124,9 @@ class OpenAITranscriber:
             # Extract text and format with speaker labels if available
             logger.info("Processing transcription response...")
 
-            # Format the output
+            # Format the output, and keep the structured transcript for downstream writers.
             formatted_text = self._format_transcript_response(transcript_response, audio_path)
+            self.last_transcript = self._response_to_transcript(transcript_response)
 
             # Write output
             logger.info(f"Writing transcript to: {output_path}")
@@ -230,6 +235,60 @@ class OpenAITranscriber:
             lines.append(str(response).strip())
 
         return "\n".join(lines)
+
+    def _response_to_transcript(self, response: Any) -> Transcript:
+        """Build the structured Transcript from an API response.
+
+        Mirrors the extraction in _format_transcript_response but yields typed
+        segments (with speaker labels) instead of rendered lines.
+        """
+        duration: float | None = None
+        raw_duration = getattr(response, "duration", None)
+        if isinstance(raw_duration, (int, float)):
+            duration = float(raw_duration)
+
+        segments: list[TranscriptSegment] = []
+        if isinstance(response, str):
+            text = response.strip()
+            if text:
+                segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
+            return Transcript(
+                segments=segments, duration=duration, backend="openai", model=self.model
+            )
+
+        # Try the diarized/segmented shape, falling back to a plain text blob the same
+        # way the renderer does, so a malformed response never crashes.
+        try:
+            raw_segments = getattr(response, "segments", None)
+            for segment in raw_segments or []:
+                if isinstance(segment, dict):
+                    start = float(segment.get("start", 0) or 0)
+                    end = float(segment.get("end", start) or start)
+                    text = str(segment.get("text", "")).strip()
+                    speaker = segment.get("speaker")
+                else:
+                    start = float(getattr(segment, "start", 0) or 0)
+                    end = float(getattr(segment, "end", start) or start)
+                    text = str(getattr(segment, "text", "")).strip()
+                    speaker = getattr(segment, "speaker", None)
+                if not text:
+                    continue
+                segments.append(
+                    TranscriptSegment(
+                        start=start, end=max(start, end), text=text, speaker=speaker or None
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Could not structure segments, using plain text: {e}")
+            segments = []
+
+        if not segments:
+            blob = getattr(response, "text", None)
+            text = str(blob).strip() if blob else ""
+            if text:
+                segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
+
+        return Transcript(segments=segments, duration=duration, backend="openai", model=self.model)
 
     def _format_timestamp(self, seconds: float) -> str:
         """Format seconds as HH:MM:SS."""

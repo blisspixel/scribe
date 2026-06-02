@@ -12,6 +12,7 @@ from typing import Any
 
 from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
+from scribe.models.transcript import Transcript, TranscriptSegment
 from scribe.utils.audio import detect_silence_periods, format_timestamp, get_audio_duration
 from scribe.utils.files import extract_date_from_filename, format_date, format_duration_minutes
 from scribe.utils.gpu import clear_gpu_cache, set_gpu_optimizations
@@ -75,6 +76,9 @@ class LocalWhisperTranscriber:
             logger.info(f"  FP16: {gpu_config.use_fp16}")
 
         self.model: Any | None = None
+        # The structured transcript from the most recent transcribe() call, so callers
+        # (and the structured-output writers) can reuse the segments without re-parsing.
+        self.last_transcript: Transcript | None = None
 
     def detect_language(
         self, audio_path: Path, sample_duration: int = 30
@@ -312,8 +316,8 @@ class LocalWhisperTranscriber:
 
     def _execute_transcription(
         self, audio_path: Path, duration: float | None, initial_prompt: str
-    ) -> list[dict[str, float | str]]:
-        """Execute the actual transcription and return segments."""
+    ) -> Transcript:
+        """Execute the actual transcription and return a structured Transcript."""
         if duration:
             duration_mins = int(duration / 60)
             logger.info(f"Transcribing {duration_mins} min audio with Whisper {self.model_size}...")
@@ -322,7 +326,7 @@ class LocalWhisperTranscriber:
         if model is None:
             raise TranscriptionError("Whisper model failed to load")
 
-        segments_iter, _info = model.transcribe(
+        segments_iter, info = model.transcribe(
             str(audio_path),
             language=self.language,
             vad_filter=True,
@@ -334,11 +338,17 @@ class LocalWhisperTranscriber:
             initial_prompt=initial_prompt,
         )
 
-        segments = []
-        for segment in segments_iter:
-            segments.append({"start": segment.start, "end": segment.end, "text": segment.text})
-
-        return segments
+        segments = [
+            TranscriptSegment(start=segment.start, end=segment.end, text=segment.text)
+            for segment in segments_iter
+        ]
+        return Transcript(
+            segments=segments,
+            language=getattr(info, "language", self.language),
+            duration=duration,
+            backend="faster-whisper",
+            model=self.model_size,
+        )
 
     def transcribe(
         self,
@@ -383,10 +393,11 @@ class LocalWhisperTranscriber:
         start_time = time.time()
 
         try:
-            segments = self._execute_transcription(audio_path, duration, prompt)
+            transcript = self._execute_transcription(audio_path, duration, prompt)
+            self.last_transcript = transcript
             elapsed = time.time() - start_time
 
-            if not segments:
+            if not transcript.segments:
                 if duration and duration < 1.0:
                     raise TranscriptionError(
                         "Audio file is too short (less than 1 second)",
@@ -407,10 +418,9 @@ class LocalWhisperTranscriber:
 
             # Write transcript
             self._write_clean_transcript(
-                segments=segments,
+                transcript=transcript,
                 output_path=output_path,
                 audio_path=audio_path,
-                duration=duration,
                 silence_periods=silence_periods,
             )
 
@@ -430,10 +440,9 @@ class LocalWhisperTranscriber:
 
     def _write_clean_transcript(
         self,
-        segments: list[dict[str, Any]],
+        transcript: Transcript,
         output_path: Path,
         audio_path: Path,
-        duration: float | None,
         silence_periods: list[tuple[float, float]],
     ) -> None:
         """
@@ -446,6 +455,7 @@ class LocalWhisperTranscriber:
         - Silence markers for gaps
         - NO technical metadata
         """
+        duration = transcript.duration
         with open(output_path, "w", encoding="utf-8") as f:
             # Extract meeting info
             meeting_name = audio_path.stem.replace("_16k_mono", "").replace("_converted", "")
@@ -471,11 +481,11 @@ class LocalWhisperTranscriber:
             # Write transcript with silence markers
             last_end = 0.0
 
-            for segment in segments:
+            for segment in transcript.segments:
                 # Check for silence gaps
                 if silence_periods:
                     for silence_start, silence_end in silence_periods:
-                        if last_end < silence_start < segment["start"]:
+                        if last_end < silence_start < segment.start:
                             silence_duration = silence_end - silence_start
                             if silence_duration > 120:  # 2+ minutes
                                 silence_mins = silence_duration / 60
@@ -495,13 +505,13 @@ class LocalWhisperTranscriber:
                                 break
 
                 # Write segment (without timestamp)
-                text = segment["text"].strip()
+                text = segment.text.strip()
 
                 if text:
                     f.write(f"{text}\n\n")
                     f.flush()
 
-                last_end = segment["end"]
+                last_end = segment.end
 
             # Final flush
             f.flush()
