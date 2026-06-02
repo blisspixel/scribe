@@ -6,6 +6,7 @@ This module provides conversion to optimal formats for transcription:
 - Optimized MP3 for OpenAI API transcription
 """
 
+import math
 import subprocess
 import time
 from collections.abc import Callable
@@ -30,6 +31,14 @@ from scribe.utils.platform import get_ffmpeg_path
 logger = get_logger(__name__)
 
 
+def _is_finite_number(value: Any) -> bool:
+    """True if ``value`` parses as a finite float (not -inf/inf/nan)."""
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
 class Converter:
     """
     Audio/video format converter with progress tracking.
@@ -42,8 +51,16 @@ class Converter:
         """Initialize converter and validate ffmpeg availability."""
         self.ffmpeg_path = get_ffmpeg_path()
         if not self.ffmpeg_path:
+            import platform
+
+            install = {
+                "Windows": "winget install FFmpeg.FFmpeg",
+                "Darwin": "brew install ffmpeg",
+                "Linux": "sudo apt install ffmpeg",
+            }.get(platform.system(), "install ffmpeg from https://ffmpeg.org/download.html")
             raise ProcessError(
-                "ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.",
+                f"ffmpeg not found. Install it with: {install}\n"
+                "Then re-run, or run `scribe doctor` to verify.",
                 context={"ffmpeg_path": None},
             )
 
@@ -133,6 +150,17 @@ class Converter:
                         "measured_lra": loudnorm_data.get("input_lra", "11"),
                         "measured_thresh": loudnorm_data.get("input_thresh", "-27"),
                     }
+                    # Near-silent or empty audio makes ffmpeg report "-inf" for these,
+                    # which the second loudnorm pass then rejects. Fall back to the
+                    # standard targets so silent intros/instrumentals still convert.
+                    if not all(_is_finite_number(v) for v in measured.values()):
+                        logger.info(
+                            "Loudnorm measurements are not finite (near-silent audio); "
+                            "using default normalization"
+                        )
+                        if show_progress and progress_ctx:
+                            progress_ctx.update(task, description="Using default settings")
+                        return defaults
                     logger.info(
                         f"Audio analysis complete: I={measured['measured_i']}, TP={measured['measured_tp']}"
                     )

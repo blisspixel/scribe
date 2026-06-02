@@ -870,22 +870,26 @@ class TestKillExistingObs:
     @patch("scribe.core.recorder.subprocess.run")
     @patch("scribe.utils.platform.is_windows", return_value=False)
     def test_kill_linux(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Kill on Linux calls pkill."""
+        """Kill on Linux calls pkill -x for each exact process name (obs, OBS)."""
         with patch.object(recorder, "_obs_process_running", return_value=False):
             with patch.object(recorder, "_clean_obs_crash_sentinel"):
                 recorder._kill_existing_obs()
-        assert mock_run.call_count == 1
+        assert mock_run.call_count == 2
+        # Exact-name match, never the dangerous "-f obs" substring match.
+        for call in mock_run.call_args_list:
+            assert "-x" in call.args[0]
+            assert "-f" not in call.args[0]
 
     @patch("scribe.core.recorder.time.sleep")
     @patch("scribe.core.recorder.subprocess.run")
     @patch("scribe.utils.platform.is_windows", return_value=False)
     def test_kill_linux_retry(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Linux retries with -9 when process survives."""
+        """Linux retries with -9 when process survives (two exact names each pass)."""
         with patch.object(recorder, "_obs_process_running", return_value=True):
             with patch.object(recorder, "_clean_obs_crash_sentinel"):
                 recorder._kill_existing_obs()
-        # 1 initial pkill + 1 pkill -9
-        assert mock_run.call_count == 2
+        # 2 initial pkill -x (obs, OBS) + 2 pkill -9 -x (obs, OBS)
+        assert mock_run.call_count == 4
 
     @patch("scribe.core.recorder.time.sleep")
     @patch("scribe.core.recorder.subprocess.run")

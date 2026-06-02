@@ -221,25 +221,28 @@ class TestMemeGeneratorSafetyHandling:
         )
 
         assert result is not None
-        # Spice level should be reduced by 2
-        assert config.spice_level == 5
+        # The safety reduction is applied to a local copy; the caller's shared config
+        # must NOT be mutated (mutating it would lower spice for the rest of the run).
+        assert config.spice_level == 7
 
-    def test_spice_level_reduction_respects_minimum(self):
-        """Test that spice level reduction doesn't go below 1."""
+    def test_safety_reduction_does_not_mutate_shared_config(self):
+        """The make_safer path must not mutate the caller's config (even near the floor)."""
         from scribe.utils.meme_generator import _analyze_transcript_for_meme
 
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.output_text = '{"template": "test", "concept": "test", "top_text": "A", "bottom_text": "B", "image_prompt": "test"}'
-        mock_response.output = []
-        mock_client.responses.create.return_value = mock_response
+        mock_provider = Mock()
+        mock_provider.chat_completion.return_value = {
+            "content": '{"template": "t", "concept": "c", "top_text": "A", "bottom_text": "B", "image_prompt": "p"}',
+            "usage": {"total_tokens": 10},
+        }
 
         config = MemeConfig(spice_level=2)
 
-        _analyze_transcript_for_meme(mock_client, "Test transcript", config, make_safer=True)
+        _analyze_transcript_for_meme(
+            mock_provider, "Test transcript", config, show_reasoning=False, make_safer=True
+        )
 
-        # Should be max(1, 2-2) = 1
-        assert config.spice_level == 1
+        # Unchanged: the internal reduction (max(1, 2-2)=1) applies to a local copy only.
+        assert config.spice_level == 2
 
     def test_generate_meme_image_safety_block_detection(self):
         """Test that safety blocks are detected correctly."""

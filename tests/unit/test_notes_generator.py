@@ -493,19 +493,13 @@ class TestNotesGeneratorHelpers:
 
         assert breakdown == repaired_breakdown
 
-        monkeypatch_dir = tmp_path / "debug"
-        monkeypatch_dir.mkdir()
-        current_dir = os.getcwd()
-        os.chdir(monkeypatch_dir)
-        try:
-            with patch.object(generator, "_call_gpt5_api", return_value=("{bad json", {})):
-                with pytest.raises(
-                    NotesGenerationError, match="Failed to generate analytical breakdown"
-                ):
-                    generator._generate_analytical_breakdown("transcript", "summary")
-            assert (monkeypatch_dir / "debug_json_response.txt").exists()
-        finally:
-            os.chdir(current_dir)
+        # Unrepairable JSON raises a clean NotesGenerationError (the debug dump is now
+        # opt-in via SCRIBE_DEBUG_JSON and written to the temp dir, not the CWD).
+        with patch.object(generator, "_call_gpt5_api", return_value=("{bad json", {})):
+            with pytest.raises(
+                NotesGenerationError, match="Failed to generate analytical breakdown"
+            ):
+                generator._generate_analytical_breakdown("transcript", "summary")
 
         original_breakdown = {
             "current_state_business": ["Business"],
