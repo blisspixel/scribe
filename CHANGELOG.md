@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-06-01
+
 ### Added
 - Shared `Transcript` domain model (segments, speakers, confidence, provenance) produced by the local and API transcription paths, so structured data is no longer discarded after writing the `.txt`.
 - Structured output: every transcription writes a machine-readable JSON transcript next to the `.txt` by default, with optional WebVTT, SRT, and Markdown (YAML frontmatter) via `--format` or the `SCRIBE_OUTPUT_FORMATS` setting.
@@ -15,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Hardware-adaptive local backends: local transcription now picks the engine that fits the machine instead of being CUDA-only. NVIDIA and CPU stay on faster-whisper (unchanged), Apple Silicon can use mlx-whisper (Metal) via `pip install "scribe[mlx]"`, and AMD/Intel/Apple can use whisper.cpp via `pip install "scribe[whispercpp]"`. Selection is automatic by detected vendor, overridable with `SCRIBE_LOCAL_BACKEND` or `local_backend` in config, and always falls back to a working CPU path. `scribe info` reports the detected vendor, the selected backend, and which optional engines are installed.
 - Local speaker diarization: local transcription can now label "who said what" on-device with pyannote.audio, populating the same speaker field the cloud path uses, so the `.txt` and the JSON/VTT/SRT/Markdown outputs all show speakers. Opt in with `--diarize` (or `enable_speaker_diarization` in config); it needs an `HF_TOKEN` and the `scribe[diarize]` extra, and degrades to unlabeled output when either is missing.
 - Voice I/O mode: `scribe listen` dictates speech into the focused window (F9 toggles, Esc quits) and `scribe say` reads a transcript or notes file aloud with an offline local voice. A deliberate opt-in real-time mode separate from the batch pipeline, behind the `scribe[voice]` extra (sounddevice, pynput, pyperclip, pyttsx3).
+
+### Engineering
+- Dependency-preference policy (ADR-009): pure-Python by default, with heavy or platform-specific dependencies isolated in optional extras (`mlx`, `whispercpp`, `diarize`, `voice`, `whisperx`) so the base install stays lean and cross-platform.
+- Advisory mutation-testing CI job (`mutmut`) over the pure, property-tested core (transcript model, backend selection, diarization alignment, voice endpointing, output writers). Non-blocking and outside the CI gate aggregator; a surviving mutant flags a missing test rather than failing the build.
+- Hardware and live-I/O glue that cannot run in CI is marked `pragma: no cover` with a stated reason instead of being padded with fake tests; the 80% line-coverage gate stays honest with a documented path toward 90%.
 
 ## [2.5.0] - 2026-06-01
 
@@ -167,6 +174,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[2.6.0]: https://github.com/blisspixel/scribe/releases/tag/v2.6.0
 [2.4.3]: https://github.com/blisspixel/scribe/releases/tag/v2.4.3
 [2.4.2]: https://github.com/blisspixel/scribe/releases/tag/v2.4.2
 [2.4.1]: https://github.com/blisspixel/scribe/releases/tag/v2.4.1

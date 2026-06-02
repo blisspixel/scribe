@@ -33,15 +33,13 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 ---
 
-## What's New in v2.5.0
+## What's New in v2.6.0
 
-- **Cross-platform Quick Record launcher**: `scribe shortcut` installs a native, icon-bearing launcher into your OS application menu (Windows Start Menu, macOS `~/Applications`, Linux app menu) that runs `scribe rec`. Supports `--desktop` and `--remove`, and replaces the old hand-made batch file.
-- **A real app icon**: a terminal prompt with a soundwave cursor, bundled for Windows, macOS, and Linux.
-- **Global install**: documented `uv tool install` so the `scribe` command works from any directory on all three platforms, plus a `python -m scribe` entry point.
-- **Cross-platform recording**: the OBS integration now resolves its config directory and launches OBS correctly on macOS and Linux, not just Windows.
-- **Cleaner startup**: connection retries the recorder recovers from no longer print tracebacks, and a noisy pydub import warning is suppressed.
-- **First-run config wizard** (`scribe init`) writes `~/.scribe/config.toml`, and its AI vendor choice is now actually used for provider selection.
-- **Correctness fixes**: a configured `default_method` is honored, language and filename-date parsing are stricter, invalid API keys fail fast, and several smaller bugs are fixed.
+- **Structured, queryable output**: every transcription writes a machine-readable JSON transcript next to the `.txt` (optional WebVTT, SRT, and Markdown via `--format`), and `scribe query` does keyword and speaker search across them to find a moment from past meetings.
+- **Hardware-adaptive local backends**: local transcription picks the engine for your machine instead of being CUDA-only, NVIDIA and CPU on faster-whisper, Apple Silicon on mlx-whisper (`scribe[mlx]`), AMD/Intel/Apple on whisper.cpp (`scribe[whispercpp]`), always with a working CPU fallback.
+- **Local speaker diarization**: label "who said what" fully offline with `--diarize` (`scribe[diarize]` + `HF_TOKEN`), filling the same speaker field in every output that the cloud path uses.
+- **Voice I/O mode**: `scribe listen` dictates speech into the focused window and `scribe say` reads a file aloud with a local offline voice, a deliberate opt-in mode behind `scribe[voice]`.
+- **Engineering**: a shared `Transcript` domain model underpins all of the above, a dependency-preference policy keeps the base install lean (heavy/platform deps are extras), and an advisory mutation-testing CI job guards the pure core.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for direction.
 
@@ -58,7 +56,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 
 **Core Value:**
 - Record or import audio/video files
-- Get accurate transcripts (speaker identification in API mode; local diarization is on the roadmap)
+- Get accurate transcripts with speaker identification (cloud diarization in API mode, or local diarization with `--diarize`)
 - Receive structured meeting notes with decisions and action items (currently via a cloud AI provider)
 - Optional context-aware humor (jokes and memes)
 - Output in TXT, DOCX, Markdown, and PNG formats
