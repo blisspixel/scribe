@@ -1,7 +1,7 @@
-# ADR-003: Ruff Typography — Allowed Confusables for Readability
+# ADR-003: Ruff Typography - Allowed Confusables for Readability
 
 ## Status
-Accepted — 2026
+Accepted - 2026
 
 ## Context
 During Step 2 of the elevation (full Ruff enforcement), enabling `RUF001` (ambiguous unicode characters) surfaced a small number of intentional uses of characters that look similar to ASCII but improve readability or match external conventions in a transcription + humor analysis tool.
@@ -22,7 +22,7 @@ The project chose a line-length of 100 (slightly above the common 88/79) and val
 ## Rationale
 - A humor/transcription tool that deals with real human language (including punctuation, quotes, dashes in notes) benefits from being able to render text that matches user expectations and source material.
 - Strict ASCII-only would have required escaping or replacement in many user-visible strings, harming the "feels like a thoughtful local tool" experience.
-- The allowance is narrow, reviewed, and documented — not a free pass for Unicode golf.
+- The allowance is narrow, reviewed, and documented - not a free pass for Unicode golf.
 
 ## Consequences
 - Slightly larger allowed-confusables list than a pure infrastructure library would have.

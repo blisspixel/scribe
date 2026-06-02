@@ -5,7 +5,7 @@
 
 ---
 
-## 📁 Current Structure
+## Current Structure
 
 ### docs/ (Core Documentation)
 
@@ -43,7 +43,7 @@ Contains API research, feature research notes, and implementation experiments.
 
 ---
 
-## 🎯 Documentation Guidelines
+## Documentation Guidelines
 
 ### What Goes Where
 

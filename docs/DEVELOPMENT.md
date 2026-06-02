@@ -9,9 +9,9 @@
 - Git
 - FFmpeg
 - (Optional) NVIDIA GPU with CUDA 12.4+
-- **uv** (recommended for development — https://docs.astral.sh/uv/)
+- **uv** (recommended for development - https://docs.astral.sh/uv/)
 
-### Clone and Setup (Recommended — uv)
+### Clone and Setup (Recommended - uv)
 
 ```bash
 git clone https://github.com/blisspixel/scribe.git
@@ -35,7 +35,7 @@ pip install -e .
 
 > **Note:** The requirements*.txt files are now legacy. The single source of truth is `pyproject.toml` + `uv.lock`. The legacy files may drift.
 
-See [ROADMAP.md](ROADMAP.md) Step 1 (Reproducible Environment Foundation — now complete) for the rationale and current state.
+See [ROADMAP.md](ROADMAP.md) Step 1 (Reproducible Environment Foundation - now complete) for the rationale and current state.
 
 ### Configuration
 ```bash

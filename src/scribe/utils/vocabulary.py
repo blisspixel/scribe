@@ -112,16 +112,16 @@ WHAT WE ACTUALLY KNOW (HONEST ASSESSMENT):
 We haven't formally measured effectiveness. These are OBSERVATIONS from usage:
 
 **Works well for:**
-- ✅ Proper nouns: "Kubernetes" instead of "coober netties"
-- ✅ Capitalization: "PostgreSQL" instead of "post gray sequel"
-- ✅ Technical terms: "OAuth" instead of "oh auth"
-- ✅ Company names: "Acme Corporation" instead of "acme corporation"
+- Proper nouns: "Kubernetes" instead of "coober netties"
+- Capitalization: "PostgreSQL" instead of "post gray sequel"
+- Technical terms: "OAuth" instead of "oh auth"
+- Company names: "Acme Corporation" instead of "acme corporation"
 
 **Doesn't always work:**
-- ❌ Still makes mistakes even with vocabulary
-- ❌ Doesn't fix grammatical errors
-- ❌ Doesn't help with homophones (to/too/two)
-- ❌ Irrelevant terms don't help (and may hurt)
+- Still makes mistakes even with vocabulary
+- Doesn't fix grammatical errors
+- Doesn't help with homophones (to/too/two)
+- Irrelevant terms don't help (and may hurt)
 
 **We don't know:**
 - Exact improvement percentage (no formal testing)
