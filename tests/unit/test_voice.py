@@ -179,7 +179,7 @@ def test_run_say_clipboard_dispatch(monkeypatch):
 
     from scribe.cli import voice
 
-    monkeypatch.setattr(voice, "_read_clipboard", lambda console: "")
+    monkeypatch.setattr(voice, "_read_clipboard", lambda _c: "")
     assert voice.run_say(Console(), None, use_clipboard=True) == 1
 
 
@@ -188,7 +188,7 @@ def test_run_say_selection_dispatch(monkeypatch):
 
     from scribe.cli import voice
 
-    monkeypatch.setattr(voice, "_read_selection", lambda console: "")
+    monkeypatch.setattr(voice, "_read_selection", lambda _c: "")
     assert voice.run_say(Console(), None, use_selection=True) == 1
 
 
