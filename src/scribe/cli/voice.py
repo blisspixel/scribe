@@ -310,7 +310,23 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
 
-    console.print("[cyan]Dictation ready. Speak; F9 toggles, Esc quits.[/cyan]")
+    # Dictation owns the clipboard while running; remember the user's contents so we
+    # can put them back on exit instead of silently clobbering them.
+    prior_clipboard: str | None = None
+    if pyperclip is not None:
+        try:
+            prior_clipboard = pyperclip.paste()
+        except Exception:
+            prior_clipboard = None
+
+    console.print(
+        "[bold cyan]DICTATION LIVE[/bold cyan] - your speech is typed into the focused "
+        "window. F9 pauses, Esc quits."
+    )
+    console.print(
+        "[yellow]Keep focus on a text field; do not dictate near a terminal or "
+        "password field.[/yellow]"
+    )
     try:
         with sd.RawInputStream(
             samplerate=sample_rate, blocksize=frame_samples, dtype="int16", channels=1
@@ -340,6 +356,12 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         pass
     finally:
         listener.stop()
+        # Restore whatever the user had on the clipboard before dictation.
+        if pyperclip is not None and prior_clipboard is not None:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                pyperclip.copy(prior_clipboard)
 
     console.print("[green]Dictation stopped.[/green]")
     return 0

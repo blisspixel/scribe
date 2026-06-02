@@ -8,6 +8,8 @@ keep working unchanged.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -65,6 +67,10 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
 def save_config_file(data: dict[str, Any]) -> Path:
     """Write the TOML config, creating the parent dir if needed."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    # Keep ~/.scribe owner-only so it is locked down before any sensitive value
+    # could ever be written there (no-op on platforms without POSIX modes).
+    with contextlib.suppress(OSError):
+        os.chmod(CONFIG_DIR, 0o700)
     lines: list[str] = []
 
     def section(name: str, body: dict[str, Any]) -> None:
@@ -81,6 +87,8 @@ def save_config_file(data: dict[str, Any]) -> Path:
     section("providers", data.get("providers", {}))
 
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        os.chmod(CONFIG_PATH, 0o600)
     return CONFIG_PATH
 
 

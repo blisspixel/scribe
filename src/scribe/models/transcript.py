@@ -14,12 +14,18 @@ illegal segment (end before start, confidence out of range) cannot be built.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 
 def _check_span(start: float, end: float) -> None:
+    # Reject non-finite values (NaN/inf) up front: NaN slips past every ordering
+    # comparison below and would later crash the SRT/VTT writers. External engine
+    # or provider responses can produce these, so guard at construction.
+    if not (math.isfinite(start) and math.isfinite(end)):
+        raise ValueError(f"start and end must be finite, got start={start}, end={end}")
     if start < 0:
         raise ValueError(f"start must be non-negative, got {start}")
     if end < start:

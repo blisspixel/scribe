@@ -5,11 +5,43 @@ This module provides comprehensive validation functions for all user inputs,
 file paths, API keys, and configuration values with clear error messages.
 """
 
+import ipaddress
+import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from scribe.exceptions import ValidationError
 from scribe.utils.platform import normalize_path
+
+
+def _is_internal_host(host: str) -> bool:
+    """True if a host points at loopback, link-local, private, or internal targets.
+
+    Used to keep media downloads from being aimed at localhost or an internal
+    network (SSRF), including the cloud metadata endpoint at 169.254.169.254.
+    Literal IPs are checked precisely; bare/internal hostnames are matched by name.
+    DNS rebinding (a public name resolving to an internal IP) is not covered here.
+    """
+    if not host:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        )
+    except ValueError:
+        lowered = host.lower().rstrip(".")
+        return (
+            lowered == "localhost"
+            or lowered.endswith((".localhost", ".local", ".internal"))
+            or "." not in lowered  # bare hostnames are intranet by convention
+        )
 
 
 def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = True) -> Path:
@@ -236,6 +268,21 @@ def sanitize_meeting_name(name: str) -> str:
 
     # Remove leading/trailing underscores
     name = name.strip("_")
+
+    # Strip control characters and trailing dots/spaces (Windows trims trailing dots
+    # and spaces from filenames, which can produce surprising or colliding names).
+    name = "".join(ch for ch in name if ch.isprintable())
+    name = name.rstrip(". ").strip("_")
+
+    # Avoid Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9),
+    # which do not behave as ordinary files. Compare on the stem before any dot.
+    reserved = (
+        {"CON", "PRN", "AUX", "NUL"}
+        | {f"COM{i}" for i in range(1, 10)}
+        | {f"LPT{i}" for i in range(1, 10)}
+    )
+    if name.split(".")[0].upper() in reserved:
+        name = f"_{name}"
 
     # Limit length (leave room for timestamps and extensions)
     max_length = 100
@@ -597,6 +644,26 @@ def validate_media_url(url: str) -> str:
     if not url.lower().startswith(("http://", "https://")):
         raise ValidationError(
             "Only http:// and https:// URLs are supported", context={"provided": url}
+        )
+
+    parsed = urlparse(url)
+
+    # Embedded credentials (user:pass@host) are almost always a mistake or an attempt
+    # to smuggle auth to an internal target; reject them.
+    if parsed.username or parsed.password:
+        raise ValidationError(
+            "URLs with embedded credentials are not supported", context={"provided": url}
+        )
+
+    # Refuse loopback/internal targets by default so a copied or forwarded link cannot
+    # turn into a request against localhost or an internal service (SSRF). A user who
+    # genuinely transcribes from a local media server can opt in.
+    allow_local = os.getenv("SCRIBE_ALLOW_LOCAL_URLS", "").strip().lower() in ("1", "true", "yes")
+    if not allow_local and _is_internal_host(parsed.hostname or ""):
+        raise ValidationError(
+            "Refusing to download from a local or internal address. Set "
+            "SCRIBE_ALLOW_LOCAL_URLS=1 to allow it.",
+            context={"provided": url},
         )
 
     return url

@@ -20,8 +20,15 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+# Skip absurdly large JSON files rather than reading them fully into memory; a real
+# transcript is far smaller, and the output folder may be a synced/shared location.
+_MAX_TRANSCRIPT_BYTES = 50 * 1024 * 1024
+
+
 def _load_transcript(path: Path) -> dict[str, Any] | None:
     try:
+        if path.stat().st_size > _MAX_TRANSCRIPT_BYTES:
+            return None
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None

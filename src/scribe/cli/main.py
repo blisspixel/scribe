@@ -759,6 +759,30 @@ def url_command(
         # Download the media
         output_dir = config.download_folder or config.output_folder
         cookies_browser = cookies or config.cookies_from_browser
+        # Cookie extraction reads the browser's full cookie jar, so only accept a known
+        # browser keyword and tell the user what it does.
+        if cookies_browser:
+            supported_browsers = {
+                "brave",
+                "chrome",
+                "chromium",
+                "edge",
+                "firefox",
+                "opera",
+                "safari",
+                "vivaldi",
+            }
+            if cookies_browser.lower() not in supported_browsers:
+                console.print(
+                    f"[red]Unsupported --cookies value '{cookies_browser}'. "
+                    f"Choose one of: {', '.join(sorted(supported_browsers))}.[/red]"
+                )
+                raise typer.Exit(1)
+            cookies_browser = cookies_browser.lower()
+            console.print(
+                f"[{ScribeTheme.TEXT_MUTED}]Reading {cookies_browser} cookies for the download "
+                f"(grants the site access to that browser's session).[/{ScribeTheme.TEXT_MUTED}]"
+            )
         downloader = URLDownloader(
             output_dir=output_dir,
             audio_only=config.download_audio_only,

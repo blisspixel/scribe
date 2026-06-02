@@ -218,6 +218,7 @@ complex post-processing.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -227,6 +228,14 @@ if TYPE_CHECKING:
     from scribe.models.transcript import Transcript
 
 logger = get_logger(__name__)
+
+# Cap glossary file size so a hostile or accidental multi-GB file cannot exhaust
+# memory during parsing. Real glossaries are kilobytes.
+MAX_GLOSSARY_BYTES = 5 * 1024 * 1024
+
+# A named glossary must be a single safe token (no separators, no "..") so a name
+# can never resolve outside ~/.scribe/vocab or the bundled preset directory.
+_SAFE_GLOSSARY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _bundled_glossary_dir() -> Path:
@@ -316,6 +325,16 @@ class CustomVocabulary:
         if not vocab_file.exists():
             logger.error(f"Vocabulary file not found: {vocab_file}")
             raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
+
+        try:
+            size = vocab_file.stat().st_size
+        except OSError:
+            size = 0
+        if size > MAX_GLOSSARY_BYTES:
+            raise ValueError(
+                f"Glossary file is too large ({size} bytes; limit {MAX_GLOSSARY_BYTES}). "
+                "Glossaries are meant to be small term lists."
+            )
 
         suffix = vocab_file.suffix.lower()
         aliases: dict[str, list[str]] = {}
@@ -457,6 +476,14 @@ class CustomVocabulary:
         )
         if looks_like_path:
             return cls.from_file(candidate)
+
+        # Named glossary: require a single safe token so it can only ever resolve to
+        # a file directly inside one of the known glossary roots.
+        if not _SAFE_GLOSSARY_NAME.match(name_or_path):
+            raise FileNotFoundError(
+                f"Invalid glossary name '{name_or_path}'. Use letters, digits, '.', "
+                "'-', '_', or pass a .txt/.json file path."
+            )
 
         for root in (Path.home() / ".scribe" / "vocab", _bundled_glossary_dir()):
             for ext in (".txt", ".json"):

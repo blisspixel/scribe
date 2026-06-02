@@ -19,9 +19,18 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from scribe.models.transcript import Transcript, TranscriptSegment
+from scribe.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # A compiled variant pattern paired with the canonical form it maps to.
 Replacement = tuple[re.Pattern[str], str]
+
+# Bounds so a hostile or accidental glossary cannot turn normalization into a
+# denial of service. Single-character variants match nearly everywhere (which both
+# misfires and makes the per-text match set quadratic), so they are dropped.
+_MIN_VARIANT_LEN = 2
+_MAX_REPLACEMENTS = 2000
 
 
 def build_replacements(aliases: Mapping[str, Iterable[str]]) -> list[Replacement]:
@@ -29,8 +38,11 @@ def build_replacements(aliases: Mapping[str, Iterable[str]]) -> list[Replacement
 
     Each canonical term also maps from itself, which fixes capitalization when the
     model produced the right word with the wrong case (``postgresql`` -> ``PostgreSQL``).
+    Variants shorter than two characters are ignored, and the rule set is capped, so a
+    pathological glossary cannot blow up normalization.
     """
     pairs: list[tuple[str, str]] = []
+    dropped_short = 0
     for canonical, variants in aliases.items():
         canonical = canonical.strip()
         if not canonical:
@@ -39,9 +51,20 @@ def build_replacements(aliases: Mapping[str, Iterable[str]]) -> list[Replacement
         for variant in [canonical, *variants]:
             variant = variant.strip()
             key = variant.lower()
-            if variant and key not in seen:
-                seen.add(key)
-                pairs.append((variant, canonical))
+            if not variant or key in seen:
+                continue
+            if len(variant) < _MIN_VARIANT_LEN:
+                dropped_short += 1
+                continue
+            seen.add(key)
+            pairs.append((variant, canonical))
+    if dropped_short:
+        logger.debug(f"Ignored {dropped_short} glossary variant(s) shorter than 2 characters")
+    if len(pairs) > _MAX_REPLACEMENTS:
+        logger.warning(
+            f"Glossary has {len(pairs)} normalization rules; using the first {_MAX_REPLACEMENTS}."
+        )
+        pairs = pairs[:_MAX_REPLACEMENTS]
     # Longest variant first so "post gray sequel" beats a stray "sequel" rule.
     pairs.sort(key=lambda p: len(p[0]), reverse=True)
     return [

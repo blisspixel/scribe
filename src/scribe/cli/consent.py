@@ -13,6 +13,7 @@ silence even that with ``SCRIBE_ASSUME_CONSENT=1``.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -77,7 +78,12 @@ def ensure_recording_consent(console: Console) -> bool:
     try:
         marker = consent_marker_path()
         marker.parent.mkdir(parents=True, exist_ok=True)
+        # Lock down ~/.scribe before anything sensitive could ever live there.
+        with contextlib.suppress(OSError):
+            os.chmod(marker.parent, 0o700)
         marker.write_text("acknowledged\n", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            os.chmod(marker, 0o600)
     except OSError:
         # If we cannot persist the acknowledgement, proceed anyway; the user has
         # confirmed in this session. They may just be asked again next time.
