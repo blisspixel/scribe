@@ -333,8 +333,10 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         if hasattr(provider, "config") and "gemini" in provider.config.model.lower():
             kwargs["disable_thinking"] = True
 
+        # Give reasoning-capable providers headroom: a one-word answer is tiny,
+        # but a thin budget gets eaten by hidden reasoning and returns empty.
         response = provider.chat_completion(
-            messages=[{"role": "user", "content": selection_prompt}], max_tokens=100, **kwargs
+            messages=[{"role": "user", "content": selection_prompt}], max_tokens=512, **kwargs
         )
 
         # Defensive: handle None or missing content
@@ -366,8 +368,15 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
         return _select_archetype_heuristic({}, None)
 
 
-def _select_archetype_ai(client: OpenAI, transcript_excerpt: str) -> str:
-    """Use GPT-5 to intelligently select the best comedy archetype for this meeting."""
+def _select_archetype_ai(client: OpenAI, transcript_excerpt: str, model: str) -> str:
+    """Use the configured reasoning model to select the best comedy archetype.
+
+    Selecting an archetype only needs a single word back, but reasoning models
+    spend hidden tokens before emitting visible text. A tight ``max_tokens``
+    budget gets entirely consumed by that reasoning and the model returns empty
+    content, so we use the Responses API with minimal reasoning effort and a
+    generous output budget (the same path the joke text generation uses).
+    """
 
     # Build archetype descriptions for AI
     archetype_options = []
@@ -396,14 +405,16 @@ Respond with ONLY the archetype key (e.g., "translator", "trickster", "fool_scho
 """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-5",
-            messages=[{"role": "user", "content": selection_prompt}],
-            max_completion_tokens=50,
+        responses_api = cast(Any, client.responses)
+        response = responses_api.create(
+            model=model,
+            input=[{"role": "user", "content": [{"type": "input_text", "text": selection_prompt}]}],
+            reasoning={"effort": "minimal"},
+            max_output_tokens=1024,
+            timeout=30.0,
         )
 
-        message_content = response.choices[0].message.content or ""
-        selected = message_content.strip().lower()
+        selected = _extract_output_text(response).strip().lower()
 
         # Validate the selection
         if selected in COMEDY_STYLES:
@@ -693,7 +704,7 @@ def generate_transcript_joke(
             else:
                 if client is None:
                     raise RuntimeError("OpenAI client unavailable for archetype selection")
-                archetype_key = _select_archetype_ai(client, transcript_text)
+                archetype_key = _select_archetype_ai(client, transcript_text, cfg.model)
         except AuthenticationError:
             logger.error(
                 "Invalid OpenAI API key. Update your key via "

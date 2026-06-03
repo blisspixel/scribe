@@ -29,7 +29,7 @@ from scribe.utils.joke_generator import (
     generate_transcript_joke,
 )
 from scribe.utils.logging import console, get_logger, setup_logging
-from scribe.utils.theme import ScribeTheme
+from scribe.utils.theme import ScribeTheme, file_uri
 from scribe.utils.transcript_loader import is_supported_transcript_file, load_transcript_text
 from scribe.utils.validation import sanitize_meeting_name, validate_file_path
 
@@ -589,56 +589,25 @@ def transcribe_command(
         console.print("[bold cyan]Output Files:[/bold cyan]")
         console.print()
 
-        # Helper function to create clickable file links that work on Windows, macOS, and Linux
-        def make_clickable_path(file_path: Path) -> str:
-            """Create a clickable file:// URL that works across platforms"""
-            import platform
-            import urllib.parse
-
-            # Get absolute path
-            abs_path = file_path.resolve()
-
-            # Convert to string and handle platform differences
-            path_str = str(abs_path)
-
-            if platform.system() == "Windows":
-                # Windows: file:///C:/Users/... (forward slashes, three slashes)
-                # Convert backslashes to forward slashes
-                path_str = path_str.replace("\\", "/")
-                # Ensure it starts with drive letter
-                if len(path_str) > 1 and path_str[1] == ":":
-                    url = f"file:///{path_str}"
-                else:
-                    url = f"file:///{path_str}"
-            else:
-                # macOS/Linux: file:///home/... (already has leading slash)
-                url = f"file://{urllib.parse.quote(path_str)}"
-
-            return url
-
         # Show files with clickable links (works in Windows Terminal, iTerm2, VS Code terminal, etc.)
         if transcript_path:
-            url = make_clickable_path(transcript_path)
             console.print(
-                f"  [green]-[/green] [white]Transcript:[/white] [link={url}]{transcript_path}[/link]"
+                f"  [green]-[/green] [white]Transcript:[/white] [link={file_uri(transcript_path)}]{transcript_path}[/link]"
             )
 
         if not no_docx and session.docx_file:
-            url = make_clickable_path(session.docx_file)
             console.print(
-                f"  [green]-[/green] [white]Document:[/white]   [link={url}]{session.docx_file}[/link]"
+                f"  [green]-[/green] [white]Document:[/white]   [link={file_uri(session.docx_file)}]{session.docx_file}[/link]"
             )
 
         if notes_path:
-            url = make_clickable_path(notes_path)
             console.print(
-                f"  [green]-[/green] [white]Notes:[/white]      [link={url}]{notes_path}[/link]"
+                f"  [green]-[/green] [white]Notes:[/white]      [link={file_uri(notes_path)}]{notes_path}[/link]"
             )
 
         if session.meme_file:
-            url = make_clickable_path(session.meme_file)
             console.print(
-                f"  [green]-[/green] [white]Meme:[/white]       [link={url}]{session.meme_file}[/link]"
+                f"  [green]-[/green] [white]Meme:[/white]       [link={file_uri(session.meme_file)}]{session.meme_file}[/link]"
             )
 
         console.print()
@@ -1082,41 +1051,24 @@ def url_command(
         console.print("[bold cyan]Output Files:[/bold cyan]")
         console.print()
 
-        def make_clickable_path(file_path: Path) -> str:
-            import platform
-            import urllib.parse
-
-            abs_path = file_path.resolve()
-            path_str = str(abs_path)
-            if platform.system() == "Windows":
-                path_str = path_str.replace("\\", "/")
-                url = f"file:///{path_str}"
-            else:
-                url = f"file://{urllib.parse.quote(path_str)}"
-            return url
-
         if transcript_path:
-            file_url = make_clickable_path(transcript_path)
             console.print(
-                f"  [green]-[/green] [white]Transcript:[/white] [link={file_url}]{transcript_path}[/link]"
+                f"  [green]-[/green] [white]Transcript:[/white] [link={file_uri(transcript_path)}]{transcript_path}[/link]"
             )
 
         if not no_docx and session.docx_file:
-            file_url = make_clickable_path(session.docx_file)
             console.print(
-                f"  [green]-[/green] [white]Document:[/white]   [link={file_url}]{session.docx_file}[/link]"
+                f"  [green]-[/green] [white]Document:[/white]   [link={file_uri(session.docx_file)}]{session.docx_file}[/link]"
             )
 
         if notes_path:
-            file_url = make_clickable_path(notes_path)
             console.print(
-                f"  [green]-[/green] [white]Notes:[/white]      [link={file_url}]{notes_path}[/link]"
+                f"  [green]-[/green] [white]Notes:[/white]      [link={file_uri(notes_path)}]{notes_path}[/link]"
             )
 
         if session.meme_file:
-            file_url = make_clickable_path(session.meme_file)
             console.print(
-                f"  [green]-[/green] [white]Meme:[/white]       [link={file_url}]{session.meme_file}[/link]"
+                f"  [green]-[/green] [white]Meme:[/white]       [link={file_uri(session.meme_file)}]{session.meme_file}[/link]"
             )
 
         console.print()
@@ -1466,9 +1418,7 @@ def record(
 
             # Helper to format clickable file links
             def format_file_link(label: str, path: Path) -> str:
-                # Convert Windows backslashes to forward slashes for file:// URLs
-                url_path = str(path).replace("\\", "/")
-                return f"  {label:<11} [link=file:///{url_path}]{path}[/link]"
+                return f"  {label:<11} [link={file_uri(path)}]{path}[/link]"
 
             console.print(format_file_link("Transcript:", transcript_path))
             if session.docx_file:
@@ -2596,9 +2546,8 @@ def meme(
             for attempt in attempts:
                 score_str = f"{attempt['score']:.1f}/10" if attempt["score"] is not None else "N/A"
                 attempt_path = attempt["path"]
-                url_path = str(attempt_path).replace("\\", "/")
                 console.print(
-                    f"  Attempt {attempt['attempt']} (score: {score_str}): [link=file:///{url_path}]{attempt_path}[/link]"
+                    f"  Attempt {attempt['attempt']} (score: {score_str}): [link={file_uri(attempt_path)}]{attempt_path}[/link]"
                 )
         console.print()
 
@@ -2708,10 +2657,8 @@ def notes(
 
         console.print()
 
-        # Convert to absolute path with forward slashes for clickable link
         abs_path = notes_path.absolute()
-        link_path = str(abs_path).replace("\\", "/")
-        console.print(f"[bold cyan]Notes:[/bold cyan] [link=file:///{link_path}]{abs_path}[/link]")
+        console.print(f"[bold cyan]Notes:[/bold cyan] [link={file_uri(abs_path)}]{abs_path}[/link]")
         console.print()
 
     except ScribeError as e:
