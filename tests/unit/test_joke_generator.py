@@ -18,6 +18,7 @@ from scribe.utils.joke_generator import (
     _clip_to_words,
     _extract_meeting_metadata,
     _mine_safe_entities,
+    _select_archetype_ai,
     _select_archetype_heuristic,
     _word_len_ok,
     generate_transcript_joke,
@@ -515,6 +516,49 @@ class TestJokeGeneration:
         result = generate_transcript_joke(transcript_path, config)
 
         assert result is not None
+
+
+class TestArchetypeSelectionAI:
+    """Test AI archetype selection against reasoning-model token starvation."""
+
+    def test_select_archetype_ai_returns_valid_key(self):
+        """A valid archetype key from the model is honored."""
+        archetype = next(iter(COMEDY_STYLES))
+        client = Mock()
+        resp = Mock()
+        resp.output_text = archetype.upper()  # whitespace/case normalized
+        client.responses.create.return_value = resp
+
+        assert _select_archetype_ai(client, "meeting about X", "gpt-5.5") == archetype
+
+    def test_select_archetype_ai_uses_configured_model_and_ample_budget(self):
+        """Regression: selection must use the Responses API with the configured
+        model and a generous output budget so reasoning models do not return
+        empty content (the cause of 'invalid archetype \\'\\'' fallbacks)."""
+        client = Mock()
+        resp = Mock()
+        resp.output_text = next(iter(COMEDY_STYLES))
+        client.responses.create.return_value = resp
+
+        _select_archetype_ai(client, "meeting about X", "gpt-5.5")
+
+        # The legacy path called client.chat.completions with max_completion_tokens=50.
+        client.chat.completions.create.assert_not_called()
+        client.responses.create.assert_called_once()
+        kwargs = client.responses.create.call_args.kwargs
+        assert kwargs["model"] == "gpt-5.5"
+        assert kwargs["max_output_tokens"] >= 256
+        assert kwargs["reasoning"] == {"effort": "minimal"}
+
+    def test_select_archetype_ai_empty_response_falls_back_to_heuristic(self):
+        """Empty model output falls back to a valid heuristic archetype, not ''."""
+        client = Mock()
+        resp = Mock()
+        resp.output_text = ""
+        client.responses.create.return_value = resp
+
+        result = _select_archetype_ai(client, "meeting about X", "gpt-5.5")
+        assert result in COMEDY_STYLES
 
 
 class TestArchetypeDisplayNames:

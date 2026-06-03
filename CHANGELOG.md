@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `scribe transcribe -o/--output-dir DIR` writes output to a chosen folder for that run.
 
 ### Fixed
+- Clickable output-file links now percent-encode the path, so a transcript written to a folder whose name contains spaces (or characters like `#`/`?`) opens correctly when clicked in the terminal instead of producing a broken or non-clickable link. A single `file_uri` helper (built on `Path.as_uri()`) now backs every link on Windows, macOS, and Linux, replacing six slightly different hand-rolled versions.
+- The joke's comedy-archetype selection used a 50-token budget on the legacy chat-completions path; reasoning models spend that entirely on hidden reasoning and return empty content, so the step always logged `invalid archetype ''` and fell back to the heuristic. Selection now uses the configured model on the Responses API with minimal reasoning effort and an adequate output budget, and the provider path gets the same headroom.
 - A third QA pass over the previously-unreviewed setup/config/diagnostics code fixed:
   - The setup wizard hardcoded `notes_provider=openai`, so an xAI-only setup hit "No API key found for openai" when generating notes; it now uses the vendor you actually configured.
   - The support bundle leaked your home directory, working directory, and PATH (and therefore your username) despite claiming to sanitize; those are now redacted, and generating a bundle no longer makes live API network calls (`scribe doctor` still does).

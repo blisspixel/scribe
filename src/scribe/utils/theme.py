@@ -19,6 +19,7 @@ This theme draws inspiration from:
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from rich.style import Style
 from rich.theme import Theme
@@ -148,6 +149,30 @@ def status_line(status: str, message: str, detail: str | None = None) -> str:
     return result
 
 
+def file_uri(path: str | Path) -> str:
+    """Build a percent-encoded ``file://`` URI that terminals can click.
+
+    Uses ``Path.as_uri()`` so spaces and other special characters are encoded
+    correctly (e.g. ``a b.txt`` -> ``a%20b.txt``) on Windows, macOS, and Linux.
+    Without encoding, a space in the path breaks the OSC 8 hyperlink and the
+    terminal stops treating it as clickable.
+
+    Args:
+        path: File path (relative or absolute).
+
+    Returns:
+        A ``file://`` URI string.
+    """
+    p = Path(path)
+    try:
+        # as_uri() requires an absolute path; resolve() also normalizes it.
+        # strict=False (default) means the file does not need to exist yet.
+        return p.resolve().as_uri()
+    except (ValueError, OSError):
+        # Best-effort fallback if resolution fails for an unusual path.
+        return "file:///" + str(p).replace("\\", "/")
+
+
 def file_link(label: str, path: str) -> str:
     """Format a clickable file link with consistent styling.
 
@@ -158,6 +183,4 @@ def file_link(label: str, path: str) -> str:
     Returns:
         Rich-formatted string with clickable link
     """
-    # Convert Windows backslashes to forward slashes for file:// URLs
-    url_path = str(path).replace("\\", "/")
-    return f"[{ScribeTheme.ACCENT}]{label}[/{ScribeTheme.ACCENT}] [link=file:///{url_path}][{ScribeTheme.TEXT_PRIMARY}]{path}[/{ScribeTheme.TEXT_PRIMARY}][/link]"
+    return f"[{ScribeTheme.ACCENT}]{label}[/{ScribeTheme.ACCENT}] [link={file_uri(path)}][{ScribeTheme.TEXT_PRIMARY}]{path}[/{ScribeTheme.TEXT_PRIMARY}][/link]"
