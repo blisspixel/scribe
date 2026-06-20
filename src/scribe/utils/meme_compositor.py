@@ -9,18 +9,29 @@ and safety filters.
 
 import logging
 import textwrap
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from PIL import Image as PILImage
 
+_Image: ModuleType | None
+_ImageDraw: ModuleType | None
+_ImageFont: ModuleType | None
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    _Image = import_module("PIL.Image")
+    _ImageDraw = import_module("PIL.ImageDraw")
+    _ImageFont = import_module("PIL.ImageFont")
 except ImportError:  # Optional dependency
-    Image = None
-    ImageDraw = None
-    ImageFont = None
+    _Image = None
+    _ImageDraw = None
+    _ImageFont = None
+
+Image: Any = _Image
+ImageDraw: Any = _ImageDraw
+ImageFont: Any = _ImageFont
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,9 @@ dependency is absent.
 from __future__ import annotations
 
 import re
+import uuid
 import wave
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -272,16 +274,39 @@ def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/cli
         console.print(VOICE_INSTALL_HINT, markup=False)
         return ""
 
-    controller = keyboard.Controller()
-    modifier = keyboard.Key.cmd if platform.system() == "Darwin" else keyboard.Key.ctrl
-    with controller.pressed(modifier):
-        controller.press("c")
-        controller.release("c")
-    time.sleep(0.15)  # give the OS a moment to populate the clipboard
+    prior: str | None = None
+    should_restore = False
     try:
-        return clean_spoken_text(pyperclip.paste() or "")
+        prior = pyperclip.paste()
+        should_restore = True
     except Exception:
         return ""
+
+    sentinel = f"__SCRIBE_SELECTION_SENTINEL_{uuid.uuid4()}__"
+    try:
+        pyperclip.copy(sentinel)
+    except Exception:
+        return ""
+
+    raw = ""
+    try:
+        controller = keyboard.Controller()
+        modifier = keyboard.Key.cmd if platform.system() == "Darwin" else keyboard.Key.ctrl
+        with controller.pressed(modifier):
+            controller.press("c")
+            controller.release("c")
+        time.sleep(0.15)  # give the OS a moment to populate the clipboard
+        raw = pyperclip.paste() or ""
+        return "" if raw == sentinel else clean_spoken_text(raw)
+    except Exception:
+        return ""
+    finally:
+        if should_restore and prior is not None:
+            with suppress(Exception):
+                pyperclip.copy(prior)
+        elif raw == sentinel:
+            with suppress(Exception):
+                pyperclip.copy("")
 
 
 def _speak(  # pragma: no cover - drives the local TTS engine; no audio device in CI
@@ -326,10 +351,12 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
         pass
 
     console.print(f"[cyan]Reading {title} aloud...[/cyan]")
-    engine.say(text)
-    engine.runAndWait()
-    if listener is not None:
-        listener.stop()
+    try:
+        engine.say(text)
+        engine.runAndWait()
+    finally:
+        if listener is not None:
+            listener.stop()
     console.print("[green]Done.[/green]")
     return 0
 

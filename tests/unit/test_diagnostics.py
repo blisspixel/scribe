@@ -5,6 +5,7 @@ Tests diagnostic checks for environment, dependencies, and configuration.
 """
 
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -436,6 +437,93 @@ class TestEnvFileCheck:
 
         assert result.status == "warn"
         assert "Not found" in result.message
+
+
+class TestOBSWebSocketCheck:
+    """Test OBS WebSocket configuration checks."""
+
+    def _write_obs_config(
+        self,
+        tmp_path,
+        monkeypatch,
+        *,
+        server_enabled=True,
+        auth_required=True,
+        server_port=4455,
+    ):
+        appdata = tmp_path / "AppData" / "Roaming"
+        config_path = appdata / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            (
+                "{"
+                f'"server_enabled": {str(server_enabled).lower()}, '
+                f'"auth_required": {str(auth_required).lower()}, '
+                f'"server_port": {server_port}'
+                "}"
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("APPDATA", str(appdata))
+        return config_path
+
+    @patch("scribe.utils.obs_config.get_platform", return_value="windows")
+    def test_obs_auth_without_scribe_password_warns(self, _platform, tmp_path, monkeypatch):
+        """OBS auth on with no Scribe password warns before recording fails."""
+        self._write_obs_config(tmp_path, monkeypatch)
+        diagnostics = SystemDiagnostics()
+
+        with patch(
+            "scribe.models.config.ScribeConfig",
+            return_value=SimpleNamespace(obs_port=4455, obs_password=None),
+        ):
+            result = diagnostics.check_obs_websocket()
+
+        assert result.status == "warn"
+        assert result.message == "Password required but not configured"
+        fix = result.fix_suggestion or ""
+        assert "scribe init --force" in fix
+        assert "set SCRIBE_OBS_PASSWORD=<password>" in fix
+        assert "$env:SCRIBE_OBS_PASSWORD" in fix
+        assert "[obs].password" in fix
+
+    @patch("scribe.utils.obs_config.get_platform", return_value="windows")
+    def test_obs_auth_with_scribe_password_passes(self, _platform, tmp_path, monkeypatch):
+        """OBS auth on with a configured Scribe password passes."""
+        self._write_obs_config(tmp_path, monkeypatch)
+        diagnostics = SystemDiagnostics()
+
+        class FakeConfig:
+            obs_port = 4455
+            obs_password = object()
+
+        with patch(
+            "scribe.models.config.ScribeConfig",
+            return_value=FakeConfig(),
+        ):
+            result = diagnostics.check_obs_websocket()
+
+        assert result.status == "pass"
+        assert result.message == "Configured"
+
+    @patch("scribe.utils.obs_config.get_platform", return_value="windows")
+    def test_obs_port_mismatch_warns(self, _platform, tmp_path, monkeypatch):
+        """OBS and Scribe must use the same WebSocket port."""
+        self._write_obs_config(tmp_path, monkeypatch, server_port=4456, auth_required=False)
+        diagnostics = SystemDiagnostics()
+
+        with patch(
+            "scribe.models.config.ScribeConfig",
+            return_value=SimpleNamespace(obs_port=4455, obs_password=None),
+        ):
+            result = diagnostics.check_obs_websocket()
+
+        assert result.status == "warn"
+        assert result.message == "Port mismatch"
+        fix = result.fix_suggestion or ""
+        assert "scribe init --force" in fix
+        assert "set SCRIBE_OBS_PORT=4456" in fix
+        assert "$env:SCRIBE_OBS_PORT='4456'" in fix
 
 
 class TestSystemDiagnostics:

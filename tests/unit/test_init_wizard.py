@@ -49,6 +49,35 @@ def test_detected_keys_reads_discovered_env_file(tmp_path, monkeypatch):
         assert init_wizard._detected_keys() == {"openai": True, "xai": True}
 
 
+def test_default_output_folder_prefers_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCRIBE_OUTPUT_FOLDER", str(tmp_path / "env-output"))
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", tmp_path / "missing.toml")
+
+    assert init_wizard._default_output_folder() == str(tmp_path / "env-output")
+
+
+def test_default_output_folder_uses_existing_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    configured_output = (tmp_path / "configured-output").as_posix()
+    config_path.write_text(
+        f'[output]\nfolder = "{configured_output}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SCRIBE_OUTPUT_FOLDER", raising=False)
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
+
+    assert init_wizard._default_output_folder() == configured_output
+
+
+def test_default_output_folder_uses_platform_default(tmp_path, monkeypatch):
+    expected = tmp_path / "Videos" / "Transcriptions"
+    monkeypatch.delenv("SCRIBE_OUTPUT_FOLDER", raising=False)
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", tmp_path / "missing.toml")
+
+    with patch("scribe.utils.platform.get_default_output_directory", return_value=expected):
+        assert init_wizard._default_output_folder() == str(expected)
+
+
 def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
     config_path = tmp_path / "config.toml"
     save_config = Mock(return_value=config_path)
@@ -62,9 +91,16 @@ def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
     with (
         patch(
             "scribe.cli.init.Prompt.ask",
-            side_effect=[str(tmp_path / "out"), "local", "xai"],
+            side_effect=[
+                str(tmp_path / "out"),
+                "local",
+                "xai",
+                "localhost",
+                "4455",
+                "obs-secret",
+            ],
         ),
-        patch("scribe.cli.init.Confirm.ask", side_effect=[True, False, True]),
+        patch("scribe.cli.init.Confirm.ask", side_effect=[True, False, True, True]),
     ):
         result = init_wizard.run_wizard(console=_console(), force=True)
 
@@ -80,6 +116,48 @@ def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
     }
     assert saved_data["providers"]["joke_provider"] == "xai"
     assert saved_data["providers"]["meme_provider"] == "xai"
+    assert saved_data["providers"]["notes_provider"] == "xai"
+    assert saved_data["obs"] == {
+        "host": "localhost",
+        "port": 4455,
+        "password": "obs-secret",
+    }
+
+
+def test_default_obs_settings_reads_existing_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '[obs]\nhost = "127.0.0.1"\nport = 4456\npassword = "secret"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SCRIBE_OBS_HOST", raising=False)
+    monkeypatch.delenv("SCRIBE_OBS_PORT", raising=False)
+    monkeypatch.delenv("SCRIBE_OBS_PASSWORD", raising=False)
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
+
+    assert init_wizard._default_obs_settings() == {
+        "host": "127.0.0.1",
+        "port": "4456",
+        "password": "secret",
+    }
+
+
+def test_default_obs_settings_prefers_env(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '[obs]\nhost = "localhost"\nport = 4455\npassword = "config-secret"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCRIBE_OBS_HOST", "obs.local")
+    monkeypatch.setenv("SCRIBE_OBS_PORT", "4457")
+    monkeypatch.setenv("SCRIBE_OBS_PASSWORD", "env-secret")
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
+
+    assert init_wizard._default_obs_settings() == {
+        "host": "obs.local",
+        "port": "4457",
+        "password": "env-secret",
+    }
 
 
 def test_run_wizard_keeps_existing_config_when_declined(tmp_path, monkeypatch):

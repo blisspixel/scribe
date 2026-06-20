@@ -2,12 +2,16 @@
 Manual test to measure actual timing for each phase.
 Run this to get real performance data for your machine.
 
-Usage: python tests/manual/test_actual_timing.py
+Usage: python tests/manual/test_actual_timing.py path/to/audio-or-video-file
 
-NOTE: This is a manual test that requires a specific test file.
+You can also set SCRIBE_TIMING_TEST_FILE to avoid passing the path each time.
+
+NOTE: This is a manual test that requires a local media file.
 It will be skipped during normal pytest runs.
 """
 
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -21,12 +25,25 @@ from scribe.utils.meme_generator import generate_meeting_meme
 from scribe.utils.notes_generator import NotesGenerator
 
 
+def _resolve_test_file() -> Path | None:
+    """Resolve the media file to benchmark from argv or environment."""
+    if len(sys.argv) > 1:
+        return Path(sys.argv[1]).expanduser()
+
+    env_path = os.getenv("SCRIBE_TIMING_TEST_FILE")
+    if env_path:
+        return Path(env_path).expanduser()
+
+    return None
+
+
 def main():
     """Run the timing test"""
-    # Test file
-    test_file = Path(
-        "C:/Users/nicks/OneDrive/scribe/output/Rawlings_AI_Literacy_Internal_2025-11-13_14-31-14.mp4"
-    )
+    test_file = _resolve_test_file()
+    if test_file is None:
+        print("Usage: python tests/manual/test_actual_timing.py path/to/audio-or-video-file")
+        print("Or set SCRIBE_TIMING_TEST_FILE.")
+        return
 
     if not test_file.exists():
         print(f"Test file not found: {test_file}")

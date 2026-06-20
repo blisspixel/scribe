@@ -57,7 +57,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 **Core Value:**
 - Record or import audio/video files
 - Get accurate transcripts with speaker identification (cloud diarization in API mode, or local diarization with `--diarize`)
-- Receive structured meeting notes with decisions and action items (currently via a cloud AI provider)
+- Receive structured meeting notes with decisions and action items (via a cloud or local AI provider)
 - Optional context-aware humor (jokes and memes)
 - Output in TXT, DOCX, Markdown, and PNG formats
 
@@ -140,7 +140,8 @@ Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md
 
 ### Voice (opt-in mode)
 ```bash
-# Needs: pip install "scribe[voice]"
+# Needs: pip install "scribe[voice]" for listen/say
+# Needs: pip install "scribe[tray]" for the resident tray utility
 
 # Dictate (push-to-talk by default): hold F9, speak, release to insert at the cursor
 scribe listen
@@ -153,8 +154,19 @@ scribe say meeting_transcription.txt     # a file
 scribe say --selection                   # the currently selected text
 scribe say --clipboard                   # the clipboard contents
 scribe say notes.md --rate 180           # Esc stops playback
+
+# Experimental resident voice utility
+scribe tray --check                      # validate optional deps and hotkeys
+scribe tray                              # tray icon, F9 dictates, F8 reads selection
+scribe tray --no-tray                    # terminal fallback with the same hotkeys
+scribe tray --profile accurate --preload # best local model, loaded at startup
 ```
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
+The tray utility is an initial resident-desktop implementation, not a promise
+that every OS, permission model, and desktop environment is fully validated yet.
+Run `scribe tray --check` first, and expect manual validation for live microphone,
+global-hotkey, tray-backend, clipboard, and TTS behavior. See the
+[Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
 
 ### Utilities
 ```bash
@@ -165,6 +177,7 @@ scribe init --force                # Overwrite existing ~/.scribe/config.toml
 # Install a cross-platform "Quick Record" launcher (Windows/macOS/Linux)
 scribe shortcut
 scribe shortcut --remove
+scribe rec --check              # read-only OBS preflight before a meeting
 
 # Search across your structured (.json) transcripts
 scribe query "budget"
@@ -323,7 +336,7 @@ Scribe reads from three layers, highest precedence first:
 scribe init   # auto-prompts on first run; rerun anytime
 ```
 
-The wizard asks for output folder, transcription method (auto/local/openai), which features to enable by default (notes/joke/meme), and your AI vendor preference. It also detects conflicting `SCRIBE_ENABLE_*` lines in your `.env` and offers to comment them out so the wizard's choices actually take effect.
+The wizard asks for output folder, transcription method (auto/local/openai), which features to enable by default (notes/joke/meme), and your AI vendor preference. The output prompt defaults to `SCRIBE_OUTPUT_FOLDER` if set, then an existing `~/.scribe/config.toml` value, then the platform default (`~/Videos/Transcriptions` on Windows/Linux, `~/Movies/Transcriptions` on macOS), so it is not tied to the repo checkout. It also detects conflicting `SCRIBE_ENABLE_*` lines in your `.env` and offers to comment them out so the wizard's choices actually take effect.
 
 **`.env` setup:**
 
@@ -345,7 +358,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Optional: Google Gemini
 GEMINI_API_KEY=...
 
-# Output directory
+# Output directory. Overrides ~/.scribe/config.toml.
 SCRIBE_OUTPUT_FOLDER=/path/to/scribe/output
 
 # Defaults
@@ -369,6 +382,25 @@ SCRIBE_OBS_PASSWORD=your_password
 # Optional runaway-recording protection
 SCRIBE_MAX_RECORDING_HOURS=9
 SCRIBE_RECORDING_WARNING_FRACTION=0.9
+```
+
+Windows one-session examples:
+
+```bat
+set SCRIBE_OBS_PASSWORD=your_password
+```
+
+```powershell
+$env:SCRIBE_OBS_PASSWORD = 'your_password'
+```
+
+OBS settings can also live in `~/.scribe/config.toml`:
+
+```toml
+[obs]
+host = "localhost"
+port = 4455
+password = "your OBS WebSocket password"
 ```
 
 ---
@@ -919,8 +951,9 @@ Scribe automatically sets a browser User-Agent and retries with exponential back
 **"Could not connect to OBS WebSocket":**
 
 1. Ensure OBS WebSocket server is enabled: Tools → WebSocket Server Settings
-2. Check `SCRIBE_OBS_PASSWORD` in `.env` matches the OBS WebSocket password
-3. Scribe auto-launches OBS if not running - no need to start it manually
+2. Run `scribe rec --check` for a read-only connection test
+3. Check `SCRIBE_OBS_PASSWORD` or `[obs].password` in `~/.scribe/config.toml`
+4. Scribe can launch OBS only when no OBS process is already running; it will not kill or restart a running OBS instance
 
 **"No recording file detected" error:**
 
@@ -930,13 +963,14 @@ Scribe automatically sets a browser User-Agent and retries with exponential back
 
 **OBS keeps asking about safe mode:**
 
-Scribe now handles this automatically - it kills stale OBS processes, cleans crash sentinel files, and launches with `--disable-shutdown-check`. If you still see the safe mode dialog, delete `%APPDATA%/obs-studio/global.ini` manually.
+Scribe cleans crash sentinel files before launching OBS with `--disable-shutdown-check`, but it does not kill a running OBS process. If you still see the safe mode dialog, close OBS manually and delete `%APPDATA%/obs-studio/global.ini`.
 
 **To configure OBS WebSocket:**
 1. Open OBS Studio
 2. Go to Tools > WebSocket Server Settings
 3. Enable WebSocket server on port 4455
-4. Set password in `.env`
+4. Run `scribe init --force` and configure OBS, or set `SCRIBE_OBS_PASSWORD`
+5. Run `scribe rec --check` or `scribe doctor` to verify
 
 ### Exit Codes
 - 0: Success
@@ -953,6 +987,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 
 ### Core Documentation
 - [Architecture Guide](docs/ARCHITECTURE.md) - System architecture and design patterns
+- [Agentic Balance](docs/AGENTIC_BALANCE.md) - Where Scribe uses deterministic rules versus model judgment
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Development Guide](docs/DEVELOPMENT.md) - Development setup and workflows
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
@@ -961,6 +996,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 
 ### Feature Documentation
 - [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) - Music transcription technical details
+- [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) - Initial resident dictation and read-aloud prototype, validation plan, and follow-on work
 
 ### Additional Resources
 - [ROADMAP](ROADMAP.md) - Feature roadmap and version history
@@ -1033,9 +1069,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.5.0 (cross-platform Quick Record launcher and app icon, macOS/Linux recording, plus correctness fixes)
+**Current Version:** 2.6.0 (structured output, hardware-adaptive local backends, local diarization, voice I/O, and dependency-policy work)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-06-01
+**Last Updated:** 2026-06-19
 
 

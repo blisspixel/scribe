@@ -15,11 +15,15 @@ from scribe.exceptions import TranscriptionError
 from scribe.models.config import ScribeConfig
 from scribe.models.gpu import GPUConfig
 
-# Skip all tests in this module if CUDA not available
-pytestmark = pytest.mark.skipif(
-    not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
-    reason="CUDA not available",
-)
+# Skip all tests in this module if CUDA not available. Mark them as GPU tests so
+# the CI-safe "not gpu" selector also excludes them on local GPU machines.
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(
+        not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
+        reason="CUDA not available",
+    ),
+]
 
 
 class TestLocalWhisperTranscriber:

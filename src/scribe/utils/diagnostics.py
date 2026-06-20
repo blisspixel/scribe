@@ -32,12 +32,12 @@ THE SOLUTION - AUTOMATED DIAGNOSTICS:
 ──────────────────────────────────────
 Run `scribe doctor` and get a comprehensive health check:
 
-✓ Python 3.10.11
-✓ FFmpeg installed
-✓ GPU: RTX 4090 (24GB VRAM)
-✓ OpenAI API Key configured
-✗ Output folder not writable
-⚠ Only 2GB disk space remaining
+[PASS] Python 3.10.11
+[PASS] FFmpeg installed
+[PASS] GPU: RTX 4090 (24GB VRAM)
+[PASS] OpenAI API Key configured
+[FAIL] Output folder not writable
+[WARN] Only 2GB disk space remaining
 
 Fix suggestions:
 1. Check output folder permissions
@@ -94,22 +94,22 @@ SMART VALIDATION:
 Not just "is it installed?" but "will it work?":
 
 **FFmpeg check:**
-- ✓ Installed
-- ✓ Can execute
-- ✓ Version is recent
-- ✓ Has required codecs
+- Installed
+- Can execute
+- Version is recent
+- Has required codecs
 
 **Output folder check:**
-- ✓ Path configured
-- ✓ Folder exists
-- ✓ Is a directory (not a file)
-- ✓ Writable (actually tests write)
+- Path configured
+- Folder exists
+- Is a directory (not a file)
+- Writable (actually tests write)
 
 **API key check:**
-- ✓ Configured
-- ✓ Starts with "sk-"
-- ✓ Reasonable length
-- ⚠ Format validation (not actual API test)
+- Configured
+- Starts with "sk-"
+- Reasonable length
+- Format validation (not actual API test)
 
 PRIORITIZED RECOMMENDATIONS:
 ─────────────────────────────
@@ -175,6 +175,7 @@ from typing import Any, cast
 from openai import AuthenticationError, OpenAI
 
 from scribe.models.gpu import GPUConfig
+from scribe.utils.obs_config import read_obs_websocket_config
 from scribe.utils.platform import get_platform, is_windows
 
 
@@ -212,6 +213,7 @@ class SystemDiagnostics:
             self.check_ffmpeg,
             self.check_ffprobe,
             self.check_ytdlp,
+            self.check_obs_websocket,
             self.check_cuda,
             self.check_gpu,
             self.check_gpu_memory,
@@ -368,6 +370,111 @@ class SystemDiagnostics:
         self.results.append(result)
         return result
 
+    def check_obs_websocket(self) -> DiagnosticResult:
+        """Check OBS WebSocket settings against Scribe's recorder config."""
+        obs_config = read_obs_websocket_config()
+        if obs_config.path is None:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Could not locate OBS config directory",
+                details="Recording requires OBS WebSocket when using scribe rec.",
+                fix_suggestion=(
+                    "Open OBS once, enable Tools > WebSocket Server Settings, then run "
+                    "`scribe rec --check`."
+                ),
+            )
+            self.results.append(result)
+            return result
+
+        if not obs_config.exists:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Config not found",
+                details=f"Expected: {obs_config.path}",
+                fix_suggestion=(
+                    "Open OBS, enable Tools > WebSocket Server Settings, then run "
+                    "`scribe rec --check`."
+                ),
+            )
+            self.results.append(result)
+            return result
+
+        if obs_config.error:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Could not read config",
+                details=f"Path: {obs_config.path}\nError: {obs_config.error}",
+                fix_suggestion=(
+                    "Open OBS, re-save Tools > WebSocket Server Settings, then run "
+                    "`scribe rec --check`."
+                ),
+            )
+            self.results.append(result)
+            return result
+
+        server_enabled = bool(obs_config.server_enabled)
+        auth_required = bool(obs_config.auth_required)
+        server_port = obs_config.server_port or 4455
+
+        from scribe.models.config import ScribeConfig
+
+        config = ScribeConfig()
+        details = (
+            f"OBS config: {obs_config.path}\n"
+            f"OBS server enabled: {server_enabled}\n"
+            f"OBS port: {server_port}\n"
+            f"OBS auth required: {auth_required}\n"
+            f"Scribe port: {config.obs_port}\n"
+            f"Scribe password configured: {bool(config.obs_password)}"
+        )
+
+        if not server_enabled:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Server disabled",
+                details=details,
+                fix_suggestion="Enable OBS Tools > WebSocket Server Settings.",
+            )
+        elif config.obs_port != server_port:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Port mismatch",
+                details=details,
+                fix_suggestion=(
+                    f"Run `scribe init --force` and set OBS port {server_port}, "
+                    f"or set CMD `set SCRIBE_OBS_PORT={server_port}` "
+                    f"or PowerShell `$env:SCRIBE_OBS_PORT='{server_port}'`."
+                ),
+            )
+        elif auth_required and not config.obs_password:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="Password required but not configured",
+                details=details,
+                fix_suggestion=(
+                    "Run `scribe init --force` and configure OBS, or set CMD "
+                    "`set SCRIBE_OBS_PASSWORD=<password>` or PowerShell "
+                    "`$env:SCRIBE_OBS_PASSWORD='<password>'`. Persistent config: "
+                    "add [obs].password to ~/.scribe/config.toml."
+                ),
+            )
+        else:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="pass",
+                message="Configured",
+                details=details,
+            )
+
+        self.results.append(result)
+        return result
+
     def check_cuda(self) -> DiagnosticResult:
         """Check CUDA availability."""
         gpu_config = GPUConfig.detect()
@@ -445,7 +552,7 @@ class SystemDiagnostics:
             self.results.append(result)
             return result
 
-        # Live validation — actually call the API to verify the key works
+        # Live validation - actually call the API to verify the key works
         try:
             client = OpenAI(api_key=api_key, timeout=10)
             client.models.list()
@@ -467,7 +574,7 @@ class SystemDiagnostics:
                 ),
             )
         except Exception as e:
-            # Network error, timeout, etc. — key format is fine, can't verify
+            # Network error, timeout, etc. - key format is fine, can't verify
             result = DiagnosticResult(
                 name="OpenAI API Key",
                 status="warn",
@@ -701,7 +808,7 @@ class SystemDiagnostics:
         """Check additional AI provider configurations with live validation."""
         results: list[DiagnosticResult] = []
 
-        # XAI/Grok — OpenAI-compatible API
+        # XAI/Grok - OpenAI-compatible API
         xai_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
         if xai_key:
             try:
@@ -740,7 +847,7 @@ class SystemDiagnostics:
                     )
                 )
 
-        # Gemini — Google genai SDK
+        # Gemini - Google genai SDK
         gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
         if gemini_key:
             try:
@@ -782,7 +889,7 @@ class SystemDiagnostics:
                         )
                     )
 
-        # Anthropic — just check presence (no lightweight endpoint)
+        # Anthropic - just check presence (no lightweight endpoint)
         anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
         if anthropic_key:
             results.append(
