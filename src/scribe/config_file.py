@@ -41,11 +41,11 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
     translate here. Unknown keys are dropped.
     """
     out: dict[str, Any] = {}
-    output = data.get("output", {})
+    output = _section(data, "output")
     if "folder" in output:
         out["output_folder"] = output["folder"]
 
-    transcription = data.get("transcription", {})
+    transcription = _section(data, "transcription")
     if "method" in transcription:
         out["default_method"] = transcription["method"]
     if "model" in transcription:
@@ -53,7 +53,7 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
     if "language" in transcription:
         out["default_language"] = transcription["language"]
 
-    features = data.get("features", {})
+    features = _section(data, "features")
     if "generate_notes" in features:
         out["enable_notes"] = bool(features["generate_notes"])
     if "generate_joke" in features:
@@ -61,7 +61,21 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
     if "generate_meme" in features:
         out["enable_meme"] = bool(features["generate_meme"])
 
+    obs = _section(data, "obs")
+    if "host" in obs:
+        out["obs_host"] = obs["host"]
+    if "port" in obs:
+        out["obs_port"] = obs["port"]
+    if "password" in obs:
+        out["obs_password"] = obs["password"]
+
     return out
+
+
+def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return a config section only when it is a table."""
+    section = data.get(name, {})
+    return section if isinstance(section, dict) else {}
 
 
 def save_config_file(data: dict[str, Any]) -> Path:
@@ -73,8 +87,8 @@ def save_config_file(data: dict[str, Any]) -> Path:
         os.chmod(CONFIG_DIR, 0o700)
     lines: list[str] = []
 
-    def section(name: str, body: dict[str, Any]) -> None:
-        if not body:
+    def section(name: str, body: Any) -> None:
+        if not isinstance(body, dict) or not body:
             return
         lines.append(f"[{name}]")
         for k, v in body.items():
@@ -85,6 +99,7 @@ def save_config_file(data: dict[str, Any]) -> Path:
     section("transcription", data.get("transcription", {}))
     section("features", data.get("features", {}))
     section("providers", data.get("providers", {}))
+    section("obs", data.get("obs", {}))
 
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
     with contextlib.suppress(OSError):

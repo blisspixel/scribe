@@ -50,28 +50,27 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## Product Direction (Competitive Gaps - Under Active Consideration)
+## Product Direction
 
-As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscribe, Meetily, OpenWhispr, transcriptionstream, WhisperX) surfaced capabilities that are now table stakes and where Scribe has gaps. These are candidate product directions, recorded so the roadmap reflects reality. The Engineering Excellence track below is unaffected by them.
+As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscribe, Meetily, OpenWhispr, transcriptionstream, WhisperX) surfaced capabilities that are table stakes for a credible local-first meeting tool. Several of those gaps shipped in v2.6.0; the list remains here so current and future work stays tied to the original product rationale. The Engineering Excellence track below is unaffected by them.
 
-1. **Local-only summarization (close the offline gap).** Notes and humor currently require a cloud provider (OpenAI/xAI/Anthropic/Gemini), so the "local-first, private, offline-capable" promise only holds for transcript-only use. Add an **Ollama / OpenAI-compatible local LLM provider** to the existing provider abstraction so notes can be generated fully offline. Highest priority - this reconciles a claim/reality gap rather than expanding scope, and slots into the current architecture cleanly.
+1. **Local-only summarization (shipped for notes).** Scribe now supports Ollama for fully local meeting notes and provider comparison. Humor and image generation can still use cloud providers when selected, so docs must remain explicit about which features transmit content.
 
-2. **Local speaker diarization.** Diarization is currently API-only (`gpt-4o-transcribe-diarize`); the local GPU path produces no speaker labels. Evaluate **WhisperX + pyannote.audio** for word-level alignment and local "who said what." Pairs with the hardware-backend work below (item 4).
+2. **Local speaker diarization (shipped).** Local transcription can label "who said what" with pyannote.audio via `--diarize`, filling the same speaker field used by the cloud path. Further work should focus on alignment quality, setup diagnostics, and graceful degradation.
 
-3. **Structured, queryable output.** Emit machine-readable artifacts (YAML frontmatter / JSON with timestamps, speakers, decisions, action items, confidence, provenance) so notes are both ingestible by sibling tools and queryable ("ask across my meetings"). Cheapest high-value item; in-scope regardless of the rest.
+3. **Structured, queryable output (shipped).** Every transcription writes a JSON transcript by default, with optional VTT, SRT, and Markdown sidecars, and `scribe query` searches stored JSON transcripts.
 
-4. **Hardware-adaptive transcription backends.** Generalize the existing VRAM-based auto-selection from CUDA-only to `(vendor, memory)`: faster-whisper on NVIDIA, mlx-whisper / whisper.cpp (Metal) on Apple Silicon, whisper.cpp (Vulkan/ROCm) on AMD/Intel, int8 CPU fallback. Prerequisite for a credible cross-platform public release rather than a 4090/Windows-optimized tool.
+4. **Hardware-adaptive transcription backends (shipped baseline).** Local transcription now selects among faster-whisper, MLX, whisper.cpp, and CPU fallback by detected platform and installed extras. Continue tuning backend diagnostics and platform-specific install guidance.
 
 5. **Voice I/O (deliberate mode decision).** Shipped as a separate opt-in mode: `scribe listen` (global-hotkey speech-to-type) and `scribe say` (read-aloud via local TTS), behind the `scribe[voice]` extra. It is intentionally outside the batch pipeline, so the streaming non-goal there still holds; see ADR-008.
 
-   **v2 refinement (in progress).** A review of the established voice-typing and read-aloud tools (Wispr Flow, superwhisper, WhisperWriter, OpenWhispr, the macOS Speak-Selection feature) points to a few patterns worth adopting, and the first version's always-on mic was the one piece the security review flagged:
-   - **Dictation modes.** Add **push-to-hold** as the default (hold the hotkey, speak, release to transcribe and inject) with the original always-listening behavior available as `--mode continuous`. Push-to-hold is the common default in those tools and removes the hot-mic exposure.
-   - **Injection method.** Add `--inject paste|type`: `paste` (clipboard then paste, clipboard restored) stays the default for reliability; `type` inserts at the cursor via keystrokes and never touches the clipboard.
-   - **Read selection aloud.** Make `scribe say`'s file optional and add `--selection` (copy the current selection, then read it, the macOS Speak-Selection pattern) and `--clipboard`, with Esc to stop playback. This is the genuinely useful read-aloud hotkey the first version lacked.
+   **v2 refinement (shipped).** Dictation defaults to push-to-hold, injection supports `paste|type`, and `scribe say` can read a file, the current selection, or the clipboard.
 
    The pure pieces (mode and injection resolution, say-source resolution) are unit-tested; the live microphone, keyboard, and TTS paths remain behind the manual marker since CI has no audio device.
 
-Priority order: 1 → 3 → 2 → 4 → 5. Items 1 and 3 are low-risk and strengthen the local-first promise; 2 and 4 are larger lifts tied to going public; 5 is a conscious scope decision (see Explicit Non-Goals).
+6. **Resident voice tray utility (prototype baseline).** `scribe tray` now has an initial lightweight tray/menu-bar implementation for local dictation and read-selection hotkeys. It includes dependency diagnostics (`--check`), a terminal fallback (`--no-tray`), configurable hotkeys, local voice profiles (`fast|balanced|accurate`), optional model preload, pause/resume, and read-selection from the tray menu. This should be treated as an early desktop surface until the manual OS matrix proves live microphone, global-hotkey, tray-backend, clipboard, and TTS behavior across real machines. It remains separate from the batch pipeline. See [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+
+Current product priority: validate and harden tray startup/install support, backend routing, model diagnostics, and setup experience for the v2.6 local-first features.
 
 ---
 
@@ -225,14 +224,12 @@ These are deliberate decisions to keep Scribe a focused, high-quality tool rathe
 - We will not apply Design by Contract or strict parsing rules uniformly across CLI glue, UI layers, or provider code. These techniques are reserved for pure, critical business logic where they add clear value.
 - We will not turn Scribe into a library, framework, or monorepo. It is a cohesive end-user CLI product.
 - We will not add web UIs, multi-user features, cloud sync, or enterprise authentication. These remain out of scope (see Scope and Focus section above). Real-time/streaming is held out of the **batch pipeline**, but a separate opt-in voice-I/O mode (global-hotkey dictation via `scribe listen`, read-aloud via `scribe say`) has shipped as a distinct product surface - see Product Direction item 5 and ADR-008. It does not touch the batch pipeline; adopting it was a deliberate decision, not a drift.
-- "Local-first, private, offline-capable" is the goal, but note generation and humor currently require a cloud provider. Until the local LLM provider lands (Product Direction item 1), the fully-offline guarantee holds for transcript-only use; with a cloud provider, transcripts/notes are transmitted for analysis. This is documented honestly rather than overstated.
+- "Local-first, private, offline-capable" is the goal, and transcript generation plus Ollama-backed notes can run fully offline. Cloud transcription, cloud notes providers, and cloud image providers still transmit user content when selected, so documentation must state the active provider boundary honestly.
 - We will not add observability or telemetry that phones home or increases the attack surface of a local tool.
-
-Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
 
 Elevation work exists only to make the existing focused value more reliable, reproducible, and maintainable over time. Any proposal that would expand scope or compromise the local-first, private, offline-capable nature of the tool will be rejected.
 
 ---
 
-**Last Updated:** 2026-06-01
+**Last Updated:** 2026-06-19
 

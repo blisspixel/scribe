@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 import typer
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -133,6 +134,7 @@ class CleanGroup(typer.core.TyperGroup):
             ("query TEXT       ", "search transcripts"),
             ("vocab            ", "domain glossaries"),
             ("listen           ", "dictate (speech to type)"),
+            ("tray             ", "resident voice hotkeys"),
             ("say FILE         ", "read a file aloud"),
             ("clean FILE       ", "remove silence / trim"),
             ("compare          ", "compare AI providers"),
@@ -664,7 +666,7 @@ def url_command(
     cookies: str | None = typer.Option(
         None,
         "--cookies",
-        help="Browser to extract cookies from (chrome, firefox, edge) — fixes YouTube 403 errors",
+        help="Browser to extract cookies from (chrome, firefox, edge) - fixes YouTube 403 errors",
     ),
     output_format: str | None = typer.Option(
         None,
@@ -1103,9 +1105,37 @@ def url_command(
                 logger.warning(f"Could not clean up download: {cleanup_err}")
 
 
+def _run_obs_preflight() -> int:
+    """Run a read-only OBS WebSocket preflight for Quick Record."""
+    config = ScribeConfig()
+    recorder = OBSRecorder(config)
+    result = recorder.check_obs_preflight()
+
+    status_style = {"pass": "green", "warn": "yellow", "fail": "red"}.get(result.status, "white")
+    console.print("[bold cyan]OBS preflight[/bold cyan]")
+    console.print(f"[{status_style}]{result.status.upper()}[/{status_style}] {result.message}")
+    if result.endpoint:
+        console.print(f"[dim]endpoint: {result.endpoint}[/dim]")
+    if result.recording_active is not None:
+        console.print(f"[dim]recording active: {result.recording_active}[/dim]")
+    if result.details:
+        console.print()
+        for detail in result.details:
+            console.print(f"[dim]- {escape(detail)}[/dim]")
+    if result.fix_suggestion:
+        console.print()
+        console.print(f"[yellow]{escape(result.fix_suggestion)}[/yellow]")
+    return 0 if result.ok else 1
+
+
 @app.command()
 def record(
     name: str | None = typer.Option(None, "--name", "-n", help="Meeting name for the recording"),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Run a read-only OBS preflight for Quick Record, then exit",
+    ),
     auto_transcribe: bool = typer.Option(
         True,
         "--auto-transcribe/--no-auto-transcribe",
@@ -1140,6 +1170,9 @@ def record(
       # Record without humor
       scribe record --no-joke --no-meme
     """
+    if check:
+        raise typer.Exit(_run_obs_preflight())
+
     try:
         # Load configuration
         config = ScribeConfig()
@@ -2238,7 +2271,14 @@ def music_transcribe(
 
 
 @app.command(name="rec")
-def rec_shortcut(name: str | None = typer.Argument(None, help="Meeting name (optional)")) -> None:
+def rec_shortcut(
+    name: str | None = typer.Argument(None, help="Meeting name (optional)"),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Run a read-only OBS preflight for Quick Record, then exit",
+    ),
+) -> None:
     """
     Quick record shortcut - starts recording immediately.
 
@@ -2257,7 +2297,14 @@ def rec_shortcut(name: str | None = typer.Argument(None, help="Meeting name (opt
       scribe rec Board-Meeting
     """
     # Call the record command directly with auto-transcribe enabled
-    record(name=name, auto_transcribe=True, method="auto", no_joke=False, no_meme=False)
+    record(
+        name=name,
+        check=check,
+        auto_transcribe=True,
+        method="auto",
+        no_joke=False,
+        no_meme=False,
+    )
 
 
 @app.command()
@@ -2691,7 +2738,7 @@ def _run_notes_comparison(
     specs, judge = resolve_compare_plan(providers_arg, judge_arg, avail)
     if not specs:
         console.print(
-            "[bold red]Error:[/bold red] nothing to compare — no cloud API keys and "
+            "[bold red]Error:[/bold red] nothing to compare - no cloud API keys and "
             "no local Ollama models found."
         )
         console.print(
@@ -2948,7 +2995,7 @@ def info() -> None:
         )
         console.print()
 
-        # Local LLM (Ollama) section — free, offline notes. Surfaces the smart
+        # Local LLM (Ollama) section - free, offline notes. Surfaces the smart
         # default model auto-selected for this machine's memory budget.
         from scribe.utils.ollama_models import (
             available_model_memory_gb,
@@ -3036,7 +3083,7 @@ def doctor() -> None:
             )
             if result.fix_suggestion:
                 console.print(
-                    f"    [{ScribeTheme.PRIMARY}]→ {result.fix_suggestion}[/{ScribeTheme.PRIMARY}]"
+                    f"    [{ScribeTheme.PRIMARY}]-> {escape(result.fix_suggestion)}[/{ScribeTheme.PRIMARY}]"
                 )
         console.print()
 
@@ -3052,7 +3099,7 @@ def doctor() -> None:
             )
             if result.fix_suggestion:
                 console.print(
-                    f"    [{ScribeTheme.PRIMARY}]→ {result.fix_suggestion}[/{ScribeTheme.PRIMARY}]"
+                    f"    [{ScribeTheme.PRIMARY}]-> {escape(result.fix_suggestion)}[/{ScribeTheme.PRIMARY}]"
                 )
         console.print()
 
@@ -3626,6 +3673,84 @@ def say_command(
             use_clipboard=clipboard,
         )
     )
+
+
+@app.command(name="tray")
+def tray_command(
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Validate voice/tray dependencies and settings, then exit",
+    ),
+    no_tray: bool = typer.Option(
+        False,
+        "--no-tray",
+        help="Run resident hotkeys in the terminal without a tray icon",
+    ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Voice STT profile: fast, balanced, or accurate",
+    ),
+    dictate_hotkey: str | None = typer.Option(
+        None,
+        "--dictate-hotkey",
+        help="Push-to-talk hotkey or chord (default: f9)",
+    ),
+    read_hotkey: str | None = typer.Option(
+        None,
+        "--read-hotkey",
+        help="Read selected text hotkey or chord (default: f8)",
+    ),
+    inject: str | None = typer.Option(
+        None,
+        "--inject",
+        help="How to insert dictated text: paste or type",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="Whisper model override for tray dictation",
+    ),
+    language: str | None = typer.Option(
+        None,
+        "--language",
+        "-l",
+        help="Spoken language (ISO 639-1); auto-detect if omitted",
+    ),
+    preload: bool | None = typer.Option(
+        None,
+        "--preload/--no-preload",
+        help="Load the STT model at startup instead of on first dictation",
+    ),
+) -> None:
+    """
+    Run the resident voice tray utility.
+
+    Hold the dictation hotkey to speak into the focused field. Press the read
+    hotkey to read the selected text aloud. This is a separate opt-in voice
+    surface behind the tray optional extra.
+    """
+    from scribe.voice.settings import resolve_tray_settings
+    from scribe.voice.tray import run_tray, run_tray_check
+
+    try:
+        settings = resolve_tray_settings(
+            profile=profile,
+            dictate_hotkey=dictate_hotkey,
+            read_hotkey=read_hotkey,
+            inject=inject,
+            model=model,
+            language=language,
+            preload=preload,
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    if check:
+        raise typer.Exit(run_tray_check(console, settings, include_tray=not no_tray))
+    raise typer.Exit(run_tray(console, settings, no_tray=no_tray))
 
 
 def main() -> None:

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 import sys
+import tomllib
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +43,7 @@ def _detected_keys() -> dict[str, bool]:
     """
     Detect provider API keys.
 
-    Looks beyond os.environ — also loads scribe's discovered .env file (cwd,
+    Looks beyond os.environ - also loads scribe's discovered .env file (cwd,
     home, package dir) so the wizard sees keys even when run from outside the
     project directory.
     """
@@ -63,6 +65,45 @@ def _detected_keys() -> dict[str, bool]:
     return {
         "openai": has("OPENAI_API_KEY", "SCRIBE_OPENAI_API_KEY"),
         "xai": has("XAI_API_KEY", "SCRIBE_XAI_API_KEY"),
+    }
+
+
+def _default_output_folder() -> str:
+    """Return the best default for the init wizard's output folder prompt."""
+    env_output = os.getenv("SCRIBE_OUTPUT_FOLDER")
+    if env_output:
+        return env_output
+
+    with suppress(Exception):
+        if CONFIG_PATH.is_file():
+            data = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            configured = data.get("output", {}).get("folder")
+            if configured:
+                return str(configured)
+
+    from scribe.utils.platform import get_default_output_directory
+
+    return str(get_default_output_directory())
+
+
+def _default_obs_settings() -> dict[str, str]:
+    """Return defaults for OBS WebSocket prompts from env or config."""
+    host = os.getenv("SCRIBE_OBS_HOST")
+    port = os.getenv("SCRIBE_OBS_PORT")
+    password = os.getenv("SCRIBE_OBS_PASSWORD")
+
+    with suppress(Exception):
+        if CONFIG_PATH.is_file():
+            data = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            obs = data.get("obs", {})
+            host = host or obs.get("host")
+            port = port or str(obs.get("port") or "")
+            password = password or obs.get("password")
+
+    return {
+        "host": str(host or "localhost"),
+        "port": str(port or "4455"),
+        "password": str(password or ""),
     }
 
 
@@ -97,7 +138,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     )
 
     # 1. Output folder
-    default_output = os.getenv("SCRIBE_OUTPUT_FOLDER") or str(Path.cwd() / "output")
+    default_output = _default_output_folder()
     output_folder = Prompt.ask(
         "[bold]Output folder[/bold]",
         default=default_output,
@@ -109,10 +150,10 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     console.print(f"\n[dim]GPU check:[/dim] {gpu_desc}")
     if has_gpu:
         method_default = "local"
-        method_help = "[green]GPU detected[/green] — local recommended for speed and privacy"
+        method_help = "[green]GPU detected[/green] - local recommended for speed and privacy"
     else:
         method_default = "openai"
-        method_help = "[yellow]No GPU[/yellow] — OpenAI API recommended"
+        method_help = "[yellow]No GPU[/yellow] - OpenAI API recommended"
     console.print(method_help)
     method = Prompt.ask(
         "[bold]Transcription method[/bold]",
@@ -142,15 +183,24 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         )
     elif keys["openai"]:
         vendor_choice = "openai"
-        console.print("\n[dim]Only OPENAI_API_KEY detected — using openai.[/dim]")
+        console.print("\n[dim]Only OPENAI_API_KEY detected - using openai.[/dim]")
     elif keys["xai"]:
         vendor_choice = "xai"
-        console.print("\n[dim]Only XAI_API_KEY detected — using xai.[/dim]")
+        console.print("\n[dim]Only XAI_API_KEY detected - using xai.[/dim]")
     else:
         console.print(
             "\n[yellow]No AI vendor keys detected.[/yellow] "
             "[dim]Set OPENAI_API_KEY or XAI_API_KEY in .env then re-run `scribe init`.[/dim]"
         )
+
+    # 5. OBS WebSocket
+    obs_defaults = _default_obs_settings()
+    console.print("\n[bold]OBS recording[/bold] [dim](optional, used by `scribe rec`)[/dim]")
+    configure_obs = Confirm.ask(
+        "  Configure OBS WebSocket for Quick Record?",
+        default=bool(obs_defaults["password"]),
+        console=console,
+    )
 
     data: dict[str, Any] = {
         "output": {"folder": output_folder},
@@ -169,6 +219,36 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             "meme_provider": vendor_choice,
             "notes_provider": vendor_choice,
         }
+
+    if configure_obs:
+        obs_host = Prompt.ask(
+            "  OBS WebSocket host",
+            default=obs_defaults["host"],
+            console=console,
+        )
+        obs_port_text = Prompt.ask(
+            "  OBS WebSocket port",
+            default=obs_defaults["port"],
+            console=console,
+        )
+        try:
+            obs_port = int(obs_port_text)
+        except ValueError:
+            console.print("[yellow]Invalid OBS port; using 4455.[/yellow]")
+            obs_port = 4455
+        obs_password = Prompt.ask(
+            "  OBS WebSocket password (blank if auth is disabled)",
+            default=obs_defaults["password"],
+            password=True,
+            console=console,
+        )
+
+        data["obs"] = {
+            "host": obs_host,
+            "port": obs_port,
+        }
+        if obs_password:
+            data["obs"]["password"] = obs_password
 
     path = save_config_file(data)
     console.print(f"\n[green]Saved.[/green] [dim]Edit anytime at[/dim] [cyan]{path}[/cyan]")
@@ -189,7 +269,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
 def _resolve_env_conflicts(console: Console, chosen: dict[str, bool]) -> None:
     """
     Detect SCRIBE_ENABLE_* lines in .env that contradict wizard choices and
-    offer to comment them out — env vars override the TOML config, so leaving
+    offer to comment them out - env vars override the TOML config, so leaving
     a stale `SCRIBE_ENABLE_NOTES=true` would silently undo a wizard choice.
     """
     from scribe.models.config import _find_env_file
@@ -264,7 +344,7 @@ def maybe_prompt_first_run(console: Console | None = None) -> bool:
         default=True,
         console=console,
     ):
-        console.print("[dim]Skipping — run `scribe init` later to configure.[/dim]")
+        console.print("[dim]Skipping - run `scribe init` later to configure.[/dim]")
         return False
 
     run_wizard(console=console, force=True)

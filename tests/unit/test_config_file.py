@@ -35,6 +35,7 @@ def test_flatten_for_settings_maps_known_sections_only():
             "output": {"folder": "C:/scribe/out", "ignored": "value"},
             "transcription": {"method": "local", "model": "large-v3", "language": "es"},
             "features": {"generate_notes": 1, "generate_joke": 0, "generate_meme": True},
+            "obs": {"host": "127.0.0.1", "port": 4456, "password": "secret"},
             "unknown": {"value": "ignored"},
         }
     )
@@ -47,28 +48,65 @@ def test_flatten_for_settings_maps_known_sections_only():
         "enable_notes": True,
         "enable_joke": False,
         "enable_meme": True,
+        "obs_host": "127.0.0.1",
+        "obs_port": 4456,
+        "obs_password": "secret",
     }
+
+
+def test_flatten_for_settings_ignores_malformed_sections():
+    flattened = config_file.flatten_for_settings(
+        {
+            "output": "not-a-table",
+            "transcription": None,
+            "features": ["not", "a", "table"],
+            "obs": "localhost",
+        }
+    )
+
+    assert flattened == {}
 
 
 def test_save_config_file_writes_sections_and_escaped_values(monkeypatch, tmp_path):
     config_path = _use_temp_config(monkeypatch, tmp_path)
+    output_folder = r"C:\scribe\output"
 
     saved_path = config_file.save_config_file(
         {
             # Use an explicit backslash string (not a Path) so the escaping
             # assertion is identical on Windows and POSIX runners; str(Path)
             # would otherwise normalize separators per platform.
-            "output": {"folder": "C:\\Users\\Nick\\Scribe Output"},
+            "output": {"folder": output_folder},
             "transcription": {"method": "auto", "model": "large-v3"},
             "features": {"generate_notes": False, "generate_joke": True},
             "providers": {"joke_provider": 'open"ai'},
+            "obs": {"host": "localhost", "port": 4455, "password": "secret"},
         }
     )
 
     assert saved_path == config_path
     contents = config_path.read_text(encoding="utf-8")
     assert "[output]" in contents
-    assert 'folder = "C:\\\\Users\\\\Nick\\\\Scribe Output"' in contents
+    assert 'folder = "C:\\\\scribe\\\\output"' in contents
     assert "generate_notes = false" in contents
     assert "generate_joke = true" in contents
     assert 'joke_provider = "open\\"ai"' in contents
+    assert "[obs]" in contents
+    assert 'host = "localhost"' in contents
+    assert "port = 4455" in contents
+    assert 'password = "secret"' in contents
+
+
+def test_save_config_file_ignores_malformed_sections(monkeypatch, tmp_path):
+    config_path = _use_temp_config(monkeypatch, tmp_path)
+
+    config_file.save_config_file(
+        {
+            "output": {"folder": "out"},
+            "obs": "not-a-table",
+        }
+    )
+
+    contents = config_path.read_text(encoding="utf-8")
+    assert "[output]" in contents
+    assert "[obs]" not in contents

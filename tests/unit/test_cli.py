@@ -13,6 +13,7 @@ import pytest
 from typer.testing import CliRunner
 
 from scribe.cli.main import app
+from scribe.core.recorder import OBSPreflightResult
 from scribe.exceptions import ScribeError
 
 
@@ -257,6 +258,7 @@ class TestRecordCommand:
 
         assert result.exit_code == 0
         assert "--name" in output
+        assert "--check" in output
 
     @patch("scribe.cli.main.ScribeConfig")
     @patch("scribe.cli.main.OBSRecorder")
@@ -273,6 +275,43 @@ class TestRecordCommand:
         result = cli_runner.invoke(app, ["record", "--help"])
         assert result.exit_code == 0
 
+    def test_record_check_runs_preflight_only(self, cli_runner, monkeypatch):
+        """`scribe record --check` should not prompt or instantiate the recorder flow."""
+        called = {"preflight": False}
+
+        def fake_preflight():
+            called["preflight"] = True
+            return 0
+
+        monkeypatch.setattr("scribe.cli.main._run_obs_preflight", fake_preflight)
+
+        result = cli_runner.invoke(app, ["record", "--check"])
+
+        assert result.exit_code == 0
+        assert called["preflight"] is True
+
+    @patch("scribe.cli.main.ScribeConfig")
+    @patch("scribe.cli.main.OBSRecorder")
+    def test_record_check_escapes_preflight_markup(
+        self, mock_recorder_class, mock_config_class, cli_runner
+    ):
+        """Preflight fixes may contain TOML sections like [obs]."""
+        recorder = Mock()
+        recorder.check_obs_preflight.return_value = OBSPreflightResult(
+            status="fail",
+            message="OBS WebSocket authentication failed",
+            details=("configured section=[obs]",),
+            fix_suggestion="Set [obs].password in ~/.scribe/config.toml.",
+        )
+        mock_recorder_class.return_value = recorder
+
+        result = cli_runner.invoke(app, ["record", "--check"])
+        output = _strip_ansi(result.stdout)
+
+        assert result.exit_code == 1
+        assert "[obs].password" in output
+        assert "section=[obs]" in output
+
 
 class TestRecShortcut:
     """Test 'rec' shortcut command."""
@@ -280,9 +319,11 @@ class TestRecShortcut:
     def test_rec_help(self, cli_runner):
         """Test rec shortcut help."""
         result = cli_runner.invoke(app, ["rec", "--help"])
+        output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
-        assert "rec" in result.stdout.lower() or "record" in result.stdout.lower()
+        assert "rec" in output.lower() or "record" in output.lower()
+        assert "--check" in output
 
     def test_rec_without_name(self, cli_runner):
         """Test rec command without name argument."""
@@ -294,6 +335,21 @@ class TestRecShortcut:
         """Test rec command with name argument."""
         result = cli_runner.invoke(app, ["rec", "Test Meeting", "--help"])
         assert result.exit_code == 0
+
+    def test_rec_check_runs_preflight_only(self, cli_runner, monkeypatch):
+        """`scribe rec --check` should route to the read-only OBS preflight."""
+        called = {"preflight": False}
+
+        def fake_preflight():
+            called["preflight"] = True
+            return 0
+
+        monkeypatch.setattr("scribe.cli.main._run_obs_preflight", fake_preflight)
+
+        result = cli_runner.invoke(app, ["rec", "--check"])
+
+        assert result.exit_code == 0
+        assert called["preflight"] is True
 
 
 class TestJokeCommand:

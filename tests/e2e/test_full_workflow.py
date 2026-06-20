@@ -20,6 +20,8 @@ from scribe.models.session import TranscriptionSession
 class TestGPUTranscriptionWorkflow:
     """Test complete GPU transcription workflow."""
 
+    pytestmark = pytest.mark.gpu
+
     @pytest.mark.skipif(
         not pytest.importorskip("torch", reason="PyTorch not available").cuda.is_available(),
         reason="CUDA not available",

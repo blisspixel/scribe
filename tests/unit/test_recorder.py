@@ -36,9 +36,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from scribe.core.recorder import OBSRecorder
+from scribe.core.recorder import OBSAuthenticationError, OBSRecorder
 from scribe.exceptions import ProcessError
 from scribe.models.config import ScribeConfig
+from scribe.utils.obs_config import OBSWebSocketConfig
 
 
 @pytest.fixture
@@ -53,6 +54,15 @@ def mock_config(tmp_path):
     config.max_recording_hours = 9.0
     config.recording_warning_fraction = 0.9
     return config
+
+
+@pytest.fixture(autouse=True)
+def no_obs_websocket_config(monkeypatch):
+    """Keep recorder tests independent from the developer's installed OBS config."""
+    monkeypatch.setattr(
+        "scribe.core.recorder.read_obs_websocket_config",
+        lambda: OBSWebSocketConfig(path=None, exists=False),
+    )
 
 
 @pytest.fixture
@@ -124,7 +134,11 @@ class TestWebSocketConnection:
 
         mock_obs_reqs.ReqClient.side_effect = side_effect
 
-        with patch.object(recorder, "_port_listening", side_effect=port_listening):
+        with (
+            patch.object(recorder, "_port_listening", side_effect=port_listening),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
             with recorder._connect_obs() as client:
                 assert client == mock_obs_client
                 assert call_count[0] >= 3
@@ -212,6 +226,200 @@ class TestWebSocketConnection:
         assert mock_obs_reqs.ReqClient.call_count <= 2
 
     @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_success_is_read_only(self, mock_obs_reqs, recorder, mock_obs_client):
+        """Preflight should only read OBS status and never control recording."""
+        status = Mock()
+        status.output_active = True
+        mock_obs_client.get_record_status.return_value = status
+        mock_obs_reqs.ReqClient.return_value = mock_obs_client
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=True),
+            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_launch_obs") as launch_obs,
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is True
+        assert result.recording_active is True
+        assert "ready" in result.message.lower()
+        mock_obs_client.get_record_status.assert_called_once()
+        mock_obs_client.start_record.assert_not_called()
+        mock_obs_client.stop_record.assert_not_called()
+        kill_obs.assert_not_called()
+        launch_obs.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_closed_port_fails_without_client(self, mock_obs_reqs, recorder):
+        """Closed ports should fail fast without opening a WebSocket client."""
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert "not listening" in result.message.lower()
+        mock_obs_reqs.ReqClient.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_closed_port_warns_if_recording_mux_active(self, mock_obs_reqs, recorder):
+        """A mux process means the check must not suggest restarting OBS."""
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=True),
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert "appears to be recording" in result.message.lower()
+        assert result.fix_suggestion is not None
+        assert "do not restart" in result.fix_suggestion.lower()
+        mock_obs_reqs.ReqClient.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_disabled_obs_websocket_is_explicit(self, mock_obs_reqs, recorder):
+        """OBS config can explain closed ports before socket probing is useful."""
+        with (
+            patch(
+                "scribe.core.recorder.read_obs_websocket_config",
+                return_value=OBSWebSocketConfig(
+                    path=Path("config.json"),
+                    exists=True,
+                    server_enabled=False,
+                    auth_required=False,
+                    server_port=4455,
+                ),
+            ),
+            patch.object(recorder, "_port_listening") as port_check,
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert result.message == "OBS WebSocket server is disabled"
+        assert result.fix_suggestion is not None
+        assert "enable Tools > WebSocket" in result.fix_suggestion
+        port_check.assert_not_called()
+        mock_obs_reqs.ReqClient.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_port_mismatch_uses_obs_config(self, mock_obs_reqs, recorder):
+        """A configured OBS port mismatch gets a direct fix."""
+        with (
+            patch(
+                "scribe.core.recorder.read_obs_websocket_config",
+                return_value=OBSWebSocketConfig(
+                    path=Path("config.json"),
+                    exists=True,
+                    server_enabled=True,
+                    auth_required=False,
+                    server_port=4456,
+                ),
+            ),
+            patch.object(recorder, "_port_listening") as port_check,
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert result.message == "OBS WebSocket port mismatch"
+        assert result.fix_suggestion is not None
+        assert "SCRIBE_OBS_PORT=4456" in result.fix_suggestion
+        port_check.assert_not_called()
+        mock_obs_reqs.ReqClient.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_auth_required_without_password_is_explicit(
+        self, mock_obs_reqs, recorder
+    ):
+        """OBS config can reveal a missing password before connection attempts."""
+        recorder.obs_password = ""
+        with (
+            patch(
+                "scribe.core.recorder.read_obs_websocket_config",
+                return_value=OBSWebSocketConfig(
+                    path=Path("config.json"),
+                    exists=True,
+                    server_enabled=True,
+                    auth_required=True,
+                    server_port=4455,
+                ),
+            ),
+            patch.object(recorder, "_port_listening") as port_check,
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert result.message == "OBS WebSocket requires a password"
+        assert result.fix_suggestion is not None
+        assert "[obs].password" in result.fix_suggestion
+        port_check.assert_not_called()
+        mock_obs_reqs.ReqClient.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_status_request_failure_is_explicit(self, mock_obs_reqs, recorder):
+        """A listening TCP port is not enough if OBS status requests fail."""
+        client = MagicMock()
+        client.get_record_status.side_effect = RuntimeError("handshake failed")
+        mock_obs_reqs.ReqClient.return_value = client
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert "status request failed" in result.message.lower()
+        assert any("handshake failed" in detail for detail in result.details)
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_generic_auth_error_is_explicit(self, mock_obs_reqs, recorder):
+        """obsws-python may raise auth failures outside OBSSDKRequestError."""
+        client = MagicMock()
+        client.get_record_status.side_effect = RuntimeError(
+            "authentication enabled but no password provided"
+        )
+        mock_obs_reqs.ReqClient.return_value = client
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert "authentication failed" in result.message.lower()
+        assert result.fix_suggestion is not None
+        assert "Show Connect Info" in result.fix_suggestion
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_obs_preflight_identify_failure_is_auth_error(self, mock_obs_reqs, recorder):
+        """OBS reports bad credentials as an identify failure."""
+        client = MagicMock()
+        client.get_record_status.side_effect = RuntimeError(
+            "failed to identify client with the server, please check connection settings"
+        )
+        mock_obs_reqs.ReqClient.return_value = client
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            result = recorder.check_obs_preflight()
+
+        assert result.ok is False
+        assert result.message == "OBS WebSocket authentication failed"
+        assert result.fix_suggestion is not None
+        assert "Show Connect Info" in result.fix_suggestion
+
+    @patch("scribe.core.recorder.obs_reqs")
     @patch("scribe.core.recorder.get_obs_executable_path")
     @patch("scribe.core.recorder.subprocess.Popen")
     @patch("scribe.core.recorder.subprocess.run")
@@ -224,7 +432,7 @@ class TestWebSocketConnection:
         mock_get_exe.return_value = obs_exe
 
         # Phase 1: _try_connect_to_running_obs checks all 3 hosts (localhost,
-        # 127.0.0.1, ::1) — all False.  Phase 2: after launch, one returns True.
+        # 127.0.0.1, ::1) - all False.  Phase 2: after launch, one returns True.
         listening_state = [False, False, False, True]
 
         def port_listening(host, port, timeout):
@@ -234,7 +442,11 @@ class TestWebSocketConnection:
 
         mock_obs_reqs.ReqClient.return_value = mock_obs_client
 
-        with patch.object(recorder, "_port_listening", side_effect=port_listening):
+        with (
+            patch.object(recorder, "_port_listening", side_effect=port_listening),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
             with recorder._connect_obs() as client:
                 assert client == mock_obs_client
                 mock_popen.assert_called_once()
@@ -244,7 +456,11 @@ class TestWebSocketConnection:
         """Test connection timeout raises ConnectionError."""
         mock_obs_reqs.ReqClient.side_effect = ConnectionError("Connection refused")
 
-        with patch.object(recorder, "_port_listening", return_value=False):
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
             with patch("scribe.core.recorder.get_obs_executable_path", return_value=None):
                 with pytest.raises(ConnectionError, match="Could not connect"):
                     with recorder._connect_obs(max_wait_seconds=1):
@@ -367,7 +583,11 @@ class TestHostnameValidation:
         # This ValueError should not be caught by hostname validation logic
         mock_obs_reqs.ReqClient.side_effect = ValueError("Invalid port number")
 
-        with patch.object(recorder, "_port_listening", return_value=True):
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
             with patch("scribe.core.recorder.get_obs_executable_path", return_value=None):
                 with pytest.raises(ConnectionError):
                     with recorder._connect_obs(max_wait_seconds=1):
@@ -408,10 +628,10 @@ class TestRecordingLifecycle:
         status_new_active.output_active = True
 
         mock_obs_client.get_record_status.side_effect = [
-            status_active,  # Initial check — stale recording detected
-            status_inactive,  # After stop_record — confirmed stopped
+            status_active,  # Initial check - stale recording detected
+            status_inactive,  # After stop_record - confirmed stopped
             status_inactive,  # Pre-start check (re-enter start path)
-            status_new_active,  # Verification — new recording started
+            status_new_active,  # Verification - new recording started
         ]
 
         recorder._start_recording_if_needed(mock_obs_client)
@@ -837,7 +1057,7 @@ class TestDefensiveProgramming:
 
 
 # ---------------------------------------------------------------------------
-# NEW TESTS — appended to raise coverage to 80%+
+# NEW TESTS - appended to raise coverage to 80%+
 # ---------------------------------------------------------------------------
 
 
@@ -935,6 +1155,39 @@ class TestObsProcessRunning:
         assert recorder._obs_process_running() is False
 
 
+class TestObsRecordingProcessRunning:
+    """Test _obs_recording_process_running."""
+
+    @patch("scribe.core.recorder.subprocess.run")
+    @patch("scribe.utils.platform.is_windows", return_value=True)
+    def test_windows_mux_running(self, _w, mock_run, recorder):
+        mock_run.return_value = Mock(stdout="Image Name  PID\nobs-ffmpeg-mux.exe  1234")
+        assert recorder._obs_recording_process_running() is True
+
+    @patch("scribe.core.recorder.subprocess.run")
+    @patch("scribe.utils.platform.is_windows", return_value=True)
+    def test_windows_mux_not_running(self, _w, mock_run, recorder):
+        mock_run.return_value = Mock(stdout="INFO: No tasks are running")
+        assert recorder._obs_recording_process_running() is False
+
+    @patch("scribe.core.recorder.subprocess.run")
+    @patch("scribe.utils.platform.is_windows", return_value=False)
+    def test_linux_mux_running(self, _w, mock_run, recorder):
+        mock_run.return_value = Mock(returncode=0)
+        assert recorder._obs_recording_process_running() is True
+
+    @patch("scribe.core.recorder.subprocess.run")
+    @patch("scribe.utils.platform.is_windows", return_value=False)
+    def test_linux_mux_not_running(self, _w, mock_run, recorder):
+        mock_run.return_value = Mock(returncode=1)
+        assert recorder._obs_recording_process_running() is False
+
+    @patch("scribe.core.recorder.subprocess.run", side_effect=Exception("oops"))
+    @patch("scribe.utils.platform.is_windows", return_value=True)
+    def test_exception_returns_false(self, _w, _r, recorder):
+        assert recorder._obs_recording_process_running() is False
+
+
 class TestCleanObsCrashSentinel:
     """Test _clean_obs_crash_sentinel."""
 
@@ -976,35 +1229,135 @@ class TestCleanObsCrashSentinel:
 
 
 class TestConnectObsPhase2:
-    """Test the kill→launch→retry loop in _connect_obs Phase 2."""
+    """Test conservative launch recovery in _connect_obs Phase 2."""
 
     @patch("scribe.core.recorder.obs_reqs")
     @patch("scribe.core.recorder.get_obs_executable_path", return_value=None)
     def test_no_exe_raises_connection_error(self, _exe, mock_reqs, recorder):
-        """If OBS exe is None, cannot launch → raises ConnectionError."""
-        with patch.object(recorder, "_port_listening", return_value=False):
-            with patch.object(recorder, "_kill_existing_obs"):
-                with pytest.raises(ConnectionError, match="Could not connect"):
-                    with recorder._connect_obs(max_wait_seconds=1):
-                        pass
+        """If OBS exe is None, cannot launch, so raises ConnectionError."""
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            with pytest.raises(ConnectionError, match="Could not connect"):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
 
     @patch("scribe.core.recorder.obs_reqs")
     @patch("scribe.core.recorder.subprocess.Popen")
     @patch("scribe.core.recorder.get_obs_executable_path")
     def test_launch_fails_retries(self, mock_exe, mock_popen, mock_reqs, recorder, tmp_path):
-        """Popen raises → retries, eventually ConnectionError."""
+        """Popen raises, retries, and eventually raises ConnectionError."""
         obs_exe = tmp_path / "obs.exe"
         obs_exe.touch()
         mock_exe.return_value = obs_exe
         mock_popen.side_effect = OSError("cannot start")
 
-        with patch.object(recorder, "_port_listening", return_value=False):
-            with patch.object(recorder, "_kill_existing_obs"):
-                with pytest.raises(ConnectionError):
-                    with recorder._connect_obs(max_wait_seconds=1):
-                        pass
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            with pytest.raises(ConnectionError):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
         # Popen called for each attempt (max_launch_attempts=2)
         assert mock_popen.call_count == 2
+
+    @patch("scribe.core.recorder.obs_reqs")
+    @patch("scribe.core.recorder.get_obs_executable_path")
+    def test_refuses_restart_when_recording_mux_is_active(
+        self, mock_exe, mock_reqs, recorder, tmp_path
+    ):
+        """An active recording mux blocks all restart recovery."""
+        obs_exe = tmp_path / "obs.exe"
+        obs_exe.touch()
+        mock_exe.return_value = obs_exe
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=True),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_launch_obs") as launch_obs,
+        ):
+            with pytest.raises(ConnectionError, match="actively recording"):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
+
+        kill_obs.assert_not_called()
+        launch_obs.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    @patch("scribe.core.recorder.get_obs_executable_path")
+    def test_refuses_restart_when_obs_is_running(self, mock_exe, mock_reqs, recorder, tmp_path):
+        """A running OBS process is not killed just because WebSocket is unavailable."""
+        obs_exe = tmp_path / "obs.exe"
+        obs_exe.touch()
+        mock_exe.return_value = obs_exe
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_launch_obs") as launch_obs,
+        ):
+            with pytest.raises(ConnectionError, match="already running"):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
+
+        kill_obs.assert_not_called()
+        launch_obs.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    @patch("scribe.core.recorder.get_obs_executable_path")
+    def test_auth_failure_does_not_launch_or_restart(self, mock_exe, mock_reqs, recorder, tmp_path):
+        """A rejected OBS password is reported directly, with no recovery restart."""
+        obs_exe = tmp_path / "obs.exe"
+        obs_exe.touch()
+        mock_exe.return_value = obs_exe
+        mock_reqs.ReqClient.side_effect = Exception("failed to identify client with the server")
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=True),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=True),
+            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_launch_obs") as launch_obs,
+        ):
+            with pytest.raises(OBSAuthenticationError, match="rejected"):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
+
+        kill_obs.assert_not_called()
+        launch_obs.assert_not_called()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    @patch("scribe.core.recorder.get_obs_executable_path")
+    def test_phase2_launch_cleans_sentinel_without_killing_obs(
+        self, mock_exe, mock_reqs, recorder, tmp_path
+    ):
+        """Launch recovery only cleans the sentinel and starts OBS."""
+        obs_exe = tmp_path / "obs.exe"
+        obs_exe.touch()
+        mock_exe.return_value = obs_exe
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(recorder, "_clean_obs_crash_sentinel") as clean_sentinel,
+            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_launch_obs", side_effect=OSError("cannot start")),
+        ):
+            with pytest.raises(ConnectionError):
+                with recorder._connect_obs(max_wait_seconds=1):
+                    pass
+
+        clean_sentinel.assert_called()
+        kill_obs.assert_not_called()
 
 
 class TestStartRecordingStaleStop:
@@ -1346,15 +1699,48 @@ class TestRecordWithWebsocket:
         """ConnectionError during connect → falls back to CLI."""
         mock_reqs.ReqClient.side_effect = ConnectionError("nope")
 
-        with patch.object(recorder, "_port_listening", return_value=False):
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
             with patch("scribe.core.recorder.get_obs_executable_path", return_value=None):
-                with patch.object(recorder, "_kill_existing_obs"):
-                    with patch.object(
-                        recorder, "_record_with_cli", return_value=Path("/tmp/rec.mp4")
-                    ) as mock_cli:
-                        result = recorder._record_with_websocket("test", threading.Event())
+                with patch.object(
+                    recorder, "_record_with_cli", return_value=Path("/tmp/rec.mp4")
+                ) as mock_cli:
+                    result = recorder._record_with_websocket("test", threading.Event())
         assert result == Path("/tmp/rec.mp4")
         mock_cli.assert_called_once()
+
+    @patch("scribe.core.recorder.obs_reqs")
+    def test_active_recording_connection_error_does_not_fall_back(self, mock_reqs, recorder):
+        """An active recording refusal must not attach through CLI fallback."""
+        mock_reqs.ReqClient.side_effect = ConnectionError("nope")
+
+        with (
+            patch.object(recorder, "_port_listening", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=True),
+            patch.object(recorder, "_record_with_cli") as mock_cli,
+        ):
+            with pytest.raises(ProcessError, match="actively recording"):
+                recorder._record_with_websocket("test", threading.Event())
+
+        mock_cli.assert_not_called()
+
+    def test_authentication_error_does_not_fall_back(self, recorder):
+        """A rejected OBS password fails fast instead of entering CLI fallback."""
+        with (
+            patch.object(
+                recorder,
+                "_connect_obs",
+                side_effect=OBSAuthenticationError("OBS rejected the configured password"),
+            ),
+            patch.object(recorder, "_record_with_cli") as mock_cli,
+        ):
+            with pytest.raises(ProcessError, match="OBS rejected"):
+                recorder._record_with_websocket("test", threading.Event())
+
+        mock_cli.assert_not_called()
 
     @patch("scribe.core.recorder.time.sleep")
     @patch("scribe.core.recorder.obs_reqs")
@@ -1690,7 +2076,7 @@ class TestWaitForObsStartup:
     @patch("scribe.core.recorder.obs_error")
     def test_sdk_error_handled(self, mock_error, mock_reqs, mock_sleep, recorder):
         """OBSSDKRequestError (non-not-ready) → handled."""
-        sdk_err = Exception("auth failed")
+        sdk_err = Exception("request failed")
         mock_error.OBSSDKRequestError = type(sdk_err)
 
         client = MagicMock()
@@ -1817,14 +2203,14 @@ class TestTryConnectAuthError:
     @patch("scribe.core.recorder.obs_error")
     @patch("scribe.core.recorder.obs_reqs")
     def test_auth_error_path(self, mock_reqs, mock_error, recorder):
-        """Auth error during connection → returns None."""
+        """Auth error during connection → raises a targeted error."""
         auth_err = Exception("Authentication failed - wrong password")
         mock_error.OBSSDKRequestError = type(auth_err)
         mock_reqs.ReqClient.side_effect = auth_err
 
         with patch.object(recorder, "_port_listening", return_value=True):
-            result = recorder._try_connect_to_running_obs(["127.0.0.1"], [4455])
-        assert result is None
+            with pytest.raises(OBSAuthenticationError, match="rejected"):
+                recorder._try_connect_to_running_obs(["127.0.0.1"], [4455])
 
     @patch("scribe.core.recorder.obs_error")
     @patch("scribe.core.recorder.obs_reqs")
@@ -2016,11 +2402,14 @@ class TestConnectObsPhase1Console:
 
         mock_reqs.ReqClient.return_value = mock_obs_client
 
-        with patch.object(recorder, "_port_listening", side_effect=port_check):
-            with patch.object(recorder, "_kill_existing_obs"):
-                with patch("scribe.core.recorder.time.sleep"):
-                    with recorder._connect_obs() as client:
-                        assert client is mock_obs_client
+        with (
+            patch.object(recorder, "_port_listening", side_effect=port_check),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+        ):
+            with patch("scribe.core.recorder.time.sleep"):
+                with recorder._connect_obs() as client:
+                    assert client is mock_obs_client
 
 
 class TestObsConfigDir:

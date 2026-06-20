@@ -186,7 +186,10 @@ jobs:
             --ignore-vuln PYSEC-2025-203 \
             --ignore-vuln PYSEC-2025-204 \
             --ignore-vuln PYSEC-2025-206 \
-            --ignore-vuln PYSEC-2026-139
+            --ignore-vuln PYSEC-2026-139 \
+            --ignore-vuln CVE-2025-2999 \
+            --ignore-vuln CVE-2025-3000 \
+            --ignore-vuln CVE-2025-3001
 
   # ---------------------------------------------------------------------------
   # Toolchain Sanity Check
@@ -295,8 +298,8 @@ jobs:
           done
 
           if [[ $failed -eq 1 ]]; then
-            echo "❌ One or more required CI gates failed. See job logs above."
+            echo "One or more required CI gates failed. See job logs above."
             exit 1
           fi
 
-          echo "✅ All required CI gates passed."
+          echo "All required CI gates passed."

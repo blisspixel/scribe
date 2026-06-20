@@ -10,7 +10,9 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 
 ### Architecture & Design
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and design patterns
+- [AGENTIC_BALANCE.md](AGENTIC_BALANCE.md) - Where Scribe uses deterministic rules versus model judgment
 - [Music Mode Architecture](features/MUSIC_MODE_ARCHITECTURE.md) - Segment-based transcription deep dive
+- [Resident Voice Tray Utility Plan](features/VOICE_TRAY_UTILITY_PLAN.md) - Initial resident dictation and read-aloud prototype, validation plan, and follow-on work
 
 ### Development
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Development setup and workflows
