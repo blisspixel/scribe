@@ -8,13 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+---
+
+## [2.7.0] - 2026-06-20
+
 ### Added
+- Resident tray utility prototype: `scribe tray` adds a background tray process for push-to-hold dictation and selection read-aloud, behind the optional `scribe[tray]` extra.
+- `scribe rec --check` and `scribe record --check` run a read-only OBS WebSocket preflight and exit without starting, stopping, or restarting OBS.
+- `scribe init --force` can now persist OBS WebSocket settings, and `scribe doctor` includes OBS WebSocket configuration checks.
+- Agentic balance and voice tray planning docs that state the prototype boundaries and the rule-vs-judgment design line.
 - `scribe transcribe --method openai` with no API key now fails fast with a clear hint instead of erroring deep in the run.
 - `scribe --version` / `-V` prints the version and exits.
 - `scribe info` now shows the config file path (and whether it exists) plus which AI features (notes/joke/meme) are enabled.
 - `scribe transcribe -o/--output-dir DIR` writes output to a chosen folder for that run.
 
 ### Fixed
+- Quick Record now refuses to restart or kill OBS when OBS is already running or a recording mux appears active, and the preflight reports authentication, port, and mux-state details more clearly.
+- Voice selection read-aloud no longer reads stale clipboard content when there is no active selection or copy access fails; clipboard state is restored on setup and paste failures.
+- Tray startup and shutdown now handle hotkey/listener failures defensively and stop partially initialized services.
+- Malformed config file sections are ignored rather than crashing config flattening or saving.
+- Optional Pillow imports in the meme compositor remain optional while satisfying strict type checking.
 - Clickable output-file links now percent-encode the path, so a transcript written to a folder whose name contains spaces (or characters like `#`/`?`) opens correctly when clicked in the terminal instead of producing a broken or non-clickable link. A single `file_uri` helper (built on `Path.as_uri()`) now backs every link on Windows, macOS, and Linux, replacing six slightly different hand-rolled versions.
 - The joke's comedy-archetype selection used a 50-token budget on the legacy chat-completions path; reasoning models spend that entirely on hidden reasoning and return empty content, so the step always logged `invalid archetype ''` and fell back to the heuristic. Selection now uses the configured model on the Responses API with minimal reasoning effort and an adequate output budget, and the provider path gets the same headroom.
 - A third QA pass over the previously-unreviewed setup/config/diagnostics code fixed:
@@ -34,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A missing-ffmpeg error now prints the platform-specific install command and points to `scribe doctor`.
 
 ### Security
+- Raised dependency floors for `pydantic-settings` and `msgpack` to clear current security advisories in the locked environment.
 - Hardening from an adversarial security review (no critical issues were found; these are defense-in-depth):
   - `scribe url` now refuses loopback and internal addresses (localhost, 127.0.0.1, RFC1918, link-local, and the cloud metadata endpoint) and URLs with embedded credentials, to prevent SSRF if a link ever comes from an untrusted source. Set `SCRIBE_ALLOW_LOCAL_URLS=1` to allow a local media server.
   - `--cookies` accepts only a known browser keyword and warns that it reads that browser's cookie jar.
@@ -226,6 +242,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[2.7.0]: https://github.com/blisspixel/scribe/releases/tag/v2.7.0
 [2.6.0]: https://github.com/blisspixel/scribe/releases/tag/v2.6.0
 [2.4.3]: https://github.com/blisspixel/scribe/releases/tag/v2.4.3
 [2.4.2]: https://github.com/blisspixel/scribe/releases/tag/v2.4.2

@@ -33,13 +33,13 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 ---
 
-## What's New in v2.6.0
+## What's New in v2.7.0
 
-- **Structured, queryable output**: every transcription writes a machine-readable JSON transcript next to the `.txt` (optional WebVTT, SRT, and Markdown via `--format`), and `scribe query` does keyword and speaker search across them to find a moment from past meetings.
-- **Hardware-adaptive local backends**: local transcription picks the engine for your machine instead of being CUDA-only, NVIDIA and CPU on faster-whisper, Apple Silicon on mlx-whisper (`scribe[mlx]`), AMD/Intel/Apple on whisper.cpp (`scribe[whispercpp]`), always with a working CPU fallback.
-- **Local speaker diarization**: label "who said what" fully offline with `--diarize` (`scribe[diarize]` + `HF_TOKEN`), filling the same speaker field in every output that the cloud path uses.
-- **Voice I/O mode**: `scribe listen` dictates speech into the focused window and `scribe say` reads a file aloud with a local offline voice, a deliberate opt-in mode behind `scribe[voice]`.
-- **Engineering**: a shared `Transcript` domain model underpins all of the above, a dependency-preference policy keeps the base install lean (heavy/platform deps are extras), and an advisory mutation-testing CI job guards the pure core.
+- **Tray utility prototype**: `scribe tray` adds a resident tray process for push-to-hold dictation and selection read-aloud, behind the optional `scribe[tray]` extra.
+- **Safer OBS setup**: `scribe rec --check` and `scribe record --check` run a read-only OBS WebSocket preflight, while `scribe init --force` and `scribe doctor` now surface OBS configuration guidance.
+- **Quick Record hardening**: recording startup now refuses to restart or kill OBS while a recording appears active, and gives more actionable authentication and mux-state diagnostics.
+- **Voice I/O reliability**: selection read-aloud avoids stale clipboard reads, restores clipboard state on failures, and cleans up hotkey and TTS listeners more defensively.
+- **Engineering**: the release expands tests across recorder, OBS config, diagnostics, init, config parsing, and tray behavior; dependency floors were raised for `pydantic-settings` and `msgpack` so the security audit stays clean.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for direction.
 
@@ -1069,9 +1069,9 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.6.0 (structured output, hardware-adaptive local backends, local diarization, voice I/O, and dependency-policy work)
+**Current Version:** 2.7.0 (tray utility prototype, safer OBS preflight/setup, Quick Record hardening, and expanded defensive tests)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-06-19
+**Last Updated:** 2026-06-20
 
 
