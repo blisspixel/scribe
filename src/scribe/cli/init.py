@@ -57,6 +57,7 @@ def _detected_keys() -> dict[str, bool]:
         if env_file:
             env_data = {k: v for k, v in dotenv_values(env_file).items() if v is not None}
     except Exception:
+        # dotenv_values or file issues should not block the wizard; fall back to empty.
         env_data = {}
 
     def has(*names: str) -> bool:
@@ -322,7 +323,8 @@ def _resolve_env_conflicts(console: Console, chosen: dict[str, bool]) -> None:
     env_path = Path(env_file)
     try:
         lines = env_path.read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except (OSError, UnicodeDecodeError):
+        # Best effort; missing or unreadable .env is not fatal for init wizard.
         return
 
     conflicts: list[tuple[int, str, str]] = []  # (line_idx, var, current_value)
