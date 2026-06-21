@@ -854,7 +854,8 @@ pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- 1542 tests collected (large, high-quality suite with unit + integration + e2e)
+- 1592 tests collected (large, high-quality suite with unit + integration + e2e)
+- 1469 CI-safe unit tests pass; coverage gate 80%+ (currently ~82%)
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`

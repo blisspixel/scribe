@@ -44,9 +44,7 @@ class TestShouldFallbackWebsocketToCli:
 
     def test_active_recording_blocks_fallback(self) -> None:
         assert (
-            should_fallback_websocket_to_cli(
-                OBSActiveRecordingError("OBS is already recording")
-            )
+            should_fallback_websocket_to_cli(OBSActiveRecordingError("OBS is already recording"))
             is False
         )
 

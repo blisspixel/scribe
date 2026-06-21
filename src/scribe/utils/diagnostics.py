@@ -1166,9 +1166,7 @@ class SystemDiagnostics:
             f"Recovery timeout: {status['recovery_timeout_seconds']}s",
         ]
         if status["seconds_until_recovery"] is not None:
-            details_lines.append(
-                f"Estimated recovery in: {status['seconds_until_recovery']:.0f}s"
-            )
+            details_lines.append(f"Estimated recovery in: {status['seconds_until_recovery']:.0f}s")
 
         if status["state"] == "open":
             result = DiagnosticResult(

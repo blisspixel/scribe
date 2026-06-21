@@ -236,9 +236,7 @@ class OBSRecorder:
                     if isinstance(e, OBSActiveRecordingError)
                     else RecordingEvent.CONNECT_AUTH_FAIL
                 )
-            raise ProcessError(
-                str(e), context={"phase": self._session.phase.value}
-            ) from e
+            raise ProcessError(str(e), context={"phase": self._session.phase.value}) from e
         except ConnectionError as e:
             if should_fallback_websocket_to_cli(e):
                 logger.warning("WebSocket connection failed, falling back to CLI mode")

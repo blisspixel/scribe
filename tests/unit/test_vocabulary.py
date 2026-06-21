@@ -419,7 +419,9 @@ class TestVocabularyProperties:
         ),
         st.integers(min_value=1, max_value=200),
     )
-    def test_build_deduped_prompt_is_str_within_budget(self, words: list[str], max_chars: int) -> None:
+    def test_build_deduped_prompt_is_str_within_budget(
+        self, words: list[str], max_chars: int
+    ) -> None:
         result = build_deduped_prompt(words, max_chars)
         assert isinstance(result, str)
         if not words:

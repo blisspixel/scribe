@@ -95,7 +95,9 @@ pytest -m "not gpu"
 ```
 
 ### Test Status
-- 1542 tests collected (unit + integration + e2e)
+- 1592 tests collected (unit + integration + e2e)
+- 1469 CI-safe unit tests pass with `pytest tests/unit/ -m "not gpu and not slow and not e2e"`
+- Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml; currently ~82%)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
 - Full ruff + mypy --strict gates must pass before commit (see ROADMAP Step 2)
