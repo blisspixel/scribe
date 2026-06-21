@@ -99,6 +99,14 @@ tray = [
     "Pillow>=10.0.0",
 ]
 
+# High-quality local neural read-aloud via Kokoro (82M, ONNX, runs on CPU). An
+# optional upgrade over the pyttsx3 baseline; Scribe falls back to pyttsx3 when
+# this extra or its model files are absent. Model/voice files download on setup.
+kokoro = [
+    "kokoro-onnx>=0.4.0",
+    "sounddevice>=0.4.6",  # playback of the synthesized audio
+]
+
 [project.urls]
 Homepage = "https://github.com/blissplixel/scribe"
 Repository = "https://github.com/blissplixel/scribe"
@@ -198,6 +206,7 @@ allowed-confusables = ["×", "–", "—"]
 "src/scribe/core/openai_api.py" = ["S311"]  # jitter only
 "src/scribe/cli/main.py" = ["S324"]  # md5 for stable non-crypto machine ID (two sites)
 "src/scribe/cli/shortcut.py" = ["S603", "S607"]  # launches trusted local tools (powershell, update-desktop-database) to create OS launchers
+"src/scribe/voice/startup.py" = ["S603", "S607"]  # launches trusted local tools (launchctl) to install the login autostart entry
 
 [tool.ruff.format]
 quote-style = "double"
@@ -249,6 +258,7 @@ module = [
     "pyperclip.*",
     "pystray.*",
     "pyttsx3.*",
+    "kokoro_onnx.*",
 ]
 ignore_missing_imports = true
 

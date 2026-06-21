@@ -64,13 +64,13 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 
 5. **Voice I/O (deliberate mode decision).** Shipped as a separate opt-in mode: `scribe listen` (global-hotkey speech-to-type) and `scribe say` (read-aloud via local TTS), behind the `scribe[voice]` extra. It is intentionally outside the batch pipeline, so the streaming non-goal there still holds; see ADR-008.
 
-   **v2 refinement (shipped).** Dictation defaults to push-to-hold, injection supports `paste|type`, and `scribe say` can read a file, the current selection, or the clipboard.
+   **Refinements (shipped).** Dictation and read-aloud default to tap-to-toggle (push-to-hold remains via `--mode/--activation hold`), injection supports `paste|type` with a per-OS clipboard modifier and a typing fallback when the clipboard is wedged, and `scribe say` can read a file, the current selection, or the clipboard.
 
-   The pure pieces (mode and injection resolution, say-source resolution) are unit-tested; the live microphone, keyboard, and TTS paths remain behind the manual marker since CI has no audio device.
+   The pure pieces (mode/injection/speed resolution, say-source resolution) are unit-tested; the live microphone, keyboard, and TTS paths remain behind the manual marker since CI has no audio device.
 
-6. **Resident voice tray utility (prototype baseline).** `scribe tray` now has an initial lightweight tray/menu-bar implementation for local dictation and read-selection hotkeys. It includes dependency diagnostics (`--check`), a terminal fallback (`--no-tray`), configurable hotkeys, local voice profiles (`fast|balanced|accurate`), optional model preload, pause/resume, and read-selection from the tray menu. This should be treated as an early desktop surface until the manual OS matrix proves live microphone, global-hotkey, tray-backend, clipboard, and TTS behavior across real machines. It remains separate from the batch pipeline. See [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+6. **Resident voice tray utility (shipped, Windows-validated).** `scribe tray` is a resident tray/menu-bar utility for local dictation and read-aloud. It includes dependency + permission diagnostics (`--check`), a one-shot model/voice setup (`--setup`), a terminal fallback (`--no-tray`), local STT voice profiles (`fast|balanced|accurate`, latency-first defaults), model preload-by-default with a loading indicator, a listener watchdog that survives a silently-removed OS hook, and run-at-login support (`--startup install|remove|status`). The tray menu shows and remaps the hotkeys (F6–F12), sets read-aloud speed, and toggles start-at-login, all live. High-quality read-aloud uses Kokoro (`scribe[kokoro]`) with a cached/warmed, pipelined synthesizer and a system-voice fallback. Dictation, read-aloud, hotkeys, and startup are validated on Windows; the macOS/Linux hardware matrix is still being proven. It remains separate from the batch pipeline. See [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
 
-Current product priority: validate and harden tray startup/install support, backend routing, model diagnostics, and setup experience for the v2.6 local-first features.
+Current product priority: prove the macOS/Linux hardware matrix for the resident tray (global hotkeys, permissions, tray backend, audio), and continue hardening backend routing, diagnostics, and the setup experience.
 
 ---
 

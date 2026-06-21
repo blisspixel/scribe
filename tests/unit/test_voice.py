@@ -79,11 +79,12 @@ def test_segmenter_spans_are_well_formed(flags):
 def test_resolve_listen_mode():
     from scribe.cli.voice import resolve_listen_mode
 
-    assert resolve_listen_mode(None) == "hold"  # default
+    assert resolve_listen_mode(None) == "toggle"  # default: tap on/off
     assert resolve_listen_mode("HOLD") == "hold"
+    assert resolve_listen_mode("Toggle") == "toggle"
     assert resolve_listen_mode("continuous") == "continuous"
     with pytest.raises(ValueError, match="--mode"):
-        resolve_listen_mode("toggle")
+        resolve_listen_mode("magic")
 
 
 def test_resolve_inject_method():
@@ -114,6 +115,59 @@ def test_clean_spoken_text():
 
     assert clean_spoken_text("  hello\n\n  world \t") == "hello world"
     assert clean_spoken_text("") == ""
+
+
+def test_clipboard_copy_retries_transient_failures(monkeypatch):
+    import sys
+    import types
+
+    from scribe.cli import voice
+
+    calls = {"n": 0}
+    fake = types.ModuleType("pyperclip")
+
+    def copy(value):
+        calls["n"] += 1
+        if calls["n"] < 3:  # fail twice, then succeed (transient OpenClipboard)
+            raise RuntimeError("Error calling OpenClipboard")
+
+    fake.copy = copy  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pyperclip", fake)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    assert voice.clipboard_copy("x", attempts=5) is True
+    assert calls["n"] == 3
+
+
+def test_clipboard_copy_gives_up_after_attempts(monkeypatch):
+    import sys
+    import types
+
+    from scribe.cli import voice
+
+    fake = types.ModuleType("pyperclip")
+
+    def always_fail(value):
+        raise RuntimeError("OpenClipboard")
+
+    fake.copy = always_fail  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pyperclip", fake)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    assert voice.clipboard_copy("x", attempts=3) is False
+
+
+def test_paste_modifier_name_is_per_os():
+    # macOS copies/pastes with Cmd; Windows and Linux use Ctrl. Dictation's default
+    # paste injection and selection-copy both depend on this, so a regression here
+    # silently breaks "hold F9 to dictate" on a Mac (Ctrl+V pastes nothing there).
+    from scribe.cli.voice import paste_modifier_name
+
+    assert paste_modifier_name("Darwin") == "cmd"
+    assert paste_modifier_name("Windows") == "ctrl"
+    assert paste_modifier_name("Linux") == "ctrl"
+    # An unknown/empty platform falls back to Ctrl rather than failing.
+    assert paste_modifier_name("") == "ctrl"
 
 
 def test_hotkey_toggle():

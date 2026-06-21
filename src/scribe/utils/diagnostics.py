@@ -227,6 +227,7 @@ class SystemDiagnostics:
             self.check_env_file,
             self.check_configuration_conflicts,
             self.check_system_resources,
+            self.check_voice_readiness,
         ]
 
         for check in checks:
@@ -1065,6 +1066,50 @@ class SystemDiagnostics:
                 fix_suggestion=None,
             )
 
+        self.results.append(result)
+        return result
+
+    def check_voice_readiness(self) -> DiagnosticResult | None:
+        """Check resident-voice (tray/listen) environment readiness.
+
+        Opt-in by design: if the user has not installed any voice dependency, this
+        check stays silent so non-voice users get no extra noise. When voice is
+        installed it surfaces the OS-permission (macOS) and display-protocol
+        (Linux Wayland) caveats that dependency presence alone cannot prove - the
+        same reason ``scribe tray --check`` shows them.
+        """
+        import importlib.util
+        import os
+        import platform
+
+        # Only speak up if the user has opted into voice (pynput drives the hotkeys
+        # and injection that the advisories are about).
+        if importlib.util.find_spec("pynput") is None:
+            return None
+
+        from scribe.voice.service import resident_voice_advisories
+
+        advisories = resident_voice_advisories(
+            platform.system(),
+            session_type=os.environ.get("XDG_SESSION_TYPE", ""),
+            wayland_display=os.environ.get("WAYLAND_DISPLAY", ""),
+        )
+        warnings = [a for a in advisories if a.level == "warning"]
+        if warnings:
+            result = DiagnosticResult(
+                name="Voice Readiness",
+                status="warn",
+                message=warnings[0].message.split(".")[0],
+                details="\n".join(a.message for a in advisories),
+                fix_suggestion="Run `scribe tray --check` for full voice diagnostics.",
+            )
+        else:
+            result = DiagnosticResult(
+                name="Voice Readiness",
+                status="pass",
+                message="Global hotkeys supported on this platform",
+                details="\n".join(a.message for a in advisories) or None,
+            )
         self.results.append(result)
         return result
 

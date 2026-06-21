@@ -101,6 +101,13 @@ def save_config_file(data: dict[str, Any]) -> Path:
     section("providers", data.get("providers", {}))
     section("obs", data.get("obs", {}))
 
+    # Resident voice settings live under a nested [voice.tray] table (read by
+    # scribe.voice.settings); persist it so `scribe init` / `scribe tray --setup`
+    # choices (model, TTS backend, voice) survive across runs.
+    voice = data.get("voice", {})
+    if isinstance(voice, dict):
+        section("voice.tray", voice.get("tray", {}))
+
     CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
     with contextlib.suppress(OSError):
         os.chmod(CONFIG_PATH, 0o600)

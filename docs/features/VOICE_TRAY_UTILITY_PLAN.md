@@ -2,23 +2,32 @@
 
 ## Status
 
-Initial prototype baseline in the tree:
+Shipped and validated on Windows (real dictation, read-aloud, hotkeys, run-at-login):
 
-- `scribe tray --check` validates optional voice and tray dependencies.
-- `scribe tray` starts a resident tray icon with push-to-talk dictation and
-  read-selection hotkeys on environments where the optional dependencies,
-  desktop backend, and OS permissions allow it.
-- `scribe tray --no-tray` runs the same hotkeys from a terminal for debugging and
-  environments without a tray backend.
-- Voice profiles choose local STT defaults by detected GPU capacity, with
-  RTX 4090-class defaults and CPU fallback paths that still need more real-world
-  latency and reliability validation.
+- `scribe tray` runs a resident tray icon. Dictation and read-aloud default to
+  **tap-to-toggle** (tap to start, tap again to stop); `--activation hold` keeps
+  push-to-talk. Hotkey actions run on a dispatcher thread, not the keyboard-hook
+  callback, and a watchdog recreates the listener if Windows silently removes the
+  low-level hook.
+- `scribe tray --check` reports dependencies, the resolved read-aloud backend, and
+  macOS Input-Monitoring / Linux-Wayland permission caveats.
+- `scribe tray --setup` pre-downloads the dictation model and a read-aloud voice
+  (with byte-verified downloads) and saves the choice.
+- `scribe tray --startup install|remove|status` runs the tray at login
+  (Startup-folder `.lnk` / LaunchAgent / XDG autostart).
+- The tray menu shows + remaps the hotkeys (F6–F12), sets read-aloud speed
+  (0.5–2.0x), and toggles start-at-login, all live.
+- STT: latency-first profiles (`balanced` → small, `accurate` → large-v3-turbo on
+  12GB+), model preloaded at startup with a loading indicator.
+- TTS: Kokoro (82M, ONNX) when installed (`scribe[kokoro]`), cached/warmed and
+  pipelined for gap-free multi-paragraph reads, with a pyttsx3 system-voice
+  fallback on any failure.
 
-This is not yet a claim that the resident utility is stable across every OS,
-permission model, desktop shell, keyboard layout, audio device, or tray backend.
-Automated tests cover the pure settings, state, dependency, and CLI wiring. Live
-microphone capture, global hotkeys, tray behavior, clipboard injection/restore,
-and TTS remain manual-matrix work until proven on real machines.
+Automated tests cover the pure settings/state/dependency/CLI wiring plus the
+toggle state machine, clipboard resilience, TTS backend/speed resolution, and
+the startup install/remove round-trip. The **macOS and Linux hardware matrix**
+(global hotkeys, permissions, tray backend, audio devices) is the remaining
+manual-validation work.
 
 ## Goal
 
@@ -345,40 +354,41 @@ Hard requirements:
 
 ### Phase 2: Better Dictation Backend
 
-- Remaining: route dictation through Scribe's local backend registry instead of hardcoding
-  faster-whisper.
-- Prototype baseline: voice profiles `fast`, `balanced`, `accurate`.
-- Remaining: add short-utterance benchmark command or diagnostic output for model
-  latency.
-- Remaining: add Silero VAD for continuous mode, with RMS fallback.
+- Shipped: latency-first voice profiles `fast`/`balanced`/`accurate` (small /
+  large-v3-turbo on 12GB+), preloaded at startup and kept resident.
+- Remaining: route dictation through Scribe's local backend registry instead of
+  hardcoding faster-whisper.
+- Remaining: short-utterance latency benchmark/diagnostic output.
+- Remaining: Silero VAD for continuous mode, with RMS fallback.
 
 ### Phase 3: Tray App
 
-- Prototype baseline: `scribe tray` with `pystray`.
-- Prototype baseline: tray states, menu actions, pause/resume, read-now, and quit.
-- Prototype baseline: default hotkeys and same-hotkey validation.
-- Prototype baseline: live I/O paths stay behind the `scribe[tray]` optional extra.
+- Shipped: `scribe tray` with `pystray`; tray states, pause/resume, quit.
+- Shipped: tap-to-toggle (and hold) activation; the hook callback only enqueues,
+  with a dispatcher thread + listener watchdog for hotkey reliability.
+- Shipped: tray menu shows + remaps the hotkeys (F6–F12), sets read-aloud speed,
+  and toggles start-at-login; same-hotkey collisions are rejected.
+- Shipped: live I/O paths stay behind the `scribe[tray]`/`scribe[kokoro]` extras.
+- Removed: the "Read selection now" menu item (opening the menu steals focus, so
+  it could not capture a live selection — the read hotkey is the reliable path).
 - Remaining: validate OS-level hotkey conflicts and permission failures on the
-  manual matrix; `pynput` cannot guarantee conflict detection on every desktop.
+  macOS/Linux matrix.
 
 ### Phase 4: Startup And Doctor
 
-- Add `scribe tray --startup install/remove/status`.
-- Extend `scribe doctor` with voice-tray checks:
-  - optional deps installed
-  - microphone available
-  - hotkey listener available
-  - configured backend available
-  - macOS permission hints
-  - Linux Wayland warning and portal detection
+- Shipped: `scribe tray --startup install/remove/status` and a tray "Start at
+  login" toggle (Startup `.lnk` / LaunchAgent / XDG autostart).
+- Shipped: `scribe doctor` voice-readiness check (opt-in, shown only when voice
+  deps are installed) plus the macOS/Wayland advisories in `scribe tray --check`.
+- Remaining: per-check microphone-available / configured-backend-available probes
+  in `scribe doctor`.
 
 ### Phase 5: Packaging
 
-- Keep `uv tool install "scribe[tray,voice]"` as the developer and power-user path.
-- Add OS launchers through the existing shortcut mechanism.
-- Later, evaluate packaged app builds with PyInstaller per OS. PyInstaller requires
-  building separately on each target OS, so this should not block the Python tool
-  path.
+- Shipped: `uv tool install "scribe[tray,kokoro]"` is the developer/power-user path.
+- Shipped: run-at-login uses the existing shortcut/launcher mechanism.
+- Later: evaluate packaged app builds with PyInstaller per OS (not blocking the
+  Python tool path).
 
 Sources:
 
@@ -405,36 +415,40 @@ Manual matrix:
 
 Manual scenarios:
 
-- Hold `F9` in Notepad, browser text field, Slack/Teams, VS Code, and terminal.
-- Press `F8` with selected text in browser, PDF viewer, editor, and terminal.
-- Hotkey conflict.
-- Clipboard preservation.
-- Startup install and uninstall.
-- No microphone.
-- Missing optional dependencies.
-- GPU unavailable after startup.
+- Tap `F9` (dictate, tap again to insert) in Notepad, browser text field,
+  Slack/Teams, VS Code; confirm it does not type into a terminal/password field.
+- Tap `F8` with selected text in browser, PDF viewer, and editor; tap again to stop.
+- Remap the dictate/read keys from the tray menu and confirm they take effect live.
+- Change read-aloud speed from the tray menu and on the next read.
+- Enable/disable "Start at login" and confirm the tray launches at next login.
+- Hotkey conflict / same-key rejection.
+- Clipboard preservation; clipboard wedged → typing fallback.
+- No microphone; missing optional dependencies; GPU unavailable after startup.
 
-## Validation Criteria Before Calling It Stable
+## Validation Criteria
 
-- `scribe tray` starts without a terminal-facing stack trace when optional deps are
-  missing, and prints an actionable install hint.
-- On Windows with an RTX 4090, local dictation can use a preloaded high-quality
-  GPU model and insert text into the focused app.
-- On CPU-only machines, dictation works with a smaller int8 model or clearly says
-  why it cannot.
-- Read-selection hotkey speaks selected text and restores clipboard state.
-- Tray state visibly changes during mic capture and speech playback.
-- Hotkey conflicts are reported without crashing the tray.
-- `scribe listen` and `scribe say` still work as standalone CLI commands.
-- Lint, type checks, and coverage-gated tests pass in CI.
+Met on Windows:
+
+- [x] `scribe tray` starts cleanly when optional deps are missing and prints an
+      actionable install hint.
+- [x] On an RTX 4090, dictation uses a preloaded model and inserts text into the
+      focused app; feedback shows in the tray/terminal.
+- [x] CPU-only path falls back to a smaller int8 model.
+- [x] The read hotkey speaks the selection and restores clipboard state.
+- [x] Read-aloud stop is prompt; multi-paragraph reads are gap-free.
+- [x] Hotkey conflicts (same key) are rejected without crashing.
+- [x] `scribe listen` and `scribe say` still work standalone.
+- [x] Lint, type checks, and coverage-gated tests pass in CI.
+
+Remaining: the same on the macOS and Linux (X11 + Wayland) hardware matrix.
 
 ## Open Decisions
 
-- Whether `balanced` should default to `small`, `medium`, or `large-v3-turbo` on
-  high-VRAM NVIDIA GPUs. Decide with measured short-utterance latency on the 4090.
-- Whether to use `pystray` long-term or move to PySide6 if preferences UI becomes
-  substantial.
-- Whether Piper should be first-class in the initial tray release or a follow-up
-  `scribe[tts-piper]` extra.
+- Decided: `balanced` defaults to `small` (latency-first) and `accurate` to
+  `large-v3-turbo` on 12GB+ GPUs.
+- Decided: ship Kokoro as the optional high-quality TTS (`scribe[kokoro]`) with a
+  pyttsx3 fallback; Piper remains a possible future `scribe[tts-piper]` extra.
+- Whether to use `pystray` long-term or move to PySide6 if a real preferences UI
+  becomes substantial.
 - Whether Wayland GlobalShortcuts should be implemented directly in Python or
   deferred until a stable helper library is worth adopting.

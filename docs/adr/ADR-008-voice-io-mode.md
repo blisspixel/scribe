@@ -54,10 +54,11 @@ WhisperWriter, OpenWhispr, the macOS Speak-Selection feature) and the security r
 of v1 led to three changes, none of which alter the mode's place outside the batch
 pipeline:
 
-- Dictation defaults to **push-to-hold** (`--mode hold`: hold F9, speak, release to
-  insert), with the original always-listening behavior available as
-  `--mode continuous`. Push-to-hold is the common default in those tools and removes
-  the always-on-microphone exposure the security review flagged.
+- Dictation moved to a push-to-activate model (the v1 always-on default was
+  dropped, removing the always-on-microphone exposure the security review flagged).
+  The current default is **tap-to-toggle** (`--mode toggle`: tap F9 to start, tap
+  again to insert), matching Windows Voice Access and macOS hands-free dictation;
+  `--mode hold` keeps push-to-hold and `--mode continuous` keeps always-listening.
 - Text injection is selectable with `--inject paste|type`: `paste` (via the
   clipboard, restored on exit) stays the reliable default; `type` inserts at the
   cursor with keystrokes and never touches the clipboard.

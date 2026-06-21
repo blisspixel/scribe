@@ -3617,9 +3617,9 @@ def vocab_command(
 @app.command(name="listen")
 def listen_command(
     mode: str = typer.Option(
-        "hold",
+        "toggle",
         "--mode",
-        help="hold (push-to-talk: hold F9, speak, release) or continuous (always listening)",
+        help="toggle (tap F9 on/off, default), hold (push-to-talk), or continuous",
     ),
     inject: str = typer.Option(
         "paste", "--inject", help="How to insert text: paste (clipboard) or type (keystrokes)"
@@ -3634,9 +3634,10 @@ def listen_command(
     """
     Dictate: speak and have your words inserted into the focused window.
 
-    A real-time mode separate from the batch pipeline. Default is push-to-talk:
-    hold F9 to speak, release to insert; Esc quits. Use --mode continuous for
-    always-listening. Needs a microphone and the voice extra (pip install "scribe[voice]").
+    A real-time mode separate from the batch pipeline. Default is tap-to-toggle:
+    tap F9 to start, tap again to insert; Esc quits. Use --mode hold for
+    push-to-talk or --mode continuous for always-listening. Needs a microphone and
+    the voice extra (pip install "scribe[voice]").
     """
     from scribe.cli.voice import run_listen
 
@@ -3654,11 +3655,14 @@ def say_command(
     clipboard: bool = typer.Option(False, "--clipboard", help="Read the clipboard contents aloud"),
     rate: int | None = typer.Option(None, "--rate", help="Speech rate in words per minute"),
     voice: str | None = typer.Option(None, "--voice", help="Voice name or id substring to use"),
+    speed: float | None = typer.Option(
+        None, "--speed", help="Playback speed multiplier, e.g. 1.2 (0.5-2.0)"
+    ),
 ) -> None:
     """
     Read a file, the current selection, or the clipboard aloud with a local voice.
 
-    Examples: `scribe say notes.md`, `scribe say --selection`, `scribe say --clipboard`.
+    Examples: `scribe say notes.md`, `scribe say --selection`, `scribe say --speed 1.2`.
     Esc stops playback. Needs the voice extra (pip install "scribe[voice]").
     """
     from scribe.cli.voice import run_say
@@ -3669,6 +3673,7 @@ def say_command(
             file,
             rate=rate,
             voice=voice,
+            speed=speed,
             use_selection=selection,
             use_clipboard=clipboard,
         )
@@ -3682,6 +3687,16 @@ def tray_command(
         "--check",
         help="Validate voice/tray dependencies and settings, then exit",
     ),
+    setup: bool = typer.Option(
+        False,
+        "--setup",
+        help="Download the dictation model and set up a read-aloud voice, then exit",
+    ),
+    startup: str | None = typer.Option(
+        None,
+        "--startup",
+        help="Run the tray at login: install | remove | status",
+    ),
     no_tray: bool = typer.Option(
         False,
         "--no-tray",
@@ -3692,10 +3707,15 @@ def tray_command(
         "--profile",
         help="Voice STT profile: fast, balanced, or accurate",
     ),
+    activation: str | None = typer.Option(
+        None,
+        "--activation",
+        help="Hotkey style: toggle (tap on/off, default) or hold (push-to-talk)",
+    ),
     dictate_hotkey: str | None = typer.Option(
         None,
         "--dictate-hotkey",
-        help="Push-to-talk hotkey or chord (default: f9)",
+        help="Dictation hotkey or chord (default: f9)",
     ),
     read_hotkey: str | None = typer.Option(
         None,
@@ -3721,7 +3741,12 @@ def tray_command(
     preload: bool | None = typer.Option(
         None,
         "--preload/--no-preload",
-        help="Load the STT model at startup instead of on first dictation",
+        help="Warm the STT model at startup so the first dictation is instant (default: on)",
+    ),
+    speed: float | None = typer.Option(
+        None,
+        "--speed",
+        help="Read-aloud speed multiplier, e.g. 1.2 (0.5-2.0)",
     ),
 ) -> None:
     """
@@ -3734,15 +3759,27 @@ def tray_command(
     from scribe.voice.settings import resolve_tray_settings
     from scribe.voice.tray import run_tray, run_tray_check
 
+    if startup is not None:
+        from scribe.voice.startup import run_tray_startup
+
+        raise typer.Exit(run_tray_startup(console, startup))
+
+    if setup:
+        from scribe.voice.setup import run_voice_setup
+
+        raise typer.Exit(run_voice_setup(console, interactive=True, profile=profile))
+
     try:
         settings = resolve_tray_settings(
             profile=profile,
+            activation=activation,
             dictate_hotkey=dictate_hotkey,
             read_hotkey=read_hotkey,
             inject=inject,
             model=model,
             language=language,
             preload=preload,
+            speed=speed,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")

@@ -262,8 +262,49 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         },
     )
 
+    _maybe_setup_voice(console)
+
     console.print("[dim]Re-run with `scribe init` to change settings.[/dim]")
     return path
+
+
+def _maybe_setup_voice(console: Console) -> None:
+    """Offer to pre-download the dictation model and set up a read-aloud voice.
+
+    Only shown when the voice extra is already installed, so users who never opted
+    into voice see no extra prompt. Defensive: any failure here is non-fatal to the
+    wizard, since voice is an optional surface.
+    """
+    # Only prompt in a real interactive terminal; piped/non-TTY runs (and tests)
+    # skip silently and can use `scribe tray --setup` later.
+    if not sys.stdin.isatty():
+        return
+
+    try:
+        from scribe.voice.service import missing_dependency_packages
+    except Exception:
+        return
+
+    # No voice extra installed -> nothing to set up, stay quiet.
+    if missing_dependency_packages(include_tray=False):
+        return
+
+    if not Confirm.ask(
+        "\nSet up voice dictation + read-aloud now? "
+        "[dim](pre-downloads the model so the first use is instant)[/dim]",
+        default=True,
+        console=console,
+    ):
+        console.print("[dim]Skipped. Run `scribe tray --setup` anytime.[/dim]")
+        return
+
+    try:
+        from scribe.voice.setup import run_voice_setup
+
+        run_voice_setup(console, interactive=True)
+    except Exception as e:
+        console.print(f"[yellow]Voice setup did not complete: {e}[/yellow]")
+        console.print("[dim]You can retry later with `scribe tray --setup`.[/dim]")
 
 
 def _resolve_env_conflicts(console: Console, chosen: dict[str, bool]) -> None:

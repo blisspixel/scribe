@@ -168,13 +168,18 @@ def write_wav(path: Path, pcm16: bytes, sample_rate: int) -> None:
 
 # --- Pure option resolution --------------------------------------------------
 
-LISTEN_MODES = ("hold", "continuous")
+LISTEN_MODES = ("toggle", "hold", "continuous")
 INJECT_METHODS = ("paste", "type")
 
 
 def resolve_listen_mode(value: str | None) -> str:
-    """Validate the dictation mode. ``hold`` (push-to-talk) is the default."""
-    resolved = (value or "hold").strip().lower()
+    """Validate the dictation mode.
+
+    ``toggle`` (tap to start, tap again to insert) is the default and matches how
+    Windows Voice Access and macOS hands-free dictation work. ``hold`` is
+    push-to-talk; ``continuous`` is always-listening with silence endpointing.
+    """
+    resolved = (value or "toggle").strip().lower()
     if resolved not in LISTEN_MODES:
         raise ValueError(f"--mode must be one of {', '.join(LISTEN_MODES)}, got '{value}'")
     return resolved
@@ -211,6 +216,68 @@ def clean_spoken_text(text: str) -> str:
     return " ".join(text.split())
 
 
+def clipboard_copy(value: str, *, attempts: int = 5) -> bool:  # pragma: no cover - clipboard I/O
+    """Copy to the clipboard, retrying transient failures.
+
+    On Windows ``OpenClipboard`` fails intermittently when another process holds
+    the clipboard (common right after the user copied something). Without a retry,
+    a single transient failure silently drops a dictation, so retry briefly.
+    """
+    import time
+
+    try:
+        import pyperclip
+    except ImportError:
+        return False
+    for index in range(attempts):
+        try:
+            pyperclip.copy(value)
+            return True
+        except Exception:
+            if index == attempts - 1:
+                return False
+            time.sleep(0.05)
+    return False
+
+
+def clipboard_paste(*, attempts: int = 5) -> str | None:  # pragma: no cover - clipboard I/O
+    """Read the clipboard, retrying transient Windows failures. None on failure."""
+    import time
+
+    try:
+        import pyperclip
+    except ImportError:
+        return None
+    for index in range(attempts):
+        try:
+            result = pyperclip.paste()
+            return result if isinstance(result, str) else None
+        except Exception:
+            if index == attempts - 1:
+                return None
+            time.sleep(0.05)
+    return None
+
+
+def paste_modifier_name(system: str | None = None) -> str:
+    """Name of the clipboard modifier key for copy/paste injection.
+
+    macOS uses Cmd for copy/paste; Windows and Linux use Ctrl. Kept pure (the OS
+    name is injectable) so the platform decision is unit-testable without a real
+    keyboard, and so every injection/selection path resolves the modifier the same
+    way instead of hand-rolling the ``platform.system()`` check per call site.
+    """
+    import platform as _platform
+
+    resolved = system if system is not None else _platform.system()
+    return "cmd" if resolved == "Darwin" else "ctrl"
+
+
+def _modifier_key(keyboard: Any) -> Any:  # pragma: no cover - trivial pynput mapping
+    """Map :func:`paste_modifier_name` to the matching ``pynput`` key object."""
+    return keyboard.Key.cmd if paste_modifier_name() == "cmd" else keyboard.Key.ctrl
+
+
 # --- Runtime: read-aloud -----------------------------------------------------
 
 
@@ -220,6 +287,7 @@ def run_say(
     *,
     rate: int | None = None,
     voice: str | None = None,
+    speed: float | None = None,
     use_selection: bool = False,
     use_clipboard: bool = False,
 ) -> int:
@@ -247,7 +315,7 @@ def run_say(
         console.print("[yellow]Nothing to read.[/yellow]")
         return 1
 
-    return _speak(console, title, text, rate=rate, voice=voice)
+    return _speak(console, title, text, rate=rate, voice=voice, speed=speed)
 
 
 def _read_clipboard(console: Console) -> str:  # pragma: no cover - clipboard I/O
@@ -265,7 +333,6 @@ def _read_clipboard(console: Console) -> str:  # pragma: no cover - clipboard I/
 def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/clipboard I/O
     """Copy the current selection (Ctrl+C / Cmd+C) and return it as speakable text."""
     try:
-        import platform
         import time
 
         import pyperclip
@@ -291,8 +358,7 @@ def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/cli
     raw = ""
     try:
         controller = keyboard.Controller()
-        modifier = keyboard.Key.cmd if platform.system() == "Darwin" else keyboard.Key.ctrl
-        with controller.pressed(modifier):
+        with controller.pressed(_modifier_key(keyboard)):
             controller.press("c")
             controller.release("c")
         time.sleep(0.15)  # give the OS a moment to populate the clipboard
@@ -316,33 +382,58 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
     *,
     rate: int | None,
     voice: str | None,
+    speed: float | None = None,
 ) -> int:
-    """Speak ``text`` with pyttsx3 (isolated so the engine I/O stays out of CI)."""
+    """Speak ``text`` with the best available backend (Kokoro if set up, else pyttsx3).
+
+    Backend selection is adaptive: Kokoro is used when installed and its voice
+    files are present, otherwise the OS voice. Isolated so the engine I/O stays
+    out of CI.
+    """
+    from scribe.config_file import load_config_file
+    from scribe.voice.tts import (
+        kokoro_assets_ready,
+        kokoro_installed,
+        make_speaker,
+        resolve_tts_backend,
+        resolve_tts_speed,
+    )
+
+    # Read the resident-voice config so `scribe say` honors the same TTS backend,
+    # voice, and speed the tray uses (CLI flags still override).
+    tray_table = load_config_file().get("voice", {})
+    tray_cfg = tray_table.get("tray", {}) if isinstance(tray_table, dict) else {}
+    configured_backend = tray_cfg.get("tts_backend") if isinstance(tray_cfg, dict) else None
+    configured_voice = tray_cfg.get("tts_voice") if isinstance(tray_cfg, dict) else None
+    configured_speed = tray_cfg.get("tts_speed") if isinstance(tray_cfg, dict) else None
+    effective_speed = resolve_tts_speed(speed if speed is not None else configured_speed)
+
     try:
-        import pyttsx3
+        backend = resolve_tts_backend(
+            configured_backend,
+            kokoro_installed=kokoro_installed(),
+            kokoro_ready=kokoro_assets_ready(),
+        )
+        speaker = make_speaker(
+            backend,
+            voice=voice or configured_voice,
+            rate=rate,
+            speed=effective_speed,
+            console=console,
+        )
     except ImportError:
         console.print(VOICE_INSTALL_HINT, markup=False)
         return 1
 
-    engine = pyttsx3.init()
-    if rate is not None:
-        engine.setProperty("rate", rate)
-    if voice:
-        for candidate in engine.getProperty("voices"):
-            haystack = f"{getattr(candidate, 'name', '')} {getattr(candidate, 'id', '')}".lower()
-            if voice.lower() in haystack:
-                engine.setProperty("voice", candidate.id)
-                break
-
-    # Esc stops playback mid-sentence. The pynput listener runs on its own thread, so
-    # engine.stop() interrupts the blocking runAndWait below.
+    # Esc stops playback mid-sentence. The pynput listener runs on its own thread,
+    # so speaker.stop() interrupts the blocking speak() below.
     listener = None
     try:
         from pynput import keyboard
 
         def _on_press(key: object) -> None:
             if key == keyboard.Key.esc:
-                engine.stop()
+                speaker.stop()
 
         listener = keyboard.Listener(on_press=_on_press)
         listener.start()
@@ -351,14 +442,20 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
         pass
 
     console.print(f"[cyan]Reading {title} aloud...[/cyan]")
+    exit_code = 0
     try:
-        engine.say(text)
-        engine.runAndWait()
+        speaker.speak(text)
+    except Exception as e:
+        console.print(f"[red]Read-aloud failed: {e}[/red]")
+        exit_code = 1
     finally:
         if listener is not None:
             listener.stop()
-    console.print("[green]Done.[/green]")
-    return 0
+        with suppress(Exception):
+            speaker.close()
+    if exit_code == 0:
+        console.print("[green]Done.[/green]")
+    return exit_code
 
 
 # --- Runtime: dictation ------------------------------------------------------
@@ -419,7 +516,8 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     frame_samples = int(sample_rate * frame_ms / 1000)
     buffer: list[bytes] = []
     frame_index = 0
-    # In hold mode we capture only while the key is held; continuous starts active.
+    # hold captures only while F9 is held; toggle captures between taps; continuous
+    # starts active and uses silence endpointing.
     state = {"quit": False, "recording": mode == "continuous"}
     segmenter = UtteranceSegmenter(
         min_speech_frames=max(1, 90 // frame_ms),  # ~90 ms of speech to open
@@ -438,13 +536,17 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
             return
         if pyperclip is not None:
             pyperclip.copy(text + " ")
-            with controller.pressed(keyboard.Key.ctrl):
+            # macOS pastes with Cmd+V, not Ctrl+V; resolve per-OS so dictation's
+            # default paste mode actually inserts text on a Mac, matching the tray.
+            with controller.pressed(_modifier_key(keyboard)):
                 controller.press("v")
                 controller.release("v")
 
     def transcribe(pcm: bytes) -> None:
         if not pcm:
+            console.print("[yellow](no audio captured - speak after starting dictation)[/yellow]")
             return
+        console.print("[dim]transcribing...[/dim]")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = Path(tmp.name)
         try:
@@ -454,6 +556,7 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         finally:
             tmp_path.unlink(missing_ok=True)
         if not text:
+            console.print("[yellow](no speech detected)[/yellow]")
             return
         console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{text}[/{ScribeTheme.TEXT_PRIMARY}]")
         inject_text(text)
@@ -462,9 +565,19 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         if key == keyboard.Key.esc:
             state["quit"] = True
             return
-        if mode == "hold" and key == keyboard.Key.f9 and not state["recording"]:
+        if mode == "toggle" and key == keyboard.Key.f9:
+            if not state["recording"]:
+                state["recording"] = True
+                reset_capture()
+                console.print("[cyan]* recording... tap F9 again to insert[/cyan]")
+            else:
+                state["recording"] = False
+                transcribe(b"".join(buffer))
+                reset_capture()
+        elif mode == "hold" and key == keyboard.Key.f9 and not state["recording"]:
             state["recording"] = True
             reset_capture()
+            console.print("[cyan]* recording... release F9 to insert[/cyan]")
         elif mode == "continuous" and key == keyboard.Key.f9:
             state["recording"] = not state["recording"]
             if not state["recording"]:
@@ -489,7 +602,12 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         except Exception:
             prior_clipboard = None
 
-    if mode == "hold":
+    if mode == "toggle":
+        console.print(
+            "[bold cyan]DICTATION READY[/bold cyan] - tap F9 to start, tap again to insert. "
+            "Esc quits."
+        )
+    elif mode == "hold":
         console.print(
             "[bold cyan]DICTATION READY[/bold cyan] - hold F9 to talk, release to insert. "
             "Esc quits."
@@ -512,8 +630,10 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
                 if not state["recording"]:
                     continue
                 pcm = bytes(data)
-                if mode == "hold":
-                    # The key press/release defines the utterance; just accumulate.
+                if mode in ("hold", "toggle"):
+                    # The key taps/hold define the utterance window; just accumulate.
+                    # toggle transcribes on the second tap (in on_press), hold on
+                    # release - neither needs silence endpointing.
                     buffer.append(pcm)
                     continue
                 samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0

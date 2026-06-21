@@ -142,31 +142,50 @@ Supported transcript input formats for `notes`, `joke`, and `meme`: `.txt`, `.md
 ```bash
 # Needs: pip install "scribe[voice]" for listen/say
 # Needs: pip install "scribe[tray]" for the resident tray utility
+# Optional: pip install "scribe[kokoro]" for a high-quality neural read-aloud voice
 
-# Dictate (push-to-talk by default): hold F9, speak, release to insert at the cursor
+# One-time setup: pre-download the dictation model + pick a read-aloud voice
+# (so the first use is instant instead of triggering a surprise download)
+scribe tray --setup
+
+# Dictate (tap-to-toggle by default): tap F9, speak, tap F9 again to insert at the cursor
 scribe listen
+scribe listen --mode hold                # push-to-talk: hold F9, release to insert
 scribe listen --mode continuous          # always listening, F9 pauses
 scribe listen --inject type              # type keystrokes instead of paste
 scribe listen --model small --language en
 
-# Read aloud with a local offline voice
+# Read aloud with a local offline voice (Kokoro if set up, else the system voice)
 scribe say meeting_transcription.txt     # a file
 scribe say --selection                   # the currently selected text
 scribe say --clipboard                   # the clipboard contents
-scribe say notes.md --rate 180           # Esc stops playback
+scribe say notes.md --speed 1.2          # 1.2x speed (0.5-2.0); Esc stops playback
 
-# Experimental resident voice utility
-scribe tray --check                      # validate optional deps and hotkeys
-scribe tray                              # tray icon, F9 dictates, F8 reads selection
+# Resident voice tray utility
+scribe tray --check                      # validate optional deps, hotkeys, and read-aloud
+scribe tray                              # tray icon: tap F9 to dictate, tap F8 to read selection
+scribe tray --activation hold            # prefer push-to-talk over tap-to-toggle
+scribe tray --speed 1.2                  # default read-aloud speed
 scribe tray --no-tray                    # terminal fallback with the same hotkeys
-scribe tray --profile accurate --preload # best local model, loaded at startup
+scribe tray --profile accurate           # large-v3-turbo (model is warmed at startup by default)
+scribe tray --no-preload                 # don't warm the model at startup (load on first use)
+scribe tray --startup install            # run the tray automatically at login (remove | status)
 ```
+Dictation and read-aloud both default to **tap-to-toggle**: tap the hotkey to start,
+tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selection).
+The **tray menu** shows the current hotkeys and lets you remap them (F6–F12), pick a
+read-aloud speed, and toggle "Start at login" — all live.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
-The tray utility is an initial resident-desktop implementation, not a promise
-that every OS, permission model, and desktop environment is fully validated yet.
-Run `scribe tray --check` first, and expect manual validation for live microphone,
-global-hotkey, tray-backend, clipboard, and TTS behavior. See the
-[Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+The tray is validated on Windows (dictation, read-aloud, hotkeys, and run-at-login);
+macOS and Linux share the same code but their hardware matrix is still being proven,
+so run `scribe tray --check` first there - it reports missing deps, the resolved
+read-aloud backend, and macOS Input-Monitoring / Linux-Wayland permission caveats.
+See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+
+High-quality neural read-aloud uses **Kokoro** (82M, ONNX, CPU-capable, Apache-2.0)
+when installed (`scribe[kokoro]`) and set up; otherwise it falls back to the OS voice.
+The model is cached and warmed at startup, and synthesis is pipelined so multi-paragraph
+reads play without gaps.
 
 ### Utilities
 ```bash

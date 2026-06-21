@@ -110,11 +110,20 @@ def _windows_icon_path() -> Path:
 
 
 def _create_windows_lnk(
-    lnk_path: Path, target: str, arguments: str, workdir: Path, icon: Path
+    lnk_path: Path,
+    target: str,
+    arguments: str,
+    workdir: Path,
+    icon: Path,
+    *,
+    window_style: int = 1,
+    description: str = "Start a Scribe recording",
 ) -> None:
     """Create a Windows .lnk via WScript.Shell (no pywin32 dependency).
 
-    Isolated so tests can monkeypatch it without invoking PowerShell.
+    ``window_style`` is the WScript Shortcut WindowStyle (1 = normal, 7 = minimized
+    - used for the resident tray so it does not flash a console). Isolated so tests
+    can monkeypatch it without invoking PowerShell.
     """
 
     def ps(value: str) -> str:
@@ -127,7 +136,8 @@ def _create_windows_lnk(
         f"$s.Arguments = {ps(arguments)}; "
         f"$s.WorkingDirectory = {ps(str(workdir))}; "
         f"$s.IconLocation = {ps(str(icon) + ',0')}; "
-        f"$s.Description = {ps('Start a Scribe recording')}; "
+        f"$s.WindowStyle = {int(window_style)}; "
+        f"$s.Description = {ps(description)}; "
         "$s.Save()"
     )
     subprocess.run(
