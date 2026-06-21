@@ -138,3 +138,9 @@ Step 3 initiated with deal on costs (core pure) + transcript; Step 4 partial tig
 
 === MILESTONE REACHED ===
 Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, CLI uses unified exit_on_cli_error across all commands, systematic except tightening in I/O and wizard paths, download hygiene for voice assets. Step 3 advanced with deal on validation helpers, Hypothesis properties, and HotkeyState state machine. Docs and test counts aligned (1542). Ready for next cycle (vocabulary contracts, recorder state machine, remaining OBS except audit).
+
+### Cycle 12 (Step 3 vocabulary):
+- deal post on CustomVocabulary.to_whisper_format (pure str invariant).
+- Hypothesis property test for comma-join semantics.
+- Gates green; vocabulary 40 tests pass.
+- Committed separately.

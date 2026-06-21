@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from scribe.utils.vocabulary import CustomVocabulary
 
@@ -378,3 +380,28 @@ class TestEdgeCases:
         vocab = CustomVocabulary.from_file(vocab_file)
         assert len(vocab) == 2
         assert "" not in vocab.words
+
+
+class TestVocabularyProperties:
+    """Property-based invariants for vocabulary formatting (Step 3)."""
+
+    @given(
+        st.lists(
+            st.text(
+                alphabet=st.characters(blacklist_characters=",\n\r"),
+                min_size=1,
+                max_size=30,
+            )
+            .map(str.strip)
+            .filter(bool),
+            max_size=25,
+        )
+    )
+    def test_to_whisper_format_is_comma_join_or_empty(self, words: list[str]) -> None:
+        vocab = CustomVocabulary(words)
+        result = vocab.to_whisper_format()
+        if not words:
+            assert result == ""
+        else:
+            assert result == ", ".join(words)
+            assert all(part in result for part in words)

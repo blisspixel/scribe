@@ -222,6 +222,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import deal
+
 from scribe.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -391,6 +393,7 @@ class CustomVocabulary:
         logger.info(f"Successfully loaded {len(words)} vocabulary terms from {vocab_file.name}")
         return cls(words, aliases=aliases)
 
+    @deal.post(lambda result: isinstance(result, str))
     def to_whisper_format(self) -> str:
         """
         Convert vocabulary to Whisper prompt format.
