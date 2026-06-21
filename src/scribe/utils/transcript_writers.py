@@ -105,7 +105,7 @@ def _yaml_scalar(value: Any) -> str:
         return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return str(value)
     text = str(value)
     # Quote when the value contains a structural character, has surrounding

@@ -1878,7 +1878,7 @@ def music_transcribe(
 
                     # Only show measurable values
                     info_parts = []
-                    if isinstance(tempo, (int, float)) and tempo > 0:
+                    if isinstance(tempo, int | float) and tempo > 0:
                         info_parts.append(f"[green]{tempo:.0f} BPM[/green]")
                     if key and key != "Unknown":
                         info_parts.append(f"[dim]{key}[/dim]")
@@ -2123,7 +2123,7 @@ def music_transcribe(
                             if duration_formatted:
                                 f.write(f"Duration: {duration_formatted}\n")
                             tempo_value = metadata.get("tempo")
-                            if isinstance(tempo_value, (int, float)) and tempo_value > 0:
+                            if isinstance(tempo_value, int | float) and tempo_value > 0:
                                 f.write(f"Tempo: {tempo_value:.0f} BPM\n")
                             key_value = metadata.get("key")
                             if isinstance(key_value, str) and key_value != "Unknown":
@@ -2184,7 +2184,7 @@ def music_transcribe(
                                 if duration_formatted:
                                     f.write(f"Duration: {duration_formatted}\n")
                                 tempo_value = metadata.get("tempo")
-                                if isinstance(tempo_value, (int, float)):
+                                if isinstance(tempo_value, int | float):
                                     f.write(f"Tempo: {tempo_value:.0f} BPM\n")
                                 key_value = metadata.get("key")
                                 if key_value:

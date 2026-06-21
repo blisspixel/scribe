@@ -117,7 +117,7 @@ def save_config_file(data: dict[str, Any]) -> Path:
 def _toml_value(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
-    if isinstance(v, (int, float)):
+    if isinstance(v, int | float):
         return str(v)
     if isinstance(v, Path):
         v = str(v)

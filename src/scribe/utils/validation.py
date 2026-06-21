@@ -555,7 +555,7 @@ def validate_positive_number(value: float, name: str = "value", min_value: float
     Raises:
         ValidationError: If number is invalid
     """
-    if not isinstance(value, (int, float)):
+    if not isinstance(value, int | float):
         raise ValidationError(
             f"{name} must be a number", context={"provided": value, "type": type(value).__name__}
         )

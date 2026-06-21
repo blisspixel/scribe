@@ -244,7 +244,7 @@ class OpenAITranscriber:
         """
         duration: float | None = None
         raw_duration = getattr(response, "duration", None)
-        if isinstance(raw_duration, (int, float)):
+        if isinstance(raw_duration, int | float):
             duration = float(raw_duration)
 
         segments: list[TranscriptSegment] = []

@@ -193,9 +193,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Toolchain Sanity Check
-  # Exercises uv + pre-commit end-to-end. Non-blocking during elevation (continue-on-error)
-  # so we can see what the hooks would do without blocking the foundation PRs.
-  # Will become fully gating after Step 2 Ruff enforcement.
+  # Exercises uv + pre-commit end-to-end. Now a hard gate (Step 2 Ruff enforcement complete).
+  # Pre-commit runs the full configured hooks (ruff, mypy strict, yaml/toml, trailing whitespace, etc).
+  # This completes the "enforce in pre-commit and every CI run" requirement from ROADMAP Step 2.
   # ---------------------------------------------------------------------------
   toolchain-check:
     name: Toolchain Sanity (uv + pre-commit)
@@ -218,8 +218,7 @@ jobs:
           uv sync --python 3.12 --group dev
           uv run pre-commit install --install-hooks
 
-      - name: Run pre-commit (advisory during foundation work)
-        continue-on-error: true
+      - name: Run pre-commit
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
   # ---------------------------------------------------------------------------
@@ -269,12 +268,12 @@ jobs:
   # ---------------------------------------------------------------------------
   # CI Gate Aggregator
   # Single status that can be required in branch protection rules.
-  # All of lint-and-types, test (matrix), coverage (80% gate), and security must pass.
+  # All of lint-and-types, toolchain-check (pre-commit), test (matrix), coverage (80% gate), and security must pass.
   # ---------------------------------------------------------------------------
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint-and-types, test, coverage, security]
+    needs: [lint-and-types, toolchain-check, test, coverage, security]
     if: always()
 
     steps:

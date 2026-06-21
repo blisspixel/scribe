@@ -191,10 +191,10 @@ allowed-confusables = ["×", "–", "—"]
 "src/scribe/utils/platform.py" = ["S603", "S606", "S607"]
 "src/scribe/utils/audio.py" = ["S110", "S603"]
 "src/scribe/utils/gpu.py" = ["S110"]
-"src/scribe/core/backends/hardware.py" = ["S110", "S607"]  # best-effort accelerator probes; sysctl/torch may be absent or fail
+"src/scribe/core/backends/hardware.py" = ["S110", "S603", "S607"]  # best-effort accelerator probes; sysctl/torch may be absent or fail (S603: trusted local sysctl)
 "src/scribe/utils/silence_remover.py" = ["S603"]
 "src/scribe/utils/diagnostics.py" = ["S603", "S607"]  # runs resolved ffmpeg/ffprobe to report versions
-"src/scribe/models/gpu.py" = ["S607"]
+"src/scribe/models/gpu.py" = ["S603", "S607"]  # nvidia-smi probe on user hardware; trusted, best effort
 "src/scribe/providers/openai_provider.py" = ["S113", "S310"]
 "src/scribe/providers/xai_provider.py" = ["S310"]
 "src/scribe/utils/files.py" = ["S110", "S112"]
@@ -348,8 +348,3 @@ paths_to_mutate = [
     "src/scribe/utils/transcript_writers.py",
 ]
 tests_dir = "tests/unit"
-
-
-
-
-
