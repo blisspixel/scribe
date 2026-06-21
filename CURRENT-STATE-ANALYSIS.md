@@ -20,10 +20,11 @@
   - Agentic Balance (AGENTIC_BALANCE.md): Deterministic rules for control flow, CLI, validation, hardware selection, file ops, retries. Model judgment only inside bounded content stages (notes, jokes, memes). Never let model control program flow or bypass budgets.
 - **Engineering Steps Status (verified):**
   - Step 1: Complete (uv, .python-version 3.12, pyproject consolidated, CI matrix + lint+types + cov + security, pre-commit present).
-  - Step 2: Ruff enforced in CI lint job and pre-commit. Some RUF violations currently exist in tests (see below). Pre-commit toolchain job still advisory.
-  - Step 3: mypy --strict clean. Hypothesis in use (6+ test files). deal not yet introduced. Coverage gate uses filtered subset.
-  - Step 4: pip-audit blocking with explicit documented torch ignores (ADR-004). Broad excepts classified per ADR-002.
-  - Step 5: Mutation advisory only. Docs need living updates.
+  - Step 2: Complete. Full ruff on tree + pre-commit now hard required gate in CI and locally green. 
+  - Step 3: mypy --strict clean. Hypothesis in use. deal introduced on costs pure module (with pre/post + tests exercising). 
+  - Step 4: pip-audit blocking. Some broad excepts tightened with specific catches + comments (more audit ongoing).
+  - Step 5: Docs refreshed for accuracy in multiple cycles. Mutation advisory.
+  - Verified: current ruff/mypy/pre-commit/pytest subsets clean.
 - **Product State:** v2.7.0 shipped with tray. All listed Product Direction items complete per ROADMAP. Current code priority per docs: reliability + platform matrix for voice, but engineering focus on gates and hygiene.
 - **Agentic/Non-Goals:** Strictly followed. No new agentic control flow. Respect explicit non-goals (no 3.14 hard min yet, no heavy telemetry, no scope expansion).
 

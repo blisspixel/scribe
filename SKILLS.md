@@ -17,6 +17,8 @@ This file tracks skills, patterns, and processes discovered or reinforced during
 - Doc accuracy as first-class quality bug: stale counts, tables, and status are defects equivalent to code bugs. Update atomically with code changes when they drift. Verify with grep after.
 - Loop memory via PROGRESS-LOG.md (cycle by cycle), CURRENT-STATE-ANALYSIS.md (startup + refresh), SKILLS.md, todo_write for internal tracking.
 - Validation protocol: always re-run exact gates (ruff check, ruff format --check, mypy --strict, relevant pytest -m, pip-audit) after every change. Brutal rubric review before ship.
+- Introducing deal for Step 3: add only to dev group, target pure modules with clear numeric/token/invariant logic (costs example), use @deal.pre/@deal.post for non-negative and result guarantees, add pytest.raises(deal.PreContractError) tests. Keep public exceptions unchanged. Run `uv sync --group dev` after dep edit.
+- Broad except tightening (Step 4/ADR-002): replace bare `except Exception` with specific (OSError, UnicodeDecodeError, etc) where the failure is I/O or decoding; always document remaining graceful cases with comments. Prefer re-raise of typed ScribeError when possible.
 
 ## Patterns to Reuse
 - When fixing gates: read exact violation sites first for context. Minimal change that satisfies linter + keeps test intent explicit.

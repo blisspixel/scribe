@@ -181,7 +181,7 @@ Make the public surface and core logic statically verifiable.
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
 
-**Status (as of this revision):** Diagnostic audit complete across `src/`. One minor silent swallow tightened. All remaining broad `except` / subprocess patterns classified as intentional for hardware/provider graceful degradation and documented (module comments + ADR-002). Doctor + support bundles already perform safe key redaction. Four ADRs created in `docs/adr/`. Ruff S-bandit items (inherent to launching ffmpeg/OBS/etc. on user hardware) accepted with explicit rationale; no scope or reliability regression. Blocking dependency vulnerability scanning is now enabled in CI with an explicit torch advisory ignore policy; further doctor hardening remains for completion of this step.
+**Status (as of this revision):** Diagnostic audit complete. Some broad excepts tightened with specific types + comments. pip-audit + pre-commit gates hard. deal contracts introduced on costs module (Step 3). See loop progress in PROGRESS-LOG.md. Further tightening and doctor work ongoing.
 
 **Work in this step:**
 - Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.
