@@ -222,6 +222,7 @@ class SystemDiagnostics:
             self.check_python_version,
             self.check_python_packages,
             self.check_dependency_security,
+            self.check_api_resilience,
             self.check_ffmpeg,
             self.check_ffprobe,
             self.check_ytdlp,
@@ -1148,6 +1149,44 @@ class SystemDiagnostics:
                 message="Could not check",
                 details=f"Error: {e}",
                 fix_suggestion=None,
+            )
+
+        self.results.append(result)
+        return result
+
+    def check_api_resilience(self) -> DiagnosticResult:
+        """Report OpenAI API circuit breaker state (defensive cloud transcription)."""
+        from scribe.utils.api_resilience import api_circuit_breaker_status
+
+        status = api_circuit_breaker_status()
+        details_lines = [
+            f"Service: {status['service']}",
+            f"State: {status['state']}",
+            f"Recent failure count: {status['failure_count']}",
+            f"Recovery timeout: {status['recovery_timeout_seconds']}s",
+        ]
+        if status["seconds_until_recovery"] is not None:
+            details_lines.append(
+                f"Estimated recovery in: {status['seconds_until_recovery']:.0f}s"
+            )
+
+        if status["state"] == "open":
+            result = DiagnosticResult(
+                name="API Resilience",
+                status="warn",
+                message="OpenAI circuit breaker is open (too many recent failures)",
+                details="\n".join(details_lines),
+                fix_suggestion=(
+                    "Wait for the cooldown, verify network connectivity, then retry. "
+                    "Run `scribe doctor` again to confirm the breaker has closed."
+                ),
+            )
+        else:
+            result = DiagnosticResult(
+                name="API Resilience",
+                status="pass",
+                message="OpenAI API circuit breaker is closed",
+                details="\n".join(details_lines),
             )
 
         self.results.append(result)

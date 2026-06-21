@@ -573,6 +573,38 @@ class TestDependencySecurityCheck:
         assert "CVE-2099-0001" in (result.details or "")
 
 
+class TestApiResilienceCheck:
+    """Test OpenAI circuit breaker reporting in scribe doctor."""
+
+    def test_passes_when_breaker_closed(self):
+        from scribe.utils.api_resilience import reset_api_circuit_breaker
+
+        reset_api_circuit_breaker()
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_api_resilience()
+
+        assert result.name == "API Resilience"
+        assert result.status == "pass"
+        assert "closed" in result.message.lower()
+
+    def test_warns_when_breaker_open(self):
+        from unittest.mock import patch
+
+        from scribe.utils.api_resilience import record_api_failure, reset_api_circuit_breaker
+
+        reset_api_circuit_breaker()
+        for second in range(5):
+            record_api_failure(now=float(second))
+
+        diagnostics = SystemDiagnostics()
+        with patch("scribe.utils.api_resilience.time.time", return_value=5.0):
+            result = diagnostics.check_api_resilience()
+
+        assert result.status == "warn"
+        assert result.fix_suggestion is not None
+        assert "open" in (result.details or "").lower()
+
+
 class TestVoiceReadinessCheck:
     """Test resident-voice readiness in scribe doctor."""
 

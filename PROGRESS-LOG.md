@@ -171,3 +171,11 @@ Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, C
 - `recorder.py`: multi-directory media discovery with adaptive polling; lifecycle phase tracking on errors; file finalization uses stability policy.
 - Tests: `test_resilience.py` (11), recording policy adaptive tests (+4).
 - **Validate:** ruff clean, mypy strict 93 files, 1458 unit CI-safe passed (+15).
+
+### Cycle 17 (API circuit breaker + I/O chaos + doctor resilience):
+- New `scribe.utils.api_resilience`: process-wide OpenAI circuit breaker with doctor-visible status.
+- `openai_api.transcribe_chunk`: honors breaker, uses shared exponential backoff, records success/failure.
+- `safe_write`: close leaked mkstemp fd on early write failure (chaos-hardened).
+- `check_api_resilience` in `scribe doctor` reports breaker open/closed and recovery ETA.
+- Tests: `test_api_resilience.py` (6), `TestAtomicWriteChaos` (4), `TestApiResilienceCheck` (2).
+- **Validate:** ruff clean, mypy strict 94 files, 1469 unit CI-safe passed (+11), 1592 collected.

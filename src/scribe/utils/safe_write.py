@@ -235,6 +235,8 @@ def atomic_write(
         return path
 
     except OSError as e:
+        with suppress(OSError):
+            os.close(fd)
         logger.error(f"Failed to write file atomically: {path} - {e}")
         raise OSError(f"Failed to write file: {e}") from e
     finally:

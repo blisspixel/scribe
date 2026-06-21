@@ -4,6 +4,10 @@ Unit tests for safe file writing utilities.
 Tests atomic writes, safe copies, and backup functionality.
 """
 
+import os
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 
 from scribe.utils.safe_write import (
@@ -159,6 +163,57 @@ class TestSafeWriteContext:
         # No temp files should remain
         temp_files = list(tmp_path.glob("*.tmp"))
         assert len(temp_files) == 0
+
+
+class TestAtomicWriteChaos:
+    """Fault-injection tests: originals must survive failed writes."""
+
+    def test_write_failure_preserves_original_content(self, tmp_path) -> None:
+        target = tmp_path / "transcript.txt"
+        target.write_text("original transcript", encoding="utf-8")
+
+        with patch("os.fdopen", side_effect=OSError("simulated disk full")):
+            with pytest.raises(OSError, match="Failed to write file"):
+                atomic_write(target, "partial new content")
+
+        assert target.read_text(encoding="utf-8") == "original transcript"
+        assert list(tmp_path.glob(".*.tmp")) == []
+
+    def test_rename_failure_preserves_original_on_posix(self, tmp_path) -> None:
+        if os.name == "nt":
+            pytest.skip("Windows removes the target before rename")
+
+        target = tmp_path / "transcript.txt"
+        target.write_text("keep this", encoding="utf-8")
+
+        with patch.object(Path, "rename", side_effect=OSError("simulated rename failure")):
+            with pytest.raises(OSError):
+                atomic_write(target, "should not land")
+
+        assert target.read_text(encoding="utf-8") == "keep this"
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_context_manager_failure_preserves_existing_file(self, tmp_path) -> None:
+        target = tmp_path / "transcript.txt"
+        target.write_text("stable original", encoding="utf-8")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            with safe_write_context(target) as handle:
+                handle.write("partial")
+                raise RuntimeError("boom")
+
+        assert target.read_text(encoding="utf-8") == "stable original"
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_atomic_write_json_chaos_preserves_original(self, tmp_path) -> None:
+        target = tmp_path / "transcript.json"
+        target.write_text('{"version": 1}', encoding="utf-8")
+
+        with patch("os.fdopen", side_effect=OSError("json write failed")):
+            with pytest.raises(OSError):
+                atomic_write_json(target, {"version": 2})
+
+        assert target.read_text(encoding="utf-8") == '{"version": 1}'
 
 
 class TestSafeCopy:

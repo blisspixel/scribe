@@ -19,8 +19,13 @@ from pydub import AudioSegment
 from pydub.silence import split_on_silence
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from scribe.exceptions import APIError, TranscriptionError
+from scribe.exceptions import APIError, CircuitBreakerOpen, TranscriptionError
 from scribe.models.transcript import Transcript, TranscriptSegment
+from scribe.utils.api_resilience import (
+    ensure_api_circuit_closed,
+    record_api_failure,
+    record_api_success,
+)
 from scribe.utils.files import (
     extract_date_from_filename,
     format_date,
@@ -28,6 +33,7 @@ from scribe.utils.files import (
     verify_file_content,
 )
 from scribe.utils.logging import console, get_logger
+from scribe.utils.resilience import retry_backoff_seconds
 
 logger = get_logger(__name__)
 
@@ -462,6 +468,7 @@ class OpenAITranscriber:
         """
         for attempt in range(retries):
             try:
+                ensure_api_circuit_closed()
                 with open(chunk_path, "rb") as f:
                     kwargs = {"model": self.model, "file": f, "response_format": "text"}
 
@@ -473,7 +480,11 @@ class OpenAITranscriber:
                     # Extract text
                     text = response.text if hasattr(response, "text") else str(response)
 
+                    record_api_success()
                     return True, text
+
+            except CircuitBreakerOpen:
+                raise
 
             except AuthenticationError as e:
                 # A bad API key can never succeed on retry — fail fast instead of
@@ -483,9 +494,14 @@ class OpenAITranscriber:
 
             except (APIConnectionError, RateLimitError, APIStatusError) as e:
                 logger.warning(f"API error ({chunk_path.name}, attempt {attempt + 1}): {e}")
+                record_api_failure()
 
                 if attempt < retries - 1:
-                    sleep_time = (2**attempt) + random.uniform(0, 1)
+                    sleep_time = retry_backoff_seconds(
+                        attempt,
+                        jitter_fraction=0.2,
+                        jitter_unit=random.random(),
+                    )
                     logger.info(f"Retrying in {sleep_time:.2f}s...")
                     time.sleep(sleep_time)
                 else:
