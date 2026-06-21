@@ -122,3 +122,23 @@ def test_add_cost_fields_always_adds_cost_fields(usage: dict, ticks: int | None)
         # For known model it should at least attempt an estimate
         assert "estimated_cost_usd" in result or "cost_usd" in result
         assert result.get("cost_source") in {"local_estimate", "provider_exact"}
+
+
+# --- Design by Contract tests (Step 3) ---
+
+import deal  # type: ignore[import-not-found]
+import pytest
+
+
+def test_estimate_text_cost_usd_pre_contract_rejects_negative_tokens():
+    """Preconditions on token counts are enforced by deal in dev/test."""
+    with pytest.raises(deal.PreContractError):
+        estimate_text_cost_usd("grok-4.3", -5, 10)
+
+    with pytest.raises(deal.PreContractError):
+        estimate_text_cost_usd("grok-4.3", 10, -1)
+
+
+def test_usd_from_ticks_pre_contract_rejects_negative_ticks():
+    with pytest.raises(deal.PreContractError):
+        usd_from_ticks(-100)

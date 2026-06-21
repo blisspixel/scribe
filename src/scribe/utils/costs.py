@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import deal
+
 USD_TICKS_PER_DOLLAR = 10_000_000_000
 MODEL_PRICING_LAST_REVIEWED = "2026-05-06"
 
@@ -29,6 +31,8 @@ TEXT_MODEL_PRICING: dict[str, TextModelPricing] = {
 }
 
 
+@deal.pre(lambda cost_in_usd_ticks: cost_in_usd_ticks is None or cost_in_usd_ticks >= 0)
+@deal.post(lambda result: result is None or result >= 0)
 def usd_from_ticks(cost_in_usd_ticks: int | float | None) -> float | None:
     """Convert xAI USD ticks to dollars."""
     if cost_in_usd_ticks is None:
@@ -46,6 +50,10 @@ def numeric_attr(obj: Any, attr_name: str) -> int | float | None:
     return None
 
 
+@deal.pre(
+    lambda _model, prompt_tokens, completion_tokens: prompt_tokens >= 0 and completion_tokens >= 0
+)
+@deal.post(lambda result: result is None or result >= 0)
 def estimate_text_cost_usd(
     model: str,
     prompt_tokens: int | float,
