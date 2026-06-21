@@ -24,8 +24,8 @@
 - `uv run ruff check src tests`: clean
 - `uv run ruff format --check src tests`: clean (186 files)
 - `uv run mypy --strict src/scribe`: clean (91 files)
-- `uv run pytest tests/unit/ -m "not gpu and not slow and not e2e"`: 1441 passed, 4 skipped
-- `uv run pytest tests/unit/ --collect-only`: 1446 collected
+- `uv run pytest tests/unit/ -m "not gpu and not slow and not e2e"`: 1443 passed, 4 skipped
+- `uv run pytest --collect-only`: 1565 collected
 - pip-audit: only ADR-004 accepted torch advisories
 - Lifetime external spend: $0
 
@@ -37,9 +37,9 @@
 
 ## Immediate Priorities (ordered)
 
-1. Step 4: remaining ADR-002 broad except audit in recorder OBS paths (with logging comments only where fallback is intentional).
+1. Step 4: remaining recorder OBS WebSocket connect/auth paths (8 intentional broad catches left).
 2. Step 3: wire `RecordingPhase` tracking into recorder orchestration (optional instrumentation).
-3. Product: macOS/Linux tray hardware matrix validation in doctor/tray --check.
+3. Product: live macOS/Linux tray hardware matrix proof (manual validation runs).
 4. Step 5: sync test counts across README, DEVELOPMENT, TEST_STATUS after full collect-only.
 5. Product: tray cross-platform validation helpers in doctor/tray --check.
 

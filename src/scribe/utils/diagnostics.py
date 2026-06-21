@@ -1177,6 +1177,7 @@ class SystemDiagnostics:
             platform.system(),
             session_type=os.environ.get("XDG_SESSION_TYPE", ""),
             wayland_display=os.environ.get("WAYLAND_DISPLAY", ""),
+            display=os.environ.get("DISPLAY", ""),
         )
         missing = missing_dependency_packages(include_tray=True)
         advisory_lines = [a.message for a in advisories]

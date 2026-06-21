@@ -158,3 +158,9 @@ Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, C
 - `recorder.py` delegates duration checks to policy module; explicit `OSError` catch in `record()` before generic handler.
 - Tests: `RecordingPhaseMachine` Hypothesis state machine, duration monotonicity property, happy-path/CLI-fallback transitions (+11 tests).
 - **Validate:** ruff clean, mypy strict 92 files, 1441 unit CI-safe passed, 1446 collected.
+
+### Cycle 15 (Step 4 OBS except audit + tray platform matrix):
+- `recorder.py`: ADR-002 typed tuples `_SUBPROCESS_PROBE_ERRORS` / `_OBS_SOCKET_ERRORS`; tightened 24 broad except sites (subprocess probes, socket polling, file I/O, ffmpeg remux). obsws query paths retain documented broad catch for assorted library types.
+- `voice/service.py`: `tray_platform_matrix`, `graphical_session_detected`, `tray_environment_advisories`; wired into `resident_voice_advisories`, `tray --check`, and doctor voice readiness (DISPLAY env).
+- Tests: tray matrix tiers, headless Linux warning, updated Linux X11 advisory expectations (+2).
+- **Validate:** ruff clean, mypy strict 92 files, 1443 unit CI-safe passed.

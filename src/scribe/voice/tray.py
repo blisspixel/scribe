@@ -109,6 +109,7 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
         inject=settings.inject,
         session_type=os.environ.get("XDG_SESSION_TYPE", ""),
         wayland_display=os.environ.get("WAYLAND_DISPLAY", ""),
+        display=os.environ.get("DISPLAY", ""),
     )
     if advisories:
         console.print()

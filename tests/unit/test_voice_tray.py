@@ -477,9 +477,30 @@ def test_tray_command_check_uses_no_tray_dependency_scope(
     assert seen["settings"] == replace(seen["settings"], profile="fast")
 
 
+def test_tray_platform_matrix_tiers() -> None:
+    from scribe.voice.service import graphical_session_detected, tray_platform_matrix
+
+    assert tray_platform_matrix("Windows").tier == "validated"
+    assert tray_platform_matrix("Darwin").tier == "experimental"
+    assert tray_platform_matrix("Linux").tier == "experimental"
+    assert tray_platform_matrix("FreeBSD").tier == "unsupported"
+    assert graphical_session_detected(display=":0")
+    assert graphical_session_detected(wayland_display="wayland-0")
+    assert not graphical_session_detected()
+
+
+def test_tray_environment_advisories_linux_headless_warns() -> None:
+    from scribe.voice.service import tray_environment_advisories
+
+    advisories = tray_environment_advisories("Linux")
+    assert any("DISPLAY" in a.message for a in advisories)
+    assert not tray_environment_advisories("Windows")
+
+
 def test_resident_voice_advisories_macos_warns_about_permissions() -> None:
     advisories = resident_voice_advisories("Darwin")
     assert any(a.level == "warning" and "Input Monitoring" in a.message for a in advisories)
+    assert any(a.level == "warning" and "experimental" in a.message.lower() for a in advisories)
 
 
 def test_resident_voice_advisories_linux_wayland_warns() -> None:
@@ -490,10 +511,10 @@ def test_resident_voice_advisories_linux_wayland_warns() -> None:
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_display)
 
 
-def test_resident_voice_advisories_linux_x11_is_info_only() -> None:
-    advisories = resident_voice_advisories("Linux", session_type="x11")
-    assert advisories
-    assert all(a.level == "info" for a in advisories)
+def test_resident_voice_advisories_linux_x11_includes_matrix_and_session_notes() -> None:
+    advisories = resident_voice_advisories("Linux", session_type="x11", display=":0")
+    assert any(a.level == "info" and "X11" in a.message for a in advisories)
+    assert any(a.level == "warning" and "experimental" in a.message.lower() for a in advisories)
 
 
 def test_resident_voice_advisories_windows_paste_is_clean() -> None:

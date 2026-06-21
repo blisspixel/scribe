@@ -39,6 +39,10 @@ from scribe.utils.platform import get_ffmpeg_path, get_obs_executable_path
 
 logger = get_logger(__name__)
 
+# ADR-002: typed exception groups for intentional graceful-degradation sites.
+_SUBPROCESS_PROBE_ERRORS = (OSError, subprocess.SubprocessError)
+_OBS_SOCKET_ERRORS = (ConnectionError, OSError, TimeoutError)
+
 # NOTE ON ERROR HANDLING IN THIS MODULE
 # --------------------------------------
 # This module intentionally uses broader exception handling (catching Exception
@@ -570,7 +574,7 @@ class OBSRecorder:
                         stderr=subprocess.DEVNULL,
                         timeout=5,
                     )
-        except Exception as e:
+        except _SUBPROCESS_PROBE_ERRORS as e:
             logger.debug(f"Could not kill OBS processes: {e}")
 
         # Wait for process to fully exit, then verify
@@ -595,7 +599,7 @@ class OBSRecorder:
                             stderr=subprocess.DEVNULL,
                             timeout=5,
                         )
-            except Exception:
+            except _SUBPROCESS_PROBE_ERRORS:
                 # Best-effort cleanup only - OBS may already be dead or permissions
                 # may prevent kill on this platform. Non-fatal; proceed to sentinel clean.
                 logger.debug("Secondary kill attempt failed (non-fatal during OBS cleanup)")
@@ -635,7 +639,7 @@ class OBSRecorder:
                     if result.returncode == 0:
                         return True
                 return False
-        except Exception:
+        except _SUBPROCESS_PROBE_ERRORS:
             return False
 
     def _obs_recording_process_running(self) -> bool:
@@ -660,7 +664,7 @@ class OBSRecorder:
                 timeout=5,
             )
             return result.returncode == 0
-        except Exception:
+        except _SUBPROCESS_PROBE_ERRORS:
             return False
 
     def _obs_config_dir(self) -> Path | None:
@@ -708,7 +712,7 @@ class OBSRecorder:
                 cleaned.append(line)
             sentinel.write_text("\n".join(cleaned) + "\n", encoding="utf-8")
             logger.debug("Cleaned OBS crash sentinel")
-        except Exception as e:
+        except OSError as e:
             logger.debug(f"Could not clean OBS crash sentinel: {e}")
 
     def _launch_obs(self, obs_exe: Path) -> None:
@@ -950,7 +954,7 @@ class OBSRecorder:
             logger.info("Starting OBS (attempt %d)...", attempt)
             try:
                 self._launch_obs(obs_exe)
-            except Exception as e:
+            except OSError as e:
                 logger.warning(f"Could not launch OBS: {e}")
                 continue
 
@@ -1011,6 +1015,7 @@ class OBSRecorder:
                 cur = client.get_record_directory()
                 cur_dir = getattr(cur, "record_directory", None) or ""
             except Exception:
+                # ADR-002: obsws_python query failures are assorted types; proceed to set.
                 cur_dir = ""
 
             if cur_dir and os.path.normcase(cur_dir) == os.path.normcase(out_dir):
@@ -1027,7 +1032,7 @@ class OBSRecorder:
                 "[yellow]Could not set recording folder - OBS may record elsewhere[/yellow]"
             )
             return False
-        except Exception as e:
+        except _OBS_SOCKET_ERRORS as e:
             logger.warning(f"Could not set record directory: {e}")
             console.print(
                 "[yellow]Could not set recording folder - OBS may record elsewhere[/yellow]"
@@ -1064,7 +1069,7 @@ class OBSRecorder:
                 try:
                     status = client.get_record_status()
                     stale_stopped = not getattr(status, "output_active", False)
-                except Exception as e:
+                except _OBS_SOCKET_ERRORS as e:
                     # ADR-002: OBS may drop the socket during stale-stop; treat as unknown.
                     logger.debug(f"Could not re-check OBS record status: {e}")
 
@@ -1099,7 +1104,7 @@ class OBSRecorder:
             time.sleep(0.2)
             try:
                 status = client.get_record_status()
-            except Exception:
+            except _OBS_SOCKET_ERRORS:
                 continue
             if getattr(status, "output_active", False):
                 console.print("Recording started")
@@ -1129,7 +1134,7 @@ class OBSRecorder:
                         new_client.get_record_status()
                         logger.info(f"Reconnected to OBS at ws://{h}:{p}")
                         return new_client
-                    except Exception:
+                    except _OBS_SOCKET_ERRORS:
                         pass
         return None
 
@@ -1242,7 +1247,7 @@ class OBSRecorder:
                 status = client.get_record_status()
                 active = getattr(status, "output_active", False)
                 consecutive_errors = 0  # reset on success
-            except Exception:
+            except _OBS_SOCKET_ERRORS:
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
                     # WebSocket likely dropped - try to reconnect
@@ -1288,7 +1293,7 @@ class OBSRecorder:
                         client = new_client
                         try:
                             client.stop_record()
-                        except Exception:
+                        except _OBS_SOCKET_ERRORS:
                             logger.warning("Stop failed after reconnect too")
 
             # Deadman timer: if we sent stop but OBS still reports active,
@@ -1339,7 +1344,7 @@ class OBSRecorder:
                         client = new_client
                         try:
                             client.stop_record()
-                        except Exception:
+                        except _OBS_SOCKET_ERRORS:
                             logger.warning("Stop failed after reconnect too")
 
             # Update recording time every second
@@ -1435,7 +1440,7 @@ class OBSRecorder:
             except subprocess.TimeoutExpired:
                 console.print("[yellow]Stop signal timed out[/yellow]")
                 logger.warning("OBS --stoprecording timed out after 10s")
-            except Exception as e:
+            except _SUBPROCESS_PROBE_ERRORS as e:
                 console.print("[yellow]Could not signal OBS to stop - stop manually[/yellow]")
                 logger.warning(f"Could not signal OBS to stop: {e}")
         else:
@@ -1516,7 +1521,7 @@ class OBSRecorder:
                                 sys.stdout.flush()
                         else:
                             time.sleep(0.1)
-                except Exception as e:
+                except OSError as e:
                     logger.debug(f"Windows input error: {e}")
                     # Fall back to readline
                     self._listen_readline(ev, console)
@@ -1541,10 +1546,10 @@ class OBSRecorder:
                         console.print(f"\n[yellow]Stop command received: '{cmd}'[/yellow]")
                         ev.set()
                         break
-                except Exception as e:
+                except (OSError, EOFError) as e:
                     logger.debug(f"Error reading input: {e}")
                     break
-        except Exception as e:
+        except OSError as e:
             logger.debug(f"Stop listener error: {e}")
 
     def _get_effective_record_dir(self, client: Any, fallback: str) -> str:
@@ -1559,6 +1564,7 @@ class OBSRecorder:
             if d:
                 return os.path.abspath(d)
         except Exception as e:
+            # ADR-002: obsws_python query failures are assorted types; use fallback.
             logger.warning(f"Could not query OBS recording directory: {e}")
         logger.warning(f"Using fallback recording directory: {fallback}")
         return os.path.abspath(fallback)
@@ -1570,7 +1576,7 @@ class OBSRecorder:
 
         try:
             entries = os.listdir(dir_path)
-        except Exception:
+        except OSError:
             return None, None
 
         for name in entries:
@@ -1582,7 +1588,7 @@ class OBSRecorder:
             try:
                 # Use mtime - getctime on Linux is inode change time, not creation
                 c = os.path.getmtime(p)
-            except Exception:
+            except OSError:
                 continue
 
             if c >= since_ts - 5:
@@ -1672,12 +1678,12 @@ class OBSRecorder:
 
             try:
                 os.replace(src_path, str(final_path))
-            except Exception:
+            except OSError:
                 shutil.copy2(src_path, str(final_path))
-                with suppress(Exception):
+                with suppress(OSError):
                     os.remove(src_path)
-        except Exception as e:
-            raise ProcessError(f"Failed to place final file: {e}")
+        except OSError as e:
+            raise ProcessError(f"Failed to place final file: {e}") from e
 
         logger.info(f"Recording saved: {final_path}")
         return final_path
@@ -1713,7 +1719,7 @@ class OBSRecorder:
         except subprocess.TimeoutExpired:
             logger.warning("FFmpeg remux timed out; keeping the original MKV")
             return False
-        except Exception as e:
+        except _SUBPROCESS_PROBE_ERRORS as e:
             logger.warning(f"FFmpeg remux exception: {e}")
             return False
 

@@ -95,12 +95,96 @@ class ReadinessAdvisory:
     message: str
 
 
+TrayValidationTier = Literal["validated", "experimental", "unsupported"]
+
+
+@dataclass(frozen=True)
+class TrayPlatformMatrix:
+    """Hardware-matrix validation tier for the resident tray utility."""
+
+    system: str
+    tier: TrayValidationTier
+    headline: str
+
+
+def tray_platform_matrix(system: str) -> TrayPlatformMatrix:
+    """Return the validation tier for ``scribe tray`` on this OS."""
+    if system == "Windows":
+        return TrayPlatformMatrix(
+            system,
+            "validated",
+            "Windows tray, hotkeys, and startup are CI-validated",
+        )
+    if system == "Darwin":
+        return TrayPlatformMatrix(
+            system,
+            "experimental",
+            "macOS tray is experimental: grant Input Monitoring and Microphone "
+            "privacy permissions; hardware matrix is not CI-proven",
+        )
+    if system == "Linux":
+        return TrayPlatformMatrix(
+            system,
+            "experimental",
+            "Linux tray is experimental: requires a graphical session (X11 or Wayland); "
+            "Wayland global hotkeys are unreliable",
+        )
+    return TrayPlatformMatrix(
+        system,
+        "unsupported",
+        f"Resident tray is not validated on {system}",
+    )
+
+
+def graphical_session_detected(
+    *,
+    display: str = "",
+    wayland_display: str = "",
+    session_type: str = "",
+) -> bool:
+    """Return True when a Linux graphical session is likely present."""
+    if display.strip():
+        return True
+    if wayland_display.strip():
+        return True
+    return session_type.strip().lower() in ("x11", "wayland")
+
+
+def tray_environment_advisories(
+    system: str,
+    *,
+    display: str = "",
+    wayland_display: str = "",
+    session_type: str = "",
+) -> list[ReadinessAdvisory]:
+    """Platform-matrix and display-session notes for tray readiness."""
+    advisories: list[ReadinessAdvisory] = []
+    matrix = tray_platform_matrix(system)
+    if matrix.tier != "validated":
+        advisories.append(ReadinessAdvisory("warning", matrix.headline))
+
+    if system == "Linux" and not graphical_session_detected(
+        display=display,
+        wayland_display=wayland_display,
+        session_type=session_type,
+    ):
+        advisories.append(
+            ReadinessAdvisory(
+                "warning",
+                "Linux: no DISPLAY or WAYLAND_DISPLAY detected; the tray icon and "
+                "global hotkeys require a local graphical session (not SSH/headless).",
+            )
+        )
+    return advisories
+
+
 def resident_voice_advisories(
     system: str,
     *,
     inject: str = "paste",
     session_type: str = "",
     wayland_display: str = "",
+    display: str = "",
 ) -> list[ReadinessAdvisory]:
     """Environment-readiness notes for resident voice, by OS and injection mode.
 
@@ -109,7 +193,12 @@ def resident_voice_advisories(
     "determinism for plumbing" half of the agentic balance - a fixed, reviewable
     rule, not model judgment.
     """
-    advisories: list[ReadinessAdvisory] = []
+    advisories: list[ReadinessAdvisory] = tray_environment_advisories(
+        system,
+        display=display,
+        wayland_display=wayland_display,
+        session_type=session_type,
+    )
 
     if system == "Darwin":
         advisories.append(

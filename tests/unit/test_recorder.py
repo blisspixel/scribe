@@ -1149,7 +1149,7 @@ class TestObsProcessRunning:
         mock_run.return_value = Mock(returncode=1)
         assert recorder._obs_process_running() is False
 
-    @patch("scribe.core.recorder.subprocess.run", side_effect=Exception("oops"))
+    @patch("scribe.core.recorder.subprocess.run", side_effect=OSError("oops"))
     @patch("scribe.utils.platform.is_windows", return_value=True)
     def test_exception_returns_false(self, _w, _r, recorder):
         assert recorder._obs_process_running() is False
@@ -1182,7 +1182,7 @@ class TestObsRecordingProcessRunning:
         mock_run.return_value = Mock(returncode=1)
         assert recorder._obs_recording_process_running() is False
 
-    @patch("scribe.core.recorder.subprocess.run", side_effect=Exception("oops"))
+    @patch("scribe.core.recorder.subprocess.run", side_effect=OSError("oops"))
     @patch("scribe.utils.platform.is_windows", return_value=True)
     def test_exception_returns_false(self, _w, _r, recorder):
         assert recorder._obs_recording_process_running() is False
