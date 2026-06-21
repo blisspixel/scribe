@@ -95,9 +95,10 @@ pytest -m "not gpu"
 ```
 
 ### Test Status
-- 1,143 tests (unit + integration + e2e)
-- Very high pass rate; comprehensive error-path coverage (especially recorder)
+- 1527 tests collected (unit + integration + e2e)
+- Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
+- Full ruff + mypy --strict gates must pass before commit (see ROADMAP Step 2)
 
 ## Code Quality & Engineering Standards
 
@@ -180,11 +181,11 @@ class NewProvider(AIProvider):
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
         # Initialize client
-    
+
     def chat_completion(self, messages, **kwargs):
         # Implement
         pass
-    
+
     def generate_image(self, prompt, **kwargs):
         # Implement or raise NotImplementedError
         pass

@@ -851,10 +851,11 @@ pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- 1,143 tests collected (large, high-quality suite with unit + integration + e2e)
+- 1527 tests collected (large, high-quality suite with unit + integration + e2e)
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`
+- Ruff, mypy --strict, and coverage gates enforced on safe subsets
 
 See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the ordered plan to raise gates (uv foundation, ruff, strict types, property testing, coverage, and hygiene).
 
@@ -1083,7 +1084,7 @@ MIT License. See LICENSE file.
 
 ## Author
 
-**Nick Seal**  
+**Nick Seal**
 GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
@@ -1092,5 +1093,3 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
 **Last Updated:** 2026-06-20
-
-

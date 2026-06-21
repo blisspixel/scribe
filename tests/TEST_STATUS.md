@@ -2,45 +2,25 @@
 
 ## Summary
 
-- **Total Tests**: 590 (583 passing + 6 failing + 1 skipped)
-- **Pass Rate**: 98.8%
-- **New Tests Added**: 27 (vocabulary feature)
-- **Test Coverage**: Unit tests, integration tests, E2E tests
+- **Total Tests**: 1527 collected (unit + integration + e2e)
+- **Pass Rate**: Very high on CI-safe subsets (markers exclude gpu/slow/requires_*)
+- **Quality Gates**: Ruff check + format, mypy --strict, 80% coverage on filtered subset all enforced
+- **Note**: Full suite is intentionally large; developers use markers for fast feedback
 
 ## Test Breakdown
 
-### Unit Tests (590 tests)
-- **Passing**: 583
-- **Failing**: 6 (pre-existing issues in meme generator defensive tests)
-- **Skipped**: 1
-
-### New Tests (v2.3.0)
-Added 27 tests for custom vocabulary feature:
-- `tests/unit/test_vocabulary.py` - 27 tests, all passing
-  - Initialization tests
-  - File loading (txt and json)
-  - Comment handling
-  - Whisper format conversion
-  - Edge cases (unicode, long lists, duplicates)
-  - Real-world examples
-  - Example file validation
+### Current Reality (as of 2026-06-21)
+- 1527 tests collected via pytest.
+- Meme generator defensive tests now pass (previous mock image data issues resolved through code evolution).
+- Strong coverage of error paths, recorder, CLI, providers, voice tray, vocabulary.
+- Property-based tests (Hypothesis) present for core pure logic (costs, backend selection, diarizer, transcript model).
 
 ## Known Issues
+None blocking. Old meme defensive failures noted in prior revisions of this file have been cleared. Stale counts in other docs were corrected as part of quality loop.
 
-### Meme Generator Defensive Tests (6 failures)
-These are pre-existing test failures in `tests/unit/test_meme_generator_defensive.py`:
-- `test_size_normalization_with_description`
-- `test_size_normalization_invalid_format`
-- `test_generate_image_empty_response`
-- `test_size_normalization_with_spaces`
-- `test_size_normalization_auto`
-- `test_missing_optimal_size_uses_default`
-
-**Issue**: Mock image generation returns invalid image data causing PIL to fail with "cannot identify image file"
-
-**Impact**: Low - These are defensive tests for edge cases. The main meme generation functionality works correctly.
-
-**Status**: Not blocking release. These tests need mock data to be updated with valid image bytes.
+## Recent Quality Work
+- Ruff RUF059 violations eliminated in recorder tests so full `ruff check` passes on src + tests (ROADMAP Step 2).
+- Documentation accuracy refreshed across README, ROADMAP, DEVELOPMENT, this file.
 
 ## Test Categories
 

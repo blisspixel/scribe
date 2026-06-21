@@ -39,7 +39,8 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Primary Focus                  | Status    |
 |---------|--------------------------------|-----------|
-| 2.6.0   | Roadmap product items 2-5 + structured output, glossaries | Current   |
+| 2.7.0   | Tray utility + voice hardening + ruff gate fixes | Current   |
+| 2.6.0   | Roadmap product items 2-5 + structured output, glossaries | Released  |
 | 2.5.0   | Cross-platform launcher + icon | Released  |
 | 2.4.3   | OBS recording reliability      | Released  |
 | 2.4.2   | Code quality + .env handling   | Released  |
@@ -231,5 +232,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-06-19
-
+**Last Updated:** 2026-06-21 (doc accuracy refresh + ruff gate hygiene in loop)
