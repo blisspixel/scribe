@@ -19,6 +19,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+import deal
+
 
 def _check_span(start: float, end: float) -> None:
     # Reject non-finite values (NaN/inf) up front: NaN slips past every ordering
@@ -95,6 +97,7 @@ class Transcript:
     def has_speakers(self) -> bool:
         return any(segment.speaker for segment in self.segments)
 
+    @deal.post(lambda result: isinstance(result, str))
     def text(self) -> str:
         """The full transcript as plain text, one space between segments."""
         return " ".join(s.text.strip() for s in self.segments if s.text.strip())
