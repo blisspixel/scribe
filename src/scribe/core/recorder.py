@@ -25,7 +25,11 @@ from typing import Any
 from scribe.core.recording_policy import (
     OBSActiveRecordingError,
     OBSAuthenticationError,
+    format_recording_elapsed,
+    recording_limit_seconds,
+    recording_warning_seconds,
     should_fallback_websocket_to_cli,
+    step_recording_duration_limit,
 )
 from scribe.exceptions import ProcessError
 from scribe.models.config import ScribeConfig
@@ -154,6 +158,11 @@ class OBSRecorder:
         except ProcessError:
             # Already a ProcessError - don't double-wrap
             raise
+        except OSError as e:
+            logger.error("Recording failed (OS error): %s", e)
+            raise ProcessError(
+                f"OBS recording failed: {e}", context={"meeting": meeting_name}
+            ) from e
         except Exception as e:
             logger.error(f"Recording failed: {e}")
             raise ProcessError(f"OBS recording failed: {e}", context={"meeting": meeting_name})
@@ -1126,22 +1135,16 @@ class OBSRecorder:
 
     def _recording_limit_seconds(self) -> float:
         """Return the hard auto-stop limit in seconds."""
-        return max(0.0, float(self.max_recording_hours) * 3600.0)
+        return recording_limit_seconds(self.max_recording_hours)
 
     def _recording_warning_seconds(self) -> float:
         """Return the warning threshold in seconds."""
-        limit_seconds = self._recording_limit_seconds()
         warning_fraction = min(1.0, max(0.1, float(self.recording_warning_fraction)))
-        return limit_seconds * warning_fraction
+        return recording_warning_seconds(self.max_recording_hours, warning_fraction)
 
     def _format_elapsed(self, elapsed_seconds: float) -> str:
         """Format elapsed seconds for recorder warnings."""
-        total_seconds = max(0, int(elapsed_seconds))
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, _ = divmod(remainder, 60)
-        if hours:
-            return f"{hours}h {minutes}m"
-        return f"{minutes}m"
+        return format_recording_elapsed(elapsed_seconds)
 
     def _check_recording_duration_limit(
         self,
@@ -1153,15 +1156,17 @@ class OBSRecorder:
         """Warn near the cap and auto-stop when the recording limit is reached."""
         from scribe.utils.logging import console
 
-        warning_seconds = self._recording_warning_seconds()
+        warning_fraction = min(1.0, max(0.1, float(self.recording_warning_fraction)))
+        step = step_recording_duration_limit(
+            elapsed_seconds,
+            max_hours=self.max_recording_hours,
+            warning_fraction=warning_fraction,
+            warning_issued=warning_issued,
+            auto_stop_announced=auto_stop_announced,
+        )
         limit_seconds = self._recording_limit_seconds()
 
-        if (
-            not warning_issued
-            and warning_seconds > 0
-            and elapsed_seconds >= warning_seconds
-            and elapsed_seconds < limit_seconds
-        ):
+        if step.emit_warning:
             console.print(
                 "[yellow]Recording is nearing the configured limit "
                 f"({self._format_elapsed(elapsed_seconds)} elapsed, "
@@ -1171,9 +1176,8 @@ class OBSRecorder:
                 "Recording nearing configured limit: "
                 f"elapsed={elapsed_seconds:.1f}s, max={limit_seconds:.1f}s"
             )
-            warning_issued = True
 
-        if not auto_stop_announced and limit_seconds > 0 and elapsed_seconds >= limit_seconds:
+        if step.emit_auto_stop:
             stop_event.set()
             console.print(
                 "[yellow]Maximum recording duration reached "
@@ -1183,9 +1187,8 @@ class OBSRecorder:
                 "Auto-stopping recording at configured limit: "
                 f"elapsed={elapsed_seconds:.1f}s, max={limit_seconds:.1f}s"
             )
-            auto_stop_announced = True
 
-        return warning_issued, auto_stop_announced
+        return step.warning_issued, step.auto_stop_announced
 
     def _wait_for_stop_with_input(self, client: Any, stop_event: threading.Event) -> None:
         """Wait for user to stop recording, with automatic reconnect.

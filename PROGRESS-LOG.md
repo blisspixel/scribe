@@ -152,3 +152,9 @@ Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, C
 - `check_voice_readiness` in doctor: opt-in when pynput installed; surfaces missing tray deps + platform advisories.
 - Tests: `test_recording_policy.py` (5), Hypothesis on `build_deduped_prompt`, `TestVoiceReadinessCheck` (3).
 - **Validate:** ruff clean, mypy strict 92 files, 1430 unit CI-safe passed (+10).
+
+### Cycle 14 (Step 3 recorder lifecycle state machine + duration policy):
+- Expanded `recording_policy.py`: `RecordingPhase`/`RecordingEvent` lifecycle, `advance_recording_phase`, duration limit pure helpers (`step_recording_duration_limit`, `format_recording_elapsed`) with deal contracts.
+- `recorder.py` delegates duration checks to policy module; explicit `OSError` catch in `record()` before generic handler.
+- Tests: `RecordingPhaseMachine` Hypothesis state machine, duration monotonicity property, happy-path/CLI-fallback transitions (+11 tests).
+- **Validate:** ruff clean, mypy strict 92 files, 1441 unit CI-safe passed, 1446 collected.

@@ -15,7 +15,7 @@
 |------|--------|----------|
 | 1 Reproducible foundation | **Complete** | uv.lock, .python-version 3.12, CI matrix 3.12/3.13 |
 | 2 Static quality gates | **Complete** | ruff clean full tree; pre-commit hard required in CI aggregator |
-| 3 Type safety | **In progress** | mypy --strict clean (91 files); deal on costs, transcript, validation; Hypothesis on costs, validation, voice tray HotkeyStateMachine |
+| 3 Type safety | **In progress** | mypy --strict clean (92 files); deal on costs, transcript, validation, recording_policy, vocabulary; Hypothesis on validation, vocabulary, voice tray HotkeyStateMachine, RecordingPhaseMachine |
 | 4 Error/security hygiene | **In progress** | doctor pip-audit scan; cli/errors.py; except tightening across config, validation, safe_write, init, setup, recorder, query; main.py consolidated on exit_on_cli_error |
 | 5 Governance | **In progress** | README/ROADMAP status updated; PROGRESS-LOG + SKILLS maintained |
 
@@ -24,7 +24,8 @@
 - `uv run ruff check src tests`: clean
 - `uv run ruff format --check src tests`: clean (186 files)
 - `uv run mypy --strict src/scribe`: clean (91 files)
-- `uv run pytest tests/unit/ -m "not gpu and not slow and not e2e"`: 1420 passed, 4 skipped
+- `uv run pytest tests/unit/ -m "not gpu and not slow and not e2e"`: 1441 passed, 4 skipped
+- `uv run pytest tests/unit/ --collect-only`: 1446 collected
 - pip-audit: only ADR-004 accepted torch advisories
 - Lifetime external spend: $0
 
@@ -36,9 +37,9 @@
 
 ## Immediate Priorities (ordered)
 
-1. Commit accumulated loop work (Cycles 8-11 batch).
-2. Step 3: deal + Hypothesis on vocabulary/sanitize invariants; recorder lifecycle state machine.
-3. Step 4: remaining ADR-002 broad except audit in recorder OBS paths (with logging comments only where fallback is intentional).
+1. Step 4: remaining ADR-002 broad except audit in recorder OBS paths (with logging comments only where fallback is intentional).
+2. Step 3: wire `RecordingPhase` tracking into recorder orchestration (optional instrumentation).
+3. Product: macOS/Linux tray hardware matrix validation in doctor/tray --check.
 4. Step 5: sync test counts across README, DEVELOPMENT, TEST_STATUS after full collect-only.
 5. Product: tray cross-platform validation helpers in doctor/tray --check.
 
