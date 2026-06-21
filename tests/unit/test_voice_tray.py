@@ -8,6 +8,8 @@ import types
 from dataclasses import replace
 
 import pytest
+from hypothesis import strategies as st
+from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -231,6 +233,37 @@ def test_hotkey_state_reports_activation_edges() -> None:
     assert hotkeys.press("f8") == (False, True)
     assert hotkeys.press("f8") == (False, False)
     assert hotkeys.release("f8") is False
+
+
+class HotkeyStateMachine(RuleBasedStateMachine):
+    """Stateful exploration of hotkey press/release invariants (Step 3)."""
+
+    _KEYS = ("ctrl", "alt", "shift", "space", "f8", "f9")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hotkeys = HotkeyState(parse_hotkey("ctrl+alt+space"), parse_hotkey("f8"))
+
+    @rule(key=st.sampled_from(_KEYS))
+    def press_key(self, key: str) -> None:
+        self.hotkeys.press(key)
+
+    @rule(key=st.sampled_from(_KEYS))
+    def release_key(self, key: str) -> None:
+        self.hotkeys.release(key)
+
+    @rule()
+    def reset_keys(self) -> None:
+        self.hotkeys.reset()
+
+    @invariant()
+    def pressed_keys_are_tracked_consistently(self) -> None:
+        pressed = self.hotkeys.pressed
+        assert all(isinstance(key, str) for key in pressed)
+        assert pressed.issubset(frozenset(self._KEYS))
+
+
+TestHotkeyStateMachine = HotkeyStateMachine.TestCase
 
 
 def test_service_status_and_pause_callbacks() -> None:

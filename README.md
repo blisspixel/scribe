@@ -48,7 +48,10 @@ See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for
 All historical changes and the full version history live in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog format).
 
 The current workspace is executing the **Engineering Excellence Roadmap** (see [ROADMAP.md](ROADMAP.md)):
-- Step 1 complete: reproducible uv foundation, .python-version pin, consolidated pyproject.toml, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
+- Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
+- Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
+- Step 3 in progress: mypy --strict clean; `deal` contracts on pure modules (`costs`, transcript model, validation helpers); Hypothesis property tests expanding.
+- Step 4 in progress: pip-audit blocking in CI; `scribe doctor` dependency security scan (ADR-004 torch ignores); systematic tightening of broad `except` handlers in config, validation, safe I/O, init wizard, voice setup, and recorder paths.
 
 ---
 
@@ -851,7 +854,7 @@ pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- 1527 tests collected (large, high-quality suite with unit + integration + e2e)
+- 1542 tests collected (large, high-quality suite with unit + integration + e2e)
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`

@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+import deal
+
 from scribe.exceptions import ValidationError
 from scribe.utils.platform import normalize_path
 
@@ -94,7 +96,7 @@ def validate_file_path(path: str, must_exist: bool = True, must_be_file: bool = 
 
     except ValidationError:
         raise
-    except Exception as e:
+    except (OSError, TypeError, ValueError) as e:
         raise ValidationError(f"Invalid file path: {path}", context={"error": str(e)})
 
 
@@ -133,7 +135,7 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
         if create and not validated_path.exists():
             try:
                 validated_path.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
+            except OSError as e:
                 raise ValidationError(
                     f"Cannot create directory: {validated_path}", context={"error": str(e)}
                 )
@@ -142,7 +144,7 @@ def validate_directory_path(path: str, must_exist: bool = False, create: bool = 
 
     except ValidationError:
         raise
-    except Exception as e:
+    except (OSError, TypeError, ValueError) as e:
         raise ValidationError(f"Invalid directory path: {path}", context={"error": str(e)})
 
 
@@ -188,7 +190,7 @@ def validate_audio_file(path: str | Path) -> Path:
         with open(path, "rb") as f:
             # Try to read first few bytes
             f.read(1024)
-    except Exception as e:
+    except OSError as e:
         raise ValidationError(
             f"Cannot read audio file: {path}", context={"path": str(path), "error": str(e)}
         )
@@ -232,6 +234,7 @@ def validate_api_key(api_key: str | None, service: str = "OpenAI") -> str:
     return api_key
 
 
+@deal.post(lambda result: bool(result) and len(result) <= 100)
 def sanitize_meeting_name(name: str) -> str:
     """
     Sanitize meeting name for use in filenames.
@@ -516,6 +519,8 @@ def validate_language_code(language: str) -> str:
     )
 
 
+@deal.pre(lambda port: isinstance(port, int))
+@deal.post(lambda result: 1 <= result <= 65535)
 def validate_port(port: int) -> int:
     """
     Validate port number.
@@ -540,6 +545,7 @@ def validate_port(port: int) -> int:
     return port
 
 
+@deal.post(lambda result: result >= 0)
 def validate_positive_number(value: float, name: str = "value", min_value: float = 0.0) -> float:
     """
     Validate positive number.

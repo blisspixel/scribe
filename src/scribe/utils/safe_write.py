@@ -172,6 +172,12 @@ from scribe.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _cleanup_temp_file(temp_path: Path) -> None:
+    """Remove a leftover temp file after a failed atomic write."""
+    with suppress(OSError):
+        temp_path.unlink(missing_ok=True)
+
+
 def atomic_write(
     path: str | Path, content: str | bytes, encoding: str | None = "utf-8", mode: str = "w"
 ) -> Path:
@@ -203,6 +209,7 @@ def atomic_write(
     fd, temp_path_str = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
 
     temp_path = Path(temp_path_str)
+    completed = False
 
     try:
         # Write to temporary file
@@ -223,17 +230,16 @@ def atomic_write(
             path.unlink()
 
         temp_path.rename(path)
-
+        completed = True
         logger.debug(f"Atomically wrote file: {path}")
         return path
 
-    except Exception as e:
-        # Clean up temp file on error
-        with suppress(Exception):
-            temp_path.unlink()
-
+    except OSError as e:
         logger.error(f"Failed to write file atomically: {path} - {e}")
         raise OSError(f"Failed to write file: {e}") from e
+    finally:
+        if not completed:
+            _cleanup_temp_file(temp_path)
 
 
 def atomic_write_json(path: str | Path, data: dict[str, Any], indent: int = 2) -> Path:
@@ -283,6 +289,7 @@ def safe_write_context(
     fd, temp_path_str = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
 
     temp_path = Path(temp_path_str)
+    completed = False
 
     try:
         # Open file handle
@@ -301,15 +308,15 @@ def safe_write_context(
             path.unlink()
 
         temp_path.rename(path)
+        completed = True
         logger.debug(f"Atomically wrote file: {path}")
 
-    except Exception as e:
-        # Clean up temp file on error
-        with suppress(Exception):
-            temp_path.unlink()
-
+    except OSError as e:
         logger.error(f"Failed to write file atomically: {path} - {e}")
         raise
+    finally:
+        if not completed:
+            _cleanup_temp_file(temp_path)
 
 
 def safe_copy(src: str | Path, dst: str | Path) -> Path:
@@ -337,6 +344,7 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
     fd, temp_path_str = tempfile.mkstemp(dir=dst.parent, prefix=f".{dst.name}.", suffix=".tmp")
 
     temp_path = Path(temp_path_str)
+    completed = False
 
     try:
         # Close the file descriptor (shutil.copy2 will open it)
@@ -350,17 +358,16 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
             dst.unlink()
 
         temp_path.rename(dst)
-
+        completed = True
         logger.debug(f"Safely copied: {src} -> {dst}")
         return dst
 
-    except Exception as e:
-        # Clean up temp file on error
-        with suppress(Exception):
-            temp_path.unlink()
-
+    except (OSError, shutil.Error) as e:
         logger.error(f"Failed to copy file safely: {src} -> {dst} - {e}")
         raise OSError(f"Failed to copy file: {e}") from e
+    finally:
+        if not completed:
+            _cleanup_temp_file(temp_path)
 
 
 def backup_file(path: str | Path, suffix: str = ".bak") -> Path | None:
@@ -391,6 +398,6 @@ def backup_file(path: str | Path, suffix: str = ".bak") -> Path | None:
         shutil.copy2(path, backup_path)
         logger.debug(f"Created backup: {backup_path}")
         return backup_path
-    except Exception as e:
+    except OSError as e:
         logger.warning(f"Failed to create backup: {e}")
         return None

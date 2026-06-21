@@ -30,7 +30,7 @@ def _load_transcript(path: Path) -> dict[str, Any] | None:
         if path.stat().st_size > _MAX_TRANSCRIPT_BYTES:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return None
     if not isinstance(data, dict) or data.get("schema") != JSON_SCHEMA:
         return None

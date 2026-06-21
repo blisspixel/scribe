@@ -72,6 +72,19 @@ def test_search_ignores_foreign_json(tmp_path):
     assert search_transcripts(tmp_path, text="x") == []
 
 
+def test_search_ignores_corrupt_json(tmp_path):
+    (tmp_path / "broken.json").write_text("{not valid", encoding="utf-8")
+    assert search_transcripts(tmp_path, text="anything") == []
+
+
+def test_search_ignores_oversized_json(tmp_path, monkeypatch):
+    from scribe.cli import query as query_mod
+
+    (tmp_path / "huge.json").write_text('{"schema": "scribe.transcript/v1"}', encoding="utf-8")
+    monkeypatch.setattr(query_mod, "_MAX_TRANSCRIPT_BYTES", 10)
+    assert search_transcripts(tmp_path, text="schema") == []
+
+
 def test_query_command_runs(tmp_path):
     _make(tmp_path)
     result = CliRunner().invoke(app, ["query", "plan", "--folder", str(tmp_path)])

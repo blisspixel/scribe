@@ -206,7 +206,7 @@ pip install torch torchaudio whisper-openai colorama python-dotenv numpy scipy
 # Install pycaw for Windows audio control
 pip install pycaw
 
-# Install AudioDeviceCmdlets for PowerShell integration  
+# Install AudioDeviceCmdlets for PowerShell integration
 Install-Module -Name AudioDeviceCmdlets -Force
 ```
 
@@ -245,6 +245,6 @@ The test suite is optimized for speed:
 
 Typical execution times:
 - Startup tests: ~5-10 seconds
-- Audio tests: ~10-15 seconds  
+- Audio tests: ~10-15 seconds
 - Device tests: ~5-10 seconds
 - **Total suite: ~20-35 seconds**

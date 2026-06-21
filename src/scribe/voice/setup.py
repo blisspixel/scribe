@@ -63,7 +63,15 @@ def download_stt_model(
             # Construct on CPU/int8 for the verification load even if the user will
             # run on CUDA: it only needs to prove the weights download and open.
             WhisperModel(model_name, device="cpu", compute_type="int8")
+    except (ImportError, OSError, RuntimeError, ValueError) as e:
+        # Defensive: network/model failures must not abort the wizard.
+        return SetupStepResult(
+            "STT model",
+            ok=False,
+            message=f"Could not fetch '{model_name}': {e}",
+        )
     except Exception as e:
+        # Last-resort: vendor-specific model load errors are not enumerable.
         return SetupStepResult(
             "STT model",
             ok=False,
@@ -90,33 +98,39 @@ def _download_file(
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     written = 0
-    with (
-        httpx.stream("GET", url, follow_redirects=True, timeout=60.0) as response,
-    ):
-        response.raise_for_status()
-        total = int(response.headers.get("Content-Length", 0)) or None
-        with (
-            Progress(
-                TextColumn("[cyan]{task.description}"),
-                BarColumn(),
-                DownloadColumn(),
-                TransferSpeedColumn(),
-                console=console,
-            ) as progress,
-            tmp.open("wb") as handle,
-        ):
-            task = progress.add_task(label, total=total)
-            for block in response.iter_bytes(chunk_size=1 << 20):
-                handle.write(block)
-                written += len(block)
-                progress.update(task, advance=len(block))
-    # Verify completeness: a dropped connection ends iter_bytes without error, so
-    # without this a truncated file could be promoted and then wrongly pass the
-    # readiness size floor. Reject the partial and leave nothing half-written.
-    if total is not None and written < total:
-        tmp.unlink(missing_ok=True)
-        raise OSError(f"incomplete download: got {written} of {total} bytes")
-    tmp.replace(dest)
+    total: int | None = None
+    completed = False
+    try:
+        with httpx.stream("GET", url, follow_redirects=True, timeout=60.0) as response:
+            response.raise_for_status()
+            total = int(response.headers.get("Content-Length", 0)) or None
+            with (
+                Progress(
+                    TextColumn("[cyan]{task.description}"),
+                    BarColumn(),
+                    DownloadColumn(),
+                    TransferSpeedColumn(),
+                    console=console,
+                ) as progress,
+                tmp.open("wb") as handle,
+            ):
+                task = progress.add_task(label, total=total)
+                for block in response.iter_bytes(chunk_size=1 << 20):
+                    handle.write(block)
+                    written += len(block)
+                    progress.update(task, advance=len(block))
+        # Verify completeness: a dropped connection ends iter_bytes without error, so
+        # without this a truncated file could be promoted and then wrongly pass the
+        # readiness size floor. Reject the partial and leave nothing half-written.
+        if total is not None and written < total:
+            raise OSError(f"incomplete download: got {written} of {total} bytes")
+        tmp.replace(dest)
+        completed = True
+    except httpx.HTTPError as e:
+        raise OSError(f"download failed for {label}: {e}") from e
+    finally:
+        if not completed:
+            tmp.unlink(missing_ok=True)
 
 
 def download_kokoro_assets(
@@ -140,12 +154,26 @@ def download_kokoro_assets(
         )
 
     model_path, voices_path = kokoro_asset_paths(home)
+    download_errors: tuple[type[Exception], ...] = (
+        ImportError,
+        OSError,
+        RuntimeError,
+        ValueError,
+    )
+    try:
+        import httpx
+    except ImportError:
+        pass
+    else:
+        download_errors = (*download_errors, httpx.HTTPError)
+
     try:
         if not model_path.is_file():
             _download_file(KOKORO_MODEL_URL, model_path, console, KOKORO_MODEL_FILE)
         if not voices_path.is_file():
             _download_file(KOKORO_VOICES_URL, voices_path, console, KOKORO_VOICES_FILE)
-    except Exception as e:
+    except download_errors as e:
+        # Defensive: a failed optional download degrades to the system voice.
         return SetupStepResult(
             "Kokoro voice",
             ok=False,
@@ -275,7 +303,7 @@ def run_voice_setup(
     config["voice"]["tray"] = new_tray
     try:
         save_config_file(config)
-    except Exception as e:
+    except OSError as e:
         console.print(f"[yellow]Could not save voice settings: {e}[/yellow]")
 
     console.print()

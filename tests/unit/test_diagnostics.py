@@ -526,6 +526,53 @@ class TestOBSWebSocketCheck:
         assert "$env:SCRIBE_OBS_PORT='4456'" in fix
 
 
+class TestDependencySecurityCheck:
+    """Test dependency vulnerability scanning."""
+
+    @patch("importlib.util.find_spec", return_value=None)
+    def test_warns_when_pip_audit_missing(self, _find_spec):
+        """Without pip-audit, doctor surfaces a warning instead of failing."""
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_dependency_security()
+
+        assert result.status == "warn"
+        assert result.name == "Dependency Security"
+        assert "pip-audit not installed" in result.message
+        assert result.fix_suggestion is not None
+
+    @patch("scribe.utils.diagnostics.subprocess.run")
+    def test_passes_when_scan_clean(self, mock_run):
+        """A clean pip-audit run passes with ADR-004 torch ignores applied."""
+        mock_run.return_value = SimpleNamespace(
+            returncode=0,
+            stdout="No known vulnerabilities found, 7 ignored\n",
+            stderr="",
+        )
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_dependency_security()
+
+        assert result.status == "pass"
+        assert "No unignored vulnerabilities" in result.message
+        cmd = mock_run.call_args[0][0]
+        assert "--ignore-vuln" in cmd
+        assert "PYSEC-2025-203" in cmd
+
+    @patch("scribe.utils.diagnostics.subprocess.run")
+    def test_fails_when_scan_finds_vulns(self, mock_run):
+        """Actionable vulnerabilities fail the check."""
+        mock_run.return_value = SimpleNamespace(
+            returncode=1,
+            stdout="Found 1 known vulnerability in 1 package\nexample 1.0.0 CVE-2099-0001\n",
+            stderr="",
+        )
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_dependency_security()
+
+        assert result.status == "fail"
+        assert "vulnerabilities detected" in result.message.lower()
+        assert "CVE-2099-0001" in (result.details or "")
+
+
 class TestSystemDiagnostics:
     """Test SystemDiagnostics class."""
 
@@ -546,8 +593,8 @@ class TestSystemDiagnostics:
             diagnostics = SystemDiagnostics()
             results = diagnostics.run_all_checks()
 
-            # Should have results for all checks
-            assert len(results) >= 9
+            # Should have results for all checks (includes dependency security)
+            assert len(results) >= 10
 
             # Check that all results have required fields
             for result in results:

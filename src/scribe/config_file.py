@@ -29,7 +29,7 @@ def load_config_file() -> dict[str, Any]:
     try:
         with CONFIG_PATH.open("rb") as f:
             return tomllib.load(f)
-    except Exception:
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
 
 

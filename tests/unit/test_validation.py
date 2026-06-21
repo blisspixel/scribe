@@ -8,6 +8,8 @@ and other user inputs with defensive programming.
 from pathlib import Path
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from scribe.exceptions import ValidationError
 from scribe.utils.validation import (
@@ -382,3 +384,39 @@ class TestValidateURL:
         """Test validation fails for empty URL."""
         with pytest.raises(ValidationError, match="cannot be empty"):
             validate_url("")
+
+
+class TestValidationProperties:
+    """Property-based invariants for pure validation helpers (Step 3)."""
+
+    @given(st.integers(min_value=1, max_value=65535))
+    def test_validate_port_roundtrip(self, port: int):
+        """Valid ports pass through unchanged."""
+        assert validate_port(port) == port
+
+    @given(
+        st.text(
+            alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters='<>:"/\\|?*'),
+            min_size=1,
+            max_size=50,
+        ).filter(lambda s: s.strip() and any(ch.isalnum() for ch in s))
+    )
+    def test_sanitize_meeting_name_produces_safe_filename(self, name: str):
+        """Sanitized names stay within length bounds and avoid Windows reserved stems."""
+        result = sanitize_meeting_name(name)
+        assert result
+        assert len(result) <= 100
+        assert not any(ch in result for ch in '<>:"/\\|?*')
+        assert result.split(".")[0].upper() not in {
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            *(f"COM{i}" for i in range(1, 10)),
+            *(f"LPT{i}" for i in range(1, 10)),
+        }
+
+    @given(st.floats(min_value=0.0, max_value=1_000_000, allow_nan=False, allow_infinity=False))
+    def test_validate_positive_number_respects_minimum(self, value: float):
+        """Non-negative values return a float >= the configured minimum."""
+        assert validate_positive_number(value) >= 0.0

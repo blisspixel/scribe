@@ -36,6 +36,7 @@ def _detect_gpu_summary() -> tuple[bool, str]:
             return True, f"{name} ({vram:.0f}GB VRAM, {tier})"
         return False, "no CUDA-capable GPU detected"
     except Exception as e:
+        # ADR-002: hardware probes may fail on broken drivers; wizard must continue.
         return False, f"GPU detection failed: {e}"
 
 
@@ -56,7 +57,7 @@ def _detected_keys() -> dict[str, bool]:
         env_data: dict[str, str] = {}
         if env_file:
             env_data = {k: v for k, v in dotenv_values(env_file).items() if v is not None}
-    except Exception:
+    except (ImportError, OSError, TypeError, ValueError):
         # dotenv_values or file issues should not block the wizard; fall back to empty.
         env_data = {}
 
@@ -283,7 +284,7 @@ def _maybe_setup_voice(console: Console) -> None:
 
     try:
         from scribe.voice.service import missing_dependency_packages
-    except Exception:
+    except ImportError:
         return
 
     # No voice extra installed -> nothing to set up, stay quiet.
@@ -303,7 +304,7 @@ def _maybe_setup_voice(console: Console) -> None:
         from scribe.voice.setup import run_voice_setup
 
         run_voice_setup(console, interactive=True)
-    except Exception as e:
+    except (ImportError, OSError, KeyboardInterrupt) as e:
         console.print(f"[yellow]Voice setup did not complete: {e}[/yellow]")
         console.print("[dim]You can retry later with `scribe tray --setup`.[/dim]")
 

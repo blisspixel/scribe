@@ -346,10 +346,10 @@ All AI providers implement a common interface:
 class AIProvider(ABC):
     @abstractmethod
     def chat_completion(self, messages, **kwargs) -> dict
-    
+
     @abstractmethod
     def generate_image(self, prompt, **kwargs) -> bytes
-    
+
     @abstractmethod
     def transcribe_audio(self, audio_path, **kwargs) -> dict
 ```
@@ -365,7 +365,7 @@ GPU resource manager ensures single point of access:
 ```python
 class GPUResourceManager:
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)

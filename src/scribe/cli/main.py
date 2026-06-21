@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from scribe import __version__
+from scribe.cli.errors import exit_on_cli_error
 from scribe.core.recorder import OBSRecorder
 from scribe.core.transcriber import Transcriber
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
@@ -84,7 +85,7 @@ def _write_structured_outputs(
         for path in write_formats(transcript, transcript_path, formats):
             if session is not None:
                 session.add_file(path, path.suffix.lstrip("."))
-    except Exception as e:
+    except (OSError, TypeError, ValueError, KeyError) as e:
         logger.warning(f"Could not write structured outputs: {e}")
 
 
@@ -615,13 +616,9 @@ def transcribe_command(
         console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        if e.context:
-            console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1) from e
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        raise typer.Exit(1) from e
+        exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
             unified_progress.stop()
@@ -1076,13 +1073,9 @@ def url_command(
         console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        if e.context:
-            console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1) from e
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        raise typer.Exit(1) from e
+        exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
             unified_progress.stop()
@@ -1464,11 +1457,9 @@ def record(
             console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command(name="batch")
@@ -1719,11 +1710,9 @@ def batch_transcribe(
             console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command(name="music")
@@ -2262,12 +2251,9 @@ def music_transcribe(
             console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in music transcription")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command(name="rec")
@@ -2435,16 +2421,11 @@ def joke(
                     raise typer.Exit(1)
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        if e.context:
-            console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except typer.Exit:
         raise
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in joke command")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command()
@@ -2599,14 +2580,9 @@ def meme(
         console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        if e.context:
-            console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in meme command")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command()
@@ -2709,14 +2685,9 @@ def notes(
         console.print()
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        if e.context:
-            console.print(f"[dim]Context: {e.context}[/dim]")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in notes command")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 def _run_notes_comparison(
@@ -2821,12 +2792,9 @@ def compare(
         _run_notes_comparison(transcript_file, providers, judge)
 
     except ScribeError as e:
-        console.print(f"\n[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in compare command")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command()
@@ -3032,9 +3000,10 @@ def info() -> None:
             console.print(f"[{ScribeTheme.PRIMARY}]recommended: OpenAI API[/{ScribeTheme.PRIMARY}]")
         console.print()
 
+    except ScribeError as e:
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print(f"\n[bold {ScribeTheme.ERROR}]error:[/bold {ScribeTheme.ERROR}] {e}")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command()
@@ -3220,7 +3189,11 @@ def health_check(
                 results.append((provider_name, False, status.error_message or "error"))
                 all_healthy = False
 
+        except ScribeError as e:
+            results.append((provider_name, False, str(e)[:30]))
+            all_healthy = False
         except Exception as e:
+            logger.debug("Provider health check failed for %s: %s", provider_name, e)
             results.append((provider_name, False, str(e)[:30]))
             all_healthy = False
 
@@ -3305,10 +3278,12 @@ def support_bundle(
         console.print("[dim]API keys are automatically redacted.[/dim]")
         console.print()
 
+    except ScribeError as e:
+        exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
         console.print("[bold red]Error:[/bold red] Failed to create support bundle")
         console.print(f"[dim]{e}[/dim]")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command()
@@ -3471,6 +3446,8 @@ def clean(
             console.print()
             console.print(f"[bold]Output:[/bold] {output_path}")
 
+    except ScribeError as e:
+        exit_on_cli_error(e, log_unexpected=False)
     except FileNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
@@ -3478,9 +3455,7 @@ def clean(
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
-        logger.exception("Unexpected error in clean command")
-        raise typer.Exit(1)
+        exit_on_cli_error(e)
 
 
 @app.command(name="init")

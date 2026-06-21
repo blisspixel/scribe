@@ -178,6 +178,17 @@ from scribe.models.gpu import GPUConfig
 from scribe.utils.obs_config import read_obs_websocket_config
 from scribe.utils.platform import get_platform, is_windows
 
+# Accepted torch advisories per ADR-004 (mirrors .github/workflows/ci.yml).
+_ACCEPTED_TORCH_VULN_IGNORES: tuple[str, ...] = (
+    "PYSEC-2025-203",
+    "PYSEC-2025-204",
+    "PYSEC-2025-206",
+    "PYSEC-2026-139",
+    "CVE-2025-2999",
+    "CVE-2025-3000",
+    "CVE-2025-3001",
+)
+
 
 @dataclass
 class DiagnosticResult:
@@ -210,6 +221,7 @@ class SystemDiagnostics:
         checks: list[Callable[[], Any]] = [
             self.check_python_version,
             self.check_python_packages,
+            self.check_dependency_security,
             self.check_ffmpeg,
             self.check_ffprobe,
             self.check_ytdlp,
@@ -748,6 +760,78 @@ class SystemDiagnostics:
                 status="pass",
                 message="All critical packages installed",
                 details=f"Checked: {', '.join(critical_packages.keys())}",
+            )
+
+        self.results.append(result)
+        return result
+
+    def check_dependency_security(self) -> DiagnosticResult:
+        """Scan installed packages for known vulnerabilities (pip-audit)."""
+        import importlib.util
+
+        if importlib.util.find_spec("pip_audit") is None:
+            result = DiagnosticResult(
+                name="Dependency Security",
+                status="warn",
+                message="pip-audit not installed",
+                details="Dependency vulnerability scan is only available in the dev environment.",
+                fix_suggestion="Developers: run `uv sync --group dev` then re-run `scribe doctor`.",
+            )
+            self.results.append(result)
+            return result
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip_audit",
+            "--local",
+            "--progress-spinner",
+            "off",
+            "--desc",
+            "on",
+        ]
+        for vuln_id in _ACCEPTED_TORCH_VULN_IGNORES:
+            cmd.extend(["--ignore-vuln", vuln_id])
+
+        try:
+            completed = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            result = DiagnosticResult(
+                name="Dependency Security",
+                status="warn",
+                message="Dependency scan could not run",
+                details=str(exc),
+                fix_suggestion="Re-run `scribe doctor` or check your Python environment.",
+            )
+            self.results.append(result)
+            return result
+
+        if completed.returncode == 0:
+            summary_lines = (completed.stdout or completed.stderr or "").strip().splitlines()
+            summary = summary_lines[0] if summary_lines else "No known vulnerabilities found"
+            result = DiagnosticResult(
+                name="Dependency Security",
+                status="pass",
+                message="No unignored vulnerabilities found",
+                details=(
+                    "Scanned local packages with pip-audit "
+                    f"(ADR-004 torch exceptions applied). {summary}"
+                ),
+            )
+        else:
+            output = (completed.stdout or completed.stderr or "").strip()
+            result = DiagnosticResult(
+                name="Dependency Security",
+                status="fail",
+                message="Known vulnerabilities detected",
+                details=output[:2000] if output else "pip-audit exited with errors",
+                fix_suggestion="Run `uv run pip-audit --local` and upgrade affected packages.",
             )
 
         self.results.append(result)

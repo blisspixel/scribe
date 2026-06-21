@@ -181,7 +181,7 @@ Make the public surface and core logic statically verifiable.
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
 
-**Status (as of this revision):** Diagnostic audit complete. Some broad excepts tightened with specific types + comments. pip-audit + pre-commit gates hard. deal contracts introduced on costs module (Step 3). See loop progress in PROGRESS-LOG.md. Further tightening and doctor work ongoing.
+**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation, Hypothesis property + HotkeyState state machine tests). Step 4 in progress: pip-audit blocking in CI; `scribe doctor` runs pip-audit with ADR-004 torch ignores; shared `exit_on_cli_error` CLI boundary; systematic except tightening in config, validation, safe I/O, init, voice setup, recorder, query. See PROGRESS-LOG.md.
 
 **Work in this step:**
 - Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.
@@ -232,4 +232,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-06-21 (doc accuracy refresh + ruff gate hygiene in loop)
+**Last Updated:** 2026-06-21 (Step 3/4 loop: CLI errors module, doctor security, deal on validation, 1542 tests)

@@ -265,11 +265,11 @@ class CustomProvider(AIProvider):
     def chat_completion(self, messages, **kwargs):
         # Implement
         pass
-    
+
     def generate_image(self, prompt, **kwargs):
         # Implement or raise NotImplementedError
         pass
-    
+
     def transcribe_audio(self, audio_path, **kwargs):
         # Implement or raise NotImplementedError
         pass

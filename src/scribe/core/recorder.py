@@ -138,7 +138,7 @@ class OBSRecorder:
         # Ensure output directory is writable
         try:
             self._ensure_dir_writable(self.output_folder)
-        except Exception as e:
+        except (ProcessError, OSError) as e:
             logger.warning(f"Cannot use configured output folder: {e}")
             fallback = Path(tempfile.gettempdir()) / "obs_recordings"
             logger.warning(f"Falling back to: {fallback}")
@@ -1060,8 +1060,9 @@ class OBSRecorder:
                 try:
                     status = client.get_record_status()
                     stale_stopped = not getattr(status, "output_active", False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # ADR-002: OBS may drop the socket during stale-stop; treat as unknown.
+                    logger.debug(f"Could not re-check OBS record status: {e}")
 
             if not stale_stopped:
                 raise ProcessError(
@@ -1736,7 +1737,7 @@ class OBSRecorder:
         try:
             probe.write_bytes(b".")
             probe.unlink()
-        except Exception as e:
+        except OSError as e:
             raise ProcessError(f"Directory not writable: {path}. Reason: {e}")
 
         return path

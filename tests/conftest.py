@@ -26,27 +26,28 @@ def temp_dir() -> Generator[Path, None, None]:
 @pytest.fixture
 def sample_audio(temp_dir: Path) -> Path:
     """Generate 10-second test audio file."""
-    audio_path = temp_dir / "test_audio.wav"
-
-    # Create a simple WAV file
+    import math
+    import struct
     import wave
 
-    import numpy as np
-
+    audio_path = temp_dir / "test_audio.wav"
     sample_rate = 16000
     duration = 10  # seconds
     frequency = 440  # Hz (A4 note)
+    n_samples = sample_rate * duration
 
-    # Generate sine wave
-    t = np.linspace(0, duration, int(sample_rate * duration))
-    audio_data = (np.sin(2 * np.pi * frequency * t) * 32767).astype(np.int16)
+    # Pure-stdlib sine wave (avoids numpy reload issues in some pytest runs).
+    frames = bytearray()
+    for i in range(n_samples):
+        t = i / sample_rate
+        sample = int(math.sin(2 * math.pi * frequency * t) * 32767)
+        frames.extend(struct.pack("<h", sample))
 
-    # Write WAV file
     with wave.open(str(audio_path), "w") as wav_file:
-        wav_file.setnchannels(1)  # Mono
-        wav_file.setsampwidth(2)  # 16-bit
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio_data.tobytes())
+        wav_file.writeframes(frames)
 
     return audio_path
 

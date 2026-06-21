@@ -95,7 +95,7 @@ pytest -m "not gpu"
 ```
 
 ### Test Status
-- 1527 tests collected (unit + integration + e2e)
+- 1542 tests collected (unit + integration + e2e)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
 - Full ruff + mypy --strict gates must pass before commit (see ROADMAP Step 2)

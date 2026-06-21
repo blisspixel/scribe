@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Total Tests**: 1527 collected (unit + integration + e2e)
+- **Total Tests**: 1542 collected (unit + integration + e2e)
 - **Pass Rate**: Very high on CI-safe subsets (markers exclude gpu/slow/requires_*)
 - **Quality Gates**: Ruff check + format, mypy --strict, 80% coverage on filtered subset all enforced
 - **Note**: Full suite is intentionally large; developers use markers for fast feedback
@@ -10,10 +10,10 @@
 ## Test Breakdown
 
 ### Current Reality (as of 2026-06-21)
-- 1527 tests collected via pytest.
+- 1542 tests collected via pytest.
 - Meme generator defensive tests now pass (previous mock image data issues resolved through code evolution).
 - Strong coverage of error paths, recorder, CLI, providers, voice tray, vocabulary.
-- Property-based tests (Hypothesis) present for core pure logic (costs, backend selection, diarizer, transcript model).
+- Property-based tests (Hypothesis) present for core pure logic (costs, backend selection, diarizer, transcript model, validation, voice tray HotkeyStateMachine).
 
 ## Known Issues
 None blocking. Old meme defensive failures noted in prior revisions of this file have been cleared. Stale counts in other docs were corrected as part of quality loop.
