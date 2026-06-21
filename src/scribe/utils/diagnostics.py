@@ -1171,28 +1171,41 @@ class SystemDiagnostics:
         if importlib.util.find_spec("pynput") is None:
             return None
 
-        from scribe.voice.service import resident_voice_advisories
+        from scribe.voice.service import missing_dependency_packages, resident_voice_advisories
 
         advisories = resident_voice_advisories(
             platform.system(),
             session_type=os.environ.get("XDG_SESSION_TYPE", ""),
             wayland_display=os.environ.get("WAYLAND_DISPLAY", ""),
         )
+        missing = missing_dependency_packages(include_tray=True)
+        advisory_lines = [a.message for a in advisories]
+        if missing:
+            advisory_lines.insert(
+                0,
+                f"Missing optional voice packages: {', '.join(missing)}. "
+                'Install with `pip install "scribe[tray]"` (and `scribe[kokoro]` for neural read-aloud).',
+            )
         warnings = [a for a in advisories if a.level == "warning"]
-        if warnings:
+        if missing or warnings:
+            headline = (
+                f"Missing packages: {', '.join(missing)}"
+                if missing
+                else warnings[0].message.split(".")[0]
+            )
             result = DiagnosticResult(
                 name="Voice Readiness",
                 status="warn",
-                message=warnings[0].message.split(".")[0],
-                details="\n".join(a.message for a in advisories),
+                message=headline,
+                details="\n".join(advisory_lines),
                 fix_suggestion="Run `scribe tray --check` for full voice diagnostics.",
             )
         else:
             result = DiagnosticResult(
                 name="Voice Readiness",
                 status="pass",
-                message="Global hotkeys supported on this platform",
-                details="\n".join(a.message for a in advisories) or None,
+                message="Voice dependencies and platform checks look ready",
+                details="\n".join(advisory_lines) or None,
             )
         self.results.append(result)
         return result

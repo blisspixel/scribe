@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from scribe.utils.vocabulary import CustomVocabulary
+from scribe.utils.vocabulary import CustomVocabulary, build_deduped_prompt
 
 
 class TestCustomVocabularyInit:
@@ -405,3 +405,42 @@ class TestVocabularyProperties:
         else:
             assert result == ", ".join(words)
             assert all(part in result for part in words)
+
+    @given(
+        st.lists(
+            st.text(
+                alphabet=st.characters(blacklist_characters=",\n\r"),
+                min_size=1,
+                max_size=20,
+            )
+            .map(str.strip)
+            .filter(bool),
+            max_size=30,
+        ),
+        st.integers(min_value=1, max_value=200),
+    )
+    def test_build_deduped_prompt_is_str_within_budget(self, words: list[str], max_chars: int) -> None:
+        result = build_deduped_prompt(words, max_chars)
+        assert isinstance(result, str)
+        if not words:
+            assert result == ""
+            return
+
+        # Case-insensitive duplicates collapse to the first spelling.
+        seen: set[str] = set()
+        expected_unique: list[str] = []
+        for word in words:
+            key = word.lower()
+            if key not in seen:
+                seen.add(key)
+                expected_unique.append(word)
+
+        kept: list[str] = []
+        for word in expected_unique:
+            candidate = ", ".join([*kept, word])
+            if kept and len(candidate) > max_chars:
+                break
+            kept.append(word)
+        assert result == ", ".join(kept)
+        if len(kept) > 1:
+            assert len(result) <= max_chars

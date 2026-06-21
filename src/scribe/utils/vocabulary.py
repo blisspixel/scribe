@@ -245,6 +245,33 @@ def _bundled_glossary_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "glossaries"
 
 
+@deal.pre(lambda _words, max_chars: max_chars > 0)
+@deal.post(lambda result: isinstance(result, str))
+def build_deduped_prompt(words: list[str], max_chars: int) -> str:
+    """Deduplicate terms (case-insensitive) and trim to a Whisper prompt budget."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for word in words:
+        key = word.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(word)
+
+    kept: list[str] = []
+    for word in unique:
+        candidate = ", ".join([*kept, word])
+        if kept and len(candidate) > max_chars:
+            break
+        kept.append(word)
+
+    if len(kept) < len(unique):
+        logger.warning(
+            f"Vocabulary exceeds the ~{max_chars}-char prompt budget; using "
+            f"{len(kept)} of {len(unique)} terms (dropped {len(unique) - len(kept)})."
+        )
+    return ", ".join(kept)
+
+
 class CustomVocabulary:
     """
     Manages custom vocabulary for improved transcription accuracy.
@@ -441,27 +468,7 @@ class CustomVocabulary:
         how many terms were left out so an oversized glossary degrades predictably
         instead of being silently truncated mid-term by the model.
         """
-        seen: set[str] = set()
-        unique: list[str] = []
-        for word in self.words:
-            key = word.lower()
-            if key not in seen:
-                seen.add(key)
-                unique.append(word)
-
-        kept: list[str] = []
-        for word in unique:
-            candidate = ", ".join([*kept, word])
-            if kept and len(candidate) > max_chars:
-                break
-            kept.append(word)
-
-        if len(kept) < len(unique):
-            logger.warning(
-                f"Vocabulary exceeds the ~{max_chars}-char prompt budget; using "
-                f"{len(kept)} of {len(unique)} terms (dropped {len(unique) - len(kept)})."
-            )
-        return ", ".join(kept)
+        return build_deduped_prompt(self.words, max_chars)
 
     @classmethod
     def load(cls, name_or_path: str) -> "CustomVocabulary":

@@ -144,3 +144,11 @@ Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, C
 - Hypothesis property test for comma-join semantics.
 - Gates green; vocabulary 40 tests pass.
 - Committed separately.
+
+### Cycle 13 (Step 3 recording policy + vocabulary budget + Step 4 voice doctor):
+- New `scribe.core.recording_policy`: OBSActiveRecordingError, OBSAuthenticationError, `should_fallback_websocket_to_cli` (ADR-002 pure policy).
+- `recorder.py` imports policy module; WebSocket except uses shared fallback helper.
+- `build_deduped_prompt` extracted with deal pre/post; `CustomVocabulary.to_prompt` delegates.
+- `check_voice_readiness` in doctor: opt-in when pynput installed; surfaces missing tray deps + platform advisories.
+- Tests: `test_recording_policy.py` (5), Hypothesis on `build_deduped_prompt`, `TestVoiceReadinessCheck` (3).
+- **Validate:** ruff clean, mypy strict 92 files, 1430 unit CI-safe passed (+10).

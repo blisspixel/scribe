@@ -573,6 +573,51 @@ class TestDependencySecurityCheck:
         assert "CVE-2099-0001" in (result.details or "")
 
 
+class TestVoiceReadinessCheck:
+    """Test resident-voice readiness in scribe doctor."""
+
+    @patch("importlib.util.find_spec", return_value=None)
+    def test_silent_when_voice_not_opted_in(self, _find_spec):
+        """Non-voice users should not see an extra doctor check."""
+        diagnostics = SystemDiagnostics()
+        assert diagnostics.check_voice_readiness() is None
+
+    @patch("importlib.util.find_spec", return_value=Mock())
+    @patch("scribe.voice.service.missing_dependency_packages", return_value=[])
+    @patch("scribe.voice.service.resident_voice_advisories")
+    def test_pass_when_deps_ok_and_only_info_advisories(
+        self, mock_advisories, _mock_missing, _find_spec
+    ):
+        from scribe.voice.service import ReadinessAdvisory
+
+        mock_advisories.return_value = [
+            ReadinessAdvisory("info", "Linux/X11: global hotkeys via pynput are supported")
+        ]
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_voice_readiness()
+
+        assert result is not None
+        assert result.name == "Voice Readiness"
+        assert result.status == "pass"
+        assert "ready" in result.message.lower()
+
+    @patch("importlib.util.find_spec", return_value=Mock())
+    @patch(
+        "scribe.voice.service.missing_dependency_packages",
+        return_value=["pyperclip", "sounddevice"],
+    )
+    @patch("scribe.voice.service.resident_voice_advisories", return_value=[])
+    def test_warns_on_missing_voice_packages(self, _mock_advisories, _mock_missing, _find_spec):
+        diagnostics = SystemDiagnostics()
+        result = diagnostics.check_voice_readiness()
+
+        assert result is not None
+        assert result.status == "warn"
+        assert "pyperclip" in result.message
+        assert "Missing optional voice packages" in (result.details or "")
+        assert result.fix_suggestion is not None
+
+
 class TestSystemDiagnostics:
     """Test SystemDiagnostics class."""
 

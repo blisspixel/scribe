@@ -22,6 +22,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scribe.core.recording_policy import (
+    OBSActiveRecordingError,
+    OBSAuthenticationError,
+    should_fallback_websocket_to_cli,
+)
 from scribe.exceptions import ProcessError
 from scribe.models.config import ScribeConfig
 from scribe.utils.logging import get_logger
@@ -83,14 +88,6 @@ class OBSPreflightResult:
     def ok(self) -> bool:
         """Whether Quick Record can use OBS WebSocket."""
         return self.status == "pass"
-
-
-class OBSActiveRecordingError(ConnectionError):
-    """Raised when OBS appears to be recording and recovery must not attach."""
-
-
-class OBSAuthenticationError(ConnectionError):
-    """Raised when OBS WebSocket rejects the configured password."""
 
 
 class OBSRecorder:
@@ -202,16 +199,14 @@ class OBSRecorder:
                 self._wait_until_file_finalized(media)
                 return self._finalize_recording(media, ext, meeting_name, start_ts)
 
-        except OBSActiveRecordingError as e:
-            logger.warning("OBS appears to be actively recording; not falling back to CLI")
+        except (OBSActiveRecordingError, OBSAuthenticationError) as e:
+            logger.warning("OBS WebSocket blocked fallback: %s", e)
             raise ProcessError(str(e)) from e
-        except OBSAuthenticationError as e:
-            logger.warning("OBS WebSocket authentication failed; not falling back to CLI")
-            raise ProcessError(str(e)) from e
-        except ConnectionError:
-            # Only fall back to CLI mode for *connection* failures
-            logger.warning("WebSocket connection failed, falling back to CLI mode")
-            return self._record_with_cli(meeting_name, stop_event)
+        except ConnectionError as e:
+            if should_fallback_websocket_to_cli(e):
+                logger.warning("WebSocket connection failed, falling back to CLI mode")
+                return self._record_with_cli(meeting_name, stop_event)
+            raise ProcessError(f"OBS WebSocket connection failed: {e}") from e
 
     def _record_with_cli(self, meeting_name: str, stop_event: threading.Event) -> Path:
         """
