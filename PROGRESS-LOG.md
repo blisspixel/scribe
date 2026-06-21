@@ -164,3 +164,10 @@ Step 4 Error Handling and Security materially advanced: doctor runs pip-audit, C
 - `voice/service.py`: `tray_platform_matrix`, `graphical_session_detected`, `tray_environment_advisories`; wired into `resident_voice_advisories`, `tray --check`, and doctor voice readiness (DISPLAY env).
 - Tests: tray matrix tiers, headless Linux warning, updated Linux X11 advisory expectations (+2).
 - **Validate:** ruff clean, mypy strict 92 files, 1443 unit CI-safe passed.
+
+### Cycle 16 (defensive resilience + adaptive recording discovery):
+- New `scribe.utils.resilience`: exponential backoff, retry policy, circuit breaker snapshots, fallback chain, retriable exception guard (deal + fault-injection tests).
+- `recording_policy.py`: `RecordingSessionTracker`, adaptive `recording_media_candidate_dirs`, `media_discovery_poll_interval`, `assess_recording_file_stability`.
+- `recorder.py`: multi-directory media discovery with adaptive polling; lifecycle phase tracking on errors; file finalization uses stability policy.
+- Tests: `test_resilience.py` (11), recording policy adaptive tests (+4).
+- **Validate:** ruff clean, mypy strict 93 files, 1458 unit CI-safe passed (+15).

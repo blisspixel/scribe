@@ -9,8 +9,10 @@ thin and Hypothesis can verify transitions without OBS installed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 import deal
 
@@ -166,3 +168,78 @@ def step_recording_duration_limit(
         emit_warning=emit_warning,
         emit_auto_stop=emit_auto_stop,
     )
+
+
+@dataclass
+class RecordingSessionTracker:
+    """Mutable lifecycle tracker for OBS recording orchestration."""
+
+    phase: RecordingPhase = field(default=RecordingPhase.IDLE)
+
+    def advance(self, event: RecordingEvent) -> RecordingPhase:
+        """Advance session phase; invalid transitions propagate as ValueError."""
+        self.phase = advance_recording_phase(self.phase, event)
+        return self.phase
+
+
+@deal.post(lambda result: len(result) >= 1)
+def recording_media_candidate_dirs(
+    primary_dir: str | Path,
+    *,
+    home: Path | None = None,
+    temp_obs_dir: Path | None = None,
+) -> tuple[Path, ...]:
+    """Ordered, deduplicated directories to search for fresh OBS media."""
+    home = home or Path.home()
+    candidates = [
+        Path(primary_dir),
+        home / "Videos",
+        home / "Videos" / "OBS",
+    ]
+    if temp_obs_dir is not None:
+        candidates.append(temp_obs_dir)
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = os.path.normcase(str(path))
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return tuple(unique)
+
+
+@deal.pre(lambda attempt: attempt >= 0)
+@deal.post(lambda result: result > 0.0)
+def media_discovery_poll_interval(
+    attempt: int,
+    *,
+    base: float = 0.5,
+    max_interval: float = 2.0,
+) -> float:
+    """Adaptive delay between recording file discovery polls."""
+    return min(max_interval, base * (1.25 ** min(attempt, 10)))
+
+
+@dataclass(frozen=True)
+class RecordingFileStability:
+    """Pure assessment of whether a recording file has stabilized."""
+
+    ready: bool
+    reason: str
+
+
+def assess_recording_file_stability(
+    current_size: int,
+    previous_size: int | None,
+    *,
+    min_bytes: int = 4096,
+) -> RecordingFileStability:
+    """Return whether a media file is large enough and no longer growing."""
+    if current_size < min_bytes:
+        return RecordingFileStability(False, "below_min_bytes")
+    if previous_size is None:
+        return RecordingFileStability(False, "awaiting_second_sample")
+    if current_size == previous_size:
+        return RecordingFileStability(True, "stable")
+    return RecordingFileStability(False, "still_growing")

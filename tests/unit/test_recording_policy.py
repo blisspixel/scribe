@@ -1,5 +1,7 @@
 """Tests for OBS WebSocket vs CLI fallback policy (ADR-002)."""
 
+from pathlib import Path
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -11,11 +13,15 @@ from scribe.core.recording_policy import (
     RecordingDurationStep,
     RecordingEvent,
     RecordingPhase,
+    RecordingSessionTracker,
     advance_recording_phase,
     allowed_recording_events,
+    assess_recording_file_stability,
     format_recording_elapsed,
     is_terminal_recording_phase,
+    media_discovery_poll_interval,
     recording_limit_seconds,
+    recording_media_candidate_dirs,
     recording_warning_seconds,
     should_fallback_websocket_to_cli,
     step_recording_duration_limit,
@@ -87,6 +93,39 @@ class TestRecordingPhaseTransitions:
     def test_invalid_transition_raises(self) -> None:
         with pytest.raises(ValueError, match="invalid recording transition"):
             advance_recording_phase(RecordingPhase.IDLE, RecordingEvent.MEDIA_FOUND)
+
+
+class TestAdaptiveMediaDiscovery:
+    """Bulletproof file discovery policy for OBS recordings."""
+
+    def test_candidate_dirs_deduplicate_and_include_fallbacks(self, tmp_path) -> None:
+        home = tmp_path / "home"
+        primary = home / "Videos" / "OBS"
+        dirs = recording_media_candidate_dirs(primary, home=home)
+        assert dirs[0] == primary
+        assert home / "Videos" in dirs
+        assert len(dirs) == len({Path(p) for p in dirs})
+
+    def test_poll_interval_is_bounded(self) -> None:
+        assert media_discovery_poll_interval(0) == 0.5
+        assert media_discovery_poll_interval(100) <= 2.0
+
+    def test_file_stability_requires_matching_sizes(self) -> None:
+        first = assess_recording_file_stability(10_000, None, min_bytes=4096)
+        assert not first.ready
+        stable = assess_recording_file_stability(10_000, 10_000, min_bytes=4096)
+        assert stable.ready
+        growing = assess_recording_file_stability(20_000, 10_000, min_bytes=4096)
+        assert not growing.ready
+
+
+class TestRecordingSessionTracker:
+    def test_tracker_advances_happy_path(self) -> None:
+        tracker = RecordingSessionTracker()
+        tracker.advance(RecordingEvent.BEGIN)
+        tracker.advance(RecordingEvent.CONNECT_OK)
+        tracker.advance(RecordingEvent.STOP_REQUESTED)
+        assert tracker.phase == RecordingPhase.AWAITING_MEDIA
 
 
 class TestRecordingDurationPolicy:

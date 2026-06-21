@@ -25,8 +25,14 @@ from typing import Any
 from scribe.core.recording_policy import (
     OBSActiveRecordingError,
     OBSAuthenticationError,
+    RecordingEvent,
+    RecordingPhase,
+    RecordingSessionTracker,
+    assess_recording_file_stability,
     format_recording_elapsed,
+    media_discovery_poll_interval,
     recording_limit_seconds,
+    recording_media_candidate_dirs,
     recording_warning_seconds,
     should_fallback_websocket_to_cli,
     step_recording_duration_limit,
@@ -124,6 +130,7 @@ class OBSRecorder:
         self.output_folder = config.output_folder
         self.max_recording_hours = config.max_recording_hours
         self.recording_warning_fraction = config.recording_warning_fraction
+        self._session = RecordingSessionTracker()
 
     def record(self, meeting_name: str) -> Path:
         """
@@ -139,6 +146,8 @@ class OBSRecorder:
             ProcessError: If recording fails
         """
         logger.info(f"Starting OBS recording: {meeting_name}")
+        self._session = RecordingSessionTracker()
+        self._session.advance(RecordingEvent.BEGIN)
 
         # Ensure output directory is writable
         try:
@@ -164,14 +173,27 @@ class OBSRecorder:
             raise
         except OSError as e:
             logger.error("Recording failed (OS error): %s", e)
+            with suppress(ValueError):
+                self._session.advance(RecordingEvent.CANCEL)
             raise ProcessError(
-                f"OBS recording failed: {e}", context={"meeting": meeting_name}
+                f"OBS recording failed: {e}",
+                context={"meeting": meeting_name, "phase": self._session.phase.value},
             ) from e
         except Exception as e:
             logger.error(f"Recording failed: {e}")
-            raise ProcessError(f"OBS recording failed: {e}", context={"meeting": meeting_name})
+            with suppress(ValueError):
+                self._session.advance(RecordingEvent.CANCEL)
+            raise ProcessError(
+                f"OBS recording failed: {e}",
+                context={"meeting": meeting_name, "phase": self._session.phase.value},
+            )
         finally:
             restore_sigint()
+
+    def _ensure_recording_session_started(self) -> None:
+        """Begin the lifecycle when callers invoke websocket helpers directly."""
+        if self._session.phase == RecordingPhase.IDLE:
+            self._session.advance(RecordingEvent.BEGIN)
 
     def _record_with_websocket(self, meeting_name: str, stop_event: threading.Event) -> Path:
         """Record using OBS WebSocket.
@@ -180,8 +202,10 @@ class OBSRecorder:
         established.  Errors during an active recording (start/stop/file
         detection) are raised so the user gets clear feedback.
         """
+        self._ensure_recording_session_started()
         try:
             with self._connect_obs() as client:
+                self._session.advance(RecordingEvent.CONNECT_OK)
                 self._set_record_dir_if_possible(client, str(self.output_folder))
                 eff_dir = self._get_effective_record_dir(client, str(self.output_folder))
 
@@ -189,37 +213,84 @@ class OBSRecorder:
                 # Set timestamp AFTER recording has started
                 start_ts = time.time()
                 self._wait_for_stop_with_input(client, stop_event)
+                self._session.advance(RecordingEvent.STOP_REQUESTED)
 
-                # Find recorded file - OBS may still be flushing the
-                # container, so retry for up to 15 seconds.
-                media = None
-                ext = ".mp4"
-                for _wait in range(30):
-                    mp4, mkv = self._newest_media_since(eff_dir, start_ts)
-                    media = mp4 or mkv
-                    if media:
-                        ext = ".mp4" if mp4 else ".mkv"
-                        break
-                    time.sleep(0.5)
-
-                if not media:
-                    raise ProcessError(
-                        f"Could not locate recorded media in {eff_dir}. "
-                        "OBS may be saving to a different folder - check "
-                        "OBS Settings → Output → Recording Path."
-                    )
+                try:
+                    media, ext = self._discover_recorded_media(eff_dir, start_ts)
+                except ProcessError:
+                    with suppress(ValueError):
+                        self._session.advance(RecordingEvent.MEDIA_MISSING)
+                    raise
+                self._session.advance(RecordingEvent.MEDIA_FOUND)
 
                 self._wait_until_file_finalized(media)
-                return self._finalize_recording(media, ext, meeting_name, start_ts)
+                final_path = self._finalize_recording(media, ext, meeting_name, start_ts)
+                self._session.advance(RecordingEvent.FINALIZED)
+                return final_path
 
         except (OBSActiveRecordingError, OBSAuthenticationError) as e:
             logger.warning("OBS WebSocket blocked fallback: %s", e)
-            raise ProcessError(str(e)) from e
+            with suppress(ValueError):
+                self._session.advance(
+                    RecordingEvent.CONNECT_BUSY
+                    if isinstance(e, OBSActiveRecordingError)
+                    else RecordingEvent.CONNECT_AUTH_FAIL
+                )
+            raise ProcessError(
+                str(e), context={"phase": self._session.phase.value}
+            ) from e
         except ConnectionError as e:
             if should_fallback_websocket_to_cli(e):
                 logger.warning("WebSocket connection failed, falling back to CLI mode")
+                self._session.advance(RecordingEvent.USE_CLI_FALLBACK)
                 return self._record_with_cli(meeting_name, stop_event)
-            raise ProcessError(f"OBS WebSocket connection failed: {e}") from e
+            with suppress(ValueError):
+                self._session.advance(RecordingEvent.CANCEL)
+            raise ProcessError(
+                f"OBS WebSocket connection failed: {e}",
+                context={"phase": self._session.phase.value},
+            ) from e
+
+    def _discover_recorded_media(
+        self,
+        primary_dir: str,
+        start_ts: float,
+        *,
+        max_attempts: int = 30,
+    ) -> tuple[str, str]:
+        """Search adaptive candidate folders for media written after ``start_ts``."""
+        temp_obs = Path(tempfile.gettempdir()) / "obs_recordings"
+        candidate_dirs = recording_media_candidate_dirs(
+            primary_dir,
+            temp_obs_dir=temp_obs,
+        )
+        searched = ", ".join(str(path) for path in candidate_dirs)
+        for attempt in range(max_attempts):
+            for directory in candidate_dirs:
+                if not directory.exists():
+                    continue
+                mp4, mkv = self._newest_media_since(str(directory), start_ts)
+                media = mp4 or mkv
+                if media:
+                    ext = ".mp4" if mp4 else ".mkv"
+                    logger.info(
+                        "Located recorded media in %s after %d discovery attempt(s)",
+                        directory,
+                        attempt + 1,
+                    )
+                    return media, ext
+            time.sleep(media_discovery_poll_interval(attempt))
+
+        raise ProcessError(
+            "Could not locate recorded media after stopping OBS. "
+            f"Searched: {searched}. OBS may be saving to a different folder - check "
+            "OBS Settings → Output → Recording Path.",
+            context={
+                "primary_dir": primary_dir,
+                "phase": self._session.phase.value,
+                "attempts": max_attempts,
+            },
+        )
 
     def _record_with_cli(self, meeting_name: str, stop_event: threading.Event) -> Path:
         """
@@ -253,12 +324,7 @@ class OBSRecorder:
         console.print("[cyan]Waiting for recording to start...[/cyan]")
         console.print("[dim]Looking for new media files in:[/dim]")
 
-        candidate_dirs = [
-            self.output_folder,
-            Path.home() / "Videos",
-            Path.home() / "Videos" / "OBS",
-        ]
-
+        candidate_dirs = recording_media_candidate_dirs(self.output_folder)
         for d in candidate_dirs:
             if d.exists():
                 console.print(f"[dim]  • {d}[/dim]")
@@ -267,6 +333,7 @@ class OBSRecorder:
         ext = ".mp4"
         deadline = time.time() + 30
         last_check_msg = 0.0
+        attempt = 0
 
         while time.time() < deadline and not found_path and not stop_event.is_set():
             for d in candidate_dirs:
@@ -285,7 +352,8 @@ class OBSRecorder:
                 console.print(f"[dim]Still waiting... ({remaining}s remaining)[/dim]")
                 last_check_msg = elapsed
 
-            time.sleep(0.5)
+            time.sleep(media_discovery_poll_interval(attempt))
+            attempt += 1
 
         if stop_event.is_set() and not found_path:
             raise ProcessError("Recording cancelled before a file was detected")
@@ -306,7 +374,8 @@ class OBSRecorder:
             console.print()
             raise ProcessError(
                 "No media file appeared after starting recording. "
-                "OBS may not be recording. Please check OBS window and start recording manually."
+                "OBS may not be recording. Please check OBS window and start recording manually.",
+                context={"phase": self._session.phase.value},
             )
 
         # Convert string path to Path object for consistent handling
@@ -1606,7 +1675,7 @@ class OBSRecorder:
 
         Raises ProcessError if the file never stabilizes within max_wait.
         """
-        last = -1
+        previous_size: int | None = None
         stable = 0.0
         waited = 0.0
 
@@ -1618,13 +1687,14 @@ class OBSRecorder:
                 waited += 0.5
                 continue
 
-            if size == last:
+            assessment = assess_recording_file_stability(size, previous_size, min_bytes=1)
+            if assessment.ready:
                 stable += 0.5
                 if stable >= idle_seconds:
                     return
             else:
                 stable = 0.0
-                last = size
+            previous_size = size
 
             time.sleep(0.5)
             waited += 0.5
