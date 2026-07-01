@@ -302,8 +302,11 @@ class Transcriber:
                 return "local"
             else:
                 if self.config.openai_api_key:
-                    logger.info(
-                        f"Auto-selected OpenAI API transcription - {self.gpu_config.reason}"
+                    logger.warning(
+                        "No usable local GPU detected (%s); auto-selecting the PAID "
+                        "OpenAI transcription API (~$0.006/min of audio). Use "
+                        "`--method local` to force free local transcription.",
+                        self.gpu_config.reason,
                     )
                     return "openai"
                 else:

@@ -42,6 +42,44 @@ def mock_config():
     return config
 
 
+class TestFeatureFlagResolution:
+    """The paid notes/joke/meme features are tri-state per-run overrides."""
+
+    @pytest.mark.parametrize(
+        ("override", "config_default", "expected"),
+        [
+            (None, True, True),  # no flag -> follow config (on)
+            (None, False, False),  # no flag -> follow config (off)
+            (True, False, True),  # --feature forces on despite config off
+            (False, True, False),  # --no-feature forces off despite config on
+        ],
+    )
+    def test_resolve_feature_truth_table(self, override, config_default, expected):
+        from scribe.cli.main import _resolve_feature
+
+        assert _resolve_feature(override, config_default) is expected
+
+    @pytest.mark.parametrize("command", ["transcribe", "url", "record", "batch"])
+    @pytest.mark.parametrize("feature", ["notes", "joke", "meme"])
+    def test_paired_toggle_flags_exposed(self, cli_runner, command, feature):
+        """Every file-producing command exposes --<feature>/--no-<feature>."""
+        result = cli_runner.invoke(app, [command, "--help"])
+        text = _strip_ansi(result.output)
+        assert f"--{feature}" in text
+        assert f"--no-{feature}" in text
+
+    @pytest.mark.parametrize("flag", ["--meme", "--no-meme", "--joke", "--notes"])
+    def test_feature_flags_are_recognized_options(self, cli_runner, flag):
+        """Both the new opt-in and the legacy --no-* flags must parse as options.
+
+        The missing input file still aborts (file validation), but an
+        unrecognized option would instead surface a distinct 'No such option'
+        usage error - which must never happen for these flags.
+        """
+        result = cli_runner.invoke(app, ["transcribe", "missing.mp4", flag])
+        assert "No such option" not in _strip_ansi(result.output)
+
+
 class TestCLIHelp:
     """Test CLI help and version commands."""
 

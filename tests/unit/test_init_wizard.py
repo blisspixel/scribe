@@ -100,7 +100,7 @@ def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
                 "obs-secret",
             ],
         ),
-        patch("scribe.cli.init.Confirm.ask", side_effect=[True, False, True, True]),
+        patch("scribe.cli.init.Confirm.ask", side_effect=[True, False, True, True, False]),
     ):
         result = init_wizard.run_wizard(console=_console(), force=True)
 

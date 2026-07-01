@@ -555,7 +555,7 @@ class TestCLIParameterPassing:
     """Test that CLI commands pass parameters correctly."""
 
     def test_rec_shortcut_passes_humor_flags(self):
-        """Test that rec shortcut passes no_joke and no_meme flags."""
+        """Quick Record forwards None for the paid extras so config defaults win."""
         from scribe.cli.main import rec_shortcut
 
         with patch("scribe.cli.main.record") as mock_record:
@@ -568,8 +568,10 @@ class TestCLIParameterPassing:
             assert call_kwargs["name"] == "Test Meeting"
             assert call_kwargs["auto_transcribe"] is True
             assert call_kwargs["method"] == "auto"
-            assert call_kwargs["no_joke"] is False
-            assert call_kwargs["no_meme"] is False
+            # None = respect the user's config defaults (don't force features on/off)
+            assert call_kwargs["notes"] is None
+            assert call_kwargs["joke"] is None
+            assert call_kwargs["meme"] is None
 
     def test_rec_shortcut_without_name(self):
         """Test that rec shortcut works without name."""
@@ -583,8 +585,9 @@ class TestCLIParameterPassing:
             call_kwargs = mock_record.call_args.kwargs
 
             assert call_kwargs["name"] is None
-            assert call_kwargs["no_joke"] is False
-            assert call_kwargs["no_meme"] is False
+            assert call_kwargs["notes"] is None
+            assert call_kwargs["joke"] is None
+            assert call_kwargs["meme"] is None
 
 
 class TestMemeGeneratorHelpers:

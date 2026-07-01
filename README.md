@@ -1,3 +1,7 @@
+License: Apache 2.0 + Commons Clause  
+Personal/research/sharing use free.  
+Commercial/enterprise products require separate license from Nick Seal.
+
 # Scribe
 
 **Speech Transcription and Summarization CLI**
@@ -26,6 +30,8 @@ scribe doctor
 ```
 
 That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or taskbar shortcut, or scheduled job. Transcript-only local GPU use needs no API key; notes/jokes/memes and API transcription do, so set `OPENAI_API_KEY` (and friends) in your environment or a `.env` file, or let `scribe init` walk you through it.
+
+> **Costs default to off.** To avoid surprise charges, the paid AI extras — meeting **notes**, **jokes**, and **memes** (memes call a paid *image* API) — are **disabled by default**. A plain `scribe meeting.mp4` only transcribes. Turn one on **just for this run** with the matching flag (`scribe meeting.mp4 --notes --meme`), turn it on **persistently** with `scribe init` or `SCRIBE_ENABLE_NOTES/JOKE/MEME=true`, or generate one on demand from an existing transcript: `scribe notes transcript.md`, `scribe joke transcript.md`, `scribe meme transcript.md`. The `--notes/--no-notes`, `--joke/--no-joke`, and `--meme/--no-meme` flags are paired toggles: the bare flag forces the feature on for that run, the `--no-` form forces it off, and omitting both uses your config default. When no GPU is available, `--method auto` transcription falls back to the **paid** OpenAI API (~$0.006/min) and prints a visible warning first; use `--method local` to force free local transcription.
 
 > **Cloud-synced home folder (OneDrive, Dropbox)?** If the install errors with a hardlink failure (Windows `os error 396`), add `--link-mode=copy` to the install command.
 >
@@ -97,7 +103,13 @@ scribe url https://youtu.be/abc123 --cookies edge    # Use browser cookies for a
 scribe batch *.mp4
 scribe batch file1.wav file2.wav file3.wav
 
-# Transcript only (no docx, notes, jokes, memes)
+# Notes/jokes/memes are OFF by default (cost safety). Opt in per run:
+scribe meeting.mp4 --notes              # add meeting notes this run (paid text API)
+scribe meeting.mp4 --notes --meme       # notes + meme (meme uses a paid image API)
+scribe batch *.mp4 --notes              # apply to every file in the batch
+
+# Transcript only is already the default; --no-* still force a feature off
+# even when your config turns it on:
 scribe batch *.mp4 --no-docx --no-notes --no-joke --no-meme
 
 # Music/lyrics
@@ -121,8 +133,8 @@ scribe record --name "Board Meeting"
 # Record only (no transcription)
 scribe record --no-auto-transcribe
 
-# Install a double-clickable "Quick Record" launcher in your OS app menu
-# (Windows Start Menu, macOS ~/Applications, Linux app menu); runs `scribe rec`
+# Install native Quick Record launchers (Start Menu + optional Desktop).
+# Runs `scribe rec`. See "Quick Record launcher" section for details + taskbar tips.
 scribe shortcut
 scribe shortcut --desktop   # also drop one on the Desktop
 scribe shortcut --remove    # remove it
@@ -196,7 +208,7 @@ reads play without gaps.
 scribe init
 scribe init --force                # Overwrite existing ~/.scribe/config.toml
 
-# Install a cross-platform "Quick Record" launcher (Windows/macOS/Linux)
+# Install Quick Record launchers (see dedicated section + taskbar icon tips)
 scribe shortcut
 scribe shortcut --remove
 scribe rec --check              # read-only OBS preflight before a meeting
@@ -235,11 +247,11 @@ scribe --banner
 - `--provider openai|xai|anthropic|gemini` - AI provider
 - `--cookies BROWSER` - Use browser cookies for URL downloads (edge, chrome, firefox)
 - `--no-docx` - Skip DOCX generation (just .txt transcript)
-- `--no-notes` - Skip meeting notes
-- `--no-joke` - Skip joke generation
-- `--no-meme` - Skip meme generation
+- `--notes` / `--no-notes` - Force meeting notes on / off for this run (paid text API; default off)
+- `--joke` / `--no-joke` - Force joke generation on / off for this run (paid text API; default off)
+- `--meme` / `--no-meme` - Force meme generation on / off for this run (paid **image** API; default off)
 
-**Tip:** For transcript-only batch processing, use all four `--no-*` flags together
+**Tip:** Transcript-only is the default now that the paid extras ship off. The `--no-*` flags are only needed to override a config/env setting that turned a feature on.
 
 ---
 
@@ -358,7 +370,14 @@ Scribe reads from three layers, highest precedence first:
 scribe init   # auto-prompts on first run; rerun anytime
 ```
 
-The wizard asks for output folder, transcription method (auto/local/openai), which features to enable by default (notes/joke/meme), and your AI vendor preference. The output prompt defaults to `SCRIBE_OUTPUT_FOLDER` if set, then an existing `~/.scribe/config.toml` value, then the platform default (`~/Videos/Transcriptions` on Windows/Linux, `~/Movies/Transcriptions` on macOS), so it is not tied to the repo checkout. It also detects conflicting `SCRIBE_ENABLE_*` lines in your `.env` and offers to comment them out so the wizard's choices actually take effect.
+The wizard is interactive and defensive:
+- Smart defaults (GPU detection, existing config / env / OBS settings).
+- Review step with confirmation before writing.
+- Post-save verification (including real OBS preflight if you supplied a password).
+- Offers to create a Quick Record launcher immediately.
+- Resolves conflicting `SCRIBE_ENABLE_*` env vars.
+
+It writes `~/.scribe/config.toml`. Env vars and CLI flags still override. Re-run `scribe init` (or `--force`) anytime.
 
 **`.env` setup:**
 
@@ -653,11 +672,17 @@ rather than being silently truncated. Glossaries should match the spoken languag
 ### Quick Record launcher
 
 `scribe shortcut` installs a native, double-clickable "Quick Record" launcher in your
-OS application menu that runs `scribe rec` with no terminal required:
+OS application menu that runs `scribe rec` (you do not need to open a terminal first).
+It is defensive and adaptive: it prefers whatever `scribe` is on your PATH at runtime
+(e.g. a stable `uv tool install`), falls back gracefully, keeps the console window open
+with pauses and clear messages, and stages a custom icon.
 
-- **Windows**: a Start Menu shortcut (`--desktop` also adds a Desktop one)
-- **macOS**: `~/Applications/Scribe Quick Record.command` (shows in Finder/Launchpad)
-- **Linux**: an XDG `.desktop` entry in your applications menu
+- **Windows**: Start Menu + optional Desktop `.lnk`. The `.lnk` targets `cmd.exe` (with env
+  and title for reliable taskbar pinning and console behavior) + a companion adaptive
+  `.cmd` wrapper is created in `~/.scribe` for advanced use/editing. Custom icon is set
+  on the `.lnk`.
+- **macOS**: `~/Applications/Scribe Quick Record.command` (and optional Desktop copy).
+- **Linux**: XDG `.desktop` (and optional Desktop copy), plus adaptive wrapper script.
 
 ```bash
 scribe shortcut            # install to the app menu (offers a Desktop copy)
@@ -665,9 +690,12 @@ scribe shortcut --desktop  # also place one on the Desktop
 scribe shortcut --remove   # remove installed launchers
 ```
 
-The launcher calls whatever `scribe` resolves to at install time (preferring a `scribe`
-on your PATH, e.g. from `uv tool install`), falling back to `python -m scribe`. This is
-the cross-platform replacement for any hand-made `.bat`/shell shortcut.
+After installation, drag the Desktop `.lnk` to your taskbar to pin. If the icon appears
+generic on the pinned taskbar item, right-click it → Properties → Change Icon and select
+`~/.scribe/scribe.ico`.
+
+The shortcut is the cross-platform replacement for hand-made launchers and survives
+updates when you use a stable global `scribe` on PATH.
 
 ---
 

@@ -5,8 +5,11 @@ This module provides the command-line interface with commands for
 transcription, recording, and system information.
 """
 
+import os
+import sys
 import time
 import warnings
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -106,6 +109,18 @@ def _show_command_banner(console: Any) -> None:
             f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
         )
     console.print()
+
+
+def _resolve_feature(override: bool | None, config_default: bool) -> bool:
+    """Resolve whether a paid AI feature should run for this invocation.
+
+    Each of the notes/joke/meme features is a tri-state per-run flag
+    (``--notes/--no-notes`` etc.): ``None`` means "no per-run flag was given,
+    fall back to the config default"; ``True``/``False`` are an explicit
+    per-run override that wins over the config. This is the single source of
+    truth so the display panel and the generation step can never disagree.
+    """
+    return config_default if override is None else override
 
 
 # Custom help formatter that's minimal and clean
@@ -211,12 +226,27 @@ def transcribe_command(
         help="Language (english, spanish, french, german, japanese, chinese, or ISO code)",
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX document generation"),
-    no_notes: bool = typer.Option(False, "--no-notes", help="Skip meeting notes generation"),
+    notes: bool | None = typer.Option(
+        None,
+        "--notes/--no-notes",
+        show_default=False,
+        help="Generate meeting notes this run (paid text API); overrides the config default",
+    ),
     keep_all: bool = typer.Option(
         False, "--keep-all", help="Keep all intermediate files (don't cleanup)"
     ),
-    no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
-    no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
+    joke: bool | None = typer.Option(
+        None,
+        "--joke/--no-joke",
+        show_default=False,
+        help="Generate a joke this run (paid text API); overrides the config default",
+    ),
+    meme: bool | None = typer.Option(
+        None,
+        "--meme/--no-meme",
+        show_default=False,
+        help="Generate a meme this run (paid image API); overrides the config default",
+    ),
     vocabulary: str | None = typer.Option(
         None,
         "--vocabulary",
@@ -245,7 +275,7 @@ def transcribe_command(
 
       scribe transcribe podcast.mp3 --method openai --language spanish
 
-      scribe transcribe meeting.mp4 --no-joke --no-meme
+      scribe transcribe meeting.mp4 --notes        # add notes this run (off by default)
 
       scribe transcribe technical.mp4 --vocabulary terms.txt
     """
@@ -316,9 +346,9 @@ def transcribe_command(
 
         # Check what features are actually enabled
         has_api_key = bool(config.openai_api_key)
-        will_generate_notes = not no_notes and config.enable_notes and has_api_key
-        will_generate_joke = not no_joke and config.enable_joke and has_api_key
-        will_generate_meme = not no_meme and config.enable_meme and has_api_key
+        will_generate_notes = _resolve_feature(notes, config.enable_notes) and has_api_key
+        will_generate_joke = _resolve_feature(joke, config.enable_joke) and has_api_key
+        will_generate_meme = _resolve_feature(meme, config.enable_meme) and has_api_key
         include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
 
         # Build feature list for display
@@ -509,7 +539,7 @@ def transcribe_command(
 
         # Generate meeting notes if enabled
         notes_path = None
-        if not no_notes and config.enable_notes and config.openai_api_key:
+        if will_generate_notes:
             unified_progress.update_phase("finishing", 0.2, "Generating notes")
             try:
                 from scribe.utils.notes_generator import NotesGenerator
@@ -525,7 +555,7 @@ def transcribe_command(
                 logger.error(f"Notes generation failed: {e}")
 
         # Generate joke if enabled
-        if not no_joke and config.enable_joke and config.openai_api_key:
+        if will_generate_joke:
             unified_progress.update_phase("finishing", 0.6, "Generating joke")
             result = generate_transcript_joke(transcript_path, config.openai_api_key)
             if result:
@@ -535,7 +565,7 @@ def transcribe_command(
                 session.joke_data = {"text": joke_text, "style": comedy_style}
 
         # Generate meme from transcript (enabled by default)
-        if not no_meme and config.enable_meme and config.openai_api_key:
+        if will_generate_meme:
             from scribe.utils.meme_generator import generate_meeting_meme
 
             def meme_progress(attempt: int, max_attempts: int, score: float | None) -> None:
@@ -645,12 +675,27 @@ def url_command(
         help="Language (english, spanish, french, german, japanese, chinese, or ISO code)",
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX document generation"),
-    no_notes: bool = typer.Option(False, "--no-notes", help="Skip meeting notes generation"),
+    notes: bool | None = typer.Option(
+        None,
+        "--notes/--no-notes",
+        show_default=False,
+        help="Generate meeting notes this run (paid text API); overrides the config default",
+    ),
     keep_all: bool = typer.Option(
         False, "--keep-all", help="Keep all intermediate files (don't cleanup)"
     ),
-    no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
-    no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
+    joke: bool | None = typer.Option(
+        None,
+        "--joke/--no-joke",
+        show_default=False,
+        help="Generate a joke this run (paid text API); overrides the config default",
+    ),
+    meme: bool | None = typer.Option(
+        None,
+        "--meme/--no-meme",
+        show_default=False,
+        help="Generate a meme this run (paid image API); overrides the config default",
+    ),
     vocabulary: str | None = typer.Option(
         None,
         "--vocabulary",
@@ -689,7 +734,7 @@ def url_command(
 
       scribe url https://example.com/podcast.mp3 --language es
 
-      scribe url https://youtu.be/abc123 --no-joke --no-meme
+      scribe url https://youtu.be/abc123 --notes        # add notes this run (off by default)
 
       scribe url https://youtube.com/watch?v=xyz --keep-download
     """
@@ -826,9 +871,9 @@ def url_command(
 
         # Check what features are enabled
         has_api_key = bool(config.openai_api_key)
-        will_generate_notes = not no_notes and config.enable_notes and has_api_key
-        will_generate_joke = not no_joke and config.enable_joke and has_api_key
-        will_generate_meme = not no_meme and config.enable_meme and has_api_key
+        will_generate_notes = _resolve_feature(notes, config.enable_notes) and has_api_key
+        will_generate_joke = _resolve_feature(joke, config.enable_joke) and has_api_key
+        will_generate_meme = _resolve_feature(meme, config.enable_meme) and has_api_key
         include_api_features = will_generate_notes or will_generate_joke or will_generate_meme
 
         outputs = ["transcript"]
@@ -977,7 +1022,7 @@ def url_command(
                 logger.error(f"DOCX generation failed: {e}")
 
         notes_path = None
-        if not no_notes and config.enable_notes and config.openai_api_key:
+        if will_generate_notes:
             unified_progress.update_phase("finishing", 0.2, "Generating notes")
             try:
                 from scribe.utils.notes_generator import NotesGenerator
@@ -990,14 +1035,14 @@ def url_command(
             except Exception as e:
                 logger.error(f"Notes generation failed: {e}")
 
-        if not no_joke and config.enable_joke and config.openai_api_key:
+        if will_generate_joke:
             unified_progress.update_phase("finishing", 0.6, "Generating joke")
             result_joke = generate_transcript_joke(transcript_path, config.openai_api_key)
             if result_joke:
                 joke_text, comedy_style = result_joke
                 session.joke_data = {"text": joke_text, "style": comedy_style}
 
-        if not no_meme and config.enable_meme and config.openai_api_key:
+        if will_generate_meme:
             from scribe.utils.meme_generator import generate_meeting_meme
 
             def meme_progress(attempt: int, max_attempts: int, score: float | None) -> None:
@@ -1137,8 +1182,24 @@ def record(
     method: TranscriptionMethod = typer.Option(
         "auto", "--method", "-m", help="Transcription method (if auto-transcribe enabled)"
     ),
-    no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
-    no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
+    notes: bool | None = typer.Option(
+        None,
+        "--notes/--no-notes",
+        show_default=False,
+        help="Generate meeting notes after recording (paid text API); overrides the config default",
+    ),
+    joke: bool | None = typer.Option(
+        None,
+        "--joke/--no-joke",
+        show_default=False,
+        help="Generate a joke after recording (paid text API); overrides the config default",
+    ),
+    meme: bool | None = typer.Option(
+        None,
+        "--meme/--no-meme",
+        show_default=False,
+        help="Generate a meme after recording (paid image API); overrides the config default",
+    ),
 ) -> None:
     """
     Record audio/video using OBS Studio.
@@ -1160,8 +1221,8 @@ def record(
       # Record without auto-transcription
       scribe record --name "Interview" --no-auto-transcribe
 
-      # Record without humor
-      scribe record --no-joke --no-meme
+      # Record and also generate notes this run (extras are off by default)
+      scribe record --name "Interview" --notes
     """
     if check:
         raise typer.Exit(_run_obs_preflight())
@@ -1215,6 +1276,15 @@ def record(
 
         console.print("\n[bold green]Recording Complete![/bold green]")
         console.print(f"File: {recording_path}\n")
+
+        if not auto_transcribe:
+            # For non-auto case on shortcut launch, pause here.
+            if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
+                # Cosmetic "keep the window open" pause; the only ways input() can
+                # fail here are a closed/redirected stdin (EOFError) or the user
+                # pressing Ctrl-C, and in both cases we just let the window close.
+                with suppress(EOFError, KeyboardInterrupt):
+                    input("\n[Shortcut launcher] Press Enter to close this window...")
 
         # Auto-transcribe if requested
         # Note: Could use unified progress here, but record command shows individual
@@ -1323,7 +1393,7 @@ def record(
 
             # Generate meeting notes if enabled
             notes_path = None
-            if config.enable_notes and config.openai_api_key:
+            if _resolve_feature(notes, config.enable_notes) and config.openai_api_key:
                 console.print("[cyan]Generating meeting notes...[/cyan]")
                 try:
                     from scribe.utils.notes_generator import NotesGenerator
@@ -1352,13 +1422,16 @@ def record(
             console.print("[bold green]Recording & Transcription Complete[/bold green]")
             console.print()
 
-            # Debug: Log the flags
+            # Debug: Log the resolved feature decisions
             logger.info(
-                f"Humor flags: no_joke={no_joke}, no_meme={no_meme}, has_api_key={bool(config.openai_api_key)}"
+                "Humor flags: joke=%s meme=%s has_api_key=%s",
+                _resolve_feature(joke, config.enable_joke),
+                _resolve_feature(meme, config.enable_meme),
+                bool(config.openai_api_key),
             )
 
-            # Generate joke (enabled by default)
-            if not no_joke and config.enable_joke:
+            # Generate joke if enabled
+            if _resolve_feature(joke, config.enable_joke):
                 if config.openai_api_key:
                     try:
                         # Quiet spinner for joke generation
@@ -1405,8 +1478,8 @@ def record(
                 else:
                     logger.info("Skipping joke generation - OpenAI API key not configured")
 
-            # Generate meme from transcript (enabled by default)
-            if not no_meme and config.enable_meme:
+            # Generate meme from transcript if enabled
+            if _resolve_feature(meme, config.enable_meme):
                 if config.openai_api_key:
                     try:
                         # Quiet spinner for meme generation
@@ -1456,6 +1529,14 @@ def record(
                 console.print(format_file_link("Meme:", session.meme_file))
             console.print()
 
+            # For dedicated shortcut launches, pause at the end so all output is seen.
+            if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
+                # Cosmetic "keep the window open" pause; the only ways input() can
+                # fail here are a closed/redirected stdin (EOFError) or the user
+                # pressing Ctrl-C, and in both cases we just let the window close.
+                with suppress(EOFError, KeyboardInterrupt):
+                    input("\n[Shortcut launcher] Press Enter to close this window...")
+
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
@@ -1473,9 +1554,24 @@ def batch_transcribe(
         None, "--language", "-l", help="Language (english, spanish, etc. or ISO code)"
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX generation"),
-    no_notes: bool = typer.Option(False, "--no-notes", help="Skip meeting notes"),
-    no_joke: bool = typer.Option(False, "--no-joke", help="Skip joke generation"),
-    no_meme: bool = typer.Option(False, "--no-meme", help="Skip meme generation"),
+    notes: bool | None = typer.Option(
+        None,
+        "--notes/--no-notes",
+        show_default=False,
+        help="Generate meeting notes for each file (paid text API); overrides the config default",
+    ),
+    joke: bool | None = typer.Option(
+        None,
+        "--joke/--no-joke",
+        show_default=False,
+        help="Generate a joke for each file (paid text API); overrides the config default",
+    ),
+    meme: bool | None = typer.Option(
+        None,
+        "--meme/--no-meme",
+        show_default=False,
+        help="Generate a meme for each file (paid image API); overrides the config default",
+    ),
     vocabulary: str | None = typer.Option(
         None,
         "--vocabulary",
@@ -1502,7 +1598,7 @@ def batch_transcribe(
 
       scribe batch file1.wav file2.wav --vocabulary terms.txt
 
-      scribe batch *.mp3 --no-joke --no-meme
+      scribe batch *.mp3 --notes        # add notes to every file (off by default)
     """
     try:
         from scribe.utils.vocabulary import CustomVocabulary
@@ -1555,6 +1651,14 @@ def batch_transcribe(
             )
         )
         console.print()
+
+        # Resolve paid AI features once for the whole batch: a per-run
+        # --notes/--joke/--meme flag overrides the config default, and every
+        # feature additionally requires an API key.
+        has_api_key = bool(config.openai_api_key)
+        will_generate_notes = _resolve_feature(notes, config.enable_notes) and has_api_key
+        will_generate_joke = _resolve_feature(joke, config.enable_joke) and has_api_key
+        will_generate_meme = _resolve_feature(meme, config.enable_meme) and has_api_key
 
         # Process each file
         results: list[BatchResult] = []
@@ -1624,7 +1728,7 @@ def batch_transcribe(
                         logger.error(f"DOCX generation failed: {e}")
 
                 # Generate notes
-                if not no_notes and config.enable_notes and config.openai_api_key:
+                if will_generate_notes:
                     try:
                         from scribe.utils.notes_generator import NotesGenerator
 
@@ -1635,7 +1739,7 @@ def batch_transcribe(
                         logger.error(f"Notes generation failed: {e}")
 
                 # Generate joke
-                if not no_joke and config.enable_joke and config.openai_api_key:
+                if will_generate_joke:
                     try:
                         joke_result = generate_transcript_joke(
                             transcript_path, config.openai_api_key
@@ -1647,7 +1751,7 @@ def batch_transcribe(
                         logger.error(f"Joke generation failed: {e}")
 
                 # Generate meme
-                if not no_meme and config.enable_meme and config.openai_api_key:
+                if will_generate_meme:
                     try:
                         from scribe.utils.meme_generator import generate_meeting_meme
 
@@ -2288,8 +2392,11 @@ def rec_shortcut(
         check=check,
         auto_transcribe=True,
         method="auto",
-        no_joke=False,
-        no_meme=False,
+        # None = respect the user's config defaults for the paid AI extras
+        # (off unless they opted in), rather than forcing them on.
+        notes=None,
+        joke=None,
+        meme=None,
     )
 
 
@@ -3092,26 +3199,37 @@ def doctor() -> None:
         console.print(table)
         console.print()
 
-    # Summary line
+    # Summary line - extremely polished QOL
     pass_count, warn_count, fail_count = diagnostics.get_summary()
 
     if fail_count == 0 and warn_count == 0:
+        console.print(f"[{ScribeTheme.SUCCESS}]✓ All systems ready[/] ({pass_count} checks)")
         console.print(
-            f"[{ScribeTheme.SUCCESS}]ready[/{ScribeTheme.SUCCESS}] [{ScribeTheme.TEXT_MUTED}]{pass_count} checks passed[/{ScribeTheme.TEXT_MUTED}]"
+            '[dim]Try: [cyan]scribe rec "Team sync"[/cyan] or create a launcher with [cyan]scribe shortcut[/cyan][/dim]'
         )
     elif fail_count == 0:
         console.print(
-            f"[{ScribeTheme.WARNING}]ready with warnings[/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_MUTED}]{pass_count} passed, {warn_count} warnings[/{ScribeTheme.TEXT_MUTED}]"
+            f"[{ScribeTheme.WARNING}]Ready with notes[/] ({pass_count} passed, {warn_count} warnings)"
         )
     else:
         console.print(
-            f"[{ScribeTheme.ERROR}]not ready[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_MUTED}]{fail_count} failed, {warn_count} warnings[/{ScribeTheme.TEXT_MUTED}]"
+            f"[{ScribeTheme.ERROR}]Needs attention[/] ({fail_count} failed, {warn_count} warnings)"
         )
 
     console.print()
 
-    # Exit with error code if there are failures
     if fail_count > 0:
+        try:
+            from rich.prompt import Confirm
+
+            if Confirm.ask("Run the setup wizard to fix issues?", default=False, console=console):
+                from scribe.cli.init import run_wizard
+
+                run_wizard(console=console, force=True)
+        except Exception as e:
+            # The wizard offer is a best-effort self-heal; never let it mask the
+            # underlying doctor failure (we still exit non-zero below).
+            logger.debug("Setup-wizard self-heal prompt failed: %s", e)
         raise typer.Exit(1)
 
 
@@ -3804,7 +3922,7 @@ def main() -> None:
 
     # First-run setup: prompt to create ~/.scribe/config.toml if missing.
     # Skipped for init/version/help/banner and when stdin is not a TTY.
-    skip_for = {"init", "version", "--help", "-h", "--version", "--banner", "help"}
+    skip_for = {"init", "shortcut", "version", "--help", "-h", "--version", "--banner", "help"}
     if len(sys.argv) <= 1 or sys.argv[1] not in skip_for:
         try:
             from scribe.cli.init import maybe_prompt_first_run

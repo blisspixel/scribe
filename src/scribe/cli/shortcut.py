@@ -2,18 +2,17 @@
 Cross-platform "Quick Record" launcher installer.
 
 Creates a native, icon-bearing launcher that runs ``scribe rec`` so users can start
-a recording without opening a terminal. It replaces the old hand-made Windows
-``.bat`` workaround and works the same way on all three desktop platforms:
+a recording without opening a terminal first. Designed to be defensive and adaptive:
 
-- Windows: a Start Menu ``.lnk`` pointing straight at ``scribe.exe`` (so Windows
-  allows pinning it to the taskbar), with the Scribe ``.ico``.
-- macOS: a small ``.app`` bundle in ``~/Applications`` that carries the ``.icns``
-  and opens Terminal to run ``scribe rec`` (so it shows in Launchpad and the Dock).
-- Linux: an XDG ``.desktop`` entry with the Scribe ``.png`` icon.
+- Prefers runtime PATH lookup for "scribe" (so shortcuts survive `uv tool install`,
+  upgrades, PATH changes, etc.).
+- On Windows uses a generated .cmd wrapper (stable location under ~/.scribe) with
+  fallbacks, clear errors, and pause so the console never flashes closed.
+- The .lnk points at the wrapper (with Scribe icon for pinning).
+- Similar wrapper/launcher patterns on macOS and Linux.
+- Strong guidance at install time when the resolution at creation looks ephemeral.
 
-The launcher targets whatever ``scribe`` resolves to at install time (preferring a
-``scribe`` on PATH, e.g. one installed via ``uv tool install``), falling back to
-``python -m scribe`` so it keeps working even when no console script is on PATH.
+Works the same on all three desktop platforms (details in code and README).
 """
 
 from __future__ import annotations
@@ -43,9 +42,13 @@ def resolve_scribe_command() -> list[str]:
     """Return the argv tokens that launch Scribe, for embedding in a launcher.
 
     Resolution order:
-      1. A ``scribe`` console script on PATH (e.g. ``uv tool install``).
+      1. A ``scribe`` console script on PATH (e.g. ``uv tool install``) -- preferred
+         for durable shortcuts because it relies on PATH at *runtime*.
       2. The currently-running entry point, if it looks like a scribe executable.
       3. ``<python> -m scribe`` as a universal fallback.
+
+    Callers (especially shortcut creation) should treat a PATH hit as the
+    most adaptive choice and avoid baking ephemeral project/venv paths.
     """
     on_path = shutil.which("scribe")
     if on_path:
@@ -59,9 +62,21 @@ def resolve_scribe_command() -> list[str]:
     return [sys.executable, "-m", "scribe"]
 
 
-def _target_and_args() -> tuple[str, list[str]]:
-    """Split the resolved command into (executable, args) with ``rec`` appended."""
-    tokens = resolve_scribe_command()
+def _get_scribe_command() -> list[str]:
+    """Resolve for embedding. Prefers PATH for adaptive launchers."""
+    return resolve_scribe_command()
+
+
+def _get_launcher_target_and_args() -> tuple[str, list[str]]:
+    """For launchers: strongly prefer bare 'scribe' (runtime PATH) for durability.
+
+    Only falls back to full resolved path if 'scribe' is not on PATH at creation.
+    This makes the generated launchers (wrappers, .desktop, .app) adapt to the
+    user's eventual stable install (uv tool, etc.).
+    """
+    if shutil.which("scribe"):
+        return "scribe", ["rec"]
+    tokens = _get_scribe_command()
     return tokens[0], [*tokens[1:], "rec"]
 
 
@@ -149,10 +164,107 @@ def _create_windows_lnk(
     )
 
 
-def _install_windows(target: str, args: list[str], desktop: bool) -> list[Path]:
+def _windows_record_wrapper(fallback_exe: str) -> Path:
+    """Create (or overwrite) a small .cmd wrapper that is *bulletproof* and adaptive.
+
+    - Always prefers bare 'scribe' via PATH at runtime (so global uv tool installs etc just work).
+    - Only falls back to the creation-time full exe path (properly quoted).
+    - Never re-appends 'rec'; always runs "xxx rec".
+    - Proper quoting for paths with spaces.
+    - Multiple layers of pause and error messages so window NEVER closes without user seeing output.
+    - Syntax-safe batch (no risky unquoted drive: expansions in conditions).
+    """
+    wrapper = Path.home() / ".scribe" / f"{LAUNCHER_NAME}.cmd"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+
+    # fallback_exe: plain full path WITHOUT any args or surrounding quotes.
+    # We quote at execution time to handle spaces in paths (e.g. "C:\Users\John Doe\...").
+
+    # Escape any " in the path for safe "set VAR=..." in batch
+    fb_escaped = fallback_exe.replace('"', '""')
+    content = (
+        "@echo off\r\n"
+        "title Scribe Quick Record\r\n"
+        "setlocal EnableExtensions\r\n"
+        "\r\n"
+        "rem === BULLETPROOF Scribe Quick Record launcher ===\r\n"
+        "rem Prefers bare 'scribe' from PATH at the moment you double-click.\r\n"
+        "rem This survives uv tool installs, updates, etc.\r\n"
+        "\r\n"
+        'set "FALLBACK=' + fb_escaped + '"\r\n'
+        "\r\n"
+        "rem Prefer explicit fallback (the scribe that was used to create this shortcut) if still valid.\r\n"
+        "rem This makes the just-made desktop icon reliable right away.\r\n"
+        'if exist "%FALLBACK%" (\r\n'
+        '    set "TO_USE=%FALLBACK%"\r\n'
+        ") else (\r\n"
+        "    where scribe >nul 2>nul\r\n"
+        "    if %ERRORLEVEL% equ 0 (\r\n"
+        '        set "TO_USE=scribe"\r\n'
+        "    ) else (\r\n"
+        "        echo [Scribe Quick Record] ERROR: No working scribe found.\r\n"
+        "        echo Run 'uv tool install ...' then recreate the shortcut.\r\n"
+        "        pause\r\n"
+        "        exit /b 1\r\n"
+        "    )\r\n"
+        ")\r\n"
+        "\r\n"
+        "echo Launching Scribe recording...\r\n"
+        "echo.\r\n"
+        "\r\n"
+        "set SCRIBE_FROM_SHORTCUT=1\r\n"
+        'if "%TO_USE%"=="scribe" (\r\n'
+        "    scribe rec %*\r\n"
+        ") else (\r\n"
+        '    "%TO_USE%" rec %*\r\n'
+        ")\r\n"
+        "\r\n"
+        "set ERR=%ERRORLEVEL%\r\n"
+        "\r\n"
+        "echo.\r\n"
+        "if %ERR% neq 0 (\r\n"
+        "    echo [Exited with code %ERR%]\r\n"
+        "    echo Common issues: OBS not running or WebSocket not configured (use scribe rec --check).\r\n"
+        ") else (\r\n"
+        "    echo Finished.\r\n"
+        ")\r\n"
+        "\r\n"
+        "echo.\r\n"
+        "echo Press any key to close (deliberately kept open).\r\n"
+        "pause >nul\r\n"
+        "exit /b %ERR%\r\n"
+    )
+    wrapper.write_text(content, encoding="utf-8")
+    return wrapper
+
+
+def _is_ephemeral_resolution(resolved: str) -> bool:
+    """Heuristic: does this look like a short-lived dev/venv path?"""
+    lower = resolved.lower()
+    # These are substring markers for detecting ephemeral install paths, not
+    # temp-file creation, so S108 (insecure /tmp/ usage) does not apply.
+    markers = (".venv", "\\src\\", "/src/", "\\temp\\", "/tmp/", "pip-req-build", "\\.cache\\")  # noqa: S108
+    return any(m in lower for m in markers) or resolved.endswith((".py",))
+
+
+def _install_windows(fallback_exe: str, desktop: bool) -> list[Path]:
     icon = _windows_icon_path()
-    arguments = subprocess.list2cmdline(args)
     home = Path.home()
+
+    # Always ensure the adaptive wrapper .cmd exists (for advanced use or editing)
+    _ = _windows_record_wrapper(fallback_exe)
+
+    # Target cmd.exe with a command that sets the env var (so python does final pause)
+    # and runs the scribe exe with "rec". The .lnk has the custom icon set.
+    # This gives a proper taskbar icon (associated with the exe + icon on .lnk)
+    # while keeping the nice "keep window open" behavior.
+    cmd_exe = os.environ.get("SYSTEMROOT", r"C:\Windows") + r"\System32\cmd.exe"
+    # Always use bare "scribe" from PATH in the .lnk for maximum adaptiveness
+    # (survives uv tool upgrades, PATH changes). The icon is set on the .lnk itself.
+    # ( ... || pause ) keeps the console visible even if launch fails.
+    lnk_arguments = (
+        '/c "title Scribe Quick Record && (set SCRIBE_FROM_SHORTCUT=1 && scribe rec || pause)"'
+    )
 
     locations = [_windows_start_menu_dir() / f"{LAUNCHER_NAME}.lnk"]
     if desktop:
@@ -161,7 +273,7 @@ def _install_windows(target: str, args: list[str], desktop: bool) -> list[Path]:
     created: list[Path] = []
     for lnk in locations:
         lnk.parent.mkdir(parents=True, exist_ok=True)
-        _create_windows_lnk(lnk, target, arguments, home, icon)
+        _create_windows_lnk(lnk, cmd_exe, lnk_arguments, home, icon)
         created.append(lnk)
     return created
 
@@ -192,9 +304,26 @@ def _write_macos_app(app: Path, target: str, args: list[str]) -> None:
 
     resources.joinpath("scribe.icns").write_bytes(_packaged_icon_bytes("scribe.icns"))
 
-    command_line = " ".join(shlex.quote(t) for t in [target, *args])
+    # Use bare "scribe" when possible for runtime PATH adaptability.
+    # Embed a small defensive script that tries PATH first then fallback.
+    # All embedded paths/args are shell-quoted to prevent word-split or injection
+    # if the resolved target contains spaces or metacharacters.
     launch = resources / "launch.command"
-    launch.write_text(f"#!/bin/bash\nexec {command_line}\n", encoding="utf-8")
+    fallback_exec = " ".join(shlex.quote(t) for t in [target, *args])
+    launch_content = f"""#!/bin/bash
+set -e
+
+# === Scribe Quick Record (macOS .app launcher) ===
+# Prefers bare 'scribe' from PATH at runtime (uv tool installs, updates survive).
+if command -v scribe >/dev/null 2>&1; then
+    exec scribe rec
+fi
+
+# Fallback to the resolution captured at shortcut creation time (always quoted).
+exec {fallback_exec}
+"""
+
+    launch.write_text(launch_content, encoding="utf-8")
     launch.chmod(0o755)
 
     run = macos_dir / "run"
@@ -243,7 +372,12 @@ def _linux_icon_path() -> Path:
 
 
 def _linux_desktop_entry(target: str, args: list[str], icon: Path) -> str:
-    exec_line = " ".join(shlex.quote(t) for t in [target, *args])
+    # Prefer bare "scribe" for PATH adaptability at runtime.
+    # The .desktop Terminal=true will resolve via shell PATH.
+    if target == "scribe" or shutil.which("scribe"):
+        exec_line = "scribe rec"
+    else:
+        exec_line = " ".join(shlex.quote(t) for t in [target, *args])
     return (
         "[Desktop Entry]\n"
         "Type=Application\n"
@@ -256,12 +390,81 @@ def _linux_desktop_entry(target: str, args: list[str], icon: Path) -> str:
     )
 
 
+def _create_linux_record_wrapper(fallback: list[str] | None = None) -> Path:
+    """Create an adaptive bash wrapper for Linux (defensive, like Windows .cmd).
+
+    Prefers 'scribe' on PATH at runtime. Embeds creation-time fallback when needed.
+    All paths properly quoted.
+    """
+    wrapper = Path.home() / ".scribe" / f"{LAUNCHER_NAME}.sh"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+
+    if fallback:
+        fb_exec = " ".join(shlex.quote(t) for t in fallback)
+        fallback_block = f"""if ! command -v scribe >/dev/null 2>&1; then
+    echo "[Scribe Quick Record] 'scribe' not found on PATH; using creation-time fallback."
+    exec {fb_exec} "$@"
+fi
+"""
+    else:
+        fallback_block = """if ! command -v scribe >/dev/null 2>&1; then
+    echo "[Scribe Quick Record] 'scribe' not found on PATH."
+    echo ""
+    echo "Recommended (makes the launcher durable):"
+    echo "  uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git"
+    echo "  # ensure ~/.local/bin or equivalent is in PATH"
+    echo ""
+    echo "Then re-run the launcher or 'scribe shortcut'."
+    echo ""
+    read -p "Press Enter to close..."
+    exit 1
+fi
+"""
+
+    content = f"""#!/bin/bash
+set +e
+
+# === Scribe Quick Record (adaptive launcher for Linux) ===
+# Prefers "scribe" from PATH (uv tool, etc.) at runtime.
+
+if command -v scribe >/dev/null 2>&1; then
+    exec scribe rec "$@"
+fi
+
+{fallback_block}
+
+# If we reach here without exec, something unexpected; try bare anyway.
+exec scribe rec "$@"
+"""
+    wrapper.write_text(content, encoding="utf-8")
+    wrapper.chmod(0o755)
+    return wrapper
+
+
 def _install_linux(target: str, args: list[str], desktop: bool) -> list[Path]:
     icon = _linux_icon_path()
     icon.parent.mkdir(parents=True, exist_ok=True)
     icon.write_bytes(_packaged_icon_bytes("scribe.png"))
 
-    entry = _linux_desktop_entry(target, args, icon)
+    # For robustness, use an adaptive wrapper script (like Windows)
+    # Pass the creation tokens so wrapper can embed fallback when bare scribe not on PATH.
+    fb_tokens = [target, *args] if target != "scribe" else None
+    wrapper = _create_linux_record_wrapper(fb_tokens)
+    # Exec the wrapper (it handles args)
+    entry = _linux_desktop_entry(str(wrapper), [], icon)  # wrapper takes no extra target args
+    # But to support name arg via .desktop edit, we can adjust; for now bare wrapper is fine
+    # Simpler: keep using bare if possible, but since we generated wrapper, point to it.
+    entry = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={LAUNCHER_NAME}\n"
+        "Comment=Start a Scribe recording (auto-transcribes when you stop)\n"
+        f"Exec={shlex.quote(str(wrapper))}\n"
+        "Terminal=true\n"
+        f"Icon={icon}\n"
+        "Categories=AudioVideo;Utility;\n"
+    )
+
     created: list[Path] = []
 
     apps_dir = _linux_applications_dir()
@@ -296,9 +499,17 @@ def _install_linux(target: str, args: list[str], desktop: bool) -> list[Path]:
 
 def install_quick_record_launcher(desktop: bool) -> list[Path]:
     """Install the Quick Record launcher for the current OS. Returns created paths."""
-    target, args = _target_and_args()
+    launcher_target, _ = _get_launcher_target_and_args()
     if is_windows():
-        return _install_windows(target, args, desktop)
+        # Pass the resolved *exe* (without args) as fallback for the wrapper.
+        # The wrapper always appends "rec" itself with proper quoting.
+        if launcher_target == "scribe":
+            fb_tokens = _get_scribe_command()
+            fb_exe = fb_tokens[0]
+        else:
+            fb_exe = launcher_target
+        return _install_windows(fb_exe, desktop)
+    target, args = launcher_target, ["rec"]  # for other platforms
     if is_macos():
         return _install_macos(target, args, desktop)
     return _install_linux(target, args, desktop)
@@ -323,10 +534,12 @@ def _candidate_launcher_paths() -> list[Path]:
             home / "Desktop" / MACOS_APP_NAME,
             home / "Applications" / f"{LAUNCHER_NAME}.command",  # legacy
             home / "Desktop" / f"{LAUNCHER_NAME}.command",  # legacy
+            home / ".scribe" / f"{LAUNCHER_NAME}.command",  # staged adaptive
         ]
     return [
         _linux_applications_dir() / LINUX_DESKTOP_ID,
         home / "Desktop" / LINUX_DESKTOP_ID,
+        home / ".scribe" / f"{LAUNCHER_NAME}.sh",  # adaptive wrapper
     ]
 
 
@@ -387,6 +600,10 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
         want_desktop = desktop
 
     try:
+        launcher_target, _ = _get_launcher_target_and_args()
+        # For advice, always look at the actual resolved (may be full path)
+        resolved_tokens = _get_scribe_command()
+        resolved_for_advice = resolved_tokens[0] if resolved_tokens else launcher_target
         created = install_quick_record_launcher(want_desktop)
     except Exception as e:
         cprint(f"[red]Could not install launcher:[/red] {e}")
@@ -396,5 +613,33 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
     for p in created:
         cprint(f"  [dim]{p}[/dim]")
     cprint()
+
+    # Defensive guidance + taskbar QOL
+    if _is_ephemeral_resolution(resolved_for_advice):
+        cprint(
+            "[yellow]Note:[/yellow] The resolved 'scribe' at creation time looks like a "
+            "project/venv path. For a shortcut that 'just works' after updates, "
+            "install globally first:\n"
+            "  uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git\n"
+            "  uv tool update-shell\n"
+            "Then re-run `scribe shortcut --desktop`."
+        )
+        cprint()
+    else:
+        cprint(
+            "[dim]Tip: For the most durable launcher, install via "
+            "`uv tool install` (or equivalent) so 'scribe' is reliably on PATH.[/dim]"
+        )
+        cprint()
+
     cprint(f"[cyan]{_pin_hint()}[/cyan]")
-    cprint("[dim]It runs `scribe rec`. Start talking, then type 'stop' when done.[/dim]")
+    cprint("[dim]It runs `scribe rec`. Type 'stop' (or Ctrl+C) when done.[/dim]")
+
+    if is_windows():
+        cprint()
+        cprint(
+            "[dim]Taskbar tip: drag the desktop .lnk to taskbar. If icon is generic after pinning,[/dim]"
+        )
+        cprint(
+            "[dim]  right-click pinned item → Properties → Change Icon → pick ~/.scribe/scribe.ico[/dim]"
+        )

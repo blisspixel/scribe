@@ -229,7 +229,13 @@ class OBSRecorder:
                 return final_path
 
         except (OBSActiveRecordingError, OBSAuthenticationError) as e:
-            logger.warning("OBS WebSocket blocked fallback: %s", e)
+            # Don't spam console with "blocked fallback" for auth errors; the
+            # raised ProcessError already gives the user clear guidance.
+            logger.debug(
+                "OBS WebSocket %s: %s",
+                "auth failed" if isinstance(e, OBSAuthenticationError) else "busy",
+                e,
+            )
             with suppress(ValueError):
                 self._session.advance(
                     RecordingEvent.CONNECT_BUSY
@@ -860,7 +866,7 @@ class OBSRecorder:
                                 client.close()
                     except obs_error.OBSSDKRequestError as e:
                         if self._is_obs_auth_error(e):
-                            logger.warning(
+                            logger.debug(
                                 f"OBS authentication failed at {h}:{p} - "
                                 "check SCRIBE_OBS_PASSWORD or [obs].password"
                             )

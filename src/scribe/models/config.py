@@ -237,12 +237,35 @@ class ScribeConfig(BaseSettings):
     )
 
     enable_notes: bool = Field(
-        default=True, description="Enable automatic meeting notes generation"
+        default=False,
+        description=(
+            "Enable automatic meeting notes generation. Off by default because it "
+            "makes several paid text-API calls per transcript. Enable automatically "
+            "via SCRIBE_ENABLE_NOTES=true, ~/.scribe/config.toml, or scribe init; or "
+            "generate on demand with `scribe notes <transcript>`."
+        ),
     )
 
-    enable_joke: bool = Field(default=True, description="Enable automatic joke generation")
+    enable_joke: bool = Field(
+        default=False,
+        description=(
+            "Enable automatic joke generation. Off by default because it makes paid "
+            "text-API calls per transcript. Enable automatically via "
+            "SCRIBE_ENABLE_JOKE=true, ~/.scribe/config.toml, or scribe init; or "
+            "generate on demand with `scribe joke <transcript>`."
+        ),
+    )
 
-    enable_meme: bool = Field(default=True, description="Enable automatic meme generation")
+    enable_meme: bool = Field(
+        default=False,
+        description=(
+            "Enable automatic meme generation. Off by default because it calls a "
+            "paid image-generation API (e.g. xAI Grok Imagine, OpenAI gpt-image-1) "
+            "with a multi-attempt QA loop. Enable automatically via "
+            "SCRIBE_ENABLE_MEME=true, ~/.scribe/config.toml, or scribe init; or "
+            "generate on demand with `scribe meme <transcript>`."
+        ),
+    )
 
     notes_model: str = Field(default="gpt-5.5", description="GPT model to use for notes generation")
 

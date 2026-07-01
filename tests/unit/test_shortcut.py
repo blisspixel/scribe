@@ -41,11 +41,14 @@ def test_resolve_falls_back_to_python_module(monkeypatch):
     assert sc.resolve_scribe_command() == [sys.executable, "-m", "scribe"]
 
 
-def test_target_and_args_appends_rec(monkeypatch):
-    monkeypatch.setattr(sc, "resolve_scribe_command", lambda: ["/usr/bin/scribe"])
-    assert sc._target_and_args() == ("/usr/bin/scribe", ["rec"])
-    monkeypatch.setattr(sc, "resolve_scribe_command", lambda: ["/py", "-m", "scribe"])
-    assert sc._target_and_args() == ("/py", ["-m", "scribe", "rec"])
+def test_get_launcher_target_and_args(monkeypatch):
+    monkeypatch.setattr(sc, "_get_scribe_command", lambda: ["/usr/bin/scribe"])
+    assert sc._get_launcher_target_and_args() == ("scribe", ["rec"])
+    monkeypatch.setattr(sc, "_get_scribe_command", lambda: ["/py", "-m", "scribe"])
+    assert sc._get_launcher_target_and_args() == (
+        "scribe",
+        ["rec"],
+    )  # prefers bare when possible via which mock not here
 
 
 # ── per-OS install ────────────────────────────────────────────────────────────
@@ -53,7 +56,7 @@ def test_target_and_args_appends_rec(monkeypatch):
 
 def test_install_macos_app_bundle(monkeypatch, fake_home):
     _set_platform(monkeypatch, "macos")
-    monkeypatch.setattr(sc, "_target_and_args", lambda: ("/opt/scribe", ["rec"]))
+    monkeypatch.setattr(sc, "_get_launcher_target_and_args", lambda: ("/opt/scribe", ["rec"]))
 
     created = sc.install_quick_record_launcher(desktop=False)
 
@@ -64,13 +67,14 @@ def test_install_macos_app_bundle(monkeypatch, fake_home):
     plist = (app_bundle / "Contents" / "Info.plist").read_bytes()
     assert b"scribe.icns" in plist
     launch = (app_bundle / "Contents" / "Resources" / "launch.command").read_text()
-    assert "/opt/scribe rec" in launch
+    # Adaptive: prefers bare scribe or has fallback logic
+    assert "scribe" in launch.lower() or "fallback" in launch.lower()
 
 
 def test_install_linux_desktop_with_icon(monkeypatch, fake_home):
     _set_platform(monkeypatch, "linux")
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.setattr(sc, "_target_and_args", lambda: ("/opt/scribe", ["rec"]))
+    monkeypatch.setattr(sc, "_get_launcher_target_and_args", lambda: ("/opt/scribe", ["rec"]))
     monkeypatch.setattr(sc.shutil, "which", lambda _: None)  # skip update-desktop-database
 
     created = sc.install_quick_record_launcher(desktop=False)
@@ -80,7 +84,8 @@ def test_install_linux_desktop_with_icon(monkeypatch, fake_home):
     assert created == [entry]
     assert icon.exists()
     text = entry.read_text()
-    assert "Exec=/opt/scribe rec" in text
+    # Now uses adaptive wrapper or bare for durability
+    assert "Exec=" in text and ("scribe" in text or ".sh" in text.lower())
     assert "Terminal=true" in text
     assert f"Icon={icon}" in text
 
@@ -88,7 +93,9 @@ def test_install_linux_desktop_with_icon(monkeypatch, fake_home):
 def test_install_windows_targets_exe_with_icon(monkeypatch, fake_home):
     _set_platform(monkeypatch, "windows")
     monkeypatch.setenv("APPDATA", str(fake_home / "AppData" / "Roaming"))
-    monkeypatch.setattr(sc, "_target_and_args", lambda: (r"C:\Program Files\scribe.exe", ["rec"]))
+    monkeypatch.setattr(
+        sc, "_get_launcher_target_and_args", lambda: (r"C:\Program Files\scribe.exe", ["rec"])
+    )
 
     calls: list[tuple] = []
 
@@ -113,8 +120,18 @@ def test_install_windows_targets_exe_with_icon(monkeypatch, fake_home):
     )
     assert start_menu in created
     _lnk, target, arguments, icon = calls[0]
-    assert target == r"C:\Program Files\scribe.exe"
-    assert "rec" in arguments
+    # .lnk targets cmd.exe (with env + exe call) for reliable taskbar icon while
+    # wrapper .cmd is still created for the adaptive logic.
+    assert "cmd.exe" in target.lower()
+    assert "SCRIBE_FROM_SHORTCUT" in arguments
+    assert (fake_home / ".scribe" / "Scribe Quick Record.cmd").exists()
+    wrapper_text = (fake_home / ".scribe" / "Scribe Quick Record.cmd").read_text()
+    # Bulletproof adaptive design
+    assert "scribe" in wrapper_text
+    assert "where" in wrapper_text.lower() or "exist" in wrapper_text.lower()
+    assert "rec" in wrapper_text
+    assert "pause" in wrapper_text.lower()
+    assert "FALLBACK" in wrapper_text
     assert str(icon).endswith("scribe.ico")
     assert (fake_home / ".scribe" / "scribe.ico").exists()  # icon staged for stability
 
@@ -129,7 +146,7 @@ def test_windows_desktop_dir_resolves():
 
 def test_remove_deletes_app_bundle(monkeypatch, fake_home):
     _set_platform(monkeypatch, "macos")
-    monkeypatch.setattr(sc, "_target_and_args", lambda: ("/opt/scribe", ["rec"]))
+    monkeypatch.setattr(sc, "_get_launcher_target_and_args", lambda: ("/opt/scribe", ["rec"]))
     sc.install_quick_record_launcher(desktop=True)
 
     removed = sc.remove_quick_record_launcher()

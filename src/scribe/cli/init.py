@@ -89,7 +89,11 @@ def _default_output_folder() -> str:
 
 
 def _default_obs_settings() -> dict[str, str]:
-    """Return defaults for OBS WebSocket prompts from env or config."""
+    """Return defaults for OBS WebSocket prompts from env, config, or OBS itself.
+
+    Defensive: never fails the wizard if OBS config is missing or unreadable.
+    Adaptive: prefers OBS's own settings when user has enabled the server.
+    """
     host = os.getenv("SCRIBE_OBS_HOST")
     port = os.getenv("SCRIBE_OBS_PORT")
     password = os.getenv("SCRIBE_OBS_PASSWORD")
@@ -101,6 +105,18 @@ def _default_obs_settings() -> dict[str, str]:
             host = host or obs.get("host")
             port = port or str(obs.get("port") or "")
             password = password or obs.get("password")
+
+    # Also pull from OBS's own config for better defaults (port, whether auth is on).
+    # Password still needs user to copy from OBS UI (it's not stored in plain text).
+    # Non-fatal: any failure here just leaves the wizard with what it already has.
+    with suppress(Exception):
+        from scribe.utils.obs_config import read_obs_websocket_config
+
+        obs_cfg = read_obs_websocket_config()
+        if obs_cfg and obs_cfg.exists and not obs_cfg.error:
+            if obs_cfg.server_port:
+                port = port or str(obs_cfg.server_port)
+            # We don't override password from OBS config (hashed or absent).
 
     return {
         "host": str(host or "localhost"),
@@ -118,6 +134,45 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         force: Overwrite an existing config without confirmation.
     """
     console = console or Console()
+
+    # Defensive: non-interactive runs should not hang on Prompts/Confirms.
+    # Use defaults and write a minimal usable config (or refuse unless --force + explicit).
+    if not sys.stdin.isatty() and not force:
+        if CONFIG_PATH.is_file():
+            console.print(
+                "[dim]Non-interactive and config exists; leaving as-is (use --force to overwrite).[/dim]"
+            )
+            return CONFIG_PATH
+        console.print("[yellow]Non-interactive terminal detected.[/yellow]")
+        console.print(
+            "[dim]Writing safe defaults. Re-run interactively or with `scribe init --force` for full wizard.[/dim]"
+        )
+        safe_defaults: dict[str, Any] = {
+            "output": {"folder": _default_output_folder()},
+            "transcription": {"method": "auto"},
+            # Paid AI extras stay off in non-interactive safe defaults (cost safety);
+            # the user can opt in later via the wizard, env vars, or per-run flags.
+            "features": {
+                "generate_notes": False,
+                "generate_joke": False,
+                "generate_meme": False,
+            },
+        }
+        path = save_config_file(safe_defaults)
+        console.print(f"[green]Wrote minimal config to {path}.[/green]")
+        return path
+
+    # Adaptive QOL: warn if running from source in a way that may not match global
+    # PATH. Purely advisory, so any failure to introspect the install is ignored.
+    with suppress(Exception):
+        import scribe
+
+        src_path = str(scribe.__file__)
+        if "site-packages" not in src_path and "uv tool" not in src_path.lower():
+            console.print(
+                "[dim]Running from source tree. For durable global use, consider "
+                "`uv tool install --editable .` or plain `uv tool install`.[/dim]"
+            )
 
     if CONFIG_PATH.is_file() and not force:
         if not Confirm.ask(
@@ -169,8 +224,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     generate_notes = Confirm.ask(
         "  Generate meeting notes by default?", default=False, console=console
     )
-    generate_joke = Confirm.ask("  Generate a joke by default?", default=True, console=console)
-    generate_meme = Confirm.ask("  Generate a meme by default?", default=True, console=console)
+    generate_joke = Confirm.ask("  Generate a joke by default?", default=False, console=console)
+    generate_meme = Confirm.ask(
+        "  Generate a meme by default? [dim](uses a paid image API)[/dim]",
+        default=False,
+        console=console,
+    )
 
     # 4. AI vendor
     keys = _detected_keys()
@@ -222,6 +281,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             "notes_provider": vendor_choice,
         }
 
+    # Bound up front so they are provably defined wherever they are read later
+    # (every read is already guarded by `configure_obs`, but this keeps the
+    # static checkers and future edits honest).
+    obs_host: str = obs_defaults["host"]
+    obs_port: int = 4455
+    obs_password: str = ""
     if configure_obs:
         obs_host = Prompt.ask(
             "  OBS WebSocket host",
@@ -252,8 +317,27 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         if obs_password:
             data["obs"]["password"] = obs_password
 
+    # --- Polished review step for extremely good QOL ---
+    console.print("\n[bold]Review your setup[/bold]")
+    review_lines = [
+        f"Output folder: [cyan]{output_folder}[/cyan]",
+        f"Transcription: [cyan]{method}[/cyan] (GPU: {gpu_desc})",
+        f"Notes: {'yes' if generate_notes else 'no'}   Joke: {'yes' if generate_joke else 'no'}   Meme: {'yes' if generate_meme else 'no'}",
+    ]
+    if vendor_choice:
+        review_lines.append(f"AI vendor: [cyan]{vendor_choice}[/cyan]")
+    if configure_obs:
+        review_lines.append(
+            f"OBS: host={obs_host} port={obs_port} password={'set' if obs_password else 'none'}"
+        )
+    console.print(Panel("\n".join(review_lines), border_style="cyan", padding=(0, 1)))
+
+    if not force and not Confirm.ask("\nSave this configuration?", default=True, console=console):
+        console.print("[yellow]Setup cancelled. Nothing written.[/yellow]")
+        return CONFIG_PATH
+
     path = save_config_file(data)
-    console.print(f"\n[green]Saved.[/green] [dim]Edit anytime at[/dim] [cyan]{path}[/cyan]")
+    console.print(f"\n[green]✓ Saved to[/green] [cyan]{path}[/cyan]")
 
     _resolve_env_conflicts(
         console=console,
@@ -266,7 +350,66 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
 
     _maybe_setup_voice(console)
 
-    console.print("[dim]Re-run with `scribe init` to change settings.[/dim]")
+    # --- Post-setup verification (the "extremely polished" part) ---
+    console.print("\n[bold]Verification[/bold]")
+    try:
+        from scribe.models.config import ScribeConfig
+
+        cfg = ScribeConfig()
+        checks = []
+        if cfg.obs_password:
+            checks.append("[green]✓[/green] OBS password configured")
+        else:
+            checks.append("[yellow]![/yellow] OBS password not set")
+        console.print("  " + "  ".join(checks))
+    except Exception as e:
+        console.print(f"[yellow]! Config validation issue: {e}[/yellow]")
+
+    # If OBS was configured, do a real lightweight preflight so user gets instant confidence
+    if configure_obs and obs_password:
+        try:
+            from scribe.core.recorder import OBSRecorder
+            from scribe.models.config import ScribeConfig as _Cfg
+
+            rec = OBSRecorder(_Cfg())
+            result = rec.check_obs_preflight()
+            if result.ok:
+                console.print(
+                    f"[green]✓ OBS WebSocket reachable[/green] ({result.endpoint or 'ok'})"
+                )
+            else:
+                console.print(f"[yellow]! OBS preflight: {result.message}[/yellow]")
+                if result.fix_suggestion:
+                    console.print(f"  [dim]-> {result.fix_suggestion}[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]! Could not run OBS preflight: {e}[/yellow]")
+
+    console.print("\n[bold green]Setup complete![/bold green]")
+    console.print("[dim]Next steps:[/dim]")
+    console.print("  [cyan]scribe doctor[/cyan]          — full system health check")
+    console.print(
+        '  [cyan]scribe rec "Meeting Name"[/cyan]  — start a recording (or use the desktop shortcut)'
+    )
+    console.print("  [cyan]scribe shortcut[/cyan]        — create Quick Record launcher")
+    console.print("[dim]Re-run `scribe init` anytime to change these settings.[/dim]")
+
+    # Extremely polished QOL: offer to create the launcher right now as part of setup
+    try:
+        if Confirm.ask(
+            "\nCreate the Quick Record desktop/taskbar launcher now?",
+            default=True,
+            console=console,
+        ):
+            from scribe.cli.shortcut import install_quick_record_launcher
+
+            created = install_quick_record_launcher(desktop=True)
+            console.print("[green]✓ Launcher created.[/green]")
+            for p in created:
+                console.print(f"  [dim]{p}[/dim]")
+            console.print("[dim]Drag the desktop one to your taskbar if desired.[/dim]")
+    except Exception as e:
+        console.print(f"[dim]Launcher offer skipped: {e}[/dim]")
+
     return path
 
 
@@ -384,11 +527,11 @@ def maybe_prompt_first_run(console: Console | None = None) -> bool:
     console = console or Console()
     console.print()
     if not Confirm.ask(
-        "[cyan]No scribe config found.[/cyan] Run the first-run setup now?",
+        "[bold cyan]Welcome to scribe![/bold cyan] No config found yet. Run the friendly first-run setup now?",
         default=True,
         console=console,
     ):
-        console.print("[dim]Skipping - run `scribe init` later to configure.[/dim]")
+        console.print("[dim]No problem — run `scribe init` later whenever you're ready.[/dim]")
         return False
 
     run_wizard(console=console, force=True)
