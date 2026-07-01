@@ -6,7 +6,7 @@ Commercial/enterprise products require separate license from Nick Seal.
 
 **Speech Transcription and Summarization CLI**
 
-Scribe converts spoken content into transcripts, notes, and optional humor outputs. It supports local GPU transcription and API-based transcription with fallback behavior.
+Scribe converts spoken content into transcripts, notes, and optional humor outputs. It is **$0-first**: transcription runs locally on any machine (GPU or CPU) with no API key, and paid cloud APIs are an explicit opt-in.
 
 ---
 
@@ -73,7 +73,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 **Key Features:**
 - GPU-accelerated local processing (11x real-time on RTX 4090)
 - Quality-first auto model selection based on detected VRAM
-- Automatic fallback to OpenAI API when GPU unavailable
+- $0-first: transcribes locally on any machine (GPU or CPU); the paid OpenAI API is opt-in only
 - Music transcription with vocal separation
 - Batch processing for multiple files
 - Custom vocabulary for domain-specific terms
@@ -265,7 +265,7 @@ scribe --banner
 - NVIDIA driver with CUDA support for your card
 - `faster-whisper` / CTranslate2 must be able to see the GPU
 
-**For API Transcription (Automatic Fallback):**
+**For API Transcription (optional, explicit opt-in via `--method openai`):**
 - OpenAI API key
 - Stable internet connection
 
@@ -406,6 +406,11 @@ SCRIBE_OUTPUT_FOLDER=/path/to/scribe/output
 SCRIBE_DEFAULT_MODEL=large-v3
 SCRIBE_DEFAULT_LANGUAGE=en
 
+# $0 local-only mode: force local transcription (never the paid API) and route
+# notes/jokes to local Ollama. Unset/false keeps the default (auto is still
+# $0-first; the paid API is opt-in via --method openai).
+SCRIBE_LOCAL_ONLY=false
+
 # Terminal UI (optional)
 # off|light|full
 SCRIBE_ANIMATIONS=light
@@ -457,9 +462,9 @@ password = "your OBS WebSocket password"
 - Ensures optimal transcription quality
 
 **2. Transcription**
-- **Local GPU:** Whisper large-v3 (11x real-time on RTX 4090 in project benchmarks)
-- **API Mode:** gpt-4o-transcribe-diarize (speaker separation, server-side chunking)
-- Automatic method selection based on GPU availability
+- **Local (default, $0):** Whisper via faster-whisper (GPU) or CPU int8 — `auto` always runs locally
+- **API Mode (opt-in):** gpt-4o-transcribe-diarize (speaker separation, server-side chunking) via `--method openai`
+- `auto` picks the best local backend for your hardware; it never auto-selects the paid API
 
 **3. Document Generation**
 - Clean TXT transcript with metadata

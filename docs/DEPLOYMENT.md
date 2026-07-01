@@ -166,7 +166,8 @@ docker run --gpus all \
   scribe:latest \
   scribe transcribe /app/output/meeting.mp4
 
-# Run without GPU (API mode)
+# Opt into the paid OpenAI API explicitly (no-GPU otherwise transcribes locally
+# on CPU at $0 — the API is never auto-selected)
 docker run \
   -v $(pwd)/output:/app/output \
   -v $(pwd)/.env:/app/.env \
@@ -329,9 +330,14 @@ SCRIBE_OUTPUT_FOLDER=/shared/scribe/output
 SCRIBE_DEFAULT_MODEL=large-v3
 SCRIBE_DEFAULT_LANGUAGE=en
 
-# Features
+# Features (paid AI extras default to OFF for cost safety; opt in here)
 SCRIBE_ENABLE_NOTES=true
 SCRIBE_ENABLE_MEME_BAKEOFF=false
+
+# $0 local-only mode: force local transcription (never the paid API) and route
+# notes/jokes to local Ollama. Leave unset/false for the default (auto is still
+# $0-first: local transcription, paid API only via --method openai).
+SCRIBE_LOCAL_ONLY=false
 
 # Terminal UI
 SCRIBE_ANIMATIONS=off

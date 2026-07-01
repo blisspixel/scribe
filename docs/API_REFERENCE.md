@@ -12,25 +12,30 @@ Main orchestration class for transcription operations.
 from scribe.core.transcriber import Transcriber
 
 transcriber = Transcriber(
-    method="auto",           # "auto", "local", or "openai"
+    method="auto",           # "auto" ($0-first: local, GPU or CPU), "local", or "openai"
     model="large-v3",        # Whisper model
     language="en",           # ISO 639-1 language code
     output_folder=Path("./output")
 )
 
-# Transcribe a file
+# Transcribe a file. The paid AI extras default to OFF (cost safety); opt in
+# explicitly. Meme image generation calls a paid image API.
 transcript_path = transcriber.transcribe(
     audio_path=Path("meeting.mp4"),
     vocabulary=None,         # Optional custom vocabulary
-    enable_notes=True,       # Generate meeting notes
-    enable_joke=True,        # Generate joke
-    enable_meme=True         # Generate meme
+    enable_notes=False,      # Generate meeting notes (paid text API; off by default)
+    enable_joke=False,       # Generate joke (paid text API; off by default)
+    enable_meme=False        # Generate meme (paid image API; off by default)
 )
 ```
 
+> **$0 by default.** `method="auto"` always transcribes locally (GPU when present,
+> CPU otherwise) and never auto-uses the paid API. Set `SCRIBE_LOCAL_ONLY=1` to
+> force notes/jokes to local Ollama too. See `scribe doctor` for a $0-readiness report.
+
 **Methods:**
 
-`transcribe(audio_path, vocabulary=None, enable_notes=True, enable_joke=True, enable_meme=True) -> Path`
+`transcribe(audio_path, vocabulary=None, enable_notes=False, enable_joke=False, enable_meme=False) -> Path`
 - Transcribes audio/video file
 - Returns path to transcript file
 - Raises `TranscriptionError` on failure

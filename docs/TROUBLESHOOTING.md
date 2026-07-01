@@ -16,9 +16,12 @@ This runs 16 comprehensive checks and provides actionable recommendations.
 ### GPU Not Detected
 
 **Symptoms:**
-- Scribe falls back to API mode
 - "No GPU detected" message
-- Slow transcription
+- Slow transcription (Scribe transcribes on CPU — still local and $0, just slower)
+
+> Note: with $0-first defaults, no GPU does **not** mean paid API. `--method auto`
+> transcribes locally on CPU; the paid OpenAI API is only used if you pass
+> `--method openai` explicitly. Run `scribe doctor` for a $0-readiness report.
 
 **Diagnosis:**
 ```bash
