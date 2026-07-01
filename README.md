@@ -1,5 +1,5 @@
-License: Apache 2.0 + Commons Clause  
-Personal/research/sharing use free.  
+License: Apache 2.0 + Commons Clause
+Personal/research/sharing use free.
 Commercial/enterprise products require separate license from Nick Seal.
 
 # Scribe

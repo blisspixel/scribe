@@ -302,6 +302,7 @@ site/
 !tests/fixtures/**
 # Local agent/editor working dirs
 .claude/
+agent-tools/
 
 /.kiro
 /docs/research
