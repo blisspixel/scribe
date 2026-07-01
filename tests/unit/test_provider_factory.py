@@ -122,3 +122,62 @@ def test_env_provider_beats_config_toml() -> None:
 
     assert provider is xai_provider
     mock_openai.assert_not_called()
+
+
+def test_local_only_routes_text_feature_to_ollama() -> None:
+    """$0 local-only mode forces notes/jokes/meme-concepts to local Ollama."""
+    ollama_provider = Mock(name="ollama-provider")
+    with (
+        patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": "1"}, clear=True),
+        patch(
+            "scribe.providers.factory.OllamaProvider", return_value=ollama_provider
+        ) as mock_ollama,
+    ):
+        provider = get_provider("notes", model="llama3.2")
+
+    assert provider is ollama_provider
+    mock_ollama.assert_called_once()
+
+
+def test_local_only_overrides_explicit_cloud_provider() -> None:
+    """local-only wins even over an explicit --provider openai (the $0 guarantee)."""
+    ollama_provider = Mock(name="ollama-provider")
+    with (
+        patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": "true"}, clear=True),
+        patch("scribe.providers.factory.OllamaProvider", return_value=ollama_provider),
+        patch("scribe.providers.factory.OpenAIProvider") as mock_openai,
+    ):
+        provider = get_provider("joke", provider_name="openai", model="llama3.2")
+
+    assert provider is ollama_provider
+    mock_openai.assert_not_called()
+
+
+def test_local_only_blocks_meme_image() -> None:
+    """Image generation has no local backend, so local-only refuses it clearly."""
+    with (
+        patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": "1"}, clear=True),
+        pytest.raises(ValueError, match="no local backend"),
+    ):
+        get_provider("meme_image")
+
+
+def test_local_only_enabled_parses_env() -> None:
+    from scribe.providers.factory import _local_only_enabled
+
+    for truthy in ("1", "true", "TRUE", "yes", "on"):
+        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": truthy}, clear=True):
+            assert _local_only_enabled() is True
+    for falsy in ("0", "false", "no", "off", ""):
+        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": falsy}, clear=True):
+            assert _local_only_enabled() is False
+
+
+def test_local_only_off_when_unset() -> None:
+    from scribe.providers.factory import _local_only_enabled
+
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("scribe.config_file.load_config_file", return_value={}),
+    ):
+        assert _local_only_enabled() is False

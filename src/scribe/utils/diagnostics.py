@@ -201,6 +201,117 @@ class DiagnosticResult:
     fix_suggestion: str | None = None
 
 
+@dataclass
+class LocalReadiness:
+    """Whether Scribe can process at $0 (no paid API) on this machine right now.
+
+    Transcription is the core feature and runs on any machine (GPU when present,
+    CPU int8 as the universal floor), so ``can_transcribe`` is the headline.
+    Notes need a local Ollama server with a model, which is a heavier opt-in.
+    """
+
+    can_transcribe: bool
+    transcribe_detail: str
+    transcribe_fix: str | None
+    can_take_notes: bool
+    notes_detail: str
+    notes_fix: str | None
+    backend: str
+    vendor: str
+    ffmpeg: bool
+
+    @property
+    def fully_local(self) -> bool:
+        """True when both transcription and notes can run with no paid API."""
+        return self.can_transcribe and self.can_take_notes
+
+
+def assess_local_readiness() -> LocalReadiness:
+    """Assess whether transcription and notes can run locally at $0 right now.
+
+    Pure inspection: never makes a paid API call. Reused by ``scribe doctor``,
+    ``scribe info``, and the ``check_local_readiness`` diagnostic so they can
+    never disagree about what runs for free on this machine.
+    """
+    # --- Transcription: a local Whisper backend + ffmpeg for format conversion ---
+    backend = "cpu"
+    vendor = "cpu"
+    backend_ok = False
+    try:
+        from scribe.core.backends import (
+            backend_availability,
+            detect_hardware,
+            select_backend,
+        )
+
+        hardware = detect_hardware()
+        vendor = hardware.vendor
+        availability = backend_availability()
+        backend = select_backend(hardware, available=availability)
+        backend_ok = any(availability.values())
+    except Exception:
+        backend_ok = False
+
+    ffmpeg = shutil.which("ffmpeg") is not None
+    can_transcribe = backend_ok and ffmpeg
+    transcribe_fix: str | None = None
+    if not backend_ok:
+        transcribe_detail = "no local Whisper backend importable"
+        transcribe_fix = (
+            'Reinstall the base package (it bundles faster-whisper): pip install "scribe".'
+        )
+    elif not ffmpeg:
+        transcribe_detail = f"{backend} ({vendor}) ready, but ffmpeg is missing"
+        transcribe_fix = (
+            "Install ffmpeg: winget install FFmpeg.FFmpeg / brew install ffmpeg / "
+            "apt install ffmpeg."
+        )
+    else:
+        accelerated = backend != "cpu"
+        speed = "GPU-accelerated" if accelerated else "CPU int8 (slower, still $0)"
+        transcribe_detail = f"{backend} on {vendor} — {speed}"
+        # Nudge Apple/AMD/Intel users off the CPU floor toward their fast backend.
+        if backend == "cpu" and vendor == "apple":
+            transcribe_fix = 'Faster on Apple Silicon: pip install "scribe[mlx]" (Metal GPU).'
+        elif backend == "cpu" and vendor in ("amd", "intel"):
+            transcribe_fix = 'Faster on this GPU: pip install "scribe[whispercpp]" (Vulkan/ROCm).'
+
+    # --- Notes: a local Ollama server with at least one installed model ---
+    notes_fix: str | None = None
+    try:
+        from scribe.utils.ollama_models import (
+            list_installed_models,
+            select_default_ollama_model,
+        )
+
+        base_url = os.getenv("SCRIBE_OLLAMA_BASE_URL")
+        models = list_installed_models(base_url)
+        if models:
+            chosen = select_default_ollama_model(base_url)
+            can_take_notes = True
+            notes_detail = f"Ollama · {len(models)} model(s), auto-selects {chosen}"
+        else:
+            can_take_notes = False
+            notes_detail = "Ollama has no models installed (or isn't running)"
+            notes_fix = "Install/start Ollama (https://ollama.com), then `ollama pull llama3.2`."
+    except Exception:
+        can_take_notes = False
+        notes_detail = "Ollama not reachable (optional, for free local notes)"
+        notes_fix = "Install and start Ollama (https://ollama.com), then `ollama pull llama3.2`."
+
+    return LocalReadiness(
+        can_transcribe=can_transcribe,
+        transcribe_detail=transcribe_detail,
+        transcribe_fix=transcribe_fix,
+        can_take_notes=can_take_notes,
+        notes_detail=notes_detail,
+        notes_fix=notes_fix,
+        backend=backend,
+        vendor=vendor,
+        ffmpeg=ffmpeg,
+    )
+
+
 class SystemDiagnostics:
     """System diagnostics and health checks."""
 
@@ -230,6 +341,7 @@ class SystemDiagnostics:
             self.check_cuda,
             self.check_gpu,
             self.check_gpu_memory,
+            self.check_local_readiness,
         ]
         if live:
             checks += [self.check_openai_api_key, self.check_additional_providers]
@@ -256,6 +368,40 @@ class SystemDiagnostics:
                 )
 
         return self.results
+
+    def check_local_readiness(self) -> DiagnosticResult:
+        """Report whether Scribe can process at $0 (no paid API) on this machine.
+
+        Emits a headline result for local transcription (the core feature, which
+        runs on any machine) plus a secondary result for local notes via Ollama.
+        """
+        readiness = assess_local_readiness()
+
+        # Secondary: local notes via Ollama (optional heavier opt-in).
+        self.results.append(
+            DiagnosticResult(
+                name="Local Notes ($0)",
+                status="pass" if readiness.can_take_notes else "warn",
+                message=readiness.notes_detail,
+                fix_suggestion=readiness.notes_fix,
+            )
+        )
+
+        # Headline: local transcription. Fail only if it genuinely can't run.
+        result = DiagnosticResult(
+            name="Local Transcription ($0)",
+            status="pass" if readiness.can_transcribe else "fail",
+            message=readiness.transcribe_detail,
+            details=(
+                "You can transcribe with no API key or cost. "
+                + ("Notes also run locally via Ollama." if readiness.can_take_notes else "")
+            )
+            if readiness.can_transcribe
+            else None,
+            fix_suggestion=readiness.transcribe_fix,
+        )
+        self.results.append(result)
+        return result
 
     def check_python_version(self) -> DiagnosticResult:
         """Check Python version."""

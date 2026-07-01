@@ -46,6 +46,25 @@ def _config_provider(feature: str) -> str | None:
         return None
 
 
+def _local_only_enabled() -> bool:
+    """Whether $0 local-only mode is on (env SCRIBE_LOCAL_ONLY or config.toml).
+
+    Mirrors ``ScribeConfig.local_only`` for the provider layer, which does not
+    receive the config object. Env wins over the config file, matching the rest
+    of the settings precedence. Any failure reading the config falls back to off.
+    """
+    env = os.getenv("SCRIBE_LOCAL_ONLY")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        from scribe.config_file import load_config_file
+
+        transcription = load_config_file().get("transcription", {})
+        return bool(transcription.get("local_only")) if isinstance(transcription, dict) else False
+    except Exception:
+        return False
+
+
 def get_provider(
     feature: str,
     api_key: str | None = None,
@@ -82,6 +101,22 @@ def get_provider(
     # Check if health checks are enabled globally
     if not enable_health_check:
         enable_health_check = os.getenv("SCRIBE_ENABLE_HEALTH_CHECKS", "false").lower() == "true"
+
+    # Local-only mode ($0): route text features to local Ollama and refuse the paid
+    # cloud image API, regardless of any configured/explicit provider.
+    if _local_only_enabled():
+        if feature == "meme_image":
+            raise ValueError(
+                "Local-only mode ($0, SCRIBE_LOCAL_ONLY) is enabled, but meme image "
+                "generation has no local backend. Disable memes or unset SCRIBE_LOCAL_ONLY."
+            )
+        if provider_name and provider_name.lower() != "ollama":
+            logger.warning(
+                "Local-only mode is enabled; using local Ollama for %s instead of %s.",
+                feature,
+                provider_name,
+            )
+        provider_name = "ollama"
 
     # Determine provider with feature-specific defaults
     if provider_name is None:

@@ -56,12 +56,13 @@ class TestMethodSelection:
         assert method == "local"
 
     def test_choose_method_auto_without_gpu(self, temp_config: ScribeConfig, mock_no_gpu):
-        """Test auto method selects openai when no GPU."""
+        """$0-first: auto selects local even without a GPU (CPU floor works)."""
         transcriber = Transcriber(temp_config)
 
         method = transcriber.choose_method("auto")
 
-        assert method == "openai"
+        # Never silently spends on the paid API; the CPU path is always $0.
+        assert method == "local"
 
     def test_choose_method_explicit_local(self, temp_config: ScribeConfig):
         """Test explicit local method selection."""
@@ -92,15 +93,23 @@ class TestMethodSelection:
 
         assert method == "local"
 
-    def test_choose_method_auto_considers_api_key(self, temp_config: ScribeConfig, mock_no_gpu):
-        """Test auto method considers API key availability."""
+    def test_choose_method_auto_is_zero_cost_first(self, temp_config: ScribeConfig, mock_no_gpu):
+        """$0-first: even with an API key set, auto never auto-selects the paid API."""
         transcriber = Transcriber(temp_config)
 
-        # With API key and no GPU, should choose openai
         assert temp_config.openai_api_key is not None
         method = transcriber.choose_method("auto")
 
-        assert method == "openai"
+        # The paid API is opt-in only (--method openai), never a surprise charge.
+        assert method == "local"
+
+    def test_choose_method_local_only_forces_local(self, temp_config: ScribeConfig, mock_no_gpu):
+        """local_only mode forces local even when openai is explicitly requested."""
+        temp_config.local_only = True
+        transcriber = Transcriber(temp_config)
+
+        assert transcriber.choose_method("openai") == "local"
+        assert transcriber.choose_method("auto") == "local"
 
 
 class TestAudioPreparation:

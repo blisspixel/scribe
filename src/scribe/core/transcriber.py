@@ -272,6 +272,15 @@ class Transcriber:
         """
         logger.debug(f"Choosing transcription method - preference: {preference}")
 
+        # Local-only mode ($0): never touch the paid API, whatever the preference.
+        if getattr(self.config, "local_only", False):
+            if preference == "openai":
+                logger.warning(
+                    "OpenAI transcription requested but local-only mode is enabled "
+                    "(SCRIBE_LOCAL_ONLY); using free local transcription instead."
+                )
+            return "local"
+
         if preference == "local":
             if not self.gpu_config.has_gpu:
                 logger.warning(
@@ -296,22 +305,19 @@ class Transcriber:
             return "openai"
 
         else:  # auto
-            # Use GPU recommendation based on hardware detection
+            # $0-first: local transcription runs on any machine (GPU when present,
+            # CPU int8 as the universal floor), so "auto" never silently spends on
+            # the paid API. Users opt into the API explicitly with --method openai.
             if self.gpu_config.recommendation == "local":
                 logger.info(f"Auto-selected local transcription - {self.gpu_config.reason}")
-                return "local"
             else:
-                if self.config.openai_api_key:
-                    logger.warning(
-                        "No usable local GPU detected (%s); auto-selecting the PAID "
-                        "OpenAI transcription API (~$0.006/min of audio). Use "
-                        "`--method local` to force free local transcription.",
-                        self.gpu_config.reason,
-                    )
-                    return "openai"
-                else:
-                    logger.info("No OpenAI API key, falling back to local transcription")
-                    return "local"
+                logger.info(
+                    "Auto-selected free local transcription (%s). Local runs on CPU "
+                    "here, which is slower; pass --method openai to use the paid "
+                    "OpenAI API instead.",
+                    self.gpu_config.reason,
+                )
+            return "local"
 
     def _prepare_audio_for_method(self, audio_path: Path, method: TranscriptionMethod) -> Path:
         """Prepare audio file in optimal format for chosen transcription method."""
@@ -507,6 +513,16 @@ class Transcriber:
 
             # In music mode, don't fallback
             if music_mode:
+                raise
+
+            # Local-only mode ($0): the only fallback from local is the paid API,
+            # which this mode forbids. Fail with the original error instead.
+            if getattr(self.config, "local_only", False):
+                logger.error(
+                    "Local-only mode is enabled (SCRIBE_LOCAL_ONLY); not falling back "
+                    "to the paid OpenAI API. Fix the local setup (e.g. run `scribe "
+                    "doctor`) or unset SCRIBE_LOCAL_ONLY."
+                )
                 raise
 
             # Attempt fallback

@@ -3100,11 +3100,19 @@ def info() -> None:
             )
         console.print()
 
-        # Recommendation
-        if gpu_config.recommendation == "local":
-            console.print(f"[{ScribeTheme.SUCCESS}]recommended: local GPU[/{ScribeTheme.SUCCESS}]")
-        else:
-            console.print(f"[{ScribeTheme.PRIMARY}]recommended: OpenAI API[/{ScribeTheme.PRIMARY}]")
+        # Recommendation — $0-first: local transcription runs on any machine, so
+        # it is always the free default. The paid API is an explicit opt-in.
+        tx_kind = "GPU" if gpu_config.recommendation == "local" else "CPU"
+        notes_bit = " + Ollama notes" if ollama_models else ""
+        console.print(
+            f"[{ScribeTheme.SUCCESS}]$0 local ready: {tx_kind} transcription{notes_bit}"
+            f"[/{ScribeTheme.SUCCESS}]"
+        )
+        if tx_kind == "CPU":
+            console.print(
+                f"  [{ScribeTheme.TEXT_MUTED}]CPU is slower; pass --method openai to use "
+                f"the paid OpenAI API instead.[/{ScribeTheme.TEXT_MUTED}]"
+            )
         console.print()
 
     except ScribeError as e:
@@ -3146,6 +3154,32 @@ def doctor() -> None:
     passed = [r for r in results if r.status == "pass"]
     warnings = [r for r in results if r.status == "warn"]
     failures = [r for r in results if r.status == "fail"]
+
+    # Headline $0-local verdict, derived from the readiness checks already run
+    # (no extra probe). This is the "can I run this for free?" answer up front.
+    tx = next((r for r in results if r.name == "Local Transcription ($0)"), None)
+    notes = next((r for r in results if r.name == "Local Notes ($0)"), None)
+    if tx is not None:
+        can_notes = notes is not None and notes.status == "pass"
+        if tx.status == "pass":
+            what = "transcribe and take notes" if can_notes else "transcribe"
+            console.print(
+                f"[bold {ScribeTheme.SUCCESS}]$0 LOCAL[/bold {ScribeTheme.SUCCESS}]  "
+                f"[{ScribeTheme.SUCCESS}]You can {what} on this machine with no API key.[/{ScribeTheme.SUCCESS}]"
+            )
+            console.print(
+                f"  [{ScribeTheme.TEXT_MUTED}]transcription: {escape(tx.message)}[/{ScribeTheme.TEXT_MUTED}]"
+            )
+            if notes is not None:
+                console.print(
+                    f"  [{ScribeTheme.TEXT_MUTED}]notes: {escape(notes.message)}[/{ScribeTheme.TEXT_MUTED}]"
+                )
+        else:
+            console.print(
+                f"[bold {ScribeTheme.WARNING}]$0 LOCAL[/bold {ScribeTheme.WARNING}]  "
+                f"[{ScribeTheme.WARNING}]Local transcription needs setup: {escape(tx.message)}[/{ScribeTheme.WARNING}]"
+            )
+        console.print()
 
     # Display failures first (if any)
     if failures:

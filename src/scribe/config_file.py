@@ -52,6 +52,10 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["default_model"] = transcription["model"]
     if "language" in transcription:
         out["default_language"] = transcription["language"]
+    if "local_backend" in transcription:
+        out["local_backend"] = transcription["local_backend"]
+    if "local_only" in transcription:
+        out["local_only"] = bool(transcription["local_only"])
 
     features = _section(data, "features")
     if "generate_notes" in features:

@@ -155,6 +155,16 @@ class ScribeConfig(BaseSettings):
         ),
     )
 
+    local_only: bool = Field(
+        default=False,
+        description=(
+            "Run everything locally at $0: force local transcription (never the "
+            "paid OpenAI API, even on fallback) and route notes/jokes/meme-concepts "
+            "to local Ollama. Meme image generation has no local backend and is "
+            "unavailable in this mode. Env: SCRIBE_LOCAL_ONLY."
+        ),
+    )
+
     # OpenAI settings
     openai_api_key: str | None = Field(
         default=None,

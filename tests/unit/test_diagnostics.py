@@ -698,3 +698,108 @@ class TestSystemDiagnostics:
         assert pass_count == 2
         assert warn_count == 1
         assert fail_count == 1
+
+
+class TestLocalReadiness:
+    """The $0-local readiness assessment used by doctor/info."""
+
+    def _patch_backends(self, monkeypatch, *, vendor, backend, available, ffmpeg):
+        import scribe.core.backends as backends
+        from scribe.utils import diagnostics as diag
+
+        monkeypatch.setattr(
+            backends, "detect_hardware", lambda: SimpleNamespace(vendor=vendor), raising=False
+        )
+        monkeypatch.setattr(backends, "backend_availability", lambda: available, raising=False)
+        monkeypatch.setattr(backends, "select_backend", lambda *_a, **_k: backend, raising=False)
+        monkeypatch.setattr(diag.shutil, "which", lambda _n: "/ffmpeg" if ffmpeg else None)
+
+    def _patch_ollama(self, monkeypatch, *, models):
+        import scribe.utils.ollama_models as om
+
+        monkeypatch.setattr(om, "list_installed_models", lambda *_a, **_k: models, raising=False)
+        monkeypatch.setattr(
+            om, "select_default_ollama_model", lambda *_a, **_k: "llama3.2", raising=False
+        )
+
+    def test_fully_local_when_gpu_and_ollama_ready(self, monkeypatch):
+        from scribe.utils.diagnostics import assess_local_readiness
+
+        self._patch_backends(
+            monkeypatch,
+            vendor="nvidia",
+            backend="faster-whisper",
+            available={"faster-whisper": True, "cpu": True},
+            ffmpeg=True,
+        )
+        self._patch_ollama(monkeypatch, models=["llama3.2"])
+
+        r = assess_local_readiness()
+
+        assert r.can_transcribe is True
+        assert r.can_take_notes is True
+        assert r.fully_local is True
+        assert "faster-whisper" in r.transcribe_detail
+
+    def test_transcription_blocked_without_ffmpeg(self, monkeypatch):
+        from scribe.utils.diagnostics import assess_local_readiness
+
+        self._patch_backends(
+            monkeypatch,
+            vendor="cpu",
+            backend="cpu",
+            available={"faster-whisper": True, "cpu": True},
+            ffmpeg=False,
+        )
+        self._patch_ollama(monkeypatch, models=[])
+
+        r = assess_local_readiness()
+
+        assert r.can_transcribe is False
+        assert r.transcribe_fix and "ffmpeg" in r.transcribe_fix.lower()
+        assert r.can_take_notes is False
+
+    def test_apple_cpu_floor_nudges_mlx(self, monkeypatch):
+        from scribe.utils.diagnostics import assess_local_readiness
+
+        self._patch_backends(
+            monkeypatch,
+            vendor="apple",
+            backend="cpu",
+            available={"cpu": True, "faster-whisper": True},
+            ffmpeg=True,
+        )
+        self._patch_ollama(monkeypatch, models=[])
+
+        r = assess_local_readiness()
+
+        assert r.can_transcribe is True  # CPU floor still works at $0
+        assert r.transcribe_fix and "mlx" in r.transcribe_fix.lower()
+
+    def test_check_appends_transcription_and_notes(self, monkeypatch):
+        from scribe.utils import diagnostics as diag
+        from scribe.utils.diagnostics import LocalReadiness, SystemDiagnostics
+
+        monkeypatch.setattr(
+            diag,
+            "assess_local_readiness",
+            lambda: LocalReadiness(
+                can_transcribe=True,
+                transcribe_detail="faster-whisper on nvidia",
+                transcribe_fix=None,
+                can_take_notes=False,
+                notes_detail="Ollama not reachable",
+                notes_fix="Install Ollama",
+                backend="faster-whisper",
+                vendor="nvidia",
+                ffmpeg=True,
+            ),
+        )
+
+        d = SystemDiagnostics()
+        result = d.check_local_readiness()
+
+        names = {r.name: r.status for r in d.results}
+        assert names.get("Local Transcription ($0)") == "pass"
+        assert names.get("Local Notes ($0)") == "warn"
+        assert result.status == "pass"
