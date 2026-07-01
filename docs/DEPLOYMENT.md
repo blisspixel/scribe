@@ -167,7 +167,7 @@ docker run --gpus all \
   scribe transcribe /app/output/meeting.mp4
 
 # Opt into the paid OpenAI API explicitly (no-GPU otherwise transcribes locally
-# on CPU at $0 — the API is never auto-selected)
+# on CPU at $0 - the API is never auto-selected)
 docker run \
   -v $(pwd)/output:/app/output \
   -v $(pwd)/.env:/app/.env \

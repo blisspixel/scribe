@@ -269,7 +269,7 @@ def assess_local_readiness() -> LocalReadiness:
     else:
         accelerated = backend != "cpu"
         speed = "GPU-accelerated" if accelerated else "CPU int8 (slower, still $0)"
-        transcribe_detail = f"{backend} on {vendor} — {speed}"
+        transcribe_detail = f"{backend} on {vendor} - {speed}"
         # Nudge Apple/AMD/Intel users off the CPU floor toward their fast backend.
         if backend == "cpu" and vendor == "apple":
             transcribe_fix = 'Faster on Apple Silicon: pip install "scribe[mlx]" (Metal GPU).'

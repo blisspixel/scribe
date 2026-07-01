@@ -3100,7 +3100,7 @@ def info() -> None:
             )
         console.print()
 
-        # Recommendation — $0-first: local transcription runs on any machine, so
+        # Recommendation - $0-first: local transcription runs on any machine, so
         # it is always the free default. The paid API is an explicit opt-in.
         tx_kind = "GPU" if gpu_config.recommendation == "local" else "CPU"
         notes_bit = " + Ollama notes" if ollama_models else ""

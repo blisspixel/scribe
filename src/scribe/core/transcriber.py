@@ -857,7 +857,7 @@ class Transcriber:
         if keep_patterns:
             default_keep_patterns.extend(keep_patterns)
 
-        # Capture sizes BEFORE deleting — cleanup_files unlinks the files, so a
+        # Capture sizes BEFORE deleting - cleanup_files unlinks the files, so a
         # stat() afterwards always sees them gone and would report 0 bytes freed.
         to_delete = cleanup_files(
             directory=directory,

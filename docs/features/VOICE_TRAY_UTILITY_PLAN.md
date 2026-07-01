@@ -15,8 +15,8 @@ Shipped and validated on Windows (real dictation, read-aloud, hotkeys, run-at-lo
   (with byte-verified downloads) and saves the choice.
 - `scribe tray --startup install|remove|status` runs the tray at login
   (Startup-folder `.lnk` / LaunchAgent / XDG autostart).
-- The tray menu shows + remaps the hotkeys (F6–F12), sets read-aloud speed
-  (0.5–2.0x), and toggles start-at-login, all live.
+- The tray menu shows + remaps the hotkeys (F6-F12), sets read-aloud speed
+  (0.5-2.0x), and toggles start-at-login, all live.
 - STT: latency-first profiles (`balanced` → small, `accurate` → large-v3-turbo on
   12GB+), model preloaded at startup with a loading indicator.
 - TTS: Kokoro (82M, ONNX) when installed (`scribe[kokoro]`), cached/warmed and
@@ -366,11 +366,11 @@ Hard requirements:
 - Shipped: `scribe tray` with `pystray`; tray states, pause/resume, quit.
 - Shipped: tap-to-toggle (and hold) activation; the hook callback only enqueues,
   with a dispatcher thread + listener watchdog for hotkey reliability.
-- Shipped: tray menu shows + remaps the hotkeys (F6–F12), sets read-aloud speed,
+- Shipped: tray menu shows + remaps the hotkeys (F6-F12), sets read-aloud speed,
   and toggles start-at-login; same-hotkey collisions are rejected.
 - Shipped: live I/O paths stay behind the `scribe[tray]`/`scribe[kokoro]` extras.
 - Removed: the "Read selection now" menu item (opening the menu steals focus, so
-  it could not capture a live selection — the read hotkey is the reliable path).
+  it could not capture a live selection - the read hotkey is the reliable path).
 - Remaining: validate OS-level hotkey conflicts and permission failures on the
   macOS/Linux matrix.
 

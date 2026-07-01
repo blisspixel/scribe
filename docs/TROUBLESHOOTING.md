@@ -17,7 +17,7 @@ This runs 16 comprehensive checks and provides actionable recommendations.
 
 **Symptoms:**
 - "No GPU detected" message
-- Slow transcription (Scribe transcribes on CPU — still local and $0, just slower)
+- Slow transcription (Scribe transcribes on CPU - still local and $0, just slower)
 
 > Note: with $0-first defaults, no GPU does **not** mean paid API. `--method auto`
 > transcribes locally on CPU; the paid OpenAI API is only used if you pass

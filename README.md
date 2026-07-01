@@ -31,7 +31,7 @@ scribe doctor
 
 That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or taskbar shortcut, or scheduled job. Transcript-only local GPU use needs no API key; notes/jokes/memes and API transcription do, so set `OPENAI_API_KEY` (and friends) in your environment or a `.env` file, or let `scribe init` walk you through it.
 
-> **Costs default to off.** To avoid surprise charges, the paid AI extras — meeting **notes**, **jokes**, and **memes** (memes call a paid *image* API) — are **disabled by default**. A plain `scribe meeting.mp4` only transcribes. Turn one on **just for this run** with the matching flag (`scribe meeting.mp4 --notes --meme`), turn it on **persistently** with `scribe init` or `SCRIBE_ENABLE_NOTES/JOKE/MEME=true`, or generate one on demand from an existing transcript: `scribe notes transcript.md`, `scribe joke transcript.md`, `scribe meme transcript.md`. The `--notes/--no-notes`, `--joke/--no-joke`, and `--meme/--no-meme` flags are paired toggles: the bare flag forces the feature on for that run, the `--no-` form forces it off, and omitting both uses your config default. Transcription is **$0-first**: `--method auto` always runs locally (GPU when present, CPU otherwise), so it never silently spends on an API — the paid OpenAI API is an explicit opt-in via `--method openai`. Want everything local? Set **`SCRIBE_LOCAL_ONLY=1`** to force local transcription and route notes/jokes to local [Ollama](https://ollama.com), never touching a paid API. Run **`scribe doctor`** (or `scribe info`) for a plain "$0 LOCAL" verdict of what runs free on your machine and how to enable anything that's missing.
+> **Costs default to off.** To avoid surprise charges, the paid AI extras - meeting **notes**, **jokes**, and **memes** (memes call a paid *image* API) - are **disabled by default**. A plain `scribe meeting.mp4` only transcribes. Turn one on **just for this run** with the matching flag (`scribe meeting.mp4 --notes --meme`), turn it on **persistently** with `scribe init` or `SCRIBE_ENABLE_NOTES/JOKE/MEME=true`, or generate one on demand from an existing transcript: `scribe notes transcript.md`, `scribe joke transcript.md`, `scribe meme transcript.md`. The `--notes/--no-notes`, `--joke/--no-joke`, and `--meme/--no-meme` flags are paired toggles: the bare flag forces the feature on for that run, the `--no-` form forces it off, and omitting both uses your config default. Transcription is **$0-first**: `--method auto` always runs locally (GPU when present, CPU otherwise), so it never silently spends on an API - the paid OpenAI API is an explicit opt-in via `--method openai`. Want everything local? Set **`SCRIBE_LOCAL_ONLY=1`** to force local transcription and route notes/jokes to local [Ollama](https://ollama.com), never touching a paid API. Run **`scribe doctor`** (or `scribe info`) for a plain "$0 LOCAL" verdict of what runs free on your machine and how to enable anything that's missing.
 
 > **Cloud-synced home folder (OneDrive, Dropbox)?** If the install errors with a hardlink failure (Windows `os error 396`), add `--link-mode=copy` to the install command.
 >
@@ -39,13 +39,13 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 ---
 
-## What's New in v2.7.0
+## What's New in v2.8.0
 
-- **Tray utility prototype**: `scribe tray` adds a resident tray process for push-to-hold dictation and selection read-aloud, behind the optional `scribe[tray]` extra.
-- **Safer OBS setup**: `scribe rec --check` and `scribe record --check` run a read-only OBS WebSocket preflight, while `scribe init --force` and `scribe doctor` now surface OBS configuration guidance.
-- **Quick Record hardening**: recording startup now refuses to restart or kill OBS while a recording appears active, and gives more actionable authentication and mux-state diagnostics.
-- **Voice I/O reliability**: selection read-aloud avoids stale clipboard reads, restores clipboard state on failures, and cleans up hotkey and TTS listeners more defensively.
-- **Engineering**: the release expands tests across recorder, OBS config, diagnostics, init, config parsing, and tray behavior; dependency floors were raised for `pydantic-settings` and `msgpack` so the security audit stays clean.
+- **$0-first, runs anywhere**: `--method auto` always transcribes locally (GPU when present, CPU otherwise) and never auto-selects the paid API. The paid OpenAI API is an explicit opt-in via `--method openai`.
+- **Cost safety by default**: the paid AI extras (notes, jokes, memes) are off by default. Turn them on per run with `--notes`/`--joke`/`--meme`, persistently via `scribe init` or `SCRIBE_ENABLE_*`, or on demand with `scribe notes|joke|meme`.
+- **Local-only mode**: `SCRIBE_LOCAL_ONLY=1` forces everything to $0: local transcription (no paid fallback) plus notes/jokes routed to local Ollama.
+- **$0 readiness in doctor/info**: `scribe doctor` and `scribe info` now lead with a plain verdict of what runs free on your machine, and tell you exactly how to enable anything missing.
+- **Cross-machine nudges**: on Apple or AMD/Intel machines that fall back to CPU, Scribe points you at the faster local engine (`scribe[mlx]` or `scribe[whispercpp]`).
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for direction.
 
@@ -188,8 +188,8 @@ scribe tray --startup install            # run the tray automatically at login (
 ```
 Dictation and read-aloud both default to **tap-to-toggle**: tap the hotkey to start,
 tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selection).
-The **tray menu** shows the current hotkeys and lets you remap them (F6–F12), pick a
-read-aloud speed, and toggle "Start at login" — all live.
+The **tray menu** shows the current hotkeys and lets you remap them (F6-F12), pick a
+read-aloud speed, and toggle "Start at login" - all live.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
 The tray is validated on Windows (dictation, read-aloud, hotkeys, and run-at-login);
 macOS and Linux share the same code but their hardware matrix is still being proven,
@@ -462,7 +462,7 @@ password = "your OBS WebSocket password"
 - Ensures optimal transcription quality
 
 **2. Transcription**
-- **Local (default, $0):** Whisper via faster-whisper (GPU) or CPU int8 — `auto` always runs locally
+- **Local (default, $0):** Whisper via faster-whisper (GPU) or CPU int8 - `auto` always runs locally
 - **API Mode (opt-in):** gpt-4o-transcribe-diarize (speaker separation, server-side chunking) via `--method openai`
 - `auto` picks the best local backend for your hardware; it never auto-selects the paid API
 
@@ -1126,7 +1126,7 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.7.0 (tray utility prototype, safer OBS preflight/setup, Quick Record hardening, and expanded defensive tests)
+**Current Version:** 2.8.0 ($0-first local transcription, cost-safe defaults, local-only mode, and $0 readiness in doctor/info)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-06-20
+**Last Updated:** 2026-07-01
