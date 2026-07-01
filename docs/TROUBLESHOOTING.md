@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2026-06-23 (polished init review+verification, robust launcher quoting + taskbar icon, doctor offers init)
 
 ## Quick Diagnostics
 
@@ -375,6 +375,55 @@ SCRIBE_OBS_PASSWORD=your_password
 7. **Firewall issues:**
 - Allow OBS through firewall
 - Check port 4455 is not blocked
+
+### Quick Record / Desktop / Taskbar Shortcut Issues
+
+**Symptoms:**
+- Launcher "crashes" or window disappears immediately
+- Taskbar pinned icon shows generic/backslash (\) instead of Scribe icon
+- No output or "file not found" when double-clicking the desktop/taskbar launcher
+- Wrong `scribe` binary used (e.g. dev venv instead of stable global)
+
+**Diagnosis:**
+- The launcher is a thin native shortcut + adaptive wrapper (`.cmd` on Windows).
+- It prefers a stable `scribe` on your PATH (e.g. from `uv tool install`).
+- Windows taskbar pinning is picky about icons when the target is a script/cmd.
+
+**Solutions:**
+
+1. **Use a stable global `scribe` before creating the launcher** (strongly recommended):
+   ```powershell
+   uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git
+   uv tool update-shell   # open a new shell
+   scribe shortcut --desktop
+   ```
+   Then drag the new Desktop `.lnk` to the taskbar.
+
+2. **If taskbar icon is wrong after pinning**:
+   - Right-click the pinned item → Properties → Change Icon
+   - Browse to `%USERPROFILE%\.scribe\scribe.ico` and select it.
+   - Unpin + repin the fresh desktop `.lnk` if needed.
+   - (Icon cache sometimes needs Explorer restart or logout.)
+
+3. **Remake cleanly**:
+   ```powershell
+   scribe shortcut --remove
+   scribe shortcut --desktop
+   ```
+   Delete/rename any old desktop `.lnk` first, then drag the new one.
+
+4. **The generated files (for debugging)**:
+   - `~/.scribe/Scribe Quick Record.cmd` (adaptive wrapper with pauses + fallback)
+   - Desktop / Start Menu `.lnk` files (icon is set on the `.lnk`)
+   - The `.lnk` targets `cmd.exe` with env + the real `scribe.EXE` for reliable console + icon behavior on taskbar.
+
+5. **Console stays open**: The launcher sets `SCRIBE_FROM_SHORTCUT=1` and the code ensures pauses + "Press Enter" on Windows for dedicated launches.
+
+6. **Wrong binary used**:
+   - Run `where scribe` (or `Get-Command scribe`) to see what your PATH resolves to.
+   - Prefer a global tool install over running from a project `.venv`.
+
+The launcher is deliberately adaptive so it survives upgrades when you have a stable `scribe` on PATH.
 
 ### Slow Transcription
 

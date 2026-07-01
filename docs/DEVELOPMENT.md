@@ -1,6 +1,6 @@
 # Development Guide
 
-**Last Updated:** 2026-05-30 (Step 1 Engineering Excellence foundation complete: uv, pre-commit, CI)
+**Last Updated:** 2026-06-23 (polished `init` with review + live verification + optional launcher in flow; robust `shortcut` for taskbar icons + adaptive Windows launcher with env/pauses; doctor offers re-init on failures)
 
 ## Getting Started
 
@@ -17,8 +17,8 @@
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
 uv sync
-uv run scribe init          # first-run wizard
-uv run scribe doctor
+uv run scribe init          # polished interactive first-run (review + verification + optional launcher)
+uv run scribe doctor        # diagnostics + offers to re-run init on failures
 ```
 
 **Classic pip path** (still supported but not recommended for development):

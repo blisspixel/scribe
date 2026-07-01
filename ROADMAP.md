@@ -232,4 +232,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-06-21 (Step 3/4 loop: resilience layer, API circuit breaker, recording policy, 1592 tests, 82% coverage)
+**Last Updated:** 2026-06-23 (polished QOL setup: defensive+adaptive init with review/verification/launcher offer; robust launcher quoting, taskbar support, pauses via env; doctor self-healing; docs refreshed)

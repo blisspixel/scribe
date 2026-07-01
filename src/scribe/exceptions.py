@@ -120,10 +120,15 @@ class ScribeError(Exception):
         super().__init__(self.message)
 
     def __str__(self) -> str:
-        """Return formatted error message with context."""
+        """Return formatted error message with context.
+
+        Internal 'phase' context is not shown to users (it's for logs/debug).
+        """
         if self.context:
-            context_str = ", ".join(f"{k}={v}" for k, v in self.context.items())
-            return f"{self.message} ({context_str})"
+            user_context = {k: v for k, v in self.context.items() if k != "phase"}
+            if user_context:
+                context_str = ", ".join(f"{k}={v}" for k, v in user_context.items())
+                return f"{self.message} ({context_str})"
         return self.message
 
 

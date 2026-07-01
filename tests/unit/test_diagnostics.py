@@ -540,8 +540,9 @@ class TestDependencySecurityCheck:
         assert "pip-audit not installed" in result.message
         assert result.fix_suggestion is not None
 
+    @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")
-    def test_passes_when_scan_clean(self, mock_run):
+    def test_passes_when_scan_clean(self, mock_run, _find_spec):
         """A clean pip-audit run passes with ADR-004 torch ignores applied."""
         mock_run.return_value = SimpleNamespace(
             returncode=0,
@@ -557,8 +558,9 @@ class TestDependencySecurityCheck:
         assert "--ignore-vuln" in cmd
         assert "PYSEC-2025-203" in cmd
 
+    @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")
-    def test_fails_when_scan_finds_vulns(self, mock_run):
+    def test_fails_when_scan_finds_vulns(self, mock_run, _find_spec):
         """Actionable vulnerabilities fail the check."""
         mock_run.return_value = SimpleNamespace(
             returncode=1,

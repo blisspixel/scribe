@@ -1,6 +1,6 @@
 # Documentation Structure
 
-**Last Updated**: January 30, 2026
+**Last Updated**: 2026-06-23 (reflects polished init + robust shortcut launchers)
 **Status**: Clean and organized
 
 ---

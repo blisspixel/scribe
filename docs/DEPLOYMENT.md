@@ -35,8 +35,10 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 
-# Configure
-cp .env.example .env
+# Configure (recommended)
+# Run the polished first-run wizard (review step, OBS preflight verification, optional Quick Record launcher)
+python -m scribe init
+# or after uv sync: uv run scribe init
 # Edit .env with API keys
 ```
 
