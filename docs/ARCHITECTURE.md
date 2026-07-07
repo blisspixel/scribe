@@ -1,10 +1,10 @@
 # Scribe Architecture
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2026-07-07
 
 ## Overview
 
-Scribe is a modular transcription and analysis pipeline built on a provider-agnostic architecture. The system is designed for reliability, performance, and extensibility.
+Scribe is a local-first desktop CLI built around a modular transcription and analysis pipeline. The system is designed for reliability, privacy-preserving local defaults, explicit cloud opt-in, performance on local hardware, and pragmatic extensibility inside the existing CLI product.
 
 ## System Architecture
 
@@ -559,20 +559,21 @@ tests/
 5. Update documentation
 6. Add configuration options
 
-## Future Architecture Considerations
+## Bounded Architecture Backlog
 
-### Planned Improvements
-- Distributed processing across multiple GPUs
-- Queue-based job processing
-- REST API for remote transcription
-- WebSocket for real-time progress
-- Plugin system for custom processors
+The roadmap deliberately keeps Scribe a cohesive local desktop CLI. Architecture work should improve the existing product surface instead of turning it into a hosted platform.
 
-### Scalability
-- Kubernetes deployment support
-- Auto-scaling based on load
-- Distributed caching
-- Load balancing across providers
+### Near-Term Improvements
+- Keep local backend routing deterministic across faster-whisper, MLX, whisper.cpp, and CPU fallback.
+- Improve `doctor`, `info`, and tray diagnostics so hardware, optional dependencies, and provider boundaries are visible before a user starts a long run.
+- Continue extracting pure policy from hardware and OS glue so state transitions, fallback choices, and file handling stay testable.
+- Keep structured transcript output, query, notes, and local-only behavior consistent across `transcribe`, `url`, `batch`, and `record`.
+
+### Explicitly Out Of Scope
+- REST APIs or hosted transcription services.
+- Kubernetes, autoscaling, or distributed server deployment as product surfaces.
+- Multi-user account, cloud sync, or enterprise control planes.
+- Telemetry that phones home or expands the local tool's attack surface.
 
 ## References
 

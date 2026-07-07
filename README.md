@@ -1049,7 +1049,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 - [Development Guide](docs/DEVELOPMENT.md) - Development setup and workflows
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [Performance Tuning](docs/PERFORMANCE_TUNING.md) - Optimization and benchmarking
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment strategies
+- [Deployment Guide](docs/DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
 
 ### Feature Documentation
 - [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) - Music transcription technical details

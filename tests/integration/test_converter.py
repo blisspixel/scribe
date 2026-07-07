@@ -155,6 +155,5 @@ class TestConvenienceFunctions:
         assert result == tmp_path / "output.mp3"
 
 
-# TODO: Add real integration tests with actual audio files
-# These would require test fixtures with real audio/video files
-# and would be slower but more comprehensive
+# Live media fixture coverage belongs in marked slow/manual tests because it
+# requires real codecs, FFmpeg behavior, and larger binary fixtures.

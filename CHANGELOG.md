@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- Corrected package metadata links to the canonical `blisspixel/scribe` repository.
+- Refreshed roadmap, architecture, deployment, and test documentation so current status, local-first scope, and quality gates match the v2.8.0 product surface.
+
 ## [2.8.0] - 2026-07-01
 
 ### Added
@@ -282,6 +286,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+[2.8.0]: https://github.com/blisspixel/scribe/releases/tag/v2.8.0
 [2.7.0]: https://github.com/blisspixel/scribe/releases/tag/v2.7.0
 [2.6.0]: https://github.com/blisspixel/scribe/releases/tag/v2.6.0
 [2.4.3]: https://github.com/blisspixel/scribe/releases/tag/v2.4.3

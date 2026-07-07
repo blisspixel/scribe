@@ -39,7 +39,8 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Primary Focus                  | Status    |
 |---------|--------------------------------|-----------|
-| 2.7.0   | Tray utility + voice hardening + ruff gate fixes | Current   |
+| 2.8.0   | $0-first defaults, local-only mode, tray polish, readiness diagnostics | Current   |
+| 2.7.0   | Tray utility + voice hardening + ruff gate fixes | Released  |
 | 2.6.0   | Roadmap product items 2-5 + structured output, glossaries | Released  |
 | 2.5.0   | Cross-platform launcher + icon | Released  |
 | 2.4.3   | OBS recording reliability      | Released  |
@@ -72,6 +73,18 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 6. **Resident voice tray utility (shipped, Windows-validated).** `scribe tray` is a resident tray/menu-bar utility for local dictation and read-aloud. It includes dependency + permission diagnostics (`--check`), a one-shot model/voice setup (`--setup`), a terminal fallback (`--no-tray`), local STT voice profiles (`fast|balanced|accurate`, latency-first defaults), model preload-by-default with a loading indicator, a listener watchdog that survives a silently-removed OS hook, and run-at-login support (`--startup install|remove|status`). The tray menu shows and remaps the hotkeys (F6-F12), sets read-aloud speed, and toggles start-at-login, all live. High-quality read-aloud uses Kokoro (`scribe[kokoro]`) with a cached/warmed, pipelined synthesizer and a system-voice fallback. Dictation, read-aloud, hotkeys, and startup are validated on Windows; the macOS/Linux hardware matrix is still being proven. It remains separate from the batch pipeline. See [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
 
 Current product priority: prove the macOS/Linux hardware matrix for the resident tray (global hotkeys, permissions, tray backend, audio), and continue hardening backend routing, diagnostics, and the setup experience.
+
+### Current Product Polish Debt
+
+The product surface is already useful, so polish work should improve what exists rather than expand scope:
+
+- **UX flow debt:** keep `init`, `doctor`, `info`, `shortcut`, `rec`, and `tray --check` aligned so setup, verification, and recovery never disagree.
+- **Visual polish debt:** keep terminal output restrained, scannable, and useful in plain terminals as well as Rich-capable terminals.
+- **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home.
+- **Reliability debt:** continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
+- **Security debt:** remove stale security assumptions, keep cloud transmission explicit, and review dependency-audit exceptions as the GPU stack moves.
+- **Accessibility debt:** keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
+- **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
 
 ---
 
@@ -232,4 +245,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-06-23 (polished QOL setup: defensive+adaptive init with review/verification/launcher offer; robust launcher quoting, taskbar support, pauses via env; doctor self-healing; docs refreshed)
+**Last Updated:** 2026-07-07 (product polish debt and current v2.8.0 status refreshed)

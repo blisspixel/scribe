@@ -1,126 +1,61 @@
 # Test Suite Status
 
-## Summary
+## Current Reality
 
-- **Total Tests**: 1592 collected (unit + integration + e2e)
-- **Pass Rate**: Very high on CI-safe subsets (markers exclude gpu/slow/requires_*)
-- **Quality Gates**: Ruff check + format, mypy --strict, 80% coverage on filtered subset all enforced
-- **Note**: Full suite is intentionally large; developers use markers for fast feedback
+As of 2026-07-07:
 
-## Test Breakdown
+- Pytest collection: 1592 tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit coverage gate: 1499 passed, 5 skipped, 1 deselected.
+- Latest measured total coverage: 81.69 percent.
+- Enforced project coverage floor: 80 percent.
+- Standard quality gates: Ruff check, Ruff format check, mypy strict, CI-safe unit coverage, build, and pip-audit with the documented CI ignores.
 
-### Current Reality (as of 2026-06-21)
-- 1592 tests collected via pytest.
-- Meme generator defensive tests now pass (previous mock image data issues resolved through code evolution).
-- Strong coverage of error paths, recorder, CLI, providers, voice tray, vocabulary.
-- Property-based tests (Hypothesis) present for core pure logic (costs, backend selection, diarizer, transcript model, validation, vocabulary, recording policy RecordingPhaseMachine, resilience backoff, voice tray HotkeyStateMachine). Fault-injection chaos tests cover `safe_write` and API circuit breaker paths.
+## Standard Local Commands
 
-## Known Issues
-None blocking. Old meme defensive failures noted in prior revisions of this file have been cleared. Stale counts in other docs were corrected as part of quality loop.
-
-## Recent Quality Work
-- Ruff RUF059 violations eliminated in recorder tests so full `ruff check` passes on src + tests (ROADMAP Step 2).
-- Documentation accuracy refreshed across README, ROADMAP, DEVELOPMENT, this file.
-
-## Test Categories
-
-### Unit Tests
-- Configuration and validation
-- CLI commands
-- Audio processing
-- Provider abstraction
-- Joke generation
-- Meme generation
-- Notes generation
-- File operations
-- Session management
-- Logging and diagnostics
-- **Custom vocabulary** (NEW)
-
-### Integration Tests
-- Audio converter
-- Local Whisper transcription
-- OpenAI API transcription
-
-### E2E Tests
-- Full workflow tests
-
-### Manual Tests
-- Actual timing tests
-- Provider-specific tests
-
-## Running Tests
-
-### All Unit Tests
 ```bash
-python -m pytest tests/unit -v
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run mypy --strict src/scribe
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
+uv build --out-dir .agent/build
 ```
 
-### Specific Feature
+Run nearby tests for focused work:
+
 ```bash
-python -m pytest tests/unit/test_vocabulary.py -v
+uv run pytest tests/unit/test_vocabulary.py -q
+uv run pytest tests/integration/test_converter.py -q
 ```
 
-### With Coverage
+## Coverage Strengths
+
+- CLI command parsing and error paths.
+- Configuration, validation, and safe file handling.
+- Recording policy state machine and recorder behavior.
+- Provider abstraction, provider health, and API resilience.
+- Voice tray, shortcut, and startup logic.
+- Vocabulary parsing and transcript output helpers.
+- Fault-injection coverage for atomic writes and provider circuit breaker paths.
+
+## Known Gaps
+
+- Live GPU, microphone, OBS, diarization, and provider API paths require marked integration or manual validation.
+- Some broad CLI, converter, provider, and media-composition branches remain below the project average and should receive targeted regression tests when touched.
+- TorchAudio emits deprecation warnings that should be handled in a future TorchCodec migration cycle.
+
+## Manual Or Slow Validation
+
+Manual or slow tests are intentionally outside the default CI-safe loop because they can require hardware, API keys, or large media fixtures. Use explicit markers when validating those paths:
+
 ```bash
-python -m pytest tests/unit --cov=scribe --cov-report=html
+uv run pytest tests -m "slow"
+uv run pytest tests -m "requires_api"
+uv run pytest tests/manual
 ```
 
-### Skip Slow Tests
-```bash
-python -m pytest tests/unit -m "not slow"
-```
+## Test Policy
 
-### Skip Manual Tests
-```bash
-python -m pytest tests/ --ignore=tests/manual --ignore=tests/e2e
-```
-
-## Test Quality
-
-### Coverage
-- Current coverage maintained at ~42%
-- New vocabulary module has 100% test coverage
-- All critical paths tested
-
-### Test Types
-- Unit tests: Fast, isolated, mocked dependencies
-- Integration tests: Real components, no external APIs
-- E2E tests: Full workflow, may require API keys
-- Manual tests: Performance and timing validation
-
-## Recent Updates (v2.3.0)
-
-### Added
-- 27 new tests for custom vocabulary feature
-- Tests for txt and json file formats
-- Tests for comment handling in txt files
-- Tests for Whisper prompt format conversion
-- Tests for edge cases and error conditions
-
-### Fixed
-- Updated provider default model test for XAI meme generation
-
-### Maintained
-- All existing tests continue to pass
-- No regressions introduced by new features
-- Test suite runs in ~70 seconds
-
-## Next Steps
-
-### To Fix
-1. Update meme generator defensive tests with valid mock image data
-2. Add integration tests for batch processing
-3. Add integration tests for vocabulary in transcription pipeline
-
-### To Add
-- Batch processing CLI tests
-- Vocabulary integration with transcriber tests
-- Performance tests for batch operations
-
-## Notes
-
-- Manual tests in `tests/manual/` require actual API keys and are not run in CI
-- E2E tests may be slow and are typically run separately
-- The test suite is designed to run quickly for development workflow
-- All new features should include unit tests before merging
+- New behavior should include focused unit coverage before broader integration tests.
+- Bug fixes should add or update a regression test when practical.
+- External APIs must stay mocked in default local and CI-safe tests.
+- Coverage must stay at or above 80 percent with meaningful assertions, not import-only tests.

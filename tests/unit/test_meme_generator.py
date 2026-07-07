@@ -170,10 +170,6 @@ class TestMemeConfig:
             assert config.spice_level == 8
 
 
-# TODO: Add integration tests for meme generation with proper mocking
-# The QA loop and refinement features need complex mocking that requires more setup
-
-
 class TestMemeGeneratorSafetyHandling:
     """Test safety filter handling and retry logic."""
 

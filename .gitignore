@@ -301,6 +301,7 @@ site/
 !tests/data/**
 !tests/fixtures/**
 # Local agent/editor working dirs
+.agent/
 .claude/
 agent-tools/
 

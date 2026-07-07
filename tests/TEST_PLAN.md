@@ -1,216 +1,120 @@
 # Scribe Test Plan
 
-## Current Status (November 2025)
+## Current Status
 
-**Test Results**: 459 passed, 0 failed (459 total)
-**Coverage**: 45% overall
+Date: 2026-07-07
 
-**Recent Additions**:
-- [done] Audio duration detection tests (20 tests)
-- [done] Progress bar UX tests (27 tests)
-- [done] Joke generator tests (45 tests)
-- [done] Meme generator tests (38 tests)
-- [done] Session management tests (30 tests)
-- [done] DOCX converter tests (23 tests)
+- 1592 tests collected.
+- Latest local CI-safe unit coverage run: 1499 passed, 5 skipped, 1 deselected.
+- Latest local CI-safe coverage: 81.69 percent.
+- Current enforced coverage floor: 80 percent.
+- CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit, and pip-audit.
 
-## Test Coverage by Module
+## Test Strategy
 
-### Unit Tests (412 tests)
+Scribe is a local-first CLI with heavy hardware and OS integration points. The test strategy separates deterministic logic from live environment behavior:
 
-#### [done] Well Tested (>80% coverage)
-- **Exception handling**: 100% (34 tests)
-- **Logging utilities**: 100% (24 tests)
-- **Configuration**: 95% (38 tests)
-- **Session management**: 93% (30 tests)
-- **DOCX converter**: 89% (23 tests)
-- **File operations**: 88% (46 tests)
-- **Input validation**: 83% (40 tests)
-- **Joke generator**: 77% (45 tests)
-- **Meme generator**: 75% (38 tests)
-- **Audio duration**: 100% (20 tests)
-- **Progress display**: 100% (27 tests)
+- Pure logic and policy should be unit-tested thoroughly.
+- CLI wiring should be tested with mocked dependencies.
+- Provider, OBS, GPU, microphone, tray, and filesystem edge paths should use mocks unless deliberately marked as live/manual.
+- Live hardware and provider checks are not required for the default CI-safe subset.
+- Coverage must stay above the 80 percent floor, but new tests should optimize for meaningful assertions.
 
-#### Needs Improvement (30-70% coverage)
-- **CLI commands**: 50% (37 tests) -> Target: 80%
-- **Transcriber orchestration**: 39% (needs more) -> Target: 70%
-- **Converter**: 44% (needs more) -> Target: 70%
-- **Platform utilities**: 35% (needs more) -> Target: 70%
-- **Audio utilities**: 28% (needs more) -> Target: 70%
+## Current Strengths
 
-#### Low Coverage (<30%)
-- **OpenAI API client**: 21% -> Target: 70%
-- **GPU utilities**: 18% -> Target: 60%
-- **Local Whisper**: 12% -> Target: 60%
+- Strong recorder, CLI, provider, diagnostics, vocabulary, transcript, resilience, and voice/tray unit coverage.
+- Hypothesis property tests for pure logic including costs, backend selection, diarizer behavior, transcript model, validation, vocabulary, recording policy, resilience backoff, and voice tray state.
+- Fault-injection coverage for atomic writes and API circuit breaker behavior.
+- Strict markers prevent accidental CI use of GPU, slow, provider, FFmpeg, WhisperX, and Pillow-dependent paths.
 
-### Integration Tests (35 tests)
+## Priority Coverage Areas
 
-#### [done] Working
-- **Converter integration**: Basic WAV/MP3 conversion
-- **Local Whisper integration**: GPU transcription workflow
-- **OpenAI API integration**: Server-side chunking
+### 1. Audio And Codec Resilience
 
-#### Needs More Coverage
-- **Recorder integration**: OBS WebSocket workflow
-- **Full transcription pipeline**: End-to-end with all features
-- **Error recovery**: Network failures, GPU OOM, etc.
+Why:
+- Audio handling sits on external tools and deprecated TorchAudio surfaces.
+- Current local tests show TorchAudio deprecation warnings pointing toward TorchCodec migration risk.
 
-### End-to-End Tests (12 tests)
+Target:
+- Duration detection and metadata fallback behavior.
+- FFmpeg/ffprobe absence, bad output, and timeout cases.
+- Codec/container edge cases that can be represented with small fixtures or mocks.
 
-#### [done] Working
-- **Basic workflow**: Audio -> Transcript -> DOCX
-- **Cleanup behavior**: Intermediate file removal
-- **Session tracking**: File management
+### 2. CLI Flow Regression Protection
 
-#### [needs-work] Missing Tests
-- **Complete workflow with AI features**
-  - Record -> Convert -> Transcribe -> DOCX -> Joke -> Meme
-- **CLI command workflows**
-  - `scribe transcribe` full flow
-  - `scribe rec` quick recording
-  - `scribe joke` standalone
-  - `scribe meme` with QA loop
-- **Cross-platform scenarios**
-  - GPU vs OpenAI fallback
-  - Path handling (Windows/macOS/Linux)
-  - Terminal link rendering
+Why:
+- `src/scribe/cli/main.py` is a large user-facing surface.
+- Small copy, option, and feature-resolution regressions have high support cost.
 
-## Priority Test Implementation
+Target:
+- `transcribe`, `url`, `batch`, `record`, `notes`, `joke`, `meme`, `doctor`, `info`, `query`, `listen`, `say`, and `tray --check` option behavior.
+- Cost-safety defaults and explicit opt-in behavior.
+- Local-only mode refusal paths.
 
-### Phase 1: Core Utilities (Target: 60% coverage) - IN PROGRESS
+### 3. Provider Boundary Safety
 
-**Status**: 45% -> 60% (75% complete)
+Why:
+- Cloud calls are explicit opt-in and must stay visible.
 
-[done] **Completed**:
-- Session management tests (93% coverage)
-- DOCX converter tests (89% coverage)
-- Logging tests (100% coverage)
-- File operations tests (88% coverage)
-- Configuration tests (95% coverage)
-- Audio duration tests (100% coverage)
-- Progress display tests (100% coverage)
+Target:
+- Provider selection and failover messages.
+- Missing key and invalid key paths.
+- No transcript or API key leakage into logs.
+- Local-only mode routes and refusal messages.
 
-**In Progress**:
-- Audio utilities (28% -> 70%, ~30 tests needed)
-- Platform utilities (35% -> 70%, ~25 tests needed)
-- GPU utilities (18% -> 60%, ~20 tests needed)
+### 4. Voice And Tray Platform Matrix
 
-### Phase 2: Core Logic (Target: 75% coverage)
+Why:
+- Windows is validated, but macOS/Linux live behavior remains the product priority.
 
-**Priority**:
-1. **Transcriber orchestration** (39% -> 75%)
-   - Method selection logic
-   - Fallback behavior
-   - Error handling
+Target:
+- Pure state and settings tests stay in CI.
+- Live macOS/Linux hotkey, tray, audio, and permission checks remain manual until stable fixtures exist.
+- `scribe tray --check` should expose platform caveats clearly.
 
-2. **Converter integration** (44% -> 75%)
-   - WAV conversion edge cases
-   - MP3 compression
-   - Format detection
+### 5. Documentation And Metadata Regression Checks
 
-3. **OpenAI API client** (21% -> 70%)
-   - Server-side chunking
-   - Speaker diarization
-   - Error recovery
+Why:
+- Stale docs created product-trust issues.
 
-4. **Local Whisper** (12% -> 60%)
-   - GPU transcription
-   - Progress tracking
-   - Memory management
+Target:
+- Keep README, ROADMAP, CHANGELOG, docs, package metadata, and test docs aligned.
+- Consider adding a lightweight local check for known stale phrases only after the phrase set stabilizes.
 
-5. **CLI commands** (50% -> 80%)
-   - Argument parsing
-   - Workflow execution
-   - Error messages
+## Standard Validation Ladder
 
-### Phase 3: Integration (Target: 85% coverage)
+Use the smallest useful subset first:
 
-**Priority**:
-1. **End-to-end workflows**
-   - Full transcription pipeline
-   - AI feature integration (jokes, memes)
-   - Error recovery scenarios
+```bash
+uv run pytest tests/unit/test_target.py -q
+```
 
-2. **Recorder integration**
-   - OBS WebSocket mocking
-   - Recording workflow
-   - File finalization
+Then run local gates before a commit:
 
-3. **Cross-platform testing**
-   - Windows/macOS/Linux paths
-   - GPU detection
-   - Terminal rendering
+```bash
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run mypy --strict src/scribe
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
+```
 
-### Phase 4: Advanced (Target: 90%+ coverage)
+For coverage-sensitive work:
 
-**Nice to Have**:
-1. **Performance benchmarks**
-   - GPU transcription speed
-   - API latency
-   - File size limits
+```bash
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80 -q
+```
 
-2. **Stress testing**
-   - Large files (>2 hours)
-   - Concurrent operations
-   - Memory limits
+For dependency/security work, mirror the CI `pip-audit` command including ADR-004 torch ignores.
 
-3. **Security testing**
-   - API key handling
-   - File permissions
-   - Input sanitization
+## Manual Validation
 
-## Test Infrastructure
+Manual checks are appropriate for:
+- Real OBS recording.
+- Real microphone dictation.
+- Real read-aloud.
+- macOS Input Monitoring and microphone permissions.
+- Linux X11 and Wayland global hotkey behavior.
+- Real GPU throughput.
+- Real provider calls.
 
-### [done] Implemented
-- Fixtures for common test data (conftest.py)
-- Mocks for external services (OpenAI API, GPU)
-- Test markers (gpu, slow, integration, e2e)
-- Coverage reporting (pytest-cov)
-- Isolated test environments (tmp_path fixtures)
-
-### Needs Improvement
-- CI/CD integration (GitHub Actions)
-- Performance benchmarking
-- Test data management (sample audio files)
-- Mock OBS WebSocket server
-- Automated coverage tracking
-
-## Success Criteria
-
-### Phase 1 (Current Target)
-- [done] All existing tests passing (459/459)
-- 60%+ code coverage (currently ~45%)
-- [done] Core utilities tested (>80% coverage)
-- Audio/Platform/GPU utilities improved
-- [done] Fast test execution (<5 seconds for unit tests)
-
-### Phase 2 (Next Milestone)
-- 75%+ code coverage
-- All core logic tested (transcriber, converter, APIs)
-- CLI commands fully tested
-- Integration tests comprehensive
-
-### Phase 3 (Production Ready)
-- 85%+ code coverage
-- End-to-end workflows tested
-- Cross-platform validation
-- Performance benchmarks
-- No flaky tests
-
-## Recent Improvements (November 2025)
-
-### New Test Files
-- `tests/unit/test_audio_duration.py` (20 tests)
-- `tests/unit/test_progress_display.py` (27 tests)
-- `tests/TEST_SUMMARY_PROGRESS_UX.md` (documentation)
-
-### Bug Fixes Validated
-1. [done] Incorrect progress percentage (1.5% -> accurate)
-2. [done] Wrong duration detection (2237 min -> 53 min)
-3. [done] Confusing ETA (615m -> accurate)
-4. [done] Information overload (7 metrics -> 2 metrics)
-5. [done] Technical jargon removed from UX
-
-### Coverage Improvements
-- Audio duration detection: 0% -> 100%
-- Progress display logic: 0% -> 100%
-- Overall coverage: 41% -> 45% (+4%)
+Paid or cloud validation requires explicit approval before it runs.

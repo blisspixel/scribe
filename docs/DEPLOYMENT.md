@@ -1,712 +1,221 @@
 # Deployment Guide
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2026-07-07
 
-## Overview
+## Scope
 
-This guide covers deploying Scribe in various environments, from single-user workstations to multi-user server deployments.
+Scribe is a local-first desktop CLI. It is not a hosted service, web app, multi-user platform, cloud sync product, or enterprise control plane.
 
-## Deployment Scenarios
+This guide covers supported local installation and self-managed operation on machines you control. Containers, shared batch hosts, cloud VMs, and orchestrators are advanced adaptations for operators who accept their own support, security, and reliability burden.
 
-### Single-User Workstation
+## Supported Product Surface
 
-**Best for:**
-- Individual developers
-- Content creators
-- Small teams (< 5 users)
+Supported:
+- Single-user workstation installs with `uv tool install` or project-local `uv sync`.
+- Local transcription on GPU or CPU.
+- Explicit opt-in cloud transcription with `--method openai`.
+- Explicit opt-in paid extras for notes, jokes, and memes.
+- Local-only mode with `SCRIBE_LOCAL_ONLY=1`.
+- OBS recording on the local desktop.
+- Local logs under `logs/` and diagnostics through `scribe doctor` and `scribe info`.
 
-**Requirements:**
-- NVIDIA GPU (optional but recommended)
-- Python 3.10+
-- FFmpeg
-- 50GB+ free disk space
+Not supported as product surfaces:
+- Public servers or REST APIs.
+- Multi-user accounts, cloud storage, or shared tenant isolation.
+- Kubernetes, autoscaling, or managed hosted deployments.
+- Telemetry that phones home.
 
-**Setup:**
+## Recommended Install
+
+Use a global uv tool install when you want `scribe` available from any folder:
+
 ```bash
-# Clone repository
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git
+uv tool update-shell
+scribe init
+scribe info
+```
+
+Use a project-local install when developing Scribe:
+
+```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -e .
-
-# Configure (recommended)
-# Run the polished first-run wizard (review step, OBS preflight verification, optional Quick Record launcher)
-python -m scribe init
-# or after uv sync: uv run scribe init
-# Edit .env with API keys
+uv sync
+uv run scribe init
+uv run scribe doctor
 ```
 
-**Usage:**
-```bash
-scribe transcribe meeting.mp4
-```
+## Workstation Requirements
 
-### Shared Server (Multi-User)
+Required:
+- Python 3.12 or newer.
+- uv.
+- FFmpeg.
+- Disk space for local media, converted audio, transcripts, logs, and model caches.
 
-**Best for:**
-- Teams (5-50 users)
-- Shared GPU resources
-- Centralized processing
+Optional:
+- NVIDIA GPU with working CUDA stack for the fastest default local backend.
+- `scribe[mlx]` for Apple Silicon local acceleration.
+- `scribe[whispercpp]` for AMD, Intel, or portable local acceleration.
+- `scribe[diarize]` and `HF_TOKEN` for local speaker diarization.
+- `scribe[voice]`, `scribe[tray]`, or `scribe[kokoro]` for voice I/O and read-aloud.
+- OBS Studio for `scribe rec` and `scribe record`.
 
-**Requirements:**
-- High-end GPU (RTX 4090 recommended)
-- 32GB+ RAM
-- 500GB+ SSD storage
-- Linux server (Ubuntu 22.04 LTS recommended)
+## Configuration
 
-**Setup:**
+Configuration layers, highest precedence first:
 
+1. CLI flags.
+2. Environment variables and `.env`.
+3. `~/.scribe/config.toml`.
 
-```bash
-# Install system dependencies
-sudo apt update
-sudo apt install python3.10 python3-pip ffmpeg git
+Common environment values:
 
-# Install CUDA (if using GPU)
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt update
-sudo apt install cuda-toolkit-12-4
-
-# Clone and install Scribe
-git clone https://github.com/blisspixel/scribe.git
-cd scribe
-python3 -m venv venv
-source venv/bin/activate
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip install -r requirements.txt
-pip install -e .
-
-# Create shared output directory
-sudo mkdir -p /shared/scribe/output
-sudo chown -R $USER:users /shared/scribe
-chmod 775 /shared/scribe/output
-
-# Configure
-cp .env.example .env
-# Edit .env
-export SCRIBE_OUTPUT_FOLDER=/shared/scribe/output
-```
-
-**User Access:**
-```bash
-# Add users to group
-sudo usermod -a -G users username
-
-# Each user activates environment
-source /path/to/scribe/venv/bin/activate
-scribe transcribe file.mp4
-```
-
-**Resource Management:**
-- Use GPU resource manager (automatic)
-- Limit concurrent users (2-3 for single GPU)
-- Monitor with `nvidia-smi`
-
-### Docker Deployment
-
-**Best for:**
-- Containerized environments
-- Reproducible deployments
-- Cloud deployments
-
-**Dockerfile:**
-```dockerfile
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
-    ffmpeg \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
-WORKDIR /app
-
-# Copy application
-COPY . /app
-
-# Install Python dependencies
-RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-RUN pip3 install --no-cache-dir -r requirements.txt
-RUN pip3 install --no-cache-dir -e .
-
-# Create output directory
-RUN mkdir -p /app/output
-
-# Set environment variables
-ENV SCRIBE_OUTPUT_FOLDER=/app/output
-ENV PYTHONUNBUFFERED=1
-
-# Run as non-root user
-RUN useradd -m -u 1000 scribe
-USER scribe
-
-# Default command
-CMD ["scribe", "--help"]
-```
-
-**Build and run:**
-```bash
-# Build image
-docker build -t scribe:latest .
-
-# Run with GPU
-docker run --gpus all \
-  -v $(pwd)/output:/app/output \
-  -v $(pwd)/.env:/app/.env \
-  scribe:latest \
-  scribe transcribe /app/output/meeting.mp4
-
-# Opt into the paid OpenAI API explicitly (no-GPU otherwise transcribes locally
-# on CPU at $0 - the API is never auto-selected)
-docker run \
-  -v $(pwd)/output:/app/output \
-  -v $(pwd)/.env:/app/.env \
-  scribe:latest \
-  scribe transcribe /app/output/meeting.mp4 --method openai
-```
-
-**Docker Compose:**
-```yaml
-version: '3.8'
-
-services:
-  scribe:
-    build: .
-    image: scribe:latest
-    volumes:
-      - ./output:/app/output
-      - ./.env:/app/.env
-    environment:
-      - SCRIBE_OUTPUT_FOLDER=/app/output
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-```
-
-### Cloud Deployment (AWS)
-
-**Best for:**
-- Large-scale processing
-- On-demand GPU access
-- Distributed teams
-
-**EC2 Instance Setup:**
-
-1. **Launch GPU instance:**
-   - Instance type: g5.xlarge or g5.2xlarge
-   - AMI: Deep Learning AMI (Ubuntu 22.04)
-   - Storage: 100GB+ EBS SSD
-
-2. **Connect and setup:**
-```bash
-ssh -i key.pem ubuntu@instance-ip
-
-# Clone and install
-git clone https://github.com/blisspixel/scribe.git
-cd scribe
-source activate pytorch
-pip install -r requirements.txt
-pip install -e .
-
-# Configure
-cp .env.example .env
-# Add API keys
-```
-
-3. **S3 Integration (optional):**
-```bash
-# Install AWS CLI
-pip install awscli
-
-# Configure
-aws configure
-
-# Upload results to S3
-aws s3 cp output/ s3://bucket/scribe-output/ --recursive
-```
-
-**Cost Optimization:**
-- Use Spot Instances for batch processing
-- Stop instance when not in use
-- Use S3 for long-term storage
-- Consider Lambda for API-only mode
-
-### Kubernetes Deployment
-
-**Best for:**
-- Enterprise deployments
-- Auto-scaling
-- High availability
-
-**Deployment manifest:**
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: scribe
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: scribe
-  template:
-    metadata:
-      labels:
-        app: scribe
-    spec:
-      containers:
-      - name: scribe
-        image: scribe:latest
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-            memory: "16Gi"
-            cpu: "4"
-          requests:
-            nvidia.com/gpu: 1
-            memory: "8Gi"
-            cpu: "2"
-        volumeMounts:
-        - name: output
-          mountPath: /app/output
-        - name: config
-          mountPath: /app/.env
-          subPath: .env
-        env:
-        - name: SCRIBE_OUTPUT_FOLDER
-          value: "/app/output"
-      volumes:
-      - name: output
-        persistentVolumeClaim:
-          claimName: scribe-output
-      - name: config
-        secret:
-          secretName: scribe-config
-```
-
-**Service manifest:**
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: scribe-service
-spec:
-  selector:
-    app: scribe
-  ports:
-  - port: 8000
-    targetPort: 8000
-  type: LoadBalancer
-```
-
-## Configuration Management
-
-### Environment Variables
-
-**Production .env:**
 ```env
-# API Keys (use secrets management)
-OPENAI_API_KEY=${OPENAI_API_KEY}
-XAI_API_KEY=${XAI_API_KEY}
-
-# Output
-SCRIBE_OUTPUT_FOLDER=/shared/scribe/output
-
-# Defaults
+SCRIBE_OUTPUT_FOLDER=/path/to/scribe/output
 SCRIBE_DEFAULT_MODEL=large-v3
 SCRIBE_DEFAULT_LANGUAGE=en
-
-# Features (paid AI extras default to OFF for cost safety; opt in here)
-SCRIBE_ENABLE_NOTES=true
-SCRIBE_ENABLE_MEME_BAKEOFF=false
-
-# $0 local-only mode: force local transcription (never the paid API) and route
-# notes/jokes to local Ollama. Leave unset/false for the default (auto is still
-# $0-first: local transcription, paid API only via --method openai).
 SCRIBE_LOCAL_ONLY=false
-
-# Terminal UI
-SCRIBE_ANIMATIONS=off
-SCRIBE_BANNER=off
-
-# Download (URL transcription)
-SCRIBE_DOWNLOAD_TIMEOUT=600
-SCRIBE_KEEP_DOWNLOADS=false
-
-# Logging
+SCRIBE_ENABLE_NOTES=false
+SCRIBE_ENABLE_JOKE=false
+SCRIBE_ENABLE_MEME=false
+OPENAI_API_KEY=
+XAI_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 SCRIBE_LOG_LEVEL=INFO
-
-# Performance
-SCRIBE_MEME_QA_THRESHOLD=8.0
-SCRIBE_MEME_QA_ATTEMPTS=3
 ```
 
-### Secrets Management
+Cost safety:
+- A plain `scribe meeting.mp4` transcribes locally and does not spend on an API.
+- API transcription requires `--method openai`.
+- Notes, jokes, and memes default off unless enabled by config, env, or per-run flags.
+- `SCRIBE_LOCAL_ONLY=1` prevents paid fallback and routes supported intelligence features to local Ollama.
 
-**AWS Secrets Manager:**
+## Local Operations
+
+Health checks:
+
 ```bash
-# Store API key
-aws secretsmanager create-secret \
-  --name scribe/openai-api-key \
-  --secret-string "sk-proj-..."
-
-# Retrieve in application
-aws secretsmanager get-secret-value \
-  --secret-id scribe/openai-api-key \
-  --query SecretString \
-  --output text
-```
-
-**Kubernetes Secrets:**
-```bash
-# Create secret
-kubectl create secret generic scribe-config \
-  --from-literal=OPENAI_API_KEY=sk-proj-... \
-  --from-literal=XAI_API_KEY=xai-...
-
-# Use in deployment (see manifest above)
-```
-
-**Docker Secrets:**
-```bash
-# Create secret
-echo "sk-proj-..." | docker secret create openai_api_key -
-
-# Use in service
-docker service create \
-  --secret openai_api_key \
-  --env OPENAI_API_KEY_FILE=/run/secrets/openai_api_key \
-  scribe:latest
-```
-
-## Monitoring
-
-### System Monitoring
-
-**GPU Monitoring:**
-```bash
-# Real-time monitoring
-watch -n 1 nvidia-smi
-
-# Log to file
-nvidia-smi dmon -s pucvmet -o T -f gpu_metrics.log
-```
-
-**Application Logs:**
-```bash
-# Tail logs
-tail -f logs/scribe_*.log
-
-# Search for errors
-grep ERROR logs/scribe_*.log
-
-# Monitor in real-time
-tail -f logs/scribe_*.log | grep -E "ERROR|WARNING"
-```
-
-**Disk Usage:**
-```bash
-# Check output directory
-du -sh /shared/scribe/output
-
-# Monitor disk space
-df -h
-
-# Clean old files
-find /shared/scribe/output -mtime +30 -delete
-```
-
-### Performance Monitoring
-
-**Prometheus Metrics (Future):**
-```yaml
-# Example metrics
-scribe_transcription_duration_seconds
-scribe_transcription_speed_ratio
-scribe_gpu_utilization_percent
-scribe_api_requests_total
-scribe_errors_total
-```
-
-**Custom Monitoring:**
-```python
-import time
-import json
-
-def log_metrics(operation, duration, success):
-    metrics = {
-        "timestamp": time.time(),
-        "operation": operation,
-        "duration": duration,
-        "success": success
-    }
-    with open("metrics.jsonl", "a") as f:
-        f.write(json.dumps(metrics) + "\n")
-```
-
-## Backup and Recovery
-
-### Backup Strategy
-
-**What to backup:**
-- Configuration files (.env)
-- Custom vocabulary files
-- Output directory (transcripts, notes, memes)
-- Performance metrics
-- Logs (optional)
-
-**Backup script:**
-```bash
-#!/bin/bash
-BACKUP_DIR="/backup/scribe/$(date +%Y%m%d)"
-mkdir -p $BACKUP_DIR
-
-# Backup configuration
-cp .env $BACKUP_DIR/
-
-# Backup output
-rsync -av --progress /shared/scribe/output/ $BACKUP_DIR/output/
-
-# Backup metrics
-cp ~/.scribe/performance_*.json $BACKUP_DIR/
-
-# Compress
-tar -czf $BACKUP_DIR.tar.gz $BACKUP_DIR
-rm -rf $BACKUP_DIR
-
-# Upload to S3 (optional)
-aws s3 cp $BACKUP_DIR.tar.gz s3://bucket/backups/
-```
-
-**Automated backups:**
-```bash
-# Add to crontab
-crontab -e
-
-# Daily backup at 2 AM
-0 2 * * * /path/to/backup.sh
-```
-
-### Disaster Recovery
-
-**Recovery procedure:**
-```bash
-# 1. Restore from backup
-tar -xzf backup_20250118.tar.gz
-
-# 2. Restore configuration
-cp backup_20250118/.env .env
-
-# 3. Restore output
-rsync -av backup_20250118/output/ /shared/scribe/output/
-
-# 4. Restore metrics
-cp backup_20250118/performance_*.json ~/.scribe/
-
-# 5. Verify
+scribe info
 scribe doctor
+scribe rec --check
+scribe tray --check
+```
+
+Logs:
+
+```bash
+# PowerShell
+Get-ChildItem logs -Filter *.log | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+Get-Content logs/scribe_*.log -Tail 200
+Select-String -Path logs/*.log -Pattern "ERROR|WARNING"
+```
+
+GPU checks:
+
+```bash
+nvidia-smi
+python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
+python -c "import torch; print(torch.cuda.is_available(), torch.__version__, torch.version.cuda)"
+```
+
+Output and cleanup:
+- Keep transcripts and user media under a user-controlled `SCRIBE_OUTPUT_FOLDER`.
+- Keep logs in `logs/`.
+- Do not commit `.env`, logs, local media, generated transcripts, or model caches.
+- Run `scribe doctor` after dependency, FFmpeg, GPU driver, OBS, or config changes.
+
+## Self-Managed Batch Host
+
+Use this only when one trusted operator controls the machine, inputs, outputs, secrets, and logs.
+
+Recommended pattern:
+- Install with `uv sync` or a uv tool install.
+- Keep input and output directories outside the repo.
+- Use filesystem permissions so only trusted users can read media, transcripts, and logs.
+- Run jobs as one service user rather than exposing Scribe directly to multiple untrusted users.
+- Monitor disk space and GPU health with OS tooling.
+- Avoid exposing OBS WebSocket or any wrapper command to a network you do not fully control.
+
+Example:
+
+```bash
+uv sync
+$env:SCRIBE_OUTPUT_FOLDER = "D:\scribe-output"
+uv run scribe doctor
+uv run scribe batch D:\incoming\*.mp4 --no-notes --no-joke --no-meme
+```
+
+## Containers
+
+Containers are useful for reproducible local or batch environments, but Scribe does not ship an official container interface.
+
+If you build a container:
+- Use Python 3.12 or newer.
+- Install FFmpeg.
+- Mount media and output directories explicitly.
+- Pass API keys through your secret manager, not image layers.
+- Keep `SCRIBE_LOCAL_ONLY=1` when no cloud transmission is intended.
+- Verify GPU access with `nvidia-smi` inside the container before running a long job.
+
+Do not expose a containerized Scribe command as a public network service without designing and reviewing authentication, authorization, upload validation, tenant isolation, logging, abuse controls, and consent flows.
+
+## Backup And Recovery
+
+Back up:
+- `~/.scribe/config.toml`.
+- Custom vocabulary files under `~/.scribe/vocab/`.
+- User-selected output folders.
+- Any operational scripts you maintain outside the repo.
+
+Usually do not back up:
+- `.venv/`.
+- `.ruff_cache/`, `.mypy_cache/`, `.pytest_cache/`.
+- Model caches unless your environment needs offline rebuilds.
+- Logs unless they are needed for audit or support.
+
+Recovery smoke test:
+
+```bash
+scribe info
+scribe doctor
+scribe vocab
+scribe rec --check
 ```
 
 ## Security
 
-### API Key Security
-
-**Best practices:**
-- Never commit API keys to git
-- Use environment variables or secrets management
-- Rotate keys regularly
-- Use separate keys for dev/prod
-- Monitor API usage for anomalies
-
-**Key rotation:**
-```bash
-# 1. Generate new key from provider
-# 2. Update secrets
-# 3. Test with new key
-# 4. Revoke old key
-```
-
-### File Permissions
-
-**Secure configuration:**
-```bash
-# Restrict .env file
-chmod 600 .env
-
-# Secure output directory
-chmod 750 /shared/scribe/output
-
-# Secure logs
-chmod 640 logs/*.log
-```
-
-### Network Security
-
-**Firewall rules:**
-```bash
-# Allow only necessary ports
-sudo ufw allow 22/tcp  # SSH
-sudo ufw allow 4455/tcp  # OBS WebSocket (if needed)
-sudo ufw enable
-```
-
-**API access:**
-- Use HTTPS only
-- Implement rate limiting
-- Monitor for abuse
-- Use API key restrictions (if available)
-
-## Scaling
-
-### Horizontal Scaling
-
-**Multiple GPU servers:**
-```
-Load Balancer
-    │
-    ├─── Server 1 (RTX 4090)
-    ├─── Server 2 (RTX 4090)
-    └─── Server 3 (RTX 4090)
-```
-
-**Queue-based processing:**
-```python
-# Producer
-import redis
-r = redis.Redis()
-r.lpush('transcription_queue', '/path/to/audio.mp4')
-
-# Consumer (on each server)
-while True:
-    file_path = r.brpop('transcription_queue')[1]
-    transcribe(file_path)
-```
-
-### Vertical Scaling
-
-**Upgrade GPU:**
-- RTX 4070 → RTX 4080 (2x faster)
-- RTX 4080 → RTX 4090 (1.5x faster)
-
-**Add more GPUs:**
-```python
-# Use multiple GPUs (advanced)
-import torch
-torch.cuda.set_device(0)  # Use GPU 0
-torch.cuda.set_device(1)  # Use GPU 1
-```
+Keep these rules:
+- Never commit API keys, `.env`, local media, transcripts, or logs.
+- Treat transcripts as sensitive by default.
+- Use local transcription and `SCRIBE_LOCAL_ONLY=1` for private or regulated material.
+- Review provider terms before using cloud transcription, notes, jokes, or memes.
+- Keep OBS WebSocket local and password-protected.
+- Restrict output and log directory permissions.
+- Rotate API keys if they appear in a shell history, support bundle, log, or shared config.
 
 ## Maintenance
 
-### Regular Tasks
+Regular checks:
+- `scribe doctor` after installs, updates, GPU driver changes, or OBS changes.
+- `uv run ruff check src tests` and `uv run mypy --strict src/scribe` before code changes.
+- `uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q` for fast local confidence.
+- The CI `pip-audit` command before dependency upgrades.
 
-**Daily:**
-- Monitor disk space
-- Check error logs
-- Verify GPU health
+Dependency policy:
+- `pyproject.toml` and `uv.lock` are authoritative.
+- `requirements.txt` and `requirements-dev.txt` are legacy compatibility shims.
+- Heavy or platform-specific capabilities should remain optional extras.
 
-**Weekly:**
-- Clean old output files
-- Review performance metrics
-- Update dependencies (if needed)
+## Troubleshooting
 
-**Monthly:**
-- Backup configuration
-- Review API usage and costs
-- Update documentation
+Common local checks:
+- `scribe doctor` for dependency and configuration issues.
+- `scribe info` for backend and provider state.
+- `scribe rec --check` for OBS readiness.
+- `scribe tray --check` for voice and tray readiness.
+- `logs/` for detailed local failure context.
 
-### Updates
-
-**Update Scribe:**
-```bash
-cd scribe
-git pull
-pip install -r requirements.txt
-pip install -e .
-
-# Run tests
-pytest
-
-# Verify
-scribe doctor
-```
-
-**Update dependencies:**
-```bash
-pip install --upgrade -r requirements.txt
-```
-
-## Troubleshooting Deployment
-
-### Common Issues
-
-**GPU not accessible in Docker:**
-```bash
-# Install nvidia-docker2
-sudo apt install nvidia-docker2
-sudo systemctl restart docker
-
-# Test
-docker run --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
-```
-
-**Permission denied errors:**
-```bash
-# Fix ownership
-sudo chown -R $USER:$USER /shared/scribe
-
-# Fix permissions
-chmod -R 755 /shared/scribe
-```
-
-**Out of disk space:**
-```bash
-# Clean old files
-find /shared/scribe/output -mtime +30 -delete
-
-# Clean Docker
-docker system prune -a
-```
-
-## Best Practices
-
-1. **Use version control** for configuration
-2. **Implement monitoring** from day one
-3. **Automate backups** regularly
-4. **Document changes** in deployment
-5. **Test updates** in staging first
-6. **Monitor costs** for cloud/API usage
-7. **Secure API keys** properly
-8. **Plan for scaling** early
-9. **Keep dependencies updated**
-10. **Have disaster recovery plan**
-
-## Summary
-
-Deployment options:
-- **Workstation:** Simple, single-user
-- **Shared Server:** Multi-user, centralized
-- **Docker:** Containerized, reproducible
-- **Cloud:** Scalable, on-demand
-- **Kubernetes:** Enterprise, auto-scaling
-
-Choose based on:
-- Number of users
-- Processing volume
-- Budget
-- Technical expertise
-- Scaling requirements
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for workflow-specific fixes.

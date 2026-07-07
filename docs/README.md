@@ -19,7 +19,7 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 - [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
 
 ### Operations
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Production deployment strategies
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
 - [PERFORMANCE_TUNING.md](PERFORMANCE_TUNING.md) - Optimization and benchmarking
 
 ### Project Status

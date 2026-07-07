@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.15"
 license = "MIT"
 authors = [
-    {name = "blissplixel", email = "blissplixel@users.noreply.github.com"}
+    {name = "blisspixel", email = "blisspixel@users.noreply.github.com"}
 ]
 keywords = ["transcription", "speech-to-text", "whisper", "gpu", "openai", "batch-processing", "custom-vocabulary"]
 classifiers = [
@@ -108,9 +108,9 @@ kokoro = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/blissplixel/scribe"
-Repository = "https://github.com/blissplixel/scribe"
-Issues = "https://github.com/blissplixel/scribe/issues"
+Homepage = "https://github.com/blisspixel/scribe"
+Repository = "https://github.com/blisspixel/scribe"
+Issues = "https://github.com/blisspixel/scribe/issues"
 
 [project.scripts]
 scribe = "scribe.cli.main:main"
