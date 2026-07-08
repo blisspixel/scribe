@@ -10,7 +10,7 @@ from typing import NoReturn
 import typer
 
 from scribe.exceptions import ScribeError
-from scribe.utils.logging import console, get_logger
+from scribe.utils.logging import console, get_current_log_file, get_logger
 from scribe.utils.theme import ScribeTheme
 
 logger = get_logger(__name__)
@@ -34,6 +34,14 @@ def exit_on_cli_error(exc: BaseException, *, log_unexpected: bool = True) -> NoR
         )
         if log_unexpected:
             logger.exception("Unexpected CLI error")
+
+    log_file = get_current_log_file()
+    if log_file is not None:
+        console.print(f"[dim]Log file: {log_file}[/dim]")
+    console.print(
+        "[dim]Next: run `scribe doctor` to check setup. "
+        "Use `scribe support-bundle` when sharing diagnostics.[/dim]"
+    )
 
     if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
         # Guarantees the window stays for desktop/taskbar .lnk launches; a

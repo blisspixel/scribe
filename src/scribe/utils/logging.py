@@ -352,6 +352,25 @@ def get_logger(name: str = "scribe") -> logging.Logger:
     return logging.getLogger(name)
 
 
+def get_current_log_file(logger_name: str = "scribe") -> Path | None:
+    """Return the active file log path for the Scribe logger, if configured."""
+    active: logging.Logger | None = logging.getLogger(logger_name)
+    seen: set[int] = set()
+
+    while active is not None and id(active) not in seen:
+        seen.add(id(active))
+        for handler in active.handlers:
+            filename = getattr(handler, "baseFilename", None)
+            if filename:
+                return Path(str(filename))
+
+        if not active.propagate:
+            break
+        active = active.parent
+
+    return None
+
+
 def log_system_info(logger: logging.Logger) -> None:
     """
     Log system information for debugging.

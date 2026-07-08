@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - Corrected package metadata links to the canonical `blisspixel/scribe` repository.
 - Refreshed roadmap, architecture, deployment, and test documentation so current status, local-first scope, and quality gates match the v2.8.0 product surface.
+- Added recovery guidance and active log-file visibility to shared CLI error output.
 
 ## [2.8.0] - 2026-07-01
 

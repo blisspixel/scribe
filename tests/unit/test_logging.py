@@ -8,6 +8,7 @@ import logging
 from unittest.mock import Mock, patch
 
 from scribe.utils.logging import (
+    get_current_log_file,
     get_logger,
     log_exception,
     log_system_info,
@@ -43,6 +44,23 @@ class TestLoggingSetup:
         log_files = list(log_dir.glob("scribe_test_session_*.log"))
         assert len(log_files) == 1
         assert log_files[0].exists()
+
+    def test_get_current_log_file_returns_active_file(self, tmp_path):
+        """Test retrieving the active Scribe file log path."""
+        log_dir = tmp_path / "logs"
+
+        logger = setup_logging("current_file", log_dir)
+
+        try:
+            log_file = get_current_log_file()
+        finally:
+            for handler in logger.handlers[:]:
+                handler.close()
+                logger.removeHandler(handler)
+
+        assert log_file is not None
+        assert log_file.name.startswith("scribe_current_file_")
+        assert log_file.exists()
 
     def test_setup_logging_with_custom_levels(self, tmp_path):
         """Test logging setup with custom levels."""
