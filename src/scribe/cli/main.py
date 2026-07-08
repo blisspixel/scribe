@@ -3122,7 +3122,13 @@ def info() -> None:
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="Opt in to live provider API checks for configured keys.",
+    ),
+) -> None:
     """
     Run system diagnostics and health checks.
 
@@ -3140,6 +3146,12 @@ def doctor() -> None:
         f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
     )
     console.print(doctor_header)
+    if live:
+        console.print("[dim]Live provider checks enabled for configured API keys.[/dim]")
+    else:
+        console.print(
+            "[dim]Live provider checks skipped. Use `scribe doctor --live` to validate API keys.[/dim]"
+        )
     console.print()
 
     # Run diagnostics with progress spinner
@@ -3148,7 +3160,7 @@ def doctor() -> None:
         f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",
         spinner="dots",
     ):
-        results = diagnostics.run_all_checks()
+        results = diagnostics.run_all_checks(live=live)
 
     # Group results by status for cleaner display
     passed = [r for r in results if r.status == "pass"]

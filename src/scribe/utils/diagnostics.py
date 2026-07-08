@@ -318,7 +318,7 @@ class SystemDiagnostics:
     def __init__(self) -> None:
         self.results: list[DiagnosticResult] = []
 
-    def run_all_checks(self, live: bool = True) -> list[DiagnosticResult]:
+    def run_all_checks(self, live: bool = False) -> list[DiagnosticResult]:
         """Run all diagnostic checks.
 
         Each check is isolated so one raising an unexpected error cannot abort the

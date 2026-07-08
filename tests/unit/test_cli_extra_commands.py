@@ -193,6 +193,23 @@ def test_doctor_command_reports_failures() -> None:
     assert result.exit_code == 1
     assert "FAILED" in result.stdout
     assert "WARNINGS" in result.stdout
+    diagnostics.run_all_checks.assert_called_once_with(live=False)
+
+
+def test_doctor_command_live_enables_provider_checks() -> None:
+    runner = CliRunner()
+    diagnostics = Mock()
+    diagnostics.run_all_checks.return_value = [
+        SimpleNamespace(name="Python Version", status="pass", message="ok", fix_suggestion=None),
+    ]
+    diagnostics.get_summary.return_value = (1, 0, 0)
+
+    with patch("scribe.utils.diagnostics.SystemDiagnostics", return_value=diagnostics):
+        result = runner.invoke(app, ["doctor", "--live"])
+
+    assert result.exit_code == 0
+    assert "Live provider checks enabled" in result.stdout
+    diagnostics.run_all_checks.assert_called_once_with(live=True)
 
 
 def test_health_check_success() -> None:

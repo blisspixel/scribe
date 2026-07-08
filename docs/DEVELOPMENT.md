@@ -148,10 +148,15 @@ uv run ruff format --check src tests
 uv run pytest tests/unit -m "not gpu and not slow" -q
 ```
 
-### 4. Full Verification
+### 4. Full Local Verification
 ```bash
-uv run scribe doctor --full
 uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
+```
+
+Optional live provider validation:
+
+```bash
+uv run scribe doctor --live
 ```
 
 ### 5. Commit

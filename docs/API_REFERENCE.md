@@ -453,8 +453,11 @@ from scribe.utils.diagnostics import SystemDiagnostics
 
 diagnostics = SystemDiagnostics()
 
-# Run all checks
+# Run local checks. Provider API checks are skipped by default.
 results = diagnostics.run_all_checks()
+
+# Opt into live provider API checks.
+results = diagnostics.run_all_checks(live=True)
 
 # Print results
 diagnostics.print_results(results)
@@ -466,7 +469,8 @@ recommendations = diagnostics.get_recommendations(results)
 **Methods:**
 
 `run_all_checks() -> List[DiagnosticResult]`
-- Runs 15 comprehensive checks
+- Runs the core local diagnostic checks
+- Skips live provider API checks unless `live=True`
 - Returns list of results
 
 `print_results(results)`

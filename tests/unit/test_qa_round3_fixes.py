@@ -64,6 +64,12 @@ class TestDiagnosticsIsolation:
             diag.run_all_checks(live=False)
         mock_key.assert_not_called()
 
+    def test_default_skips_api_network_checks(self):
+        diag = SystemDiagnostics()
+        with patch.object(diag, "check_openai_api_key") as mock_key:
+            diag.run_all_checks()
+        mock_key.assert_not_called()
+
     def test_live_true_runs_api_checks(self):
         diag = SystemDiagnostics()
         with patch.object(diag, "check_openai_api_key") as mock_key:
