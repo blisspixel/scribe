@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added recovery guidance and active log-file visibility to shared CLI error output.
 - Made `scribe doctor` local-only by default, with `scribe doctor --live` as the explicit opt-in for provider API-key validation.
 - Corrected diagnostic API documentation and source prose to match the local-first doctor behavior.
+- Clarified warning-only `scribe doctor` summaries so they report "Ready with warnings" instead of implying notes are ready.
 
 ## [2.8.0] - 2026-07-01
 

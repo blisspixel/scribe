@@ -212,6 +212,28 @@ def test_doctor_command_live_enables_provider_checks() -> None:
     diagnostics.run_all_checks.assert_called_once_with(live=True)
 
 
+def test_doctor_command_warning_summary_is_clear() -> None:
+    runner = CliRunner()
+    diagnostics = Mock()
+    diagnostics.run_all_checks.return_value = [
+        SimpleNamespace(name="Python Version", status="pass", message="ok", fix_suggestion=None),
+        SimpleNamespace(
+            name="Local Notes ($0)",
+            status="warn",
+            message="Ollama has no models installed",
+            fix_suggestion="Install Ollama",
+        ),
+    ]
+    diagnostics.get_summary.return_value = (1, 1, 0)
+
+    with patch("scribe.utils.diagnostics.SystemDiagnostics", return_value=diagnostics):
+        result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "Ready with warnings" in result.stdout
+    assert "Ready with notes" not in result.stdout
+
+
 def test_health_check_success() -> None:
     runner = CliRunner()
     status = SimpleNamespace(is_healthy=True, response_time_ms=123.0, error_message=None)

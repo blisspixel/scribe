@@ -3255,7 +3255,8 @@ def doctor(
         )
     elif fail_count == 0:
         console.print(
-            f"[{ScribeTheme.WARNING}]Ready with notes[/] ({pass_count} passed, {warn_count} warnings)"
+            f"[{ScribeTheme.WARNING}]Ready with warnings[/] "
+            f"({pass_count} passed, {warn_count} warnings)"
         )
     else:
         console.print(
