@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Clarified warning-only `scribe doctor` summaries so they report "Ready with warnings" instead of implying notes are ready.
 - Documented why macOS/Linux resident-tray validation is the next roadmap task and refreshed developer test guidance to match the current CI-safe coverage gate.
 - Clarified the unresolved license state instead of claiming both Apache 2.0 + Commons Clause and MIT across README, disclaimer, and ADR docs.
+- Kept shared CLI error log-file paths on one literal line so CI and Linux terminals do not wrap the filename out of diagnostic output.
+- Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
 
 ## [2.8.0] - 2026-07-01
 

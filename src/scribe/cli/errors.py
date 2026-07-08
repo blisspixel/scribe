@@ -8,6 +8,7 @@ from contextlib import suppress
 from typing import NoReturn
 
 import typer
+from rich.text import Text
 
 from scribe.exceptions import ScribeError
 from scribe.utils.logging import console, get_current_log_file, get_logger
@@ -37,7 +38,7 @@ def exit_on_cli_error(exc: BaseException, *, log_unexpected: bool = True) -> NoR
 
     log_file = get_current_log_file()
     if log_file is not None:
-        console.print(f"[dim]Log file: {log_file}[/dim]")
+        console.print(Text(f"Log file: {log_file}", style="dim", no_wrap=True))
     console.print(
         "[dim]Next: run `scribe doctor` to check setup. "
         "Use `scribe support-bundle` when sharing diagnostics.[/dim]"

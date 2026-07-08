@@ -82,6 +82,8 @@ Acceptance criteria for the next task:
 - Non-live tests cover platform advisory logic and failure messages for unsupported or partially supported environments.
 - Manual validation notes identify the tested macOS and Linux versions, desktop sessions, hotkey behavior, tray behavior, startup behavior, and audio devices.
 
+Roadmap watch item, not current scope: the May 21, 2026 MCP `2026-07-28` release candidate adds a stateless protocol core, first-class extensions, MCP Apps, Tasks, authorization hardening, JSON Schema 2020-12 tool schemas, and deprecations for roots, sampling, and protocol logging. Track this only for a future agent-facing local tool surface, such as exposing transcript search, diagnostics, or support-bundle generation to an agent host. It should not displace the current resident-tray hardening work, and any future MCP work must preserve Scribe's local-first, explicit-consent, no-surprise-cloud boundary.
+
 ### Current Product Polish Debt
 
 The product surface is already useful, so polish work should improve what exists rather than expand scope:
@@ -253,4 +255,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-07-08 (next resident-tray roadmap task and acceptance criteria refreshed)
+**Last Updated:** 2026-07-08 (next resident-tray roadmap task, acceptance criteria, and MCP watch item refreshed)
