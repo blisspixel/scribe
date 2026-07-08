@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Refreshed roadmap, architecture, deployment, and test documentation so current status, local-first scope, and quality gates match the v2.8.0 product surface.
 - Added recovery guidance and active log-file visibility to shared CLI error output.
 - Made `scribe doctor` local-only by default, with `scribe doctor --live` as the explicit opt-in for provider API-key validation.
+- Corrected diagnostic API documentation and source prose to match the local-first doctor behavior.
 
 ## [2.8.0] - 2026-07-01
 

@@ -459,11 +459,8 @@ results = diagnostics.run_all_checks()
 # Opt into live provider API checks.
 results = diagnostics.run_all_checks(live=True)
 
-# Print results
-diagnostics.print_results(results)
-
 # Get recommendations
-recommendations = diagnostics.get_recommendations(results)
+recommendations = diagnostics.get_recommendations()
 ```
 
 **Methods:**
@@ -473,10 +470,10 @@ recommendations = diagnostics.get_recommendations(results)
 - Skips live provider API checks unless `live=True`
 - Returns list of results
 
-`print_results(results)`
-- Prints formatted results to console
+`get_summary() -> Tuple[int, int, int]`
+- Returns pass, warn, and fail counts for the most recent run
 
-`get_recommendations(results) -> List[str]`
+`get_recommendations() -> List[str]`
 - Returns prioritized action items
 
 ## Exception Classes

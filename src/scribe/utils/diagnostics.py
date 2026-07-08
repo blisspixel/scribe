@@ -1,166 +1,17 @@
-"""
-System diagnostics and health checks for Scribe.
+"""Local-first diagnostics used by `scribe doctor` and support bundles.
 
-═══════════════════════════════════════════════════════════════════════════════
-ARCHITECTURAL PATTERN: Comprehensive System Validation
-═══════════════════════════════════════════════════════════════════════════════
+Default diagnostics are local-only and safe to run without spending money or
+calling provider APIs. They inspect Python 3.12 readiness, critical packages,
+dependency-audit status, FFmpeg/FFprobe/yt-dlp, OBS settings, CUDA/GPU state,
+local transcription and notes readiness, writable output folders, disk and temp
+space, environment files, configuration conflicts, system resources, and voice
+readiness.
 
-This module implements a diagnostic system that checks EVERYTHING needed for
-Scribe to work correctly. It's designed to help users troubleshoot issues before
-they become problems.
-
-THE PROBLEM WITH "IT DOESN'T WORK":
-────────────────────────────────────
-Users report: "Scribe doesn't work"
-
-Possible causes:
-- Python version too old?
-- FFmpeg not installed?
-- No GPU detected?
-- API key missing?
-- Disk full?
-- Permissions issue?
-- Configuration conflict?
-
-Without diagnostics, debugging requires back-and-forth:
-- "What Python version?"
-- "Is FFmpeg installed?"
-- "Do you have a GPU?"
-- etc.
-
-THE SOLUTION - AUTOMATED DIAGNOSTICS:
-──────────────────────────────────────
-Run `scribe doctor` and get a comprehensive health check:
-
-[PASS] Python 3.10.11
-[PASS] FFmpeg installed
-[PASS] GPU: RTX 4090 (24GB VRAM)
-[PASS] OpenAI API Key configured
-[FAIL] Output folder not writable
-[WARN] Only 2GB disk space remaining
-
-Fix suggestions:
-1. Check output folder permissions
-2. Free up disk space (need 10GB+)
-
-WHAT WE CHECK (15 DIAGNOSTICS):
-────────────────────────────────
-**Core System:**
-1. Python version (3.10+ required)
-2. Python packages (torch, faster-whisper, etc.)
-3. FFmpeg (audio/video conversion)
-4. FFprobe (media analysis)
-
-**GPU & Compute:**
-5. CUDA availability
-6. GPU detection and model
-7. GPU memory (VRAM)
-
-**API & Providers:**
-8. OpenAI API key
-9. Additional providers (XAI, Anthropic, Gemini)
-
-**File System:**
-10. Output folder (exists, writable)
-11. Disk space (10GB+ recommended)
-12. Temp space (5GB+ recommended)
-
-**Configuration:**
-13. .env file exists
-14. Configuration conflicts
-15. System resources (RAM, CPU)
-
-DIAGNOSTIC RESULTS:
-───────────────────
-Each check returns:
-- **Status**: pass, warn, or fail
-- **Message**: Brief summary
-- **Details**: Technical information
-- **Fix suggestion**: How to resolve issues
-
-Example:
-```python
-DiagnosticResult(
-    name="GPU",
-    status="pass",
-    message="RTX 4090",
-    details="VRAM: 24.0 GB\nDevices: 1",
-    fix_suggestion=None
-)
-```
-
-SMART VALIDATION:
-─────────────────
-Not just "is it installed?" but "will it work?":
-
-**FFmpeg check:**
-- Installed
-- Can execute
-- Version is recent
-- Has required codecs
-
-**Output folder check:**
-- Path configured
-- Folder exists
-- Is a directory (not a file)
-- Writable (actually tests write)
-
-**API key check:**
-- Configured
-- Starts with "sk-"
-- Reasonable length
-- Format validation (not actual API test)
-
-PRIORITIZED RECOMMENDATIONS:
-─────────────────────────────
-After running all checks, we prioritize fixes:
-
-1. **Failures first**: Must fix to work at all
-2. **Warnings second**: Should fix for best experience
-3. **Passes last**: Everything working
-
-Example output:
-```
-Top 5 Action Items:
-1. [FAIL] Install FFmpeg - required for audio conversion
-2. [FAIL] Set OPENAI_API_KEY - required for API features
-3. [WARN] Only 2GB disk space - need 10GB+ for large files
-4. [WARN] Python 3.9 detected - upgrade to 3.10+ recommended
-5. [WARN] No additional providers - consider XAI for cost savings
-```
-
-WHAT WE DON'T CHECK (HONEST LIMITATIONS):
-──────────────────────────────────────────
-1. **API key validity**: We check format, not if it actually works
-2. **Network connectivity**: Don't test if APIs are reachable
-3. **GPU driver version**: Just check if CUDA is available
-4. **FFmpeg codec support**: Don't verify specific codecs
-5. **Actual performance**: Don't benchmark GPU speed
-
-Why not? These would require:
-- Making API calls (costs money, slow)
-- Network requests (can fail, slow)
-- Running benchmarks (very slow)
-
-We optimize for FAST diagnostics that catch 90% of issues.
-
-POTENTIAL IMPROVEMENTS:
-───────────────────────
-1. **API key validation**: Actually test API call (optional, slow)
-2. **Network check**: Ping OpenAI to verify connectivity
-3. **GPU benchmark**: Quick test to measure actual speed
-4. **Codec verification**: Check FFmpeg has required codecs
-5. **Provider health**: Check if each provider API is responding
-
-THE VALUE:
-──────────
-This diagnostic system catches issues BEFORE users hit them:
-- New user setup: Validates everything is configured
-- Troubleshooting: Identifies the actual problem quickly
-- Support: Users can share diagnostic output
-- CI/CD: Automated environment validation
-
-One command (`scribe doctor`) replaces hours of back-and-forth debugging.
+Live provider API-key validation is intentionally opt-in through
+`run_all_checks(live=True)` or `scribe doctor --live`. Individual checks append
+`DiagnosticResult` objects to `self.results`; `run_all_checks` isolates each
+check so one unexpected failure becomes a diagnostic result rather than aborting
+the whole run.
 """
 
 import os
