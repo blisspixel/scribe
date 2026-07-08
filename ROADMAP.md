@@ -74,6 +74,14 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 
 Current product priority: prove the macOS/Linux hardware matrix for the resident tray (global hotkeys, permissions, tray backend, audio), and continue hardening backend routing, diagnostics, and the setup experience.
 
+Next roadmap task: validate and harden the resident tray on macOS and Linux. This is next because Windows is already validated, while the remaining tray paths are platform-dependent and can block the daily voice workflow before a user reaches transcription quality. Global hotkeys, microphone permissions, tray backend behavior, startup registration, and audio device availability are also the highest-risk existing surfaces for confusing failures. Finish this before adding new voice features.
+
+Acceptance criteria for the next task:
+- `scribe tray --check` gives accurate, actionable macOS and Linux readiness output without requiring paid services.
+- macOS and Linux setup docs match the live tray, hotkey, startup, permission, and audio behavior.
+- Non-live tests cover platform advisory logic and failure messages for unsupported or partially supported environments.
+- Manual validation notes identify the tested macOS and Linux versions, desktop sessions, hotkey behavior, tray behavior, startup behavior, and audio devices.
+
 ### Current Product Polish Debt
 
 The product surface is already useful, so polish work should improve what exists rather than expand scope:
@@ -245,4 +253,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-07-07 (product polish debt and current v2.8.0 status refreshed)
+**Last Updated:** 2026-07-08 (next resident-tray roadmap task and acceptance criteria refreshed)

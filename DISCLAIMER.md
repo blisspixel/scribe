@@ -40,8 +40,8 @@ authoritative record without review.
 
 Scribe is provided "as is", without warranty of any kind, express or implied. The
 authors and contributors are not liable for any claim, damages, or other
-liability arising from the use of this software. See the [MIT License](LICENSE)
-for details.
+liability arising from the use of this software. The canonical repository license
+is pending owner confirmation; no LICENSE file is currently present.
 
 ## Your responsibility
 
@@ -62,4 +62,4 @@ you know what Scribe does and does not handle for you:
 - Third-party cloud sharing: cloud transcription and notes transmit audio/text to external providers under their terms.
 - Local data security: transcripts stored on your device are yours to protect, retain, and delete.
 - Output accuracy: transcripts and AI notes can be wrong and should not be relied on as authoritative.
-- Warranty and liability: MIT no-warranty terms apply; the maintainers are not liable for use or downstream conduct.
+- Warranty and liability: Scribe is provided "as is"; canonical license terms still need owner confirmation.

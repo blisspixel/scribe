@@ -1,6 +1,5 @@
-License: Apache 2.0 + Commons Clause
-Personal/research/sharing use free.
-Commercial/enterprise products require separate license from Nick Seal.
+License: pending owner confirmation.
+Historical project metadata is inconsistent: earlier README copy referenced Apache 2.0 + Commons Clause, while `pyproject.toml` currently declares MIT and no LICENSE file is present. Treat licensing as unresolved until the owner chooses the canonical license and aligns README, `pyproject.toml`, and LICENSE.
 
 # Scribe
 
@@ -876,19 +875,19 @@ pytest
 # Unit tests only
 pytest tests/unit/
 
-# With coverage (gate is enforced in CI at 80%+)
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
+# CI-safe unit coverage gate
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
 
 # Quick check
-pytest tests/unit/ --tb=no -q
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --tb=no -q
 
 # Skip slow / external / GPU tests
-pytest -q -m "not e2e and not gpu and not slow"
+uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- 1592 tests collected (large, high-quality suite with unit + integration + e2e)
-- 1469 CI-safe unit tests pass; coverage gate 80%+ (currently ~82%)
+- Latest CI-safe unit coverage run: 1504 passed, 5 skipped, 1 deselected, 81.70% line coverage
+- Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`
@@ -1106,7 +1105,7 @@ solely responsible for how you use Scribe and for complying with applicable laws
 
 ## License
 
-MIT License. See LICENSE file.
+License terms are pending owner confirmation. Current repository evidence is inconsistent: earlier README copy referenced Apache 2.0 + Commons Clause, `pyproject.toml` declares MIT, and no LICENSE file is present.
 
 ---
 
@@ -1129,4 +1128,4 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 **Current Version:** 2.8.0 ($0-first local transcription, cost-safe defaults, local-only mode, and $0 readiness in doctor/info)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-07-01
+**Last Updated:** 2026-07-08

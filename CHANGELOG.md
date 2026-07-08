@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Made `scribe doctor` local-only by default, with `scribe doctor --live` as the explicit opt-in for provider API-key validation.
 - Corrected diagnostic API documentation and source prose to match the local-first doctor behavior.
 - Clarified warning-only `scribe doctor` summaries so they report "Ready with warnings" instead of implying notes are ready.
+- Documented why macOS/Linux resident-tray validation is the next roadmap task and refreshed developer test guidance to match the current CI-safe coverage gate.
+- Clarified the unresolved license state instead of claiming both Apache 2.0 + Commons Clause and MIT across README, disclaimer, and ADR docs.
 
 ## [2.8.0] - 2026-07-01
 

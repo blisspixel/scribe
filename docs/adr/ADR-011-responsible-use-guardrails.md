@@ -27,7 +27,8 @@ Add lightweight responsible-use guardrails:
   cancels the recording.
 - **Disclaimers.** A `DISCLAIMER.md` and a README "Responsible Use and Legal"
   section cover recording consent, regulated/sensitive data, cloud data sharing,
-  output accuracy, the MIT no-warranty terms, and user responsibility.
+  output accuracy, the no-warranty disclaimer, the unresolved license state, and
+  user responsibility.
 
 Every notice states plainly that it is not legal advice.
 

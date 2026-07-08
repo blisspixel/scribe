@@ -1,6 +1,6 @@
 # Development Guide
 
-**Last Updated:** 2026-06-23 (polished `init` with review + live verification + optional launcher in flow; robust `shortcut` for taskbar icons + adaptive Windows launcher with env/pauses; doctor offers re-init on failures)
+**Last Updated:** 2026-07-08 (current local validation gates and CI-safe coverage subset)
 
 ## Getting Started
 
@@ -78,8 +78,8 @@ pytest
 ### With Coverage
 ```bash
 # Recommended
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
-uv run pytest --cov=scribe --cov-report=html
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=html
 ```
 
 ### Specific Tests
@@ -91,13 +91,13 @@ pytest tests/unit/test_vocabulary.py
 pytest tests/unit/test_vocabulary.py::TestCustomVocabularyInit::test_init_empty
 
 # By marker
-pytest -m "not gpu"
+uv run pytest -m "not gpu and not slow and not e2e"
 ```
 
 ### Test Status
-- 1592 tests collected (unit + integration + e2e)
-- 1469 CI-safe unit tests pass with `pytest tests/unit/ -m "not gpu and not slow and not e2e"`
-- Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml; currently ~82%)
+- CI-safe unit coverage subset: `uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80`
+- Latest local validation: 1504 passed, 5 skipped, 1 deselected, 81.70% line coverage
+- Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
 - Full ruff + mypy --strict gates must pass before commit (see ROADMAP Step 2)
@@ -145,12 +145,13 @@ git checkout -b feature/your-feature-name
 ```bash
 uv run ruff check src tests
 uv run ruff format --check src tests
-uv run pytest tests/unit -m "not gpu and not slow" -q
+uv run mypy --strict src/scribe
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
 ```
 
 ### 4. Full Local Verification
 ```bash
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
 ```
 
 Optional live provider validation:
@@ -385,7 +386,7 @@ Add a new section at the top of the root `CHANGELOG.md` following the existing f
 
 ### 3. Run Full Test Suite
 ```bash
-pytest
+uv run pytest
 ```
 
 ### 4. Update Documentation
