@@ -38,7 +38,7 @@ def exit_on_cli_error(exc: BaseException, *, log_unexpected: bool = True) -> NoR
 
     log_file = get_current_log_file()
     if log_file is not None:
-        console.print(Text(f"Log file: {log_file}", style="dim", no_wrap=True))
+        console.print(Text(f"Log file: {log_file}", style="dim"), soft_wrap=True)
     console.print(
         "[dim]Next: run `scribe doctor` to check setup. "
         "Use `scribe support-bundle` when sharing diagnostics.[/dim]"
