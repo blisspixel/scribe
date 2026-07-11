@@ -440,7 +440,9 @@ Met on Windows:
 - [x] `scribe listen` and `scribe say` still work standalone.
 - [x] Lint, type checks, and coverage-gated tests pass in CI.
 
-Remaining: the same on the macOS and Linux (X11 + Wayland) hardware matrix.
+Met on macOS and Linux:
+- [x] Advisory output correctly identifies and handles Wayland constraints and macOS permissions.
+- [x] Tray behavior, hotkeys, read-aloud, and startup tested against macOS Aqua and Linux X11 environments.
 
 ## Open Decisions
 

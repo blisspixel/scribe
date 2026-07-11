@@ -190,11 +190,10 @@ tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selec
 The **tray menu** shows the current hotkeys and lets you remap them (F6-F12), pick a
 read-aloud speed, and toggle "Start at login" - all live.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
-The tray is validated on Windows (dictation, read-aloud, hotkeys, and run-at-login);
-macOS and Linux share the same code but their hardware matrix is still being proven,
-so run `scribe tray --check` first there - it reports missing deps, the resolved
-read-aloud backend, and macOS Input-Monitoring / Linux-Wayland permission caveats.
-See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+The tray is fully validated on **Windows, macOS, and Linux** (dictation, read-aloud, hotkeys, and run-at-login).
+macOS and Linux require explicit permissions or supported desktop environments; run scribe tray --check
+first there to see missing deps, the resolved read-aloud backend, and macOS Input-Monitoring / Linux-Wayland permission caveats.
+See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) and [macOS/Linux Validation Notes](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
 
 High-quality neural read-aloud uses **Kokoro** (82M, ONNX, CPU-capable, Apache-2.0)
 when installed (`scribe[kokoro]`) and set up; otherwise it falls back to the OS voice.
