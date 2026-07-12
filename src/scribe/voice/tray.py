@@ -149,9 +149,21 @@ def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:
     """Run the resident voice utility as a tray icon or terminal fallback."""
     if no_tray:
         return _run_no_tray(console, settings)
+
+    import importlib.resources
     import sys
+
     exe_name = "scribe-tray.exe" if sys.platform == "win32" else "scribe-tray"
-    go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / exe_name
+    try:
+        # Use importlib.resources.files to locate the binary inside the installed package
+        with importlib.resources.as_file(
+            importlib.resources.files("scribe.assets.bin").joinpath(exe_name)
+        ) as bin_path:
+            go_bin = Path(bin_path)
+    except Exception:
+        # Fallback if package is not built or installed correctly
+        go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / exe_name
+
     if go_bin.exists():
         import subprocess
 
