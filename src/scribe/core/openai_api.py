@@ -454,6 +454,9 @@ class OpenAITranscriber:
             max_duration_ms=cap_ms,
         )
 
+        from scribe.utils.platform import get_ffmpeg_path
+        ffmpeg_bin = str(get_ffmpeg_path() or "ffmpeg")
+
         out_paths: list[Path] = []
         stem = file_path.stem
 
@@ -465,9 +468,9 @@ class OpenAITranscriber:
             # Accumulate chunks up to cap_ms
             if (sp - chunk_start_ms) > cap_ms and last_split_ms > chunk_start_ms:
                 out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
-                subprocess.run(  # noqa: S603, S607
+                subprocess.run(  # noqa: S603
                     [
-                        "ffmpeg",
+                        ffmpeg_bin,
                         "-y",
                         "-i",
                         str(file_path),
@@ -490,9 +493,9 @@ class OpenAITranscriber:
         # Add the final chunk
         if last_split_ms > chunk_start_ms:
             out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
-            subprocess.run(  # noqa: S603, S607
+            subprocess.run(  # noqa: S603
                 [
-                    "ffmpeg",
+                    ffmpeg_bin,
                     "-y",
                     "-i",
                     str(file_path),

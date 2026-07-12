@@ -208,6 +208,7 @@ allowed-confusables = ["×", "–", "—"]
 "src/scribe/cli/main.py" = ["S324"]  # md5 for stable non-crypto machine ID (two sites)
 "src/scribe/cli/shortcut.py" = ["S603", "S607"]  # launches trusted local tools (powershell, update-desktop-database) to create OS launchers
 "src/scribe/voice/startup.py" = ["S603", "S607"]  # launches trusted local tools (launchctl) to install the login autostart entry
+"src/scribe/voice/tray.py" = ["S603"]  # launches trusted local Scribe Go daemon from within the python wheel
 
 [tool.ruff.format]
 quote-style = "double"
