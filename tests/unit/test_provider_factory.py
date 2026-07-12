@@ -156,7 +156,7 @@ def test_local_only_overrides_explicit_cloud_provider() -> None:
 def test_local_only_blocks_meme_image() -> None:
     """Image generation has no local backend, so local-only refuses it clearly."""
     with (
-        patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": "1"}, clear=True),
+        patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": "1"}),
         pytest.raises(ValueError, match="no local backend"),
     ):
         get_provider("meme_image")
@@ -166,18 +166,22 @@ def test_local_only_enabled_parses_env() -> None:
     from scribe.providers.factory import _local_only_enabled
 
     for truthy in ("1", "true", "TRUE", "yes", "on"):
-        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": truthy}, clear=True):
+        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": truthy}):
             assert _local_only_enabled() is True
     for falsy in ("0", "false", "no", "off", ""):
-        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": falsy}, clear=True):
+        with patch.dict("os.environ", {"SCRIBE_LOCAL_ONLY": falsy}):
             assert _local_only_enabled() is False
 
 
 def test_local_only_off_when_unset() -> None:
     from scribe.providers.factory import _local_only_enabled
 
+    # Ensure the var is removed for this test
+    import os
     with (
-        patch.dict("os.environ", {}, clear=True),
+        patch.dict("os.environ", {}, clear=False),
         patch("scribe.config_file.load_config_file", return_value={}),
     ):
+        if "SCRIBE_LOCAL_ONLY" in os.environ:
+            del os.environ["SCRIBE_LOCAL_ONLY"]
         assert _local_only_enabled() is False
