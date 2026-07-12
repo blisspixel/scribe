@@ -60,18 +60,18 @@ chunk_paths = split_audio_on_silence(file_path="meeting.wav", max_duration_sec=6
 
 ## Execution Plan
 
-### Phase A: Profile & Baseline (Current Step)
-1. Write benchmarking scripts in `tests/benchmarks/` to measure peak memory and latency of `pydub.silence.split_on_silence` on a 60-minute audio file.
-2. Measure the resident memory footprint of `scribe tray` on Windows, macOS, and Linux over a 24-hour period.
+### Phase A: Profile & Baseline (COMPLETED)
+1. [x] Write benchmarking scripts in `tests/benchmarks/` to measure peak memory and latency of `pydub.silence.split_on_silence` on a 60-minute audio file.
+2. [x] Measure the resident memory footprint of `scribe tray` on Windows, macOS, and Linux over a 24-hour period.
 
-### Phase B: Rust Audio Core
-1. Initialize a Rust crate `crates/scribe-audio-core`.
-2. Configure `pyproject.toml` to build the extension via Maturin.
-3. Write the streaming chunking logic in Rust and expose the PyO3 bindings.
-4. Replace the `pydub` call in `openai_api.py` and measure the delta against the baseline.
+### Phase B: Rust Audio Core (COMPLETED)
+1. [x] Initialize a Rust crate `crates/scribe-audio-core`.
+2. [x] Configure `pyproject.toml` to build the extension via Maturin.
+3. [x] Write the streaming chunking logic in Rust and expose the PyO3 bindings.
+4. [x] Replace the `pydub` call in `openai_api.py` and measure the delta against the baseline.
 
-### Phase C: Go Tray Daemon
-1. Create `cmd/scribe-tray/main.go`.
-2. Implement the static sys-tray icon, menu states, and global hotkeys.
-3. Implement the IPC boundary (a lightweight Python socket server inside `scribe.voice.service`).
-4. Package the compiled Go binary into the Python wheel or build distribution pipeline.
+### Phase C: Go Tray Daemon (COMPLETED)
+1. [x] Create `cmd/scribe-tray/main.go`.
+2. [x] Implement the static sys-tray icon, menu states, and global hotkeys.
+3. [x] Implement the IPC boundary (a lightweight Python socket server inside `scribe.voice.service`).
+4. [x] Package the compiled Go binary into the Python wheel or build distribution pipeline (via importlib.resources).
