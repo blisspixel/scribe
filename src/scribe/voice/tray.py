@@ -149,6 +149,43 @@ def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:
     """Run the resident voice utility as a tray icon or terminal fallback."""
     if no_tray:
         return _run_no_tray(console, settings)
+
+    go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / "scribe-tray.exe"
+    if go_bin.exists():
+        import subprocess
+
+        service = VoiceTrayService(settings, console)
+        port = service.start_ipc_server(preload_model=settings.preload_model)
+
+        console.print("[green]Scribe Voice is running via Go Tray Daemon.[/green]")
+        dictate_hint, read_hint = hotkey_hints(settings)
+        if _await_model_ready(console, service):
+            console.print(f"[green]Ready.[/green] [dim]{dictate_hint} {read_hint}[/dim]")
+        else:
+            console.print(f"[dim]{dictate_hint} {read_hint} (model will load on first use)[/dim]")
+
+        try:
+            subprocess.run(
+                [
+                    str(go_bin),
+                    "-port",
+                    str(port),
+                    "-dictate",
+                    settings.dictate_hotkey.upper(),
+                    "-read",
+                    settings.read_hotkey.upper(),
+                ],
+                check=True,
+            )
+            return 0
+        except KeyboardInterrupt:
+            return 0
+        except Exception as e:
+            console.print(f"[red]Go tray daemon stopped unexpectedly:[/red] {e}")
+            return 1
+        finally:
+            service.stop()
+
     _brand_windows_process()
     missing = missing_dependency_packages(include_tray=True)
     if missing:

@@ -361,6 +361,10 @@ class VoiceTrayService:
         self._model_lock = threading.Lock()
         self._watchdog: threading.Thread | None = None
 
+        self._ipc_socket: Any = None
+        self._ipc_conn: Any = None
+        self._ipc_thread: threading.Thread | None = None
+
     @property
     def status_text(self) -> str:
         """Human-readable status for the tray menu and terminal fallback."""
@@ -486,6 +490,59 @@ class VoiceTrayService:
         self.set_paused(not self.paused)
         return self.paused
 
+    def start_ipc_server(self, *, preload_model: bool = False) -> int:
+        """Start the IPC socket server for the Go tray daemon and return the bound port."""
+        import socket
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        port = sock.getsockname()[1]
+
+        self.running = True
+        self._dispatcher = threading.Thread(target=self._dispatch_loop, daemon=True)
+        self._dispatcher.start()
+        self._watchdog = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog.start()
+
+        self._ipc_socket = sock
+        self._ipc_thread = threading.Thread(target=self._ipc_server_loop, daemon=True)
+        self._ipc_thread.start()
+
+        if preload_model:
+            self.model_loading = True
+            self._notify()
+            threading.Thread(target=self._preload_model_worker, daemon=True).start()
+
+        return port
+
+    def _ipc_server_loop(self) -> None:
+        """Listen for IPC connections from the Go tray daemon."""
+        while self.running:
+            try:
+                conn, _ = self._ipc_socket.accept()
+            except Exception:
+                if not self.running:
+                    break
+                continue
+
+            with conn, conn.makefile("r", encoding="utf-8") as f:
+                self._ipc_conn = conn
+                self._notify()  # Send initial state
+                for line in f:
+                    cmd = line.strip()
+                    if cmd == "DICTATE":
+                        self._dictating = not self._dictating
+                        self._actions.put(
+                            self._finish_recording if not self._dictating else self._begin_recording
+                        )
+                    elif cmd == "READ":
+                        self._actions.put(self._read_selection_and_speak)
+                    elif cmd == "QUIT":
+                        self.stop()
+                        break
+            self._ipc_conn = None
+
     def start_hotkeys(self, *, preload_model: bool = False) -> bool:  # pragma: no cover
         """Start the global hotkey listener."""
         missing = missing_dependency_packages(include_tray=False)
@@ -599,6 +656,9 @@ class VoiceTrayService:
         return True
 
     def _notify(self) -> None:
+        if self._ipc_conn is not None:
+            with suppress(Exception):
+                self._ipc_conn.sendall(f"STATE:{self.state}\n".encode())
         for callback in list(self._callbacks):  # snapshot: callbacks may run cross-thread
             with suppress(Exception):
                 callback(self.state)
