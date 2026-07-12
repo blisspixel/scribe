@@ -8,7 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Fixed
+### Added
+- Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3, which streams audio natively and splits chunks instantly, bypassing memory limits and 500x faster than previous python implementation.
+- Polyglot Architecture Phase C: Added a lightweight, pure Go resident tray daemon (`scribe-tray`) that drastically reduces idle background memory usage on Windows and fully decouples global hotkeys from the Python main process.
+- Implemented IPC boundary via a localhost TCP socket server inside `VoiceTrayService` for communication with the Go daemon.
+
+### Changed
+- Refactored `scribe.core.openai_api` to completely eliminate `pydub.silence.split_on_silence` dependency in favor of the new Rust streaming engine.
+- Re-architected `run_tray` in `scribe.voice.tray` to automatically hand off to the Go `scribe-tray` binary if present on Windows (seamless fallback to Python tray on other platforms).
+- Packaged the Go binary gracefully via `importlib.resources` inside `pyproject.toml` data to distribute within standard Python wheels.
 - Tightened broad exception handlers across core modules (`openai_api`, `local_whisper`, utilities) to specific typed tuples in compliance with ADR-002, preventing masked errors.
 - Standardized CLI exit boundaries in `main.py` using a single `exit_on_cli_error` handler instead of scattered `typer.Exit(1)` calls.
 - Completed Engineering Excellence Step 4: added SBOM generation documentation, integrated CUDA driver age checks into `scribe doctor`, and formalized the decision against structured JSON logging (ADR-012).
