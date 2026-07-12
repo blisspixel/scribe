@@ -1051,6 +1051,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 
 ### Feature Documentation
 - [Music Mode Architecture](docs/features/MUSIC_MODE_ARCHITECTURE.md) - Music transcription technical details
+- [Polyglot Architecture Plan](docs/features/POLYGLOT_ARCHITECTURE_PLAN.md) - Architectural decoupling of audio pipelines (Rust) and background daemons (Go) for zero-latency, sub-10MB idle footprint
 - [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) - Initial resident dictation and read-aloud prototype, validation plan, and follow-on work
 
 ### Additional Resources
