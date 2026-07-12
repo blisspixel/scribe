@@ -260,6 +260,7 @@ module = [
     "pystray.*",
     "pyttsx3.*",
     "kokoro_onnx.*",
+    "scribe_audio_core.*",
 ]
 ignore_missing_imports = true
 

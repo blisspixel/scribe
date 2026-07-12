@@ -514,7 +514,7 @@ class VoiceTrayService:
             self._notify()
             threading.Thread(target=self._preload_model_worker, daemon=True).start()
 
-        return port
+        return int(port)
 
     def _ipc_server_loop(self) -> None:
         """Listen for IPC connections from the Go tray daemon."""
@@ -522,9 +522,7 @@ class VoiceTrayService:
             try:
                 conn, _ = self._ipc_socket.accept()
             except Exception:
-                if not self.running:
-                    break
-                continue
+                break
 
             with conn, conn.makefile("r", encoding="utf-8") as f:
                 self._ipc_conn = conn
