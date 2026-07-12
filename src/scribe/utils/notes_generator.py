@@ -626,6 +626,9 @@ class NotesGenerator:
     def _generate_detailed_summary(self, transcript: str) -> str:
         logger.info("Generating detailed summary...")
         prompt = f"""You are analyzing a meeting transcript to create comprehensive meeting notes.
+CRITICAL RULES:
+- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
+- Do not use ANY emojis or emdashes.
 
 TRANSCRIPT:
 {transcript}
@@ -676,6 +679,9 @@ Write 2-4 paragraphs. Be comprehensive but concise."""
         }
 
         prompt = f"""You are creating a structured breakdown of a meeting for business intelligence.
+CRITICAL RULES:
+- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
+- Do not use ANY emojis or emdashes.
 
 TRANSCRIPT:
 {transcript}
@@ -781,6 +787,9 @@ CRITICAL FORMATTING RULES:
         current_breakdown_text = json.dumps(breakdown, indent=2)
 
         prompt = f"""You are refining meeting notes for maximum detail and accuracy.
+CRITICAL RULES:
+- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
+- Do not use ANY emojis or emdashes.
 
 ORIGINAL TRANSCRIPT:
 {transcript}

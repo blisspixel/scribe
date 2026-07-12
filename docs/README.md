@@ -13,6 +13,7 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 - [AGENTIC_BALANCE.md](AGENTIC_BALANCE.md) - Where Scribe uses deterministic rules versus model judgment
 - [Music Mode Architecture](features/MUSIC_MODE_ARCHITECTURE.md) - Segment-based transcription deep dive
 - [Resident Voice Tray Utility Plan](features/VOICE_TRAY_UTILITY_PLAN.md) - Initial resident dictation and read-aloud prototype, validation plan, and follow-on work
+- [Polyglot Architecture Plan](features/POLYGLOT_ARCHITECTURE_PLAN.md) - Architecture transition from pure Python to polyglot (Python, Go, Rust)
 
 ### Development
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Development setup and workflows

@@ -70,43 +70,43 @@ ARCHETYPE_DISPLAY_NAMES: dict[str, str] = {
 COMEDY_STYLES: dict[str, str] = {
     "trickster": (
         "You are the Trickster-Employee. Reframe meaning through playful subversion. "
-        "Expose gaps between stated intent and outcome without cruelty. One line, 10–15 words."
+        "Expose gaps between stated intent and outcome without cruelty. One line, 10-15 words."
     ),
     "fool_scholar": (
         "You are the Fool-Scholar. Treat mundane meetings as research subjects. "
-        "Deadpan analysis that validates confusion. One line, 12–18 words."
+        "Deadpan analysis that validates confusion. One line, 12-18 words."
     ),
     "enthusiast": (
         "You are the Devout Enthusiast. Celebrate bureaucratic minutiae with epic sincerity. "
-        "Warm, ironically earnest. One line, 10–15 words."
+        "Warm, ironically earnest. One line, 10-15 words."
     ),
     "translator": (
         "You are the Jargon Translator. Reveal reality beneath corporate language with precise, plain speech. "
-        "One line, 10–15 words."
+        "One line, 10-15 words."
     ),
     "digital_specter": (
         "You are the Digital Specter. Meta-comment on the medium (mute, lag, screens). "
-        "Wry, aware. One line, 10–15 words."
+        "Wry, aware. One line, 10-15 words."
     ),
     "existential": (
         "You are the Existential Clerk. Find cosmic meaning in bureaucracy with playful melancholy. "
-        "One line, 12–18 words."
+        "One line, 12-18 words."
     ),
     "empathic": (
         "You are the Empathic Realist. Name shared exhaustion gently and humanely. "
-        "One line, 10–15 words."
+        "One line, 10-15 words."
     ),
     "time_alchemist": (
         "You are the Time Alchemist. Transform meeting duration into absurd metaphors. "
-        "One line, 10–15 words."
+        "One line, 10-15 words."
     ),
     "based": (
         "You are the Based Observer. Call out the obvious truth everyone sees but won't say. "
-        "Direct, unfiltered, zero corporate speak. One line, 10–15 words."
+        "Direct, unfiltered, zero corporate speak. One line, 10-15 words."
     ),
     "gen_z": (
         "You are the Gen Z Commentator. Translate corporate dysfunction into chronically online language. "
-        "Use internet slang, meme references, and generational exhaustion. One line, 10–15 words."
+        "Use internet slang, meme references, and generational exhaustion. One line, 10-15 words."
     ),
 }
 
@@ -517,7 +517,7 @@ def _build_instruction(entities: Iterable[str], cfg: HumorConfig) -> str:
     return (
         "You will receive a meeting transcript as plain text. "
         f"Produce exactly one original joke. Target {cfg.min_words}-{cfg.max_words} words. "
-        f"One line, no quotes, no emojis, no em-dashes (use regular dashes). SPICE LEVEL: {cfg.spice_level}/10 - {spice_desc}. {tone} "
+        f"One line, no quotes, no emojis, no em-dashes (use regular dashes). Do not include any signatures, meta-commentary, or attributions. SPICE LEVEL: {cfg.spice_level}/10 - {spice_desc}. {tone} "
         "Prefer targeting concepts, processes, jargon, or shared struggles; "
         f"avoid individuals or protected groups.{profanity_rule}" + hint
     )

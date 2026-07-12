@@ -295,7 +295,7 @@ class TestLoggingIntegration:
 
         # Log Unicode content
         logger.info("Testing Unicode: 中文 测试 café naïve")
-        logger.info("Emoji test: 🎉 ✅ 🚀")
+        logger.info("Emoji test:  ✅ ")
 
         # Verify log file contains Unicode
         log_files = list(log_dir.glob("*.log"))

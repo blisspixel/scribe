@@ -84,7 +84,7 @@ class TestURLDownloader:
             "requested_downloads": [{"filepath": str(fake_file)}],
         }
 
-        # Mock yt-dlp — extract_info called twice: once dry-run, once with download
+        # Mock yt-dlp - extract_info called twice: once dry-run, once with download
         mock_ydl = MagicMock()
         mock_ydl.extract_info.return_value = info
         mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)

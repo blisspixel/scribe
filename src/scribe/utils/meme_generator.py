@@ -296,7 +296,7 @@ RESPOND IN JSON (keep it concise):
 
 IMPORTANT: Your image_prompt is the KEY to creativity. Be specific, vivid, and original. Don't just say "Distracted Boyfriend meme" - describe the actual scene, the expressions, the context. Or create something entirely new that captures the meeting's absurdity.
 
-Think deeply. Be creative. Make it HILARIOUS.
+Think deeply. Be creative. Make it HILARIOUS. Output the raw text directly. Do not include any signatures, meta-commentary, or attributions. No emojis or emdashes.
 """
 
     try:
@@ -1037,7 +1037,7 @@ def generate_meeting_meme(
 
     if enable_bakeoff:
         # Run bake-off: get concepts from all providers and pick the best
-        logger.info("🎭 Running meme concept bake-off...")
+        logger.info(" Running meme concept bake-off...")
         from scribe.utils.meme_bakeoff import run_meme_bakeoff
 
         try:
@@ -1049,7 +1049,7 @@ def generate_meeting_meme(
             provider = get_provider(feature="meme", provider_name=provider_name)
             image_provider = get_provider(feature="meme_image", provider_name=provider_name)
 
-            logger.info(f"🏆 Bake-off winner: {provider_name.upper()}")
+            logger.info(f" Bake-off winner: {provider_name.upper()}")
             logger.info(f"   Reasoning: {bakeoff_result['reasoning']}")
         except Exception as e:
             logger.warning(f"Bake-off failed: {e}, falling back to single provider")

@@ -619,7 +619,7 @@ class TestNotesGeneratorIntegration:
         assert "**Technical:**" in content
 
         print(f"\n✅ Successfully generated notes: {notes_path}")
-        print(f"📄 Content length: {len(content)} characters")
+        print(f" Content length: {len(content)} characters")
 
 
 def test_segment_for_full_coverage_chunks_overlap():

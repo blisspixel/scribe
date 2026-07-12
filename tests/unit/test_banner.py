@@ -421,7 +421,7 @@ class TestAnimateSweep:
         console = MagicMock()
         cfg = _make_config(animation_mode="full", fps=10)
 
-        # Should not raise — falls back to static
+        # Should not raise - falls back to static
         _animate_sweep(console, BANNER_ART, cfg, duration=0.1)
 
         # Should have printed static fallback via Rich

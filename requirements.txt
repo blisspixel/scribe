@@ -1,4 +1,4 @@
-# DEPRECATED — Legacy pip requirements file.
+# DEPRECATED - Legacy pip requirements file.
 # Scribe now uses uv as the sole package manager (pyproject.toml + uv.lock).
 #
 # For development:   uv sync

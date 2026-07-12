@@ -49,7 +49,7 @@ def run_meme_bakeoff(
         raise ValueError("No providers available with API keys")
 
     logger.info(
-        f"🎭 Starting meme bake-off with {len(available_providers)} providers: {', '.join(available_providers)}"
+        f" Starting meme bake-off with {len(available_providers)} providers: {', '.join(available_providers)}"
     )
 
     # Collect concepts from all providers
@@ -88,7 +88,7 @@ def run_meme_bakeoff(
         raise ValueError("No providers successfully generated concepts")
 
     # Now judge the concepts using the best available provider
-    logger.info(f"\n🏆 Judging {len(concepts)} concepts...")
+    logger.info(f"\n Judging {len(concepts)} concepts...")
 
     # Use OpenAI for judging if available (most reliable), otherwise use first available
     judge_provider_name = "openai" if "openai" in available_providers else available_providers[0]

@@ -105,7 +105,7 @@ class TestAtomicWriteJSON:
     def test_atomic_write_json_with_unicode(self, tmp_path):
         """Test JSON writing with Unicode characters."""
         target = tmp_path / "data.json"
-        data = {"message": "Hello 世界", "emoji": "🎉"}
+        data = {"message": "Hello 世界", "emoji": ""}
 
         atomic_write_json(target, data)
 

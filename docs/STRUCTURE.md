@@ -78,7 +78,7 @@ Contains API research, feature research notes, and implementation experiments.
 
 ---
 
-## 🔍 Finding Documentation
+## Finding Documentation
 
 ### For Users
 1. Start with **docs/README.md** - Documentation index

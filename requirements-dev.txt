@@ -1,4 +1,4 @@
-# DEPRECATED — Legacy pip dev requirements file.
+# DEPRECATED - Legacy pip dev requirements file.
 # Scribe now uses uv + [dependency-groups] in pyproject.toml.
 #
 # Modern:            uv sync --group dev
