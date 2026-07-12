@@ -14,9 +14,15 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
-from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI, RateLimitError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    OpenAI,
+    OpenAIError,
+    RateLimitError,
+)
 from pydub import AudioSegment
-from pydub.silence import split_on_silence
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from scribe.exceptions import APIError, CircuitBreakerOpen, TranscriptionError
@@ -26,6 +32,10 @@ from scribe.utils.api_resilience import (
     record_api_failure,
     record_api_success,
 )
+from scribe.utils.audio import (
+    get_audio_duration,
+)
+from scribe.utils.costs import estimate_audio_cost_usd
 from scribe.utils.files import (
     extract_date_from_filename,
     format_date,
@@ -116,7 +126,7 @@ class OpenAITranscriber:
                     transcript_response = cast(Any, self.client.audio.transcriptions).create(
                         **params
                     )
-                except Exception as api_error:
+                except OpenAIError as api_error:
                     # If chunking_strategy fails, retry without it
                     if "chunking_strategy" in str(api_error) and "chunking_strategy" in params:
                         logger.warning("chunking_strategy not supported, retrying without it...")
@@ -143,6 +153,13 @@ class OpenAITranscriber:
             verify_file_content(output_path, min_size=10)
             logger.info(f"Transcription verified: {output_path.name}")
 
+            # Log exact cost if possible
+            duration_sec = get_audio_duration(audio_path)
+            if duration_sec:
+                cost = estimate_audio_cost_usd(self.model, duration_sec)
+                if cost is not None:
+                    logger.info(f"API Cost: ${cost:.4f} ({(duration_sec / 60):.1f}m at $0.006/m)")
+
             return output_path
 
         except AuthenticationError as e:
@@ -150,7 +167,7 @@ class OpenAITranscriber:
                 "OpenAI API authentication failed",
                 context={"error": str(e), "key_prefix": self.api_key[:10]},
             )
-        except Exception as e:
+        except OpenAIError as e:
             error_msg = str(e)
             # Check for duration limit error - retry with client-side chunking
             if "longer than" in error_msg and "seconds" in error_msg:
@@ -159,8 +176,13 @@ class OpenAITranscriber:
                 return self.transcribe(audio_path, output_path, prompt)
 
             raise TranscriptionError(
-                f"Server-side chunking transcription failed: {e}",
-                context={"audio_path": str(audio_path), "model": self.model},
+                f"OpenAI transcription failed: {error_msg}",
+                context={"audio_file": audio_path.name, "phase": "transcription"},
+            )
+        except OSError as e:
+            raise TranscriptionError(
+                f"File operation failed during API transcription: {e}",
+                context={"audio_file": audio_path.name, "phase": "transcription"},
             )
 
     def _format_transcript_response(self, response: Any, audio_path: Path) -> str:
@@ -227,7 +249,7 @@ class OpenAITranscriber:
                     else:
                         lines.append(f"[{timestamp}] {text}")
                     lines.append("")
-            except Exception as e:
+            except (AttributeError, KeyError, TypeError, ValueError) as e:
                 logger.warning(f"Error processing segments: {e}, falling back to text extraction")
                 # Fallback to text attribute if segment processing fails
                 if hasattr(response, "text"):
@@ -284,7 +306,7 @@ class OpenAITranscriber:
                         start=start, end=max(start, end), text=text, speaker=speaker or None
                     )
                 )
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             logger.warning(f"Could not structure segments, using plain text: {e}")
             segments = []
 
@@ -412,41 +434,79 @@ class OpenAITranscriber:
         Returns:
             List of chunk file paths
         """
-        logger.info("Splitting audio into chunks...")
+        logger.info("Splitting audio into chunks using native core...")
+        import subprocess
 
-        audio = AudioSegment.from_file(str(file_path))
-        silence_thresh = audio.dBFS + silence_thresh_delta_db
+        import scribe_audio_core
 
-        # Split on silence
-        parts = split_on_silence(
-            audio,
-            min_silence_len=min_silence_len_ms,
-            silence_thresh=silence_thresh,
-            keep_silence=keep_silence_ms,
+        dbfs = scribe_audio_core.get_audio_dbfs(str(file_path))
+        if dbfs == float("-inf"):
+            dbfs = -50.0
+
+        silence_thresh = dbfs + silence_thresh_delta_db
+        cap_ms = max_chunk_minutes * 60 * 1000
+
+        # split_points_ms gives every possible silence cut
+        split_points_ms = scribe_audio_core.get_split_timestamps(
+            str(file_path),
+            min_silence_ms=min_silence_len_ms,
+            silence_thresh_db=silence_thresh,
+            max_duration_ms=cap_ms,
         )
 
-        # Cap chunk duration
-        cap_ms = max_chunk_minutes * 60 * 1000
-        chunks: list[AudioSegment] = []
-        current = AudioSegment.silent(duration=0)
-
-        for part in parts:
-            if len(current) + len(part) > cap_ms:
-                if len(current) > 0:
-                    chunks.append(current)
-                current = AudioSegment.silent(duration=0)
-            current += part
-
-        if len(current) > 0:
-            chunks.append(current)
-
-        # Export chunks
         out_paths: list[Path] = []
         stem = file_path.stem
 
-        for i, chunk in enumerate(chunks, 1):
-            out_name = file_path.parent / f"{stem}_chunk_{i}.mp3"
-            chunk.export(str(out_name), format="mp3", bitrate=f"{export_bitrate_kbps}k")
+        chunk_start_ms = 0
+        last_split_ms = 0
+        chunk_idx = 1
+
+        for sp in split_points_ms:
+            # Accumulate chunks up to cap_ms
+            if (sp - chunk_start_ms) > cap_ms and last_split_ms > chunk_start_ms:
+                out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
+                subprocess.run(  # noqa: S603, S607
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        str(file_path),
+                        "-ss",
+                        str(chunk_start_ms / 1000.0),
+                        "-to",
+                        str(last_split_ms / 1000.0),
+                        "-c",
+                        "copy",
+                        str(out_name),
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                out_paths.append(out_name)
+                chunk_start_ms = last_split_ms
+                chunk_idx += 1
+            last_split_ms = sp
+
+        # Add the final chunk
+        if last_split_ms > chunk_start_ms:
+            out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
+            subprocess.run(  # noqa: S603, S607
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(file_path),
+                    "-ss",
+                    str(chunk_start_ms / 1000.0),
+                    "-to",
+                    str(last_split_ms / 1000.0),
+                    "-c",
+                    "copy",
+                    str(out_name),
+                ],
+                check=True,
+                capture_output=True,
+            )
             out_paths.append(out_name)
 
         logger.info(f"Created {len(out_paths)} chunks for transcription")
@@ -487,7 +547,7 @@ class OpenAITranscriber:
                 raise
 
             except AuthenticationError as e:
-                # A bad API key can never succeed on retry — fail fast instead of
+                # A bad API key can never succeed on retry - fail fast instead of
                 # sleeping through the full backoff schedule for every chunk.
                 logger.error(f"Authentication failed ({chunk_path.name}): {e}")
                 return False, None
@@ -507,7 +567,7 @@ class OpenAITranscriber:
                 else:
                     return False, None
 
-            except Exception as e:
+            except (OSError, OpenAIError, ValueError) as e:
                 logger.error(f"Unexpected error on {chunk_path.name}: {e}")
                 return False, None
 
@@ -652,7 +712,7 @@ class OpenAITranscriber:
             try:
                 verify_file_content(output_path, min_size=100)
                 logger.info(f"Transcription verified: {output_path.name}")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 raise TranscriptionError(
                     "Output file is empty or too small",
                     context={
@@ -663,6 +723,14 @@ class OpenAITranscriber:
                 )
 
             logger.info(f"Transcription complete: {output_path}")
+
+            # Log exact cost if possible
+            duration_sec = get_audio_duration(audio_path)
+            if duration_sec:
+                cost = estimate_audio_cost_usd(self.model, duration_sec)
+                if cost is not None:
+                    logger.info(f"API Cost: ${cost:.4f} ({(duration_sec / 60):.1f}m at $0.006/m)")
+
             return output_path
 
         finally:
@@ -671,10 +739,10 @@ class OpenAITranscriber:
                 logger.debug("Cleaning up temporary files...")
                 for temp_file in temp_files:
                     try:
-                        if temp_file.exists():
+                        if temp_file and temp_file.exists():
                             temp_file.unlink()
                             logger.debug(f"Deleted: {temp_file.name}")
-                    except Exception as e:
+                    except OSError as e:
                         logger.warning(f"Could not delete {temp_file.name}: {e}")
 
 

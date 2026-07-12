@@ -20,30 +20,30 @@ WHY WEIGHTED AVERAGING?
 ───────────────────────
 Simple average: (old + new) / 2
 - Problem: Old measurements have too much influence
-- Example: 10 old measurements of 5min, 1 new of 10min → average 5.45min
+- Example: 10 old measurements of 5min, 1 new of 10min -> average 5.45min
 - Result: Slow to adapt to changes
 
 Weighted average: old * 0.7 + new * 0.3
 - Benefit: Recent measurements have more influence
-- Example: old=5min, new=10min → average 6.5min
+- Example: old=5min, new=10min -> average 6.5min
 - Result: Adapts faster to actual performance
 
 WHY OUTLIER DETECTION? (NEW IMPROVEMENT):
 ──────────────────────────────────────────
 Without outlier detection:
-- User interrupts transcription (Ctrl+C) → recorded as very slow
-- System was busy (other processes) → recorded as slow
+- User interrupts transcription (Ctrl+C) -> recorded as very slow
+- System was busy (other processes) -> recorded as slow
 - One bad measurement skews all future estimates
 
 With outlier detection:
-- Measurement >3x average → reduce weight to 10%
-- Measurement <0.33x average → reduce weight to 10%
+- Measurement >3x average -> reduce weight to 10%
+- Measurement <0.33x average -> reduce weight to 10%
 - Prevents one bad run from ruining estimates
 
 Example:
-- Normal: 10s, 11s, 9s, 10s → average 10s ✓
-- With outlier: 10s, 11s, 50s (interrupted), 9s → average 12s ✗
-- With detection: 10s, 11s, 50s (ignored), 9s → average 10s ✓
+- Normal: 10s, 11s, 9s, 10s -> average 10s +
+- With outlier: 10s, 11s, 50s (interrupted), 9s -> average 12s x
+- With detection: 10s, 11s, 50s (ignored), 9s -> average 10s +
 
 WHAT WE TRACK:
 ──────────────
@@ -203,9 +203,9 @@ class PerformanceMetrics:
             Updated average
 
         Example:
-            current=10.0, new=11.0 → normal, use full weight
-            current=10.0, new=50.0 → outlier (5x), reduce weight to 0.1
-            current=10.0, new=2.0 → outlier (0.2x), reduce weight to 0.1
+            current=10.0, new=11.0 -> normal, use full weight
+            current=10.0, new=50.0 -> outlier (5x), reduce weight to 0.1
+            current=10.0, new=2.0 -> outlier (0.2x), reduce weight to 0.1
         """
         # Outlier detection: if new value is >3x or <0.33x current, it's suspicious
         if current > 0:

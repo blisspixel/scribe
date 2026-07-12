@@ -34,10 +34,10 @@ Not all providers support all capabilities:
 ┌────────────┬──────┬────────────┬───────┬─────────┐
 │ Provider   │ Chat │ Transcribe │ Image │ Vision  │
 ├────────────┼──────┼────────────┼───────┼─────────┤
-│ OpenAI     │  ✓   │     ✓      │   ✓   │    ✓    │
-│ XAI/Grok   │  ✓   │     ✗      │   ✓   │    ✓    │
-│ Anthropic  │  ✓   │     ✗      │   ✗   │    ✓    │
-│ Gemini     │  ✓   │     ✗      │   ✓   │    ✓    │
+│ OpenAI     │  +   │     +      │   +   │    +    │
+│ XAI/Grok   │  +   │     x      │   +   │    +    │
+│ Anthropic  │  +   │     x      │   x   │    +    │
+│ Gemini     │  +   │     x      │   +   │    +    │
 └────────────┴──────┴────────────┴───────┴─────────┘
 
 Providers raise NotImplementedError for unsupported capabilities.
@@ -141,11 +141,11 @@ class NewProvider(AIProvider):
 RESEARCH REFERENCES:
 ────────────────────
 - "Design Patterns: Elements of Reusable Object-Oriented Software" (GoF, 1994)
-  → Abstract Factory and Strategy patterns
+  -> Abstract Factory and Strategy patterns
 - "Clean Architecture" (Martin, 2017)
-  → Dependency inversion principle (depend on abstractions, not concretions)
+  -> Dependency inversion principle (depend on abstractions, not concretions)
 - "Structured Output from Language Models" (OpenAI, 2023)
-  → JSON mode and function calling for structured generation
+  -> JSON mode and function calling for structured generation
 
 This provider abstraction is key to Scribe's flexibility - it enables using
 the best AI service for each task while maintaining a simple, unified interface.

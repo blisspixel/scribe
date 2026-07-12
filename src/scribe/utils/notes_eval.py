@@ -18,7 +18,7 @@ This mirrors Scribe's existing bake-off pattern (``joke_bakeoff`` /
 
 A provider spec is ``"<provider>"`` or ``"<provider>:<model>"``, e.g.
 ``"openai"``, ``"openai:gpt-5.4"``, ``"ollama:qwen2.5:14b"`` (note the model
-itself may contain colons — only the first colon is the separator).
+itself may contain colons - only the first colon is the separator).
 """
 
 import json
@@ -446,7 +446,7 @@ def summarize_verdict(results: list[EvalResult]) -> str | None:
     if not clouds:
         return (
             f"Local {best_local.model} scored {best_local.struct_score:.0f}% structure "
-            f"at $0.00 — fully offline."
+            f"at $0.00 - fully offline."
         )
 
     best_cloud = max(clouds, key=quality)
@@ -454,7 +454,7 @@ def summarize_verdict(results: list[EvalResult]) -> str | None:
     cloud_cost = "" if best_cloud.cost_usd is None else f" (~${best_cloud.cost_usd:.4f}/run)"
     if gap <= 1.0:
         return (
-            f"Local {best_local.model} is worth it — comparable quality to "
+            f"Local {best_local.model} is worth it - comparable quality to "
             f"{best_cloud.model}{cloud_cost} at $0.00. Set SCRIBE_NOTES_PROVIDER=ollama."
         )
     return (

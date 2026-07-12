@@ -39,7 +39,7 @@ UNKNOWN_BUDGET_CAP_GB = 9.0
 
 # Fraction of the memory budget a model's *weights* may occupy. The remainder
 # is headroom for the KV cache (the context window is capped in the provider so
-# it stays small), compute buffers, and the OS — so the chosen model loads
+# it stays small), compute buffers, and the OS - so the chosen model loads
 # fully onto the GPU instead of spilling layers to the CPU.
 FIT_FRACTION = 0.85
 

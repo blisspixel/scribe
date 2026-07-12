@@ -633,7 +633,7 @@ def validate_media_url(url: str) -> str:
     Validate a URL for media download (YouTube, direct links, etc.).
 
     Validates format and checks that the scheme is http/https.
-    Does not probe the URL — that happens at download time.
+    Does not probe the URL - that happens at download time.
 
     Args:
         url: URL to validate

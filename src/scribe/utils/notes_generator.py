@@ -26,19 +26,19 @@ THE SOLUTION - MULTI-STEP REASONING:
 We break notes generation into DISTINCT STEPS:
 
 Step 1: DETAILED SUMMARY (prose)
-  → AI reads transcript and writes comprehensive summary
-  → No structure constraints, just capture everything important
-  → Output: Rich prose with all key points
+  -> AI reads transcript and writes comprehensive summary
+  -> No structure constraints, just capture everything important
+  -> Output: Rich prose with all key points
 
 Step 2: ANALYTICAL BREAKDOWN (structured JSON)
-  → AI takes summary and extracts structured data
-  → Strict schema: current_state, drivers, blockers, future_state, next_steps
-  → Output: Valid JSON with business and technical insights
+  -> AI takes summary and extracts structured data
+  -> Strict schema: current_state, drivers, blockers, future_state, next_steps
+  -> Output: Valid JSON with business and technical insights
 
 Step 3: REFINE AND POLISH (improved JSON)
-  → AI reviews breakdown and improves it
-  → Adds missing details, fixes inconsistencies
-  → Output: Polished, complete structured notes
+  -> AI reviews breakdown and improves it
+  -> Adds missing details, fixes inconsistencies
+  -> Output: Polished, complete structured notes
 
 Why this works:
 - Each step has ONE job (easier for AI)
@@ -51,14 +51,14 @@ MAP-REDUCE FOR LONG TRANSCRIPTS:
 For very long transcripts (>100K chars), we use map-reduce:
 
 Map phase:
-  → Split transcript into overlapping segments
-  → Generate summary + breakdown for each segment
-  → Overlap prevents losing context at boundaries
+  -> Split transcript into overlapping segments
+  -> Generate summary + breakdown for each segment
+  -> Overlap prevents losing context at boundaries
 
 Reduce phase:
-  → Merge all breakdowns into single structure
-  → Deduplicate action items
-  → Combine insights from all segments
+  -> Merge all breakdowns into single structure
+  -> Deduplicate action items
+  -> Combine insights from all segments
 
 This handles transcripts of ANY length without losing content.
 

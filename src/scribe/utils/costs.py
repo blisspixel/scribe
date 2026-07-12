@@ -94,3 +94,17 @@ def add_cost_fields(
         updated["cost_source"] = "local_estimate"
 
     return updated
+
+
+@deal.pre(lambda _model, duration_sec: duration_sec >= 0)
+@deal.post(lambda result: result is None or result >= 0)
+def estimate_audio_cost_usd(
+    model: str,
+    duration_sec: int | float,
+) -> float | None:
+    """Estimate audio processing cost based on duration."""
+    # OpenAI Whisper models cost ~$0.006 per minute
+    if "whisper" in model.lower() or "transcribe" in model.lower():
+        price_per_minute = 0.006
+        return (float(duration_sec) / 60.0) * price_per_minute
+    return None

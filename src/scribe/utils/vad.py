@@ -136,11 +136,11 @@ LIMITATIONS (HONEST ASSESSMENT):
 RESEARCH REFERENCES:
 ────────────────────
 - "Silero VAD: Pre-trained Enterprise-grade Voice Activity Detector" (Silero Team, 2021)
-  → Neural VAD architecture and training methodology
+  -> Neural VAD architecture and training methodology
 - "Voice Activity Detection in the Wild" (Lavrentyeva et al., 2017)
-  → Challenges of VAD in noisy environments
+  -> Challenges of VAD in noisy environments
 - "Singing Voice Detection: A Survey" (Lehner et al., 2014)
-  → Differences between speech and singing voice detection
+  -> Differences between speech and singing voice detection
 
 This VAD module is a key enabler of Scribe's segment-based music transcription,
 providing precise vocal timestamps that enable complete, accurate lyric extraction.

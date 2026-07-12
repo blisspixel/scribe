@@ -207,7 +207,7 @@ class URLDownloader:
         return opts
 
     def _progress_hook(self, d: dict[str, Any]) -> None:
-        """yt-dlp progress hook — translates to our callback."""
+        """yt-dlp progress hook - translates to our callback."""
         if not self.progress_callback:
             return
 
@@ -221,7 +221,7 @@ class URLDownloader:
 
     def _find_downloaded_file(self, info: dict[str, Any]) -> Path | None:
         """Find the actual downloaded file on disk."""
-        # yt-dlp prepares the filename — use it directly
+        # yt-dlp prepares the filename - use it directly
         if info.get("requested_downloads"):
             for download in info["requested_downloads"]:
                 filepath = download.get("filepath")

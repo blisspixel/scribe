@@ -5,12 +5,12 @@ Talks to a locally running Ollama server through its **native** ``/api/chat``
 endpoint (not the OpenAI-compat shim) so we get full control over the knobs that
 matter for running well on real hardware:
 
-- ``options.num_ctx`` — the context window is sized dynamically to the actual
+- ``options.num_ctx`` - the context window is sized dynamically to the actual
   transcript and capped, so the KV cache never balloons and forces a CPU spill.
   (Some models ship a huge default context, e.g. 262K, which alone is ~28GB of
   KV cache and pushes the model half onto the CPU. Capping it keeps the whole
   model on the GPU, where Ollama places it automatically once it fits.)
-- ``format`` = the JSON schema — constrained decoding guarantees schema-valid
+- ``format`` = the JSON schema - constrained decoding guarantees schema-valid
   JSON in ``content``. This is also what makes *thinking* models (Gemma 4,
   Qwen3) reliable: without it their JSON can land in the reasoning channel and
   ``content`` comes back empty.
@@ -77,7 +77,7 @@ def compute_num_ctx(
     Size the context window to the actual request, then clamp.
 
     Large enough to hold the transcript plus the response, rounded up, but never
-    larger than ``max_ctx`` — the cap is what prevents the KV cache from forcing
+    larger than ``max_ctx`` - the cap is what prevents the KV cache from forcing
     a CPU spill on big models.
     """
     if override and override > 0:
@@ -205,7 +205,7 @@ class OllamaProvider(AIProvider):
         Request structured JSON via constrained decoding.
 
         Passing the schema to Ollama's ``format`` constrains generation to
-        schema-valid JSON in ``content`` — reliable even for thinking models
+        schema-valid JSON in ``content`` - reliable even for thinking models
         (Gemma 4, Qwen3) whose JSON would otherwise land in the reasoning channel.
         Falls back to plain JSON mode when no schema is given.
         """

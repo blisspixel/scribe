@@ -67,8 +67,8 @@ The manager implements a "lazy unload" strategy:
 Memory lifecycle:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ acquire_gpu("model-A")                                                      │
-│   ├─ Check: Is model-A already loaded? → Yes: Reuse (fast path)           │
-│   ├─ Check: Is different model loaded? → Yes: Unload it                   │
+│   ├─ Check: Is model-A already loaded? -> Yes: Reuse (fast path)           │
+│   ├─ Check: Is different model loaded? -> Yes: Unload it                   │
 │   │   ├─ Delete model object (Python GC)                                  │
 │   │   ├─ torch.cuda.empty_cache() (free fragmented memory)                │
 │   │   └─ gc.collect() (force garbage collection)                          │
@@ -109,13 +109,13 @@ FAILURE MODES PREVENTED:
 RESEARCH REFERENCES:
 ────────────────────
 - "Design Patterns: Elements of Reusable Object-Oriented Software" (GoF, 1994)
-  → Singleton pattern for global resource management
+  -> Singleton pattern for global resource management
 - "Effective Python: 90 Specific Ways to Write Better Python" (Slatkin, 2019)
-  → Context managers for resource management (Item 66)
+  -> Context managers for resource management (Item 66)
 - "CUDA C++ Programming Guide" (NVIDIA, 2023)
-  → GPU memory management best practices
+  -> GPU memory management best practices
 - "Resource Acquisition Is Initialization" (Stroustrup, 1994)
-  → RAII pattern for automatic resource cleanup
+  -> RAII pattern for automatic resource cleanup
 
 This manager is a cornerstone of Scribe's stability - it prevents the most
 common GPU failure mode (OOM) through simple, automatic resource management.
@@ -192,7 +192,7 @@ class GPUResourceManager:
         with self._model_lock:
             # Check if we need to unload previous model
             if self._current_model and self._current_model != model_name:
-                logger.info(f"Switching GPU model: {self._current_model} → {model_name}")
+                logger.info(f"Switching GPU model: {self._current_model} -> {model_name}")
 
                 # Unload previous model
                 if self._current_model_obj is not None:

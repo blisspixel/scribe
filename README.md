@@ -56,7 +56,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 - Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
 - Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
 - Step 3 in progress: mypy --strict clean; `deal` contracts on pure modules (`costs`, transcript model, validation helpers); Hypothesis property tests expanding.
-- Step 4 in progress: pip-audit blocking in CI; `scribe doctor` dependency security scan (ADR-004 torch ignores); systematic tightening of broad `except` handlers in config, validation, safe I/O, init wizard, voice setup, and recorder paths.
+- Step 4 complete: pip-audit blocking in CI; SBOM generation documented; `scribe doctor` enhanced with CUDA driver age and pip-audit; broad exception handlers tightened to ADR-002 typed tuples across the entire codebase; ADR-012 created to evaluate and reject structured logging.
 
 ---
 

@@ -119,7 +119,7 @@ _HEADER = re.compile(r"^#{1,6}\s*")
 _BULLET = re.compile(r"^[-*+]\s+")
 _NUMBERED = re.compile(r"^\d+\.\s+")
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-_RULE_CHARS = set("-=_─—")  # hyphen, equals, underscore, box-rule, em-dash
+_RULE_CHARS = set("-=_─-")  # hyphen, equals, underscore, box-rule, em-dash
 
 
 def speakable_from_markdown(text: str) -> str:

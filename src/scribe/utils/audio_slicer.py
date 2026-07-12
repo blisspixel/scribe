@@ -26,20 +26,20 @@ THE ARCHITECTURE:
 The segment-based pipeline has three stages:
 
 Stage 1: VAD Detection
-  → Analyze audio, detect vocal segments
-  → Output: List of (start_time, end_time) timestamps
+  -> Analyze audio, detect vocal segments
+  -> Output: List of (start_time, end_time) timestamps
 
 Stage 2: Audio Slicing (THIS MODULE)
-  → Load audio file
-  → Extract each segment based on timestamps
-  → Save as separate audio files
-  → Output: List of audio file paths
+  -> Load audio file
+  -> Extract each segment based on timestamps
+  -> Save as separate audio files
+  -> Output: List of audio file paths
 
 Stage 3: Independent Transcription
-  → Transcribe each segment separately
-  → No context bleeding between segments
-  → Filter hallucinations per-segment
-  → Reassemble into complete lyrics
+  -> Transcribe each segment separately
+  -> No context bleeding between segments
+  -> Filter hallucinations per-segment
+  -> Reassemble into complete lyrics
 
 This module implements Stage 2: converting timestamps into audio files.
 
@@ -95,7 +95,7 @@ THE REAL VALUE:
 ───────────────
 The value isn't in THIS code - it's in the PIPELINE it enables:
 
-VAD → Slicing → Independent Transcription → Reassembly
+VAD -> Slicing -> Independent Transcription -> Reassembly
 
 This simple slicing step is what allows us to transcribe each vocal phrase
 independently, which prevents context loss and enables per-segment hallucination
@@ -137,7 +137,7 @@ We tried simpler approaches first. Here's what we learned:
 
 **Approach 2: Fixed-length chunks (30-second slices)**
 - Tried: Slice every 30 seconds regardless of content
-- Problem: Splits words mid-sentence ("I love y—" / "—ou")
+- Problem: Splits words mid-sentence ("I love y-" / "-ou")
 - Why: Arbitrary boundaries don't align with natural phrases
 - Result: Transcription errors at chunk boundaries
 
@@ -168,11 +168,11 @@ Sliced audio files are temporary and should be cleaned up after transcription:
 RESEARCH REFERENCES:
 ────────────────────
 - "Segment-Based Speech Recognition" (Ostendorf et al., 1996)
-  → Benefits of segment-based processing for speech recognition
+  -> Benefits of segment-based processing for speech recognition
 - "Audio Segmentation for Music Information Retrieval" (Tzanetakis & Cook, 2002)
-  → Techniques for segmenting music audio
+  -> Techniques for segmenting music audio
 - "Efficient Audio Processing with Streaming" (Stoller et al., 2019)
-  → Memory-efficient audio processing techniques
+  -> Memory-efficient audio processing techniques
 
 This slicing module is the bridge between VAD detection and transcription,
 enabling the segment-based architecture that makes complete lyric extraction

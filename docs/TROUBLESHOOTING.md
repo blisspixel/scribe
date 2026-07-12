@@ -9,7 +9,7 @@ Always start with system diagnostics:
 scribe doctor
 ```
 
-This runs 16 comprehensive checks and provides actionable recommendations.
+This runs all comprehensive checks and provides actionable recommendations.
 
 ## Common Issues
 
@@ -44,8 +44,9 @@ nvidia-smi
 ```
 
 3. **Update NVIDIA drivers:**
-- Download latest drivers from NVIDIA website
-- Restart after installation
+- `scribe doctor` now includes a CUDA driver age check. If it flags your driver as "Very old" (e.g. < 525), modern PyTorch may degrade or fail to detect your GPU.
+- Download latest drivers from the NVIDIA website.
+- Restart after installation.
 
 4. **Verify CUDA version compatibility:**
 - PyTorch requires CUDA 12.4+

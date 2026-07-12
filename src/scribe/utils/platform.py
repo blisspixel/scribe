@@ -86,9 +86,9 @@ PATH NORMALIZATION:
 The `normalize_path()` function handles ALL path edge cases:
 
 **Transformations:**
-1. Strip quotes: `"~/file.txt"` → `~/file.txt`
-2. Expand ~: `~/file.txt` → `/home/user/file.txt`
-3. Resolve to absolute: `../file.txt` → `/home/user/file.txt`
+1. Strip quotes: `"~/file.txt"` -> `~/file.txt`
+2. Expand ~: `~/file.txt` -> `/home/user/file.txt`
+3. Resolve to absolute: `../file.txt` -> `/home/user/file.txt`
 4. Handle platform differences: Backslashes on Windows, forward slashes on Unix
 
 **Why use Path.resolve()?**

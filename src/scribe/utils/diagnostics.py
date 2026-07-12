@@ -140,7 +140,7 @@ def assess_local_readiness() -> LocalReadiness:
         if models:
             chosen = select_default_ollama_model(base_url)
             can_take_notes = True
-            notes_detail = f"Ollama · {len(models)} model(s), auto-selects {chosen}"
+            notes_detail = f"Ollama - {len(models)} model(s), auto-selects {chosen}"
         else:
             can_take_notes = False
             notes_detail = "Ollama has no models installed (or isn't running)"
@@ -190,6 +190,7 @@ class SystemDiagnostics:
             self.check_ytdlp,
             self.check_obs_websocket,
             self.check_cuda,
+            self.check_cuda_driver,
             self.check_gpu,
             self.check_gpu_memory,
             self.check_local_readiness,
@@ -513,6 +514,64 @@ class SystemDiagnostics:
         self.results.append(result)
         return result
 
+    def check_cuda_driver(self) -> DiagnosticResult:
+        """Check CUDA driver version and age."""
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                driver_version = result.stdout.strip().splitlines()[0]
+
+                # Check if it's very old (e.g. < 525)
+                try:
+                    major_ver = int(float(driver_version.split(".")[0]))
+                    if major_ver < 525:
+                        diag_result = DiagnosticResult(
+                            name="CUDA Driver",
+                            status="warn",
+                            message=f"Driver v{driver_version} (Very old)",
+                            details="Driver is older than v525. CUDA support may be degraded.",
+                            fix_suggestion="Update NVIDIA drivers for better compatibility with modern PyTorch.",
+                        )
+                    else:
+                        diag_result = DiagnosticResult(
+                            name="CUDA Driver",
+                            status="pass",
+                            message=f"Driver v{driver_version}",
+                            details="Driver version is recent enough for modern PyTorch.",
+                        )
+                except ValueError:
+                    diag_result = DiagnosticResult(
+                        name="CUDA Driver",
+                        status="pass",
+                        message=f"Driver v{driver_version}",
+                        details="Could not parse driver version for age check.",
+                    )
+            else:
+                diag_result = DiagnosticResult(
+                    name="CUDA Driver",
+                    status="warn",
+                    message="Not detected",
+                    details="nvidia-smi did not return a valid driver version.",
+                )
+        except Exception as e:
+            diag_result = DiagnosticResult(
+                name="CUDA Driver",
+                status="warn",
+                message="Check failed",
+                details=f"Could not execute nvidia-smi: {e}",
+            )
+
+        self.results.append(diag_result)
+        return diag_result
+
     def check_gpu(self) -> DiagnosticResult:
         """Check GPU availability and details."""
         gpu_config = GPUConfig.detect()
@@ -717,10 +776,9 @@ class SystemDiagnostics:
         else:
             result = DiagnosticResult(
                 name=".env File",
-                status="warn",
+                status="pass",
                 message="Not found",
-                details="Using environment variables or defaults",
-                fix_suggestion="Copy .env.example to .env and configure",
+                details="Running without .env file (using environment variables or defaults)",
             )
 
         self.results.append(result)
@@ -1134,10 +1192,9 @@ class SystemDiagnostics:
         except ImportError:
             result = DiagnosticResult(
                 name="System Resources",
-                status="warn",
-                message="psutil not installed",
-                details="Cannot check system resources",
-                fix_suggestion="Install psutil for resource monitoring: pip install psutil",
+                status="pass",
+                message="Resource monitor unavailable (psutil not installed)",
+                details="Cannot check system memory",
             )
         except Exception as e:
             result = DiagnosticResult(

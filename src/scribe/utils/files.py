@@ -55,7 +55,7 @@ The `safe_path()` function handles all path edge cases:
 1. Strip whitespace: '"~/Documents/file.txt"'
 2. Remove quotes: '~/Documents/file.txt'
 3. Expand ~: '/home/user/Documents/file.txt'
-4. Expand env vars: $HOME → /home/user
+4. Expand env vars: $HOME -> /home/user
 5. Convert to absolute: Path('/home/user/Documents/file.txt')
 6. Validate not empty
 ```
@@ -83,7 +83,7 @@ The `verify_file_content()` function checks THREE things:
 ```python
 # BAD (race condition):
 if path.exists():  # File exists here
-    size = path.stat().st_size  # File deleted here → crash
+    size = path.stat().st_size  # File deleted here -> crash
 
 # GOOD (atomic):
 try:
@@ -125,8 +125,8 @@ FILENAME PARSING:
 ─────────────────
 The `extract_date_from_filename()` function handles TWO formats:
 
-1. **ISO format**: "Meeting_2025-11-06_15-31-40.mp4" → "2025-11-06"
-2. **Compact format**: "Recording_20251106.wav" → "2025-11-06"
+1. **ISO format**: "Meeting_2025-11-06_15-31-40.mp4" -> "2025-11-06"
+2. **Compact format**: "Recording_20251106.wav" -> "2025-11-06"
 
 **Why two formats?**
 - Different recording software uses different formats
@@ -316,7 +316,7 @@ def safe_path(path: str) -> Path:
 
     try:
         return normalize_path(path)
-    except Exception as e:
+    except OSError as e:
         raise FileOperationError(f"Invalid path: {path}", context={"error": str(e)})
 
 
@@ -336,7 +336,7 @@ def ensure_directory(path: Path) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=True)
         return path
-    except Exception as e:
+    except OSError as e:
         raise FileOperationError(f"Cannot create directory: {path}", context={"error": str(e)})
 
 
@@ -392,7 +392,7 @@ def cleanup_files(
                 try:
                     file_path.unlink()
                     deleted_files.append(file_path)
-                except Exception as e:
+                except OSError as e:
                     # Log but don't fail on individual file deletion errors
                     import logging
 
@@ -400,7 +400,7 @@ def cleanup_files(
 
         return deleted_files
 
-    except Exception as e:
+    except OSError as e:
         raise FileOperationError(
             f"Cleanup failed in directory: {directory}", context={"error": str(e)}
         )
@@ -492,7 +492,7 @@ def format_date(date_str: str) -> str:
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         return dt.strftime("%B %d, %Y")
-    except Exception:
+    except ValueError:
         return date_str
 
 
@@ -532,7 +532,7 @@ def get_file_size_mb(path: Path) -> float:
     """
     try:
         return path.stat().st_size / (1024 * 1024)
-    except Exception:
+    except OSError:
         return 0.0
 
 
@@ -558,7 +558,7 @@ def get_file_info(path: Path) -> dict[str, Any]:
             "is_file": path.is_file(),
             "is_dir": path.is_dir(),
         }
-    except Exception as e:
+    except OSError as e:
         return {"path": str(path), "error": str(e)}
 
 
@@ -585,7 +585,7 @@ def find_latest_file(directory: Path, pattern: str, min_size: int = 0) -> Path |
                 stat = file_path.stat()
                 if stat.st_size >= min_size:
                     matching_files.append((file_path, stat.st_ctime))
-            except Exception:
+            except OSError:
                 continue
 
     if not matching_files:
@@ -633,7 +633,7 @@ def wait_for_file_stable(
                 stable_time = 0.0
                 last_size = current_size
 
-        except Exception:
+        except OSError:
             pass
 
         time.sleep(check_interval)
@@ -672,7 +672,7 @@ def copy_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
 
         shutil.copy2(source, destination)
         return destination
-    except Exception as e:
+    except OSError as e:
         raise FileOperationError(
             f"Failed to copy file from {source} to {destination}",
             context={"source": str(source), "destination": str(destination), "error": str(e)},
@@ -710,7 +710,7 @@ def move_file_safe(source: Path, destination: Path, overwrite: bool = False) -> 
 
         shutil.move(str(source), str(destination))
         return destination
-    except Exception as e:
+    except OSError as e:
         raise FileOperationError(
             f"Failed to move file from {source} to {destination}",
             context={"source": str(source), "destination": str(destination), "error": str(e)},

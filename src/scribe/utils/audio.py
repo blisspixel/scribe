@@ -27,19 +27,19 @@ We implement a fallback chain with increasing complexity:
 
 **Duration Detection (3 methods):**
 1. **Native WAV parsing** (fastest, most reliable for WAV)
-   → Uses Python's wave module (no dependencies)
-   → Direct frame count / sample rate calculation
-   → ~1ms for typical file
+   -> Uses Python's wave module (no dependencies)
+   -> Direct frame count / sample rate calculation
+   -> ~1ms for typical file
 
 2. **Torchaudio metadata** (handles multiple formats)
-   → Uses torchaudio.info() (no audio loading)
-   → Supports WAV, MP3, FLAC, OGG, etc.
-   → ~10ms for typical file
+   -> Uses torchaudio.info() (no audio loading)
+   -> Supports WAV, MP3, FLAC, OGG, etc.
+   -> ~10ms for typical file
 
 3. **FFprobe subprocess** (last resort)
-   → Requires FFmpeg installation
-   → Handles exotic formats
-   → ~100ms for typical file (subprocess overhead)
+   -> Requires FFmpeg installation
+   -> Handles exotic formats
+   -> ~100ms for typical file (subprocess overhead)
 
 **Why this order?**
 - Start with fastest, most reliable
@@ -174,12 +174,12 @@ UTILITY FUNCTIONS:
 **format_timestamp(seconds)**: "HH:MM:SS"
 - Used in transcription output
 - Zero-padded for consistency
-- Example: 3661.5 → "01:01:01"
+- Example: 3661.5 -> "01:01:01"
 
 **format_duration(seconds)**: "Xh Ym"
 - Human-readable duration
 - Omits zero components
-- Examples: 3661 → "1h 1m", 1800 → "30m", 7200 → "2h"
+- Examples: 3661 -> "1h 1m", 1800 -> "30m", 7200 -> "2h"
 
 **get_audio_info(path)**: Comprehensive metadata
 - Combines all checks in one call
@@ -213,7 +213,7 @@ LIMITATIONS (HONEST):
 
 EDGE CASES HANDLED:
 ───────────────────
-1. **Missing dependencies**: Graceful fallback (wave → torchaudio → ffprobe)
+1. **Missing dependencies**: Graceful fallback (wave -> torchaudio -> ffprobe)
 2. **Corrupted files**: Caught in validation, clear error messages
 3. **Very large files**: Warning issued (> 2GB)
 4. **Empty files**: Detected in validation
@@ -400,9 +400,14 @@ def _get_duration_wave(path: Path) -> float | None:
 def _get_duration_torchaudio(path: Path) -> float | None:
     """Get duration using torchaudio metadata."""
     try:
+        import warnings
+
         import torchaudio
 
-        info = torchaudio.info(str(path))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            info = torchaudio.info(str(path))
+
         if hasattr(info, "sample_rate") and hasattr(info, "num_frames"):
             if info.sample_rate > 0 and info.num_frames > 0:
                 return float(info.num_frames) / float(info.sample_rate)

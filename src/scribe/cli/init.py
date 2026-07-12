@@ -337,7 +337,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         return CONFIG_PATH
 
     path = save_config_file(data)
-    console.print(f"\n[green]✓ Saved to[/green] [cyan]{path}[/cyan]")
+    console.print(f"\n[green]+ Saved to[/green] [cyan]{path}[/cyan]")
 
     _resolve_env_conflicts(
         console=console,
@@ -358,7 +358,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         cfg = ScribeConfig()
         checks = []
         if cfg.obs_password:
-            checks.append("[green]✓[/green] OBS password configured")
+            checks.append("[green]+[/green] OBS password configured")
         else:
             checks.append("[yellow]![/yellow] OBS password not set")
         console.print("  " + "  ".join(checks))
@@ -375,7 +375,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             result = rec.check_obs_preflight()
             if result.ok:
                 console.print(
-                    f"[green]✓ OBS WebSocket reachable[/green] ({result.endpoint or 'ok'})"
+                    f"[green]+ OBS WebSocket reachable[/green] ({result.endpoint or 'ok'})"
                 )
             else:
                 console.print(f"[yellow]! OBS preflight: {result.message}[/yellow]")
@@ -386,11 +386,11 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
 
     console.print("\n[bold green]Setup complete![/bold green]")
     console.print("[dim]Next steps:[/dim]")
-    console.print("  [cyan]scribe doctor[/cyan]          — full system health check")
+    console.print("  [cyan]scribe doctor[/cyan]          - full system health check")
     console.print(
-        '  [cyan]scribe rec "Meeting Name"[/cyan]  — start a recording (or use the desktop shortcut)'
+        '  [cyan]scribe rec "Meeting Name"[/cyan]  - start a recording (or use the desktop shortcut)'
     )
-    console.print("  [cyan]scribe shortcut[/cyan]        — create Quick Record launcher")
+    console.print("  [cyan]scribe shortcut[/cyan]        - create Quick Record launcher")
     console.print("[dim]Re-run `scribe init` anytime to change these settings.[/dim]")
 
     # Extremely polished QOL: offer to create the launcher right now as part of setup
@@ -403,7 +403,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             from scribe.cli.shortcut import install_quick_record_launcher
 
             created = install_quick_record_launcher(desktop=True)
-            console.print("[green]✓ Launcher created.[/green]")
+            console.print("[green]+ Launcher created.[/green]")
             for p in created:
                 console.print(f"  [dim]{p}[/dim]")
             console.print("[dim]Drag the desktop one to your taskbar if desired.[/dim]")
@@ -531,7 +531,7 @@ def maybe_prompt_first_run(console: Console | None = None) -> bool:
         default=True,
         console=console,
     ):
-        console.print("[dim]No problem — run `scribe init` later whenever you're ready.[/dim]")
+        console.print("[dim]No problem - run `scribe init` later whenever you're ready.[/dim]")
         return False
 
     run_wizard(console=console, force=True)

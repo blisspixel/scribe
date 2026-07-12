@@ -157,7 +157,7 @@ USER EXPERIENCE:
 ────────────────
 The bake-off runs silently in the background:
 
-- User sees: "Generating joke..." → "Here's your joke"
+- User sees: "Generating joke..." -> "Here's your joke"
 - User doesn't see: "Trying 4 providers... Judging... Winner: Grok"
 
 This keeps the UX simple while providing the best possible result.
@@ -175,13 +175,13 @@ Potential improvements:
 RESEARCH REFERENCES:
 ────────────────────
 - "Mixture of Experts" (Jacobs et al., 1991)
-  → Multiple specialized models with gating network
+  -> Multiple specialized models with gating network
 - "Ensemble Methods in Machine Learning" (Dietterich, 2000)
-  → Combining multiple models for better performance
+  -> Combining multiple models for better performance
 - "Learning to Learn" (Thrun & Pratt, 1998)
-  → Meta-learning and transfer learning
+  -> Meta-learning and transfer learning
 - "Constitutional AI: Harmlessness from AI Feedback" (Bai et al., 2022)
-  → Using AI to evaluate and improve AI outputs
+  -> Using AI to evaluate and improve AI outputs
 
 This bake-off system is a creative solution to the variability problem in AI
 humor generation. By running a competition and selecting the best output, we
@@ -244,7 +244,7 @@ def run_joke_bakeoff(
     jokes = []
 
     for provider_name in available_providers:
-        logger.info(f"  → Getting joke from {provider_name.upper()}...")
+        logger.info(f"  -> Getting joke from {provider_name.upper()}...")
 
         try:
             # Write transcript to temp file for generate_transcript_joke
@@ -276,12 +276,12 @@ def run_joke_bakeoff(
                 )
                 # Truncate for display
                 display_joke = joke_text[:80] + "..." if len(joke_text) > 80 else joke_text
-                logger.info(f'    ✓ {provider_name}: "{display_joke}"')
+                logger.info(f'    + {provider_name}: "{display_joke}"')
             else:
-                logger.warning(f"    ✗ {provider_name} returned no joke")
+                logger.warning(f"    x {provider_name} returned no joke")
 
         except Exception as e:
-            logger.warning(f"    ✗ {provider_name} failed: {e}")
+            logger.warning(f"    x {provider_name} failed: {e}")
 
     if not jokes:
         raise ValueError("No providers successfully generated jokes")

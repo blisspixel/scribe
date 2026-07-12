@@ -115,7 +115,7 @@ except IOError as e:
 ADDITIONAL UTILITIES:
 ─────────────────────
 1. safe_copy(): Atomic file copy (copy to temp, then rename)
-2. backup_file(): Create backup before modifying (file.txt → file.txt.bak)
+2. backup_file(): Create backup before modifying (file.txt -> file.txt.bak)
 3. safe_write_context(): Context manager for streaming writes
 
 These utilities extend the atomic write pattern to other file operations.
@@ -146,13 +146,13 @@ FAILURE MODES PREVENTED:
 RESEARCH REFERENCES:
 ────────────────────
 - "The Design and Implementation of a Log-Structured File System" (Rosenblum & Ousterhout, 1992)
-  → Atomic operations in filesystems
+  -> Atomic operations in filesystems
 - "ACID Properties in Database Systems" (Haerder & Reuter, 1983)
-  → Atomicity, Consistency, Isolation, Durability principles
+  -> Atomicity, Consistency, Isolation, Durability principles
 - "POSIX.1-2017: System Interfaces" (IEEE, 2017)
-  → rename() atomicity guarantees
+  -> rename() atomicity guarantees
 - "Crash Consistency: FSCK and Journaling" (Arpaci-Dusseau, 2018)
-  → Filesystem crash recovery mechanisms
+  -> Filesystem crash recovery mechanisms
 
 This module is a cornerstone of Scribe's data integrity - it ensures that
 transcripts, documents, and configuration files are never left in a corrupted

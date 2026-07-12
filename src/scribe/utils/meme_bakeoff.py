@@ -56,7 +56,7 @@ def run_meme_bakeoff(
     concepts = []
 
     for provider_name in available_providers:
-        logger.info(f"  → Getting concept from {provider_name.upper()}...")
+        logger.info(f"  -> Getting concept from {provider_name.upper()}...")
 
         try:
             provider = get_provider(feature="meme", provider_name=provider_name)
@@ -76,13 +76,13 @@ def run_meme_bakeoff(
                     }
                 )
                 logger.info(
-                    f'    ✓ {provider_name}: "{concept.get("top_text")}" / "{concept.get("bottom_text")}"'
+                    f'    + {provider_name}: "{concept.get("top_text")}" / "{concept.get("bottom_text")}"'
                 )
             else:
-                logger.warning(f"    ✗ {provider_name} returned no concept")
+                logger.warning(f"    x {provider_name} returned no concept")
 
         except Exception as e:
-            logger.warning(f"    ✗ {provider_name} failed: {e}")
+            logger.warning(f"    x {provider_name} failed: {e}")
 
     if not concepts:
         raise ValueError("No providers successfully generated concepts")

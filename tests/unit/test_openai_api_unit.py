@@ -64,7 +64,9 @@ class TestOpenAITranscriber:
         """Test transcription failure."""
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
-        mock_client.audio.transcriptions.create.side_effect = Exception("API Error")
+        from openai import APIConnectionError
+
+        mock_client.audio.transcriptions.create.side_effect = APIConnectionError(request=Mock())
 
         # Mock duration
         mock_duration.return_value = 100.0
@@ -75,9 +77,7 @@ class TestOpenAITranscriber:
         with patch.object(Path, "exists", return_value=True):
             with patch.object(Path, "stat") as mock_stat:
                 mock_stat.return_value.st_size = 100
-                with pytest.raises(
-                    TranscriptionError, match="Server-side chunking transcription failed"
-                ):
+                with pytest.raises(TranscriptionError, match="OpenAI transcription failed"):
                     transcriber.transcribe(audio_path)
 
     @patch("scribe.core.openai_api.OpenAI")

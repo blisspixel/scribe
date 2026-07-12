@@ -94,8 +94,8 @@ FALLBACK STRATEGY:
 ──────────────────
 When the primary method fails, the system attempts fallback:
 
-Primary: local → Fallback: openai (if API key present)
-Primary: openai → Fallback: local (if GPU present)
+Primary: local -> Fallback: openai (if API key present)
+Primary: openai -> Fallback: local (if GPU present)
 
 Fallback is NOT attempted for:
 - ValidationError (file too large, invalid format)
@@ -120,11 +120,11 @@ OpenAI API (gpt-4o-transcribe-diarize):
 RESEARCH REFERENCES:
 ────────────────────
 - "Design Patterns: Elements of Reusable Object-Oriented Software" (GoF, 1994)
-  → Facade, Strategy, Chain of Responsibility patterns
+  -> Facade, Strategy, Chain of Responsibility patterns
 - "Release It! Design and Deploy Production-Ready Software" (Nygard, 2018)
-  → Circuit breaker, bulkhead, timeout patterns for resilience
+  -> Circuit breaker, bulkhead, timeout patterns for resilience
 - "Whisper: Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., 2022)
-  → Understanding of Whisper's initial_prompt mechanism for vocabulary guidance
+  -> Understanding of Whisper's initial_prompt mechanism for vocabulary guidance
 
 This orchestration layer is the heart of Scribe's reliability - it makes
 transcription "just work" by handling the complexity of method selection,

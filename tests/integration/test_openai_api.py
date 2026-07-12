@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from scribe.core.openai_api import OpenAITranscriber
-from scribe.exceptions import TranscriptionError
+from scribe.exceptions import APIError, TranscriptionError
 from scribe.models.config import ScribeConfig
 
 
@@ -136,10 +136,11 @@ class TestOpenAITranscriber:
 
         # Mock OpenAI to raise authentication error
         def mock_openai_init(*args, **kwargs):
+            from openai import AuthenticationError
+
             mock_client = Mock()
-            # Raise a generic exception instead of AuthenticationError (complex to mock)
-            mock_client.audio.transcriptions.create.side_effect = Exception(
-                "Incorrect API key provided"
+            mock_client.audio.transcriptions.create.side_effect = AuthenticationError(
+                message="Incorrect API key provided", response=Mock(), body={}
             )
             return mock_client
 
@@ -147,7 +148,7 @@ class TestOpenAITranscriber:
 
         transcriber = OpenAITranscriber(api_key="invalid-key", model="gpt-4o-transcribe")
 
-        with pytest.raises(TranscriptionError):
+        with pytest.raises(APIError):
             transcriber.transcribe(sample_audio)
 
     @patch("scribe.core.openai_api.OpenAI")
@@ -156,8 +157,10 @@ class TestOpenAITranscriber:
     ):
         """Test transcription handles API errors gracefully."""
         # Mock OpenAI to raise an error
+        from openai import OpenAIError
+
         mock_client = Mock()
-        mock_client.audio.transcriptions.create.side_effect = Exception("API Error")
+        mock_client.audio.transcriptions.create.side_effect = OpenAIError("API Error")
         mock_openai_class.return_value = mock_client
 
         transcriber = OpenAITranscriber(

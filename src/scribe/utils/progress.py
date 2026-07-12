@@ -24,8 +24,8 @@ Traditional progress bars use naive estimation:
    - Problem: System doesn't learn from past performance
 
 These approaches produce inaccurate estimates that frustrate users:
-- "5 minutes remaining" → Actually takes 15 minutes
-- "2 hours remaining" → Actually takes 30 minutes
+- "5 minutes remaining" -> Actually takes 15 minutes
+- "2 hours remaining" -> Actually takes 30 minutes
 
 BREAKTHROUGH SOLUTION:
 ──────────────────────
@@ -122,9 +122,9 @@ Examples:
 - 0.5x realtime: Takes 120 seconds to process 60 seconds of audio
 
 This metric is intuitive for users:
-- "Processing at 11x realtime" → Very fast (GPU)
-- "Processing at 2x realtime" → Moderate (API)
-- "Processing at 0.5x realtime" → Slow (CPU)
+- "Processing at 11x realtime" -> Very fast (GPU)
+- "Processing at 2x realtime" -> Moderate (API)
+- "Processing at 0.5x realtime" -> Slow (CPU)
 
 PROGRESS BAR INTEGRATION:
 ─────────────────────────
@@ -144,7 +144,7 @@ with Progress() as progress:
 
 Rich provides beautiful terminal output:
 ```
-⠋ Transcribing... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.2% 0:02:15 • 0:02:45
+⠋ Transcribing... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.2% 0:02:15 - 0:02:45
 ```
 
 PERFORMANCE CHARACTERISTICS:
@@ -199,13 +199,13 @@ Potential improvements:
 RESEARCH REFERENCES:
 ────────────────────
 - "A New Approach to Linear Filtering and Prediction Problems" (Kalman, 1960)
-  → Original Kalman filter paper
+  -> Original Kalman filter paper
 - "An Introduction to the Kalman Filter" (Welch & Bishop, 2006)
-  → Practical guide to Kalman filtering
+  -> Practical guide to Kalman filtering
 - "Probabilistic Robotics" (Thrun et al., 2005)
-  → Kalman filters for state estimation in robotics
+  -> Kalman filters for state estimation in robotics
 - "Time Series Analysis: Forecasting and Control" (Box & Jenkins, 1970)
-  → Statistical forecasting methods
+  -> Statistical forecasting methods
 
 This adaptive progress tracking system provides users with accurate, improving
 estimates that build trust and reduce frustration. It's a small detail that
@@ -390,7 +390,7 @@ def create_progress_bar(description: str = "Processing") -> Progress:
         BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
         TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
         TimeElapsedColumn(),
-        TextColumn("•"),
+        TextColumn("-"),
         TimeRemainingColumn(),
         console=console,
         transient=False,  # Keep progress visible after completion

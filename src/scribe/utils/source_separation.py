@@ -32,10 +32,10 @@ By separating vocals from instruments BEFORE transcription, we transform the
 problem from "music transcription" to "clean speech recognition":
 
 Traditional approach (fails):
-  Music Track → Whisper → Hallucinations + Incomplete Lyrics
+  Music Track -> Whisper -> Hallucinations + Incomplete Lyrics
 
 Separation-first approach (works):
-  Music Track → Demucs → Isolated Vocals → Whisper → Clean Lyrics
+  Music Track -> Demucs -> Isolated Vocals -> Whisper -> Clean Lyrics
 
 This architectural change eliminates the root cause of hallucinations and
 enables complete, accurate lyric extraction.
@@ -132,32 +132,32 @@ clean vocal audio and transcribes it normally.
 FAILURE MODES HANDLED:
 ──────────────────────
 1. INSTRUMENTAL TRACKS: Separation succeeds but vocals are silent
-   → Detected by VAD (Voice Activity Detection) in next stage
-   → Gracefully handled as "no vocals detected"
+   -> Detected by VAD (Voice Activity Detection) in next stage
+   -> Gracefully handled as "no vocals detected"
 
 2. VERY QUIET VOCALS: Separation extracts vocals but they're very quiet
-   → Whisper's VAD filters out noise, transcribes actual vocals
-   → Works correctly for sparse lyrics (EDM, techno)
+   -> Whisper's VAD filters out noise, transcribes actual vocals
+   -> Works correctly for sparse lyrics (EDM, techno)
 
 3. COMPLEX MIXES: Heavy distortion, many instruments
-   → Demucs trained on diverse music, handles most genres
-   → Quality degrades gracefully (some instrument bleed, but vocals clear)
+   -> Demucs trained on diverse music, handles most genres
+   -> Quality degrades gracefully (some instrument bleed, but vocals clear)
 
 PERFORMANCE OPTIMIZATION:
 ─────────────────────────
 The module includes several optimizations:
 
 1. PROGRESS SUPPRESSION: Demucs outputs verbose progress bars
-   → We redirect stdout/stderr to suppress noise
-   → Scribe shows its own clean progress indicators
+   -> We redirect stdout/stderr to suppress noise
+   -> Scribe shows its own clean progress indicators
 
 2. GPU UTILIZATION: Processes on GPU if available, falls back to CPU
-   → GPU: ~25s for 3-minute song
-   → CPU: ~2-3 minutes for 3-minute song
+   -> GPU: ~25s for 3-minute song
+   -> CPU: ~2-3 minutes for 3-minute song
 
 3. MEMORY EFFICIENCY: Uses split=True to process in chunks
-   → Prevents OOM on long songs (10+ minutes)
-   → Minimal quality impact
+   -> Prevents OOM on long songs (10+ minutes)
+   -> Minimal quality impact
 
 WHAT WE ACTUALLY MEASURED:
 ──────────────────────────
@@ -191,13 +191,13 @@ LIMITATIONS (HONEST):
 RESEARCH REFERENCES:
 ────────────────────
 - "Hybrid Spectrogram and Waveform Source Separation" (Défossez et al., 2021)
-  → Original Demucs paper, hybrid time-frequency approach
+  -> Original Demucs paper, hybrid time-frequency approach
 - "Music Source Separation in the Waveform Domain" (Défossez et al., 2019)
-  → Demucs v1, waveform-based separation
+  -> Demucs v1, waveform-based separation
 - "Hybrid Transformers for Music Source Separation" (Rouard et al., 2022)
-  → Transformer integration for long-range dependencies
+  -> Transformer integration for long-range dependencies
 - "Whisper: Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., 2022)
-  → Understanding why Whisper fails on music without separation
+  -> Understanding why Whisper fails on music without separation
 
 This separation-first architecture is the breakthrough that makes Scribe's music
 transcription production-grade. By eliminating instrumental interference, we

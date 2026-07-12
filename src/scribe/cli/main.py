@@ -1511,7 +1511,7 @@ def record(
                     logger.info("Skipping meme generation - OpenAI API key not configured")
 
             # Display output files with clickable links
-            # Order: Transcript (txt) → Document (docx) → Notes → Recording → Meme
+            # Order: Transcript (txt) -> Document (docx) -> Notes -> Recording -> Meme
             console.print("[bold cyan]Output:[/bold cyan]")
             console.print()
 
@@ -1779,13 +1779,13 @@ def batch_transcribe(
                     {"file": audio_file.name, "status": "success", "transcript": transcript_path}
                 )
 
-                console.print(f"[green]✓ Completed: {audio_file.name}[/green]")
+                console.print(f"[green]+ Completed: {audio_file.name}[/green]")
                 console.print()
 
             except Exception as e:
                 logger.error(f"Failed to process {audio_file}: {e}")
                 results.append({"file": audio_file.name, "status": "failed", "error": str(e)})
-                console.print(f"[red]✗ Failed: {audio_file.name}[/red]")
+                console.print(f"[red]x Failed: {audio_file.name}[/red]")
                 console.print(f"[dim]Error: {e}[/dim]")
                 console.print()
 
@@ -1800,8 +1800,8 @@ def batch_transcribe(
         success_count = sum(1 for r in results if r["status"] == "success")
         failed_count = sum(1 for r in results if r["status"] == "failed")
 
-        console.print(f"  [green]✓ Successful:[/green] {success_count}")
-        console.print(f"  [red]✗ Failed:[/red] {failed_count}")
+        console.print(f"  [green]+ Successful:[/green] {success_count}")
+        console.print(f"  [red]x Failed:[/red] {failed_count}")
         console.print()
 
         if failed_count > 0:
@@ -2185,11 +2185,11 @@ def music_transcribe(
                     )
 
                     # Hallucination detection logic:
-                    # 1. Exact match to known hallucination → instrumental
-                    # 2. Very short (< 3 words) → likely hallucination
-                    # 3. Short (< 10 words) + contains hallucination phrase → instrumental
-                    # 4. Single line + hallucination phrase → instrumental
-                    # 5. Otherwise → keep it (could be valid sparse lyrics)
+                    # 1. Exact match to known hallucination -> instrumental
+                    # 2. Very short (< 3 words) -> likely hallucination
+                    # 3. Short (< 10 words) + contains hallucination phrase -> instrumental
+                    # 4. Single line + hallucination phrase -> instrumental
+                    # 5. Otherwise -> keep it (could be valid sparse lyrics)
 
                     is_hallucination = (
                         is_exact_hallucination
@@ -2840,7 +2840,7 @@ def _run_notes_comparison(
 
     verdict = summarize_verdict(results)
     if verdict:
-        console.print(f"[bold cyan]→[/bold cyan] {verdict}")
+        console.print(f"[bold cyan]->[/bold cyan] {verdict}")
         console.print()
 
     for r in results:
@@ -3249,7 +3249,7 @@ def doctor(
     pass_count, warn_count, fail_count = diagnostics.get_summary()
 
     if fail_count == 0 and warn_count == 0:
-        console.print(f"[{ScribeTheme.SUCCESS}]✓ All systems ready[/] ({pass_count} checks)")
+        console.print(f"[{ScribeTheme.SUCCESS}]+ All systems ready[/] ({pass_count} checks)")
         console.print(
             '[dim]Try: [cyan]scribe rec "Team sync"[/cyan] or create a launcher with [cyan]scribe shortcut[/cyan][/dim]'
         )
@@ -3978,7 +3978,13 @@ def main() -> None:
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]Setup skipped.[/dim]")
 
-    app()
+    try:
+        app()
+    except (KeyboardInterrupt, EOFError):
+        import sys
+
+        console.print("\n[dim]Cancelled by user.[/dim]")
+        sys.exit(130)
 
 
 if __name__ == "__main__":

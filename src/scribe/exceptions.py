@@ -36,22 +36,22 @@ we enable:
 EXCEPTION TAXONOMY:
 ───────────────────
 ScribeError (base)
-├── ValidationError      → Configuration/environment issues (fail fast)
-├── ProcessError         → External process failures (ffmpeg, OBS)
-├── TranscriptionError   → Core transcription failures (GPU, API, model)
-├── FileOperationError   → I/O failures (permissions, disk space, corruption)
-├── CircuitBreakerOpen   → Protective circuit breaker state (prevent cascading)
-├── ConversionError      → Audio/video format conversion failures
-├── AudioFormatError     → Invalid or unsupported audio formats
-├── GPUError            → GPU-specific failures (CUDA, memory, driver)
-├── APIError            → External API failures (rate limits, auth, network)
-└── DownloadError       → URL download failures (network, unavailable, timeout)
+├── ValidationError      -> Configuration/environment issues (fail fast)
+├── ProcessError         -> External process failures (ffmpeg, OBS)
+├── TranscriptionError   -> Core transcription failures (GPU, API, model)
+├── FileOperationError   -> I/O failures (permissions, disk space, corruption)
+├── CircuitBreakerOpen   -> Protective circuit breaker state (prevent cascading)
+├── ConversionError      -> Audio/video format conversion failures
+├── AudioFormatError     -> Invalid or unsupported audio formats
+├── GPUError            -> GPU-specific failures (CUDA, memory, driver)
+├── APIError            -> External API failures (rate limits, auth, network)
+└── DownloadError       -> URL download failures (network, unavailable, timeout)
 
 Each exception type maps to a specific recovery strategy:
-- ValidationError → Fail fast with clear configuration guidance
-- GPUError → Fallback to API transcription
-- APIError → Retry with exponential backoff or circuit breaker
-- FileOperationError → Atomic writes, cleanup, user notification
+- ValidationError -> Fail fast with clear configuration guidance
+- GPUError -> Fallback to API transcription
+- APIError -> Retry with exponential backoff or circuit breaker
+- FileOperationError -> Atomic writes, cleanup, user notification
 
 USAGE PATTERNS:
 ───────────────
@@ -85,7 +85,7 @@ RESEARCH REFERENCES:
 - "Exception Handling: Issues and a Proposed Notation" (Goodenough, 1975)
 - "A Fault Tolerance Approach to Survivability" (Lyu, 1995)
 - "Release It! Design and Deploy Production-Ready Software" (Nygard, 2018)
-  → Circuit breaker pattern for external service failures
+  -> Circuit breaker pattern for external service failures
 
 This exception hierarchy is a cornerstone of Scribe's defensive architecture,
 enabling graceful degradation and intelligent error recovery throughout the

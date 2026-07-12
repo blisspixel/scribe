@@ -157,7 +157,7 @@ class LocalWhisperTranscriber:
                 )
                 return None, detected_prob, True
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Language detection failed: {e}")
             # Assume speech present, let transcription handle it
             return None, 0.0, True
@@ -221,7 +221,7 @@ class LocalWhisperTranscriber:
                 "faster-whisper not installed. Install with: pip install faster-whisper",
                 context={"error": str(e)},
             )
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             raise TranscriptionError(
                 f"Failed to load Whisper model: {e}",
                 context={"model": self.model_size, "error": str(e)},
@@ -288,7 +288,7 @@ class LocalWhisperTranscriber:
                         f"{format_timestamp(end)} ({duration_mins:.1f}min)"
                     )
             return silence_periods
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Silence detection failed: {e}")
             return []
 
@@ -437,7 +437,7 @@ class LocalWhisperTranscriber:
 
         except TranscriptionError:
             raise
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             raise TranscriptionError(
                 f"Transcription failed: {e}",
                 context={"audio_path": str(audio_path), "error": str(e)},

@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Fixed
+- Tightened broad exception handlers across core modules (`openai_api`, `local_whisper`, utilities) to specific typed tuples in compliance with ADR-002, preventing masked errors.
+- Standardized CLI exit boundaries in `main.py` using a single `exit_on_cli_error` handler instead of scattered `typer.Exit(1)` calls.
+- Completed Engineering Excellence Step 4: added SBOM generation documentation, integrated CUDA driver age checks into `scribe doctor`, and formalized the decision against structured JSON logging (ADR-012).
 - Corrected package metadata links to the canonical `blisspixel/scribe` repository.
 - Refreshed roadmap, architecture, deployment, and test documentation so current status, local-first scope, and quality gates match the v2.8.0 product surface.
 - Added recovery guidance and active log-file visibility to shared CLI error output.

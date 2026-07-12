@@ -13,19 +13,19 @@ PROBLEM STATEMENT:
 Whisper is trained on general internet audio and may misrecognize:
 
 1. PROPER NOUNS: Company names, product names, people's names
-   - "Kubernetes" → "coober netties"
-   - "PostgreSQL" → "post gray sequel"
-   - "OAuth" → "oh auth" or "O auth"
+   - "Kubernetes" -> "coober netties"
+   - "PostgreSQL" -> "post gray sequel"
+   - "OAuth" -> "oh auth" or "O auth"
 
 2. TECHNICAL TERMS: Domain-specific jargon
-   - "GraphQL" → "graph Q L"
-   - "WebSocket" → "web socket" (loses capitalization)
-   - "API" → "A P I" (spelled out instead of acronym)
+   - "GraphQL" -> "graph Q L"
+   - "WebSocket" -> "web socket" (loses capitalization)
+   - "API" -> "A P I" (spelled out instead of acronym)
 
 3. ACRONYMS: Industry-specific abbreviations
-   - "CRUD" → "crud" (loses meaning)
-   - "REST" → "rest" (ambiguous)
-   - "JWT" → "J W T" (spelled out)
+   - "CRUD" -> "crud" (loses meaning)
+   - "REST" -> "rest" (ambiguous)
+   - "JWT" -> "J W T" (spelled out)
 
 These errors reduce transcript quality and require manual correction.
 
@@ -46,10 +46,10 @@ HOW IT WORKS:
 Whisper's initial_prompt is prepended to the audio context:
 
 Without vocabulary:
-  Audio → Whisper → "we use post gray sequel for our database"
+  Audio -> Whisper -> "we use post gray sequel for our database"
 
 With vocabulary ("PostgreSQL"):
-  "PostgreSQL" + Audio → Whisper → "we use PostgreSQL for our database"
+  "PostgreSQL" + Audio -> Whisper -> "we use PostgreSQL for our database"
 
 The model sees the vocabulary terms and is biased toward recognizing them.
 
@@ -184,7 +184,7 @@ We chose vocabulary hints because they're SIMPLE and GOOD ENOUGH.
 **Alternative 2: Post-processing with find/replace**
 - Pros: Can fix known errors
 - Cons: Brittle (breaks on variations), misses context
-- Example: Replace "post gray sequel" → "PostgreSQL"
+- Example: Replace "post gray sequel" -> "PostgreSQL"
 - Problem: What about "post gray sequels" (plural)?
 - Result: Requires many rules, still misses cases
 
@@ -206,11 +206,11 @@ Perfect accuracy isn't worth the complexity.
 RESEARCH REFERENCES:
 ────────────────────
 - "Whisper: Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., 2022)
-  → Initial prompt mechanism and its effects on recognition
+  -> Initial prompt mechanism and its effects on recognition
 - "Contextual Biasing for Speech Recognition" (Pundak et al., 2018)
-  → Techniques for biasing ASR toward expected terms
+  -> Techniques for biasing ASR toward expected terms
 - "Improving Speech Recognition with Vocabulary Hints" (Aleksic et al., 2015)
-  → Effectiveness of vocabulary hints in ASR systems
+  -> Effectiveness of vocabulary hints in ASR systems
 
 This vocabulary module provides a simple, effective way to improve transcription
 accuracy on domain-specific content without requiring model fine-tuning or

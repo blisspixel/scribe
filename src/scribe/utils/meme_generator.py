@@ -205,7 +205,7 @@ Generate a COMPLETELY DIFFERENT concept that is:
 - Uses simple, clean visual concepts
 """
 
-    analysis_prompt = f"""You are a PhD-level meme theorist. You understand Benign Violation Theory, semiotics, Grice's Maxims, and comedic theory. But you're not a robot following a checklist—you're an AGENTIC creative who uses these tools to find what's genuinely hilarious.
+    analysis_prompt = f"""You are a PhD-level meme theorist. You understand Benign Violation Theory, semiotics, Grice's Maxims, and comedic theory. But you're not a robot following a checklist-you're an AGENTIC creative who uses these tools to find what's genuinely hilarious.
 
 FULL TRANSCRIPT ({transcript_length} characters):
 {transcript}
@@ -244,7 +244,7 @@ YOUR THEORETICAL TOOLKIT (use these as lenses, not rules):
 4. COMEDIC ECONOMY: Every word must serve the joke
    - 6-8 words MAX per text block
    - Decontextualize quotes for absurdity
-   - Layout = timing: Top (setup) → Image (pause) → Bottom (punchline)
+   - Layout = timing: Top (setup) -> Image (pause) -> Bottom (punchline)
 
 5. IMAGE ORIENTATION: Choose the right aspect ratio for your template (VARY THIS!)
    - Square (1024x1024): Classic meme templates, single subjects, balanced compositions
@@ -256,7 +256,7 @@ YOUR THEORETICAL TOOLKIT (use these as lenses, not rules):
 YOUR PROCESS (be CREATIVE and AGENTIC):
 
 1. Read the ENTIRE transcript and understand what happened
-2. Hunt for the funniest moments—violations, contradictions, absurdities, specific details
+2. Hunt for the funniest moments-violations, contradictions, absurdities, specific details
 3. Consider multiple meme ideas (don't just pick the first one)
 4. Think about the VISUAL: What image would make this funnier?
    - Classic meme template? (Distracted Boyfriend, Drake, etc.)

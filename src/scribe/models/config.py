@@ -70,7 +70,7 @@ def _find_env_file() -> str | None:
         return str(home_env)
 
     # Try package directory and one level up (project root in editable installs).
-    # __file__ = src/scribe/models/config.py → walk up looking for .env.
+    # __file__ = src/scribe/models/config.py -> walk up looking for .env.
     here = Path(__file__).resolve()
     for parent in (here.parent.parent.parent, here.parent.parent.parent.parent):
         candidate = parent / ".env"

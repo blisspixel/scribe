@@ -25,7 +25,7 @@ from scribe.utils.terminal_ui import TerminalUIConfig, get_terminal_ui_config
 from scribe.utils.theme import ScribeTheme
 
 # ─── ASCII Wordmark ─────────────────────────────────────────────────────
-# ANSI Shadow block font — bold 6-line design.
+# ANSI Shadow block font - bold 6-line design.
 # Uses █ (full block) for fills and ╔═╗║╚╝ (double-line box-drawing) for edges.
 
 BANNER_ART = (
@@ -192,7 +192,7 @@ def render_banner_static(art: str) -> str:
 
 
 def _is_banner_enabled() -> bool:
-    """Check SCRIBE_BANNER env var — enabled by default."""
+    """Check SCRIBE_BANNER env var - enabled by default."""
     val = os.environ.get("SCRIBE_BANNER", "").strip().lower()
     return val not in ("off", "false", "0", "no")
 

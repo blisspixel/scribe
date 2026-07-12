@@ -53,9 +53,9 @@ HOW IT WORKS:
 
 Example learning progression:
 ```
-Run 1: Estimate 10min → Actual 5min → Save "5min on this machine"
-Run 2: Estimate 5min → Actual 4.5min → Update to 4.7min average
-Run 3: Estimate 4.7min → Actual 4.8min → Update to 4.75min average
+Run 1: Estimate 10min -> Actual 5min -> Save "5min on this machine"
+Run 2: Estimate 5min -> Actual 4.5min -> Update to 4.7min average
+Run 3: Estimate 4.7min -> Actual 4.8min -> Update to 4.75min average
 ```
 
 WHAT WE ACTUALLY MEASURED (DEFAULT VALUES):
@@ -225,7 +225,7 @@ class UnifiedProgress:
             ),
             BarColumn(complete_style=ScribeTheme.PRIMARY, finished_style=ScribeTheme.SUCCESS),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("•"),
+            TextColumn("-"),
             TimeElapsedColumn(),
             console=console,
             transient=False,

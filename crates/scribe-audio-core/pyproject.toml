@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "scribe-audio-core"
+version = "0.1.0"
+description = "Native Rust extension for high-performance audio processing"
+requires-python = ">=3.12"
+dynamic = ["classifiers"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "scribe_audio_core"

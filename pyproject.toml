@@ -45,6 +45,7 @@ dependencies = [
     "httpx>=0.24.0",
     "tenacity>=8.2.0",
     "yt-dlp>=2026.6.9",
+    "scribe-audio-core",
 ]
 
 [project.optional-dependencies]
@@ -285,6 +286,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+scribe-audio-core = { workspace = true }
 # Add any private indexes or workspace members here when needed.
 
 [tool.pytest.ini_options]
@@ -349,3 +351,8 @@ paths_to_mutate = [
     "src/scribe/utils/transcript_writers.py",
 ]
 tests_dir = "tests/unit"
+
+
+[tool.uv.workspace]
+members = ['crates/scribe-audio-core']
+

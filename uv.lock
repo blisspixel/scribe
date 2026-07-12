@@ -13,6 +13,12 @@ resolution-markers = [
     "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "scribe",
+    "scribe-audio-core",
+]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.2"
@@ -6735,6 +6741,7 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "rich" },
+    { name = "scribe-audio-core" },
     { name = "tenacity" },
     { name = "torch" },
     { name = "torchaudio" },
@@ -6832,6 +6839,7 @@ requires-dist = [
     { name = "pywhispercpp", marker = "extra == 'whispercpp'", specifier = ">=1.2.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
+    { name = "scribe-audio-core", editable = "crates/scribe-audio-core" },
     { name = "sounddevice", marker = "extra == 'kokoro'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'tray'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'voice'", specifier = ">=0.4.6" },
@@ -6865,6 +6873,11 @@ dev = [
     { name = "types-requests" },
     { name = "types-tqdm" },
 ]
+
+[[package]]
+name = "scribe-audio-core"
+version = "0.1.0"
+source = { editable = "crates/scribe-audio-core" }
 
 [[package]]
 name = "segments"

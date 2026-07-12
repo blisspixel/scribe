@@ -60,7 +60,7 @@ _OBS_SOCKET_ERRORS = (ConnectionError, OSError, TimeoutError)
 #   - The design prioritizes "recording still succeeds" over "fail fast on any
 #     unexpected state".
 # All such sites log at appropriate levels (debug/warning) and either:
-#   - Fall back to a secondary strategy (WebSocket → CLI), or
+#   - Fall back to a secondary strategy (WebSocket -> CLI), or
 #   - Raise a typed ScribeError (ProcessError) with context for the caller.
 # See ROADMAP.md Step 4 and future docs/adr/ for the exception taxonomy rationale.
 # This is NOT a violation of defensive programming - it is a deliberate
@@ -288,7 +288,7 @@ class OBSRecorder:
         raise ProcessError(
             "Could not locate recorded media after stopping OBS. "
             f"Searched: {searched}. OBS may be saving to a different folder - check "
-            "OBS Settings → Output → Recording Path.",
+            "OBS Settings -> Output -> Recording Path.",
             context={
                 "primary_dir": primary_dir,
                 "phase": self._session.phase.value,
@@ -331,7 +331,7 @@ class OBSRecorder:
         candidate_dirs = recording_media_candidate_dirs(self.output_folder)
         for d in candidate_dirs:
             if d.exists():
-                console.print(f"[dim]  • {d}[/dim]")
+                console.print(f"[dim]  - {d}[/dim]")
 
         found_path: str | None = None
         ext = ".mp4"
@@ -1047,7 +1047,7 @@ class OBSRecorder:
 
         raise ConnectionError(
             "Could not connect to OBS WebSocket. Ensure OBS is installed, "
-            "WebSocket server is enabled (Tools → WebSocket Server Settings), "
+            "WebSocket server is enabled (Tools -> WebSocket Server Settings), "
             "and SCRIBE_OBS_PASSWORD matches if authentication is on."
         )
 
@@ -1169,7 +1169,7 @@ class OBSRecorder:
                 return
             raise ProcessError(
                 f"OBS refused to start recording: {e}. "
-                "Check OBS Settings → Output for valid recording path and codec."
+                "Check OBS Settings -> Output for valid recording path and codec."
             )
 
         # Verify recording started

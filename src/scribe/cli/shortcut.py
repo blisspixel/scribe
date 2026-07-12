@@ -641,5 +641,5 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
             "[dim]Taskbar tip: drag the desktop .lnk to taskbar. If icon is generic after pinning,[/dim]"
         )
         cprint(
-            "[dim]  right-click pinned item → Properties → Change Icon → pick ~/.scribe/scribe.ico[/dim]"
+            "[dim]  right-click pinned item -> Properties -> Change Icon -> pick ~/.scribe/scribe.ico[/dim]"
         )
