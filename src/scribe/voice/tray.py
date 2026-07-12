@@ -149,8 +149,9 @@ def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:
     """Run the resident voice utility as a tray icon or terminal fallback."""
     if no_tray:
         return _run_no_tray(console, settings)
-
-    go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / "scribe-tray.exe"
+    import sys
+    exe_name = "scribe-tray.exe" if sys.platform == "win32" else "scribe-tray"
+    go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / exe_name
     if go_bin.exists():
         import subprocess
 
