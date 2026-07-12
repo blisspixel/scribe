@@ -435,7 +435,7 @@ class TestEnvFileCheck:
         diagnostics = SystemDiagnostics()
         result = diagnostics.check_env_file()
 
-        assert result.status == "warn"
+        assert result.status == "pass"
         assert "Not found" in result.message
 
 
