@@ -65,6 +65,57 @@ def _local_only_enabled() -> bool:
         return False
 
 
+def _resolve_api_key(provider_name: str, api_key: str | None) -> str:
+    """Resolve API key from environment variables if not explicitly provided."""
+    if api_key is not None:
+        return api_key
+
+    if provider_name == "xai":
+        api_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
+    elif provider_name == "openai":
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
+    elif provider_name == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
+    elif provider_name == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
+    elif provider_name == "ollama":
+        api_key = (
+            os.getenv("OLLAMA_API_KEY")
+            or os.getenv("SCRIBE_OLLAMA_API_KEY")
+            or OLLAMA_PLACEHOLDER_KEY
+        )
+    else:
+        raise ValueError(f"Unknown provider: {provider_name}")
+
+    if not api_key:
+        raise ValueError(f"No API key found for provider: {provider_name}")
+    
+    return api_key
+
+
+def _handle_unhealthy_provider(feature: str, provider_name: str, api_key: str) -> str | None:
+    """Check health and return a fallback provider if unhealthy."""
+    from scribe.providers.health import get_health_monitor
+
+    monitor = get_health_monitor()
+    status = monitor.check_provider_health(provider_name, api_key)
+
+    if status.is_healthy:
+        return None
+
+    logger.warning(f"Provider {provider_name} failed health check: {status.error_message}")
+    fallback = _get_fallback_provider(feature, provider_name, api_key)
+    if fallback:
+        logger.warning(
+            f"Provider {provider_name} is unhealthy; failing over to {fallback}. "
+            f"Your request will be sent to {fallback} instead."
+        )
+        return fallback
+    else:
+        logger.warning(f"No fallback available, proceeding with {provider_name}")
+        return None
+
+
 def get_provider(
     feature: str,
     api_key: str | None = None,
@@ -141,49 +192,13 @@ def get_provider(
         provider_name = provider_name.lower()
 
     # Get API key
-    if api_key is None:
-        if provider_name == "xai":
-            api_key = os.getenv("XAI_API_KEY") or os.getenv("SCRIBE_XAI_API_KEY")
-        elif provider_name == "openai":
-            api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
-        elif provider_name == "anthropic":
-            api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
-        elif provider_name == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
-        elif provider_name == "ollama":
-            # Ollama runs locally and ignores the key, but the SDK needs a value.
-            api_key = (
-                os.getenv("OLLAMA_API_KEY")
-                or os.getenv("SCRIBE_OLLAMA_API_KEY")
-                or OLLAMA_PLACEHOLDER_KEY
-            )
-        else:
-            raise ValueError(f"Unknown provider: {provider_name}")
-
-    if not api_key:
-        raise ValueError(f"No API key found for provider: {provider_name}")
+    api_key = _resolve_api_key(provider_name, api_key)
 
     # Health check if enabled
     if enable_health_check:
-        from scribe.providers.health import get_health_monitor
-
-        monitor = get_health_monitor()
-        status = monitor.check_provider_health(provider_name, api_key)
-
-        if not status.is_healthy:
-            logger.warning(f"Provider {provider_name} failed health check: {status.error_message}")
-            # Try to get a fallback provider
-            fallback = _get_fallback_provider(feature, provider_name, api_key)
-            if fallback:
-                # Visible at the console (WARNING), not buried at INFO: the user's data
-                # is being sent to a different cloud provider than they selected.
-                logger.warning(
-                    f"Provider {provider_name} is unhealthy; failing over to {fallback}. "
-                    f"Your request will be sent to {fallback} instead."
-                )
-                return get_provider(feature, provider_name=fallback, enable_health_check=False)
-            else:
-                logger.warning(f"No fallback available, proceeding with {provider_name}")
+        fallback = _handle_unhealthy_provider(feature, provider_name, api_key)
+        if fallback:
+            return get_provider(feature, provider_name=fallback, enable_health_check=False)
 
     # Determine model
     if model is None or model == "":
