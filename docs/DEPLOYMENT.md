@@ -61,6 +61,9 @@ Optional:
 - `scribe[diarize]` and `HF_TOKEN` for local speaker diarization.
 - `scribe[voice]`, `scribe[tray]`, or `scribe[kokoro]` for voice I/O and read-aloud.
 - OBS Studio for `scribe rec` and `scribe record`.
+- The workspace `scribe-audio-core` build for native silence analysis during
+  development. The portable root wheel uses bounded duration-based chunking when
+  that unpublished acceleration artifact is absent.
 
 ## Configuration
 

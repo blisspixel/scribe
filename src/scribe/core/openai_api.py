@@ -8,8 +8,11 @@ This module provides cloud-based transcription using OpenAI's API with:
 - CRITICAL FIX: Proper text concatenation and file flushing
 """
 
+import importlib
 import random
+import subprocess
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,9 +46,43 @@ from scribe.utils.files import (
     verify_file_content,
 )
 from scribe.utils.logging import console, get_logger
+from scribe.utils.platform import get_ffmpeg_path
 from scribe.utils.resilience import retry_backoff_seconds
 
 logger = get_logger(__name__)
+_MP3_DURATION_MARGIN_MS = 250
+
+
+def _bounded_chunk_endpoints(
+    candidate_points_ms: Iterable[int], *, duration_ms: int, cap_ms: int
+) -> list[int]:
+    """Return ordered chunk endpoints with every interval bounded by ``cap_ms``."""
+    if duration_ms <= 0:
+        raise ValueError("duration_ms must be positive")
+    if cap_ms <= 0:
+        raise ValueError("cap_ms must be positive")
+
+    candidates = sorted({point for point in candidate_points_ms if 0 < point < duration_ms})
+    endpoints: list[int] = []
+    chunk_start_ms = 0
+
+    while duration_ms - chunk_start_ms > cap_ms:
+        hard_limit_ms = chunk_start_ms + cap_ms
+        useful_floor_ms = chunk_start_ms + (cap_ms // 2)
+        useful_silences = [
+            point for point in candidates if useful_floor_ms <= point <= hard_limit_ms
+        ]
+        chunk_end_ms = max(useful_silences, default=hard_limit_ms)
+        endpoints.append(chunk_end_ms)
+        chunk_start_ms = chunk_end_ms
+
+    endpoints.append(duration_ms)
+    return endpoints
+
+
+def _load_native_audio_core() -> Any:
+    """Load the optional native audio accelerator."""
+    return importlib.import_module("scribe_audio_core")
 
 
 class OpenAITranscriber:
@@ -434,84 +471,110 @@ class OpenAITranscriber:
         Returns:
             List of chunk file paths
         """
-        logger.info("Splitting audio into chunks using native core...")
-        import subprocess
+        if max_chunk_minutes <= 0:
+            raise ValueError("max_chunk_minutes must be positive")
+        if keep_silence_ms < 0:
+            raise ValueError("keep_silence_ms cannot be negative")
+        if export_bitrate_kbps <= 0:
+            raise ValueError("export_bitrate_kbps must be positive")
 
-        import scribe_audio_core
-
-        dbfs = scribe_audio_core.get_audio_dbfs(str(file_path))
-        if dbfs == float("-inf"):
-            dbfs = -50.0
-
-        silence_thresh = dbfs + silence_thresh_delta_db
+        logger.info("Splitting audio into bounded chunks...")
         cap_ms = max_chunk_minutes * 60 * 1000
+        payload_cap_ms = cap_ms - (keep_silence_ms * 2) - _MP3_DURATION_MARGIN_MS
+        if payload_cap_ms <= 0:
+            raise ValueError("chunk cap must exceed overlap and MP3 encoder margin")
 
-        # split_points_ms gives every possible silence cut
-        split_points_ms = scribe_audio_core.get_split_timestamps(
-            str(file_path),
-            min_silence_ms=min_silence_len_ms,
-            silence_thresh_db=silence_thresh,
-            max_duration_ms=cap_ms,
-        )
+        split_points_ms: list[int] = []
+        duration_ms = 0
+        try:
+            native_core = _load_native_audio_core()
+            dbfs = float(native_core.get_audio_dbfs(str(file_path)))
+            if dbfs == float("-inf"):
+                dbfs = -50.0
+            silence_thresh = dbfs + silence_thresh_delta_db
+            split_points_ms = [
+                int(point)
+                for point in native_core.get_split_timestamps(
+                    str(file_path),
+                    min_silence_ms=min_silence_len_ms,
+                    silence_thresh_db=silence_thresh,
+                    max_duration_ms=payload_cap_ms,
+                )
+            ]
+            duration_ms = max(split_points_ms, default=0)
+            if duration_ms <= 0:
+                raise ValueError("native analysis returned no audio duration")
+            logger.info("Using native silence analysis with hard duration bounds")
+        except Exception as exc:
+            logger.warning(
+                "Native audio analysis unavailable "
+                f"({type(exc).__name__}: {exc}); using portable duration-based chunking"
+            )
+            duration = get_audio_duration(file_path)
+            if duration is None or duration <= 0:
+                raise TranscriptionError(
+                    f"Could not determine audio duration for chunking: {file_path.name}"
+                ) from exc
+            duration_ms = max(1, round(duration * 1000))
+            split_points_ms = []
 
-        from scribe.utils.platform import get_ffmpeg_path
+        if duration_ms + _MP3_DURATION_MARGIN_MS <= cap_ms:
+            endpoints_ms = [duration_ms]
+        else:
+            endpoints_ms = _bounded_chunk_endpoints(
+                split_points_ms,
+                duration_ms=duration_ms,
+                cap_ms=payload_cap_ms,
+            )
 
         ffmpeg_bin = str(get_ffmpeg_path() or "ffmpeg")
-
         out_paths: list[Path] = []
         stem = file_path.stem
-
         chunk_start_ms = 0
-        last_split_ms = 0
-        chunk_idx = 1
 
-        for sp in split_points_ms:
-            # Accumulate chunks up to cap_ms
-            if (sp - chunk_start_ms) > cap_ms and last_split_ms > chunk_start_ms:
+        try:
+            for chunk_idx, chunk_end_ms in enumerate(endpoints_ms, 1):
+                export_start_ms = max(
+                    0,
+                    chunk_start_ms - (keep_silence_ms if chunk_start_ms else 0),
+                )
+                export_end_ms = min(
+                    duration_ms,
+                    chunk_end_ms + (keep_silence_ms if chunk_end_ms < duration_ms else 0),
+                )
                 out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
                 subprocess.run(  # noqa: S603
                     [
                         ffmpeg_bin,
                         "-y",
+                        "-ss",
+                        f"{export_start_ms / 1000:.3f}",
                         "-i",
                         str(file_path),
-                        "-ss",
-                        str(chunk_start_ms / 1000.0),
-                        "-to",
-                        str(last_split_ms / 1000.0),
-                        "-c",
-                        "copy",
+                        "-t",
+                        f"{(export_end_ms - export_start_ms) / 1000:.3f}",
+                        "-vn",
+                        "-c:a",
+                        "libmp3lame",
+                        "-b:a",
+                        f"{export_bitrate_kbps}k",
                         str(out_name),
                     ],
                     check=True,
                     capture_output=True,
+                    text=True,
                 )
                 out_paths.append(out_name)
-                chunk_start_ms = last_split_ms
-                chunk_idx += 1
-            last_split_ms = sp
-
-        # Add the final chunk
-        if last_split_ms > chunk_start_ms:
-            out_name = file_path.parent / f"{stem}_chunk_{chunk_idx}.mp3"
-            subprocess.run(  # noqa: S603
-                [
-                    ffmpeg_bin,
-                    "-y",
-                    "-i",
-                    str(file_path),
-                    "-ss",
-                    str(chunk_start_ms / 1000.0),
-                    "-to",
-                    str(last_split_ms / 1000.0),
-                    "-c",
-                    "copy",
-                    str(out_name),
-                ],
-                check=True,
-                capture_output=True,
-            )
-            out_paths.append(out_name)
+                chunk_start_ms = chunk_end_ms
+        except (OSError, subprocess.CalledProcessError) as exc:
+            for output_path in [*out_paths, out_name]:
+                output_path.unlink(missing_ok=True)
+            stderr = getattr(exc, "stderr", "")
+            detail = stderr.strip() if isinstance(stderr, str) else ""
+            message = f"Failed to export audio chunk {len(out_paths) + 1}"
+            if detail:
+                message = f"{message}: {detail}"
+            raise TranscriptionError(message) from exc
 
         logger.info(f"Created {len(out_paths)} chunks for transcription")
         return out_paths

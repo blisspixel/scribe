@@ -223,6 +223,49 @@ jobs:
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
   # ---------------------------------------------------------------------------
+  # Release Artifact Contract
+  # Builds the portable root wheel, rejects workspace-only mandatory metadata,
+  # installs without workspace packages, and smokes the installed entry point.
+  # ---------------------------------------------------------------------------
+  package:
+    name: Release Artifact Contract (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Build and inspect root wheel
+        shell: bash
+        run: |
+          uv build --package scribe --out-dir .agent/build
+          wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
+          test -n "$wheel"
+          python_path=$(uv python find 3.12)
+          "$python_path" scripts/check_release_artifact.py "$wheel"
+
+      - name: Install artifact without workspace packages
+        shell: bash
+        run: |
+          uv sync --locked --python 3.12 --group dev --no-install-workspace
+          wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
+          uv pip install --python .venv/bin/python --no-deps --reinstall "$wheel"
+          cd .agent
+          ../.venv/bin/scribe --version
+
+  # ---------------------------------------------------------------------------
   # Mutation Testing (advisory, non-blocking)
   # Runs mutmut over the pure, property-tested core (transcript model, backend
   # selection, diarization alignment, voice endpointing, output writers). A
@@ -274,7 +317,7 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint-and-types, toolchain-check, test, coverage, security]
+    needs: [lint-and-types, toolchain-check, test, coverage, security, package]
     if: always()
 
     steps:
@@ -287,13 +330,15 @@ jobs:
           echo "  test:           ${{ needs.test.result }}"
           echo "  coverage:       ${{ needs.coverage.result }}"
           echo "  security:       ${{ needs.security.result }}"
+          echo "  package:        ${{ needs.package.result }}"
 
           failed=0
           for result in "${{ needs.lint-and-types.result }}" \
                         "${{ needs.toolchain-check.result }}" \
                         "${{ needs.test.result }}" \
                         "${{ needs.coverage.result }}" \
-                        "${{ needs.security.result }}"; do
+                        "${{ needs.security.result }}" \
+                        "${{ needs.package.result }}"; do
             if [[ "$result" != "success" ]]; then
               failed=1
             fi

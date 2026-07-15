@@ -6730,6 +6730,7 @@ version = "2.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "deal" },
     { name = "faster-whisper" },
     { name = "httpx" },
     { name = "numpy" },
@@ -6741,7 +6742,6 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "rich" },
-    { name = "scribe-audio-core" },
     { name = "tenacity" },
     { name = "torch" },
     { name = "torchaudio" },
@@ -6793,7 +6793,6 @@ whisperx = [
 [package.dev-dependencies]
 dev = [
     { name = "colorama" },
-    { name = "deal" },
     { name = "hypothesis" },
     { name = "msgpack" },
     { name = "mutmut" },
@@ -6812,6 +6811,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "deal", specifier = ">=4.1" },
     { name = "faster-whisper", specifier = ">=0.10.0" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "kokoro-onnx", marker = "extra == 'kokoro'", specifier = ">=0.4.0" },
@@ -6839,7 +6839,6 @@ requires-dist = [
     { name = "pywhispercpp", marker = "extra == 'whispercpp'", specifier = ">=1.2.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
-    { name = "scribe-audio-core", editable = "crates/scribe-audio-core" },
     { name = "sounddevice", marker = "extra == 'kokoro'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'tray'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'voice'", specifier = ">=0.4.6" },
@@ -6858,7 +6857,6 @@ provides-extras = ["dev", "whisperx", "mlx", "whispercpp", "diarize", "voice", "
 [package.metadata.requires-dev]
 dev = [
     { name = "colorama", specifier = ">=0.4.6" },
-    { name = "deal", specifier = ">=4.1" },
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "msgpack", specifier = ">=1.2.1" },
     { name = "mutmut", specifier = ">=3.0" },

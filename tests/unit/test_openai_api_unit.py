@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from scribe.core.openai_api import OpenAITranscriber
+from scribe.core.openai_api import OpenAITranscriber, _bounded_chunk_endpoints
 from scribe.exceptions import TranscriptionError
 
 
@@ -172,6 +172,137 @@ class TestOpenAITranscriber:
 
         assert result.name == "test_standardized.mp3"
         assert mock_audio.export.called
+
+    def test_bounded_chunk_endpoints_enforces_cap_without_silence(self):
+        """Hard boundaries protect the duration cap when no silence is available."""
+        assert _bounded_chunk_endpoints([], duration_ms=130_000, cap_ms=60_000) == [
+            60_000,
+            120_000,
+            130_000,
+        ]
+
+    def test_bounded_chunk_endpoints_prefers_useful_silence(self):
+        """Useful silence near each cap is preferred over an arbitrary early split."""
+        assert _bounded_chunk_endpoints(
+            [5_000, 40_000, 90_000, 130_000, 130_000, 140_000],
+            duration_ms=130_000,
+            cap_ms=60_000,
+        ) == [40_000, 90_000, 130_000]
+
+    @patch("scribe.core.openai_api.OpenAI")
+    @patch("scribe.core.openai_api.subprocess.run")
+    @patch("scribe.core.openai_api.get_ffmpeg_path", return_value=Path("ffmpeg"))
+    @patch("scribe.core.openai_api.get_audio_duration", return_value=130.0)
+    @patch("scribe.core.openai_api._load_native_audio_core", side_effect=ModuleNotFoundError)
+    def test_split_audio_falls_back_and_enforces_cap(
+        self,
+        _mock_import,
+        mock_duration,
+        _mock_ffmpeg_path,
+        mock_run,
+        _mock_openai,
+    ):
+        """The portable root install chunks safely without the Rust extension."""
+        transcriber = OpenAITranscriber(api_key="sk-test")
+
+        chunks = transcriber.split_audio_on_silence(Path("long.mp3"), max_chunk_minutes=1)
+
+        assert chunks == [
+            Path("long_chunk_1.mp3"),
+            Path("long_chunk_2.mp3"),
+            Path("long_chunk_3.mp3"),
+        ]
+        assert mock_duration.call_count == 1
+        assert mock_run.call_count == 3
+        durations = [call.args[0][call.args[0].index("-t") + 1] for call in mock_run.call_args_list]
+        assert durations == ["59.450", "59.750", "12.000"]
+        assert all(float(duration) <= 60 for duration in durations)
+        assert all("48k" in call.args[0] for call in mock_run.call_args_list)
+
+    @patch("scribe.core.openai_api.OpenAI")
+    @patch("scribe.core.openai_api.subprocess.run")
+    @patch("scribe.core.openai_api.get_ffmpeg_path", return_value=Path("ffmpeg"))
+    @patch("scribe.core.openai_api.get_audio_duration", return_value=130.0)
+    @patch("scribe.core.openai_api._load_native_audio_core")
+    def test_split_audio_uses_native_silence_and_bounds_old_core_results(
+        self,
+        mock_import,
+        mock_duration,
+        _mock_ffmpeg_path,
+        mock_run,
+        _mock_openai,
+    ):
+        """Candidate timestamps from old native builds cannot bypass the hard cap."""
+        native_core = Mock()
+        native_core.get_audio_dbfs.return_value = -20.0
+        native_core.get_split_timestamps.return_value = [45_000, 130_000]
+        mock_import.return_value = native_core
+        transcriber = OpenAITranscriber(api_key="sk-test")
+
+        chunks = transcriber.split_audio_on_silence(
+            Path("long.mp3"), max_chunk_minutes=1, keep_silence_ms=0
+        )
+
+        assert len(chunks) == 3
+        mock_duration.assert_not_called()
+        native_core.get_split_timestamps.assert_called_once_with(
+            "long.mp3",
+            min_silence_ms=500,
+            silence_thresh_db=-50.0,
+            max_duration_ms=59_750,
+        )
+        durations = [call.args[0][call.args[0].index("-t") + 1] for call in mock_run.call_args_list]
+        assert durations == ["45.000", "59.750", "25.250"]
+
+    @patch("scribe.core.openai_api.OpenAI")
+    @patch("scribe.core.openai_api.subprocess.run")
+    @patch("scribe.core.openai_api.get_ffmpeg_path", return_value=Path("ffmpeg"))
+    @patch("scribe.core.openai_api.get_audio_duration", return_value=130.0)
+    @patch("scribe.core.openai_api._load_native_audio_core")
+    def test_split_audio_recovers_from_native_analysis_failure(
+        self,
+        mock_import,
+        mock_duration,
+        _mock_ffmpeg_path,
+        mock_run,
+        _mock_openai,
+        caplog,
+    ):
+        """A broken native extension degrades visibly to portable duration splits."""
+        native_core = Mock()
+        native_core.get_audio_dbfs.side_effect = RuntimeError("decoder rejected media")
+        mock_import.return_value = native_core
+        transcriber = OpenAITranscriber(api_key="sk-test")
+
+        chunks = transcriber.split_audio_on_silence(
+            Path("long.mp3"), max_chunk_minutes=1, keep_silence_ms=0
+        )
+
+        assert len(chunks) == 3
+        mock_duration.assert_called_once_with(Path("long.mp3"))
+        assert mock_run.call_count == 3
+        assert "portable duration-based chunking" in caplog.text
+
+    @patch("scribe.core.openai_api.OpenAI")
+    @patch("scribe.core.openai_api.subprocess.run")
+    @patch("scribe.core.openai_api.get_ffmpeg_path", return_value=Path("ffmpeg"))
+    @patch("scribe.core.openai_api.get_audio_duration", return_value=None)
+    @patch("scribe.core.openai_api._load_native_audio_core", side_effect=ModuleNotFoundError)
+    def test_split_audio_fails_when_duration_is_unavailable(
+        self,
+        _mock_import,
+        _mock_duration,
+        _mock_ffmpeg_path,
+        mock_run,
+        _mock_openai,
+    ):
+        """Unknown duration is an actionable failure, never an empty success."""
+        transcriber = OpenAITranscriber(api_key="sk-test")
+
+        with pytest.raises(TranscriptionError, match="determine audio duration"):
+            transcriber.split_audio_on_silence(Path("bad.mp3"))
+
+        mock_run.assert_not_called()
 
     @patch("scribe.core.openai_api.OpenAITranscriber.transcribe")
     def test_transcribe_with_openai_function(self, mock_transcribe):

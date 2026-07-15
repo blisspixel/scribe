@@ -4,12 +4,11 @@
 
 As of 2026-07-15:
 
-- Pytest collection: 1617 assertion-based tests across unit, integration, e2e, and manual coverage.
-- Latest local CI-safe unit coverage gate: 1478 passed, 2 skipped, 37 deselected.
-- Latest measured CI-safe unit coverage: 80.04 percent.
-- Latest broader CI-equivalent gate: 1578 passed, 12 skipped, 27 deselected, no warnings, and 82.19 percent coverage.
+- Pytest collection: 1635 assertion-based tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit matrix: 1496 passed, 2 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1596 passed, 12 skipped, 27 deselected, no warnings, and 82.41 percent coverage.
 - Enforced project coverage floor: 80 percent.
-- Standard quality gates: Ruff check, Ruff format check, mypy strict, CI-safe unit coverage, build, and pip-audit with the documented CI ignores.
+- Standard quality gates: Ruff check, Ruff format check, mypy strict, 80 percent coverage, root-wheel artifact and isolated-install verification, build, and pip-audit with the documented CI ignores.
 
 ## Standard Local Commands
 
@@ -20,6 +19,7 @@ uv run ruff format --check src tests
 uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
 uv build --out-dir .agent/build
+uv run python scripts/check_release_artifact.py .agent/build
 ```
 
 Run nearby tests for focused work:

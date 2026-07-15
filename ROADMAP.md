@@ -92,13 +92,13 @@ The product surface is already useful, so polish work should improve what exists
 - **UX flow debt:** keep `init`, `doctor`, `info`, `shortcut`, `rec`, and `tray --check` aligned so setup, verification, and recovery never disagree.
 - **Copy and comprehension debt:** keep cost, provider, and recovery language explicit at the decision point rather than relying on later documentation.
 - **Visual polish debt:** keep terminal output restrained, scannable, and useful in plain terminals as well as Rich-capable terminals.
-- **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home; populate support-bundle run history only from real persisted run data.
-- **Reliability debt:** truthful batch and music outcomes are shipped: missing inputs, failed files, partial segment results, and requested artifact failures are summarized and return non-zero after continue-on-error processing. Next, persist failed run summaries and continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
+- **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home; the required package job now reports root-wheel contract failures, while native runtime selection still needs diagnostic visibility.
+- **Reliability debt:** truthful batch and music outcomes are shipped. The portable root wheel is independently installable, and long-audio chunking now has bounded native and fallback paths. Next, persist failed run summaries and continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
 - **Security debt:** remove stale security assumptions, keep cloud transmission explicit, and review all eight documented Torch dependency-audit exceptions as the GPU stack moves.
 - **Accessibility debt:** keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
-- **Test coverage debt:** keep the meaningful coverage gate above 80 percent with failure-path assertions, and replace legacy hardware probes with marked manual checks rather than counting returned booleans as tests.
+- **Test coverage debt:** keep the meaningful coverage gate above 80 percent with failure-path assertions. The root-wheel build, metadata, isolated install, and entry-point smoke are now required CI; native platform artifact matrices remain open.
 - **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
-- **Deferred product debt:** verify that built wheels contain or can install every native Rust and Go runtime artifact before describing those artifacts as distributable.
+- **Deferred product debt:** publish and verify platform-specific Rust acceleration wheels and Go tray binaries before describing either native runtime as distributed. The portable Python wheel does not depend on those unpublished artifacts.
 
 ---
 
@@ -259,4 +259,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-07-15 (v2.8.1 product-polish status, dependency exceptions, and deferred packaging verification refreshed)
+**Last Updated:** 2026-07-15 (v2.8.1 portable artifact contract and bounded chunking fallback verified locally)

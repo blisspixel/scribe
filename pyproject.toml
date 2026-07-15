@@ -45,7 +45,7 @@ dependencies = [
     "httpx>=0.24.0",
     "tenacity>=8.2.0",
     "yt-dlp>=2026.6.9",
-    "scribe-audio-core",
+    "deal>=4.1",
 ]
 
 [project.optional-dependencies]
@@ -261,7 +261,6 @@ module = [
     "pystray.*",
     "pyttsx3.*",
     "kokoro_onnx.*",
-    "scribe_audio_core.*",
 ]
 ignore_missing_imports = true
 
@@ -277,7 +276,6 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.14",
     "hypothesis>=6.0",
-    "deal>=4.1",  # Design by Contract for pure critical modules (ROADMAP Step 3)
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pip-audit>=2.7",

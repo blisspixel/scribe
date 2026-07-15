@@ -1,12 +1,43 @@
-use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::*;
+use std::fs::File;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use std::fs::File;
+
+fn bounded_chunk_endpoints(candidate_points_ms: &[u32], duration_ms: u32, cap_ms: u32) -> Vec<u32> {
+    if duration_ms == 0 || cap_ms == 0 {
+        return Vec::new();
+    }
+
+    let mut candidates: Vec<u32> = candidate_points_ms
+        .iter()
+        .copied()
+        .filter(|point| *point > 0 && *point < duration_ms)
+        .collect();
+    candidates.sort_unstable();
+    candidates.dedup();
+
+    let mut endpoints = Vec::new();
+    let mut chunk_start_ms = 0;
+    while duration_ms - chunk_start_ms > cap_ms {
+        let hard_limit_ms = chunk_start_ms.saturating_add(cap_ms);
+        let useful_floor_ms = chunk_start_ms.saturating_add(cap_ms / 2);
+        let chunk_end_ms = candidates
+            .iter()
+            .copied()
+            .filter(|point| *point >= useful_floor_ms && *point <= hard_limit_ms)
+            .max()
+            .unwrap_or(hard_limit_ms);
+        endpoints.push(chunk_end_ms);
+        chunk_start_ms = chunk_end_ms;
+    }
+    endpoints.push(duration_ms);
+    endpoints
+}
 
 /// Compute the dBFS of a block of samples
 fn compute_dbfs(samples: &[f32]) -> f32 {
@@ -24,8 +55,7 @@ fn compute_dbfs(samples: &[f32]) -> f32 {
     20.0 * rms.log10()
 }
 
-/// Find split timestamps (in ms) where silence occurs.
-/// Returns a list of end timestamps for each chunk, ensuring no chunk exceeds max_duration_ms.
+/// Find bounded chunk end timestamps in milliseconds, preferring useful silence points.
 #[pyfunction]
 #[pyo3(signature = (file_path, min_silence_ms, silence_thresh_db, max_duration_ms))]
 fn get_split_timestamps(
@@ -34,6 +64,12 @@ fn get_split_timestamps(
     silence_thresh_db: f32,
     max_duration_ms: u32,
 ) -> PyResult<Vec<u32>> {
+    if max_duration_ms == 0 {
+        return Err(PyRuntimeError::new_err(
+            "max_duration_ms must be greater than zero",
+        ));
+    }
+
     let file = File::open(file_path)
         .map_err(|e| PyRuntimeError::new_err(format!("Failed to open file: {}", e)))?;
 
@@ -74,20 +110,20 @@ fn get_split_timestamps(
     let mut current_ms: f64 = 0.0;
 
     let mut silence_start_ms: Option<f64> = None;
-    let mut split_points = Vec::new();
-
-    // State for tracking chunks
-    let mut last_split_ms: f64 = 0.0;
+    let mut silence_points = Vec::new();
 
     loop {
         let packet = match format.next_packet() {
             Ok(packet) => packet,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
                 break; // End of file
-            },
+            }
             Err(e) => {
-                // Ignore other decode errors and just break (best effort)
-                break;
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to read audio packet: {e}"
+                )))
             }
         };
 
@@ -97,20 +133,28 @@ fn get_split_timestamps(
 
         let decoded = match decoder.decode(&packet) {
             Ok(decoded) => decoded,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
                 break;
             }
-            Err(symphonia::core::errors::Error::DecodeError(_)) => {
-                // Ignore transient decode errors
-                continue;
+            Err(symphonia::core::errors::Error::DecodeError(e)) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to decode audio packet: {e}"
+                )))
             }
             Err(e) => {
-                break;
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to decode audio: {e}"
+                )))
             }
         };
 
         if sample_buf.is_none() {
-            sample_buf = Some(SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec()));
+            sample_buf = Some(SampleBuffer::<f32>::new(
+                decoded.capacity() as u64,
+                *decoded.spec(),
+            ));
         }
 
         if let Some(buf) = &mut sample_buf {
@@ -140,13 +184,7 @@ fn get_split_timestamps(
                                 // We found a valid split point (the middle of the silence)
                                 let split_point = start + (silence_duration / 2.0);
 
-                                // Only split if adding this chunk gets us close to max_duration,
-                                // or if we really need to split to avoid going over.
-                                // Wait, the Python logic says:
-                                // "if len(current) + len(part) > cap_ms"
-                                // Let's just collect ALL valid silence split points,
-                                // and Python can decide which ones to use.
-                                split_points.push(split_point as u32);
+                                silence_points.push(split_point as u32);
                             }
                         }
                         silence_start_ms = None;
@@ -159,10 +197,11 @@ fn get_split_timestamps(
         }
     }
 
-    // Add total duration as final split point just in case
-    split_points.push(current_ms as u32);
-
-    Ok(split_points)
+    Ok(bounded_chunk_endpoints(
+        &silence_points,
+        current_ms as u32,
+        max_duration_ms,
+    ))
 }
 
 #[pyfunction]
@@ -203,7 +242,16 @@ fn get_audio_dbfs(file_path: &str) -> PyResult<f32> {
     loop {
         let packet = match format.next_packet() {
             Ok(packet) => packet,
-            Err(_) => break,
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(e) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to read audio packet: {e}"
+                )))
+            }
         };
 
         if packet.track_id() != track_id {
@@ -212,11 +260,28 @@ fn get_audio_dbfs(file_path: &str) -> PyResult<f32> {
 
         let decoded = match decoder.decode(&packet) {
             Ok(decoded) => decoded,
-            Err(_) => continue, // Ignore decode errors
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(symphonia::core::errors::Error::DecodeError(e)) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to decode audio packet: {e}"
+                )))
+            }
+            Err(e) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Failed to decode audio: {e}"
+                )))
+            }
         };
 
         if sample_buf.is_none() {
-            sample_buf = Some(SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec()));
+            sample_buf = Some(SampleBuffer::<f32>::new(
+                decoded.capacity() as u64,
+                *decoded.spec(),
+            ));
         }
 
         if let Some(buf) = &mut sample_buf {
@@ -249,4 +314,29 @@ fn scribe_audio_core(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_split_timestamps, m)?)?;
     m.add_function(wrap_pyfunction!(get_audio_dbfs, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bounded_chunk_endpoints;
+
+    #[test]
+    fn hard_caps_audio_without_silence() {
+        assert_eq!(
+            bounded_chunk_endpoints(&[], 130_000, 60_000),
+            vec![60_000, 120_000, 130_000]
+        );
+    }
+
+    #[test]
+    fn prefers_useful_silence_and_ignores_invalid_points() {
+        assert_eq!(
+            bounded_chunk_endpoints(
+                &[5_000, 40_000, 90_000, 130_000, 130_000, 140_000],
+                130_000,
+                60_000,
+            ),
+            vec![40_000, 90_000, 130_000]
+        );
+    }
 }

@@ -65,6 +65,7 @@ class TestOpenAITranscriber:
             create_mock_transcription_response("Chunk 1 transcript."),
             create_mock_transcription_response("Chunk 2 transcript."),
             create_mock_transcription_response("Chunk 3 transcript."),
+            create_mock_transcription_response("Chunk 4 transcript."),
         ]
         mock_openai.audio.transcriptions.create.side_effect = mock_responses
 
@@ -81,8 +82,8 @@ class TestOpenAITranscriber:
         # Verify file is not empty (regression test)
         content = result.read_text(encoding="utf-8")
         assert len(content) > 0
-        # With client-side chunking, at least one chunk should be present
-        assert "Chunk 1" in content or "Chunk 2" in content or "Chunk 3" in content
+        # Thirty minutes requires four bounded chunks below the nine-minute cap.
+        assert all(f"Chunk {index}" in content for index in range(1, 5))
 
     @patch("scribe.utils.audio.get_audio_duration")
     def test_transcribe_combines_chunks_correctly(
@@ -210,10 +211,10 @@ class TestChunkingBehavior:
         assert mock_openai.audio.transcriptions.create.call_count == 1
 
     @patch("scribe.utils.audio.get_audio_duration")
-    def test_large_file_uses_server_chunking(
+    def test_large_file_forces_bounded_client_chunking(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
-        """Test large file uses server-side chunking (single API call with auto chunking)."""
+        """Files above the provider safety threshold use bounded client chunks."""
         mock_duration.return_value = 1800.0  # 30 minutes
 
         transcriber = OpenAITranscriber(
@@ -223,8 +224,7 @@ class TestChunkingBehavior:
         result = transcriber.transcribe(long_audio)
 
         assert result.exists()
-        # Server-side chunking still makes single API call (OpenAI handles chunking)
-        assert mock_openai.audio.transcriptions.create.call_count == 1
+        assert mock_openai.audio.transcriptions.create.call_count == 4
 
     @patch("scribe.utils.audio.get_audio_duration")
     def test_client_side_chunking_for_very_long_files(
@@ -240,6 +240,7 @@ class TestChunkingBehavior:
             create_mock_transcription_response("Chunk 1"),
             create_mock_transcription_response("Chunk 2"),
             create_mock_transcription_response("Chunk 3"),
+            create_mock_transcription_response("Chunk 4"),
         ]
 
         transcriber = OpenAITranscriber(
@@ -252,8 +253,7 @@ class TestChunkingBehavior:
 
         assert result.exists()
         content = result.read_text(encoding="utf-8")
-        # Should have combined chunks
-        assert "Chunk 1" in content or "Chunk 2" in content or "Chunk 3" in content
+        assert all(f"Chunk {index}" in content for index in range(1, 5))
 
     @patch("scribe.utils.audio.get_audio_duration")
     def test_client_side_chunking_uses_initial_prompt(
@@ -408,7 +408,12 @@ class TestRegressionBlankFileBug:
         # Each chunk returns unique content
         from tests.conftest import create_mock_transcription_response
 
-        chunk_contents = ["Content from chunk 1.", "Content from chunk 2.", "Content from chunk 3."]
+        chunk_contents = [
+            "Content from chunk 1.",
+            "Content from chunk 2.",
+            "Content from chunk 3.",
+            "Content from chunk 4.",
+        ]
         mock_openai.audio.transcriptions.create.side_effect = [
             create_mock_transcription_response(text) for text in chunk_contents
         ]
@@ -422,5 +427,4 @@ class TestRegressionBlankFileBug:
 
         content = result.read_text(encoding="utf-8")
 
-        # At least some chunks should be present
-        assert any(chunk_text in content for chunk_text in chunk_contents)
+        assert all(chunk_text in content for chunk_text in chunk_contents)

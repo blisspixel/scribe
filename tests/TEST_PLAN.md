@@ -4,12 +4,12 @@
 
 Date: 2026-07-15
 
-- 1625 assertion-based tests collected.
-- Latest local CI-safe unit coverage run: 1519 passed, 5 skipped, 1 deselected.
-- Latest local CI-safe unit coverage: 81.77 percent.
-- Latest broader CI-equivalent gate: 1586 passed, 12 skipped, 27 deselected, no warnings, and 82.43 percent coverage.
+- 1635 assertion-based tests collected.
+- Latest local CI-safe unit matrix: 1496 passed, 2 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1596 passed, 12 skipped, 27 deselected, no warnings, and 82.41 percent coverage.
 - Current enforced coverage floor: 80 percent.
-- CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit, and pip-audit.
+- CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit,
+  pip-audit, and the root-wheel build and isolated-install contract.
 
 ## Test Strategy
 
@@ -27,6 +27,8 @@ Scribe is a local-first CLI with heavy hardware and OS integration points. The t
 - Hypothesis property tests for pure logic including costs, backend selection, diarizer behavior, transcript model, validation, vocabulary, recording policy, resilience backoff, and voice tray state.
 - Fault-injection coverage for atomic writes and API circuit breaker behavior.
 - Strict markers prevent accidental CI use of GPU, slow, provider, FFmpeg, WhisperX, and Pillow-dependent paths.
+- Release-artifact tests reject workspace-only mandatory wheel metadata, while
+  required CI builds, inspects, installs, and smokes the portable root wheel.
 
 ## Priority Coverage Areas
 

@@ -148,6 +148,8 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
+uv build --package scribe --out-dir .agent/build
+uv run python scripts/check_release_artifact.py .agent/build
 ```
 
 ### 4. Full Local Verification
@@ -385,10 +387,16 @@ __version__ = "2.4.0"
 ### 2. Update Changelog
 Add a new section at the top of the root `CHANGELOG.md` following the existing format (Unreleased section becomes the new versioned release).
 
-### 3. Run Full Test Suite
+### 3. Run Full Test Suite And Artifact Contract
 ```bash
 uv run pytest
+uv build --package scribe --out-dir .agent/build
+uv run python scripts/check_release_artifact.py .agent/build
 ```
+
+The root wheel is the portable product artifact. `scribe-audio-core` is an
+optional workspace acceleration and must not appear as a mandatory root-wheel
+requirement until matching platform wheels are published and clean-install tested.
 
 ### 4. Update Documentation
 - README.md

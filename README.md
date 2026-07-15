@@ -52,6 +52,12 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 - **Reproducible quality gates**: CI uses the committed lockfile, includes the
   toolchain check in the aggregate result, enforces formatting, lint, strict
   typing, dependency audit policy, and at least 80 percent meaningful coverage.
+- **Portable release artifact**: the root wheel no longer requires an unpublished
+  workspace-only Rust package. Required CI now builds and inspects the wheel,
+  installs it without workspace packages, and smokes the installed command.
+- **Bounded long-audio fallback**: client-side OpenAI chunking uses native silence
+  analysis when available and a visible portable fallback otherwise. Both paths
+  enforce the configured duration cap before exporting chunks.
 
 ## v2.8.0 Highlights
 
@@ -211,9 +217,11 @@ tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selec
 The **tray menu** shows the current hotkeys and lets you remap them (F6-F12), pick a
 read-aloud speed, and toggle "Start at login" - all live.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
-The tray is fully validated on **Windows, macOS, and Linux** (dictation, read-aloud, hotkeys, and run-at-login).
-macOS and Linux require explicit permissions or supported desktop environments; run scribe tray --check
-first there to see missing deps, the resolved read-aloud backend, and macOS Input-Monitoring / Linux-Wayland permission caveats.
+The resident tray is live-validated on **Windows**. macOS and Linux support is
+implemented but still needs the platform matrix recorded in the roadmap before it
+is described as validated. Run `scribe tray --check` first on every platform to
+see missing dependencies, the resolved read-aloud backend, and macOS Input
+Monitoring or Linux Wayland permission caveats.
 See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) and [macOS/Linux Validation Notes](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
 
 High-quality neural read-aloud uses **Kokoro** (82M, ONNX, CPU-capable, Apache-2.0)
@@ -912,8 +920,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit coverage run: 1519 passed, 5 skipped, 1 deselected, 81.77% line coverage
-- Latest broader CI-equivalent run: 1586 passed, 12 skipped, 27 deselected, 82.43% line coverage
+- Latest CI-safe unit matrix: 1496 passed, 2 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1596 passed, 12 skipped, 27 deselected, 82.41% line coverage
+- Current collection: 1635 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
