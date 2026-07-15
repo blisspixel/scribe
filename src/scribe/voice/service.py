@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hmac
 import importlib.util
+import logging
 import queue
+import secrets
+import socket
 import tempfile
 import threading
 import time
@@ -25,6 +29,8 @@ from scribe.voice.settings import HotkeySpec, TraySettings, model_for_profile
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 VoiceTrayState = Literal["idle", "recording", "transcribing", "speaking", "error", "stopped"]
 
@@ -375,6 +381,8 @@ class VoiceTrayService:
         self._ipc_socket: Any = None
         self._ipc_conn: Any = None
         self._ipc_thread: threading.Thread | None = None
+        self._ipc_token: str | None = None
+        self._ipc_ready = threading.Event()
 
     @property
     def status_text(self) -> str:
@@ -503,11 +511,10 @@ class VoiceTrayService:
 
     def start_ipc_server(self, *, preload_model: bool = False) -> int:
         """Start the IPC socket server for the Go tray daemon and return the bound port."""
-        import socket
-
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("127.0.0.1", 0))
         sock.listen(1)
+        sock.settimeout(0.2)
         port = sock.getsockname()[1]
 
         self.running = True
@@ -516,41 +523,102 @@ class VoiceTrayService:
         self._watchdog = threading.Thread(target=self._watchdog_loop, daemon=True)
         self._watchdog.start()
 
+        self._ipc_token = secrets.token_urlsafe(32)
+        self._ipc_ready.clear()
         self._ipc_socket = sock
         self._ipc_thread = threading.Thread(target=self._ipc_server_loop, daemon=True)
         self._ipc_thread.start()
 
         if preload_model:
-            self.model_loading = True
-            self._notify()
-            threading.Thread(target=self._preload_model_worker, daemon=True).start()
+            self.start_model_preload()
 
         return int(port)
 
+    @property
+    def ipc_token(self) -> str:
+        """Return the process-scoped capability required by the native daemon."""
+        if self._ipc_token is None:
+            raise RuntimeError("Native tray IPC server is not running")
+        return self._ipc_token
+
+    def wait_for_ipc_ready(self, *, timeout: float) -> bool:
+        """Wait a bounded time for an authenticated daemon to register its controls."""
+        return self._ipc_ready.wait(timeout)
+
+    def start_model_preload(self) -> None:
+        """Warm resident models after the owning tray surface is ready."""
+        with self._state_lock:
+            if self.model_loading:
+                return
+            self.model_loading = True
+        self._notify()
+        threading.Thread(target=self._preload_model_worker, daemon=True).start()
+
     def _ipc_server_loop(self) -> None:
-        """Listen for IPC connections from the Go tray daemon."""
+        """Listen for one authenticated native tray daemon at a time."""
+        server = self._ipc_socket
         while self.running:
             try:
-                conn, _ = self._ipc_socket.accept()
-            except Exception:
+                conn, _ = server.accept()
+            except TimeoutError:
+                continue
+            except OSError as error:
+                if self.running:
+                    logger.warning("Native tray IPC listener stopped: %s", error)
                 break
 
-            with conn, conn.makefile("r", encoding="utf-8") as f:
-                self._ipc_conn = conn
-                self._notify()  # Send initial state
-                for line in f:
-                    cmd = line.strip()
-                    if cmd == "DICTATE":
-                        self._dictating = not self._dictating
-                        self._actions.put(
-                            self._finish_recording if not self._dictating else self._begin_recording
-                        )
-                    elif cmd == "READ":
-                        self._actions.put(self._read_selection_and_speak)
-                    elif cmd == "QUIT":
-                        self.stop()
-                        break
-            self._ipc_conn = None
+            try:
+                with conn, conn.makefile("r", encoding="utf-8") as stream:
+                    conn.settimeout(2.0)
+                    auth_line = stream.readline(512)
+                    token = self._ipc_token
+                    expected = f"AUTH {token}\n" if token is not None else ""
+                    if not auth_line.endswith("\n") or not hmac.compare_digest(auth_line, expected):
+                        logger.warning("Rejected unauthenticated native tray IPC peer")
+                        continue
+
+                    conn.settimeout(None)
+                    self._ipc_conn = conn
+                    conn.sendall(b"AUTH OK\n")
+                    peer_ready = False
+
+                    while self.running:
+                        line = stream.readline(128)
+                        if not line:
+                            break
+                        if not line.endswith("\n"):
+                            logger.warning("Rejected oversized native tray IPC command")
+                            break
+                        cmd = line.strip()
+                        if cmd == "READY":
+                            peer_ready = True
+                            self._ipc_ready.set()
+                            self._notify()
+                        elif not peer_ready:
+                            logger.warning("Ignored native tray command before READY")
+                        elif cmd == "DICTATE":
+                            self._dictating = not self._dictating
+                            self._actions.put(
+                                self._finish_recording
+                                if not self._dictating
+                                else self._begin_recording
+                            )
+                        elif cmd == "READ":
+                            if self.state == "speaking":
+                                self.stop_speaking()
+                            elif not self._dictating:
+                                self._actions.put(self.read_selection_now)
+                        elif cmd == "QUIT":
+                            self.stop()
+                            break
+                        else:
+                            logger.warning("Ignored unknown native tray IPC command")
+            except (OSError, UnicodeError) as error:
+                if self.running:
+                    logger.warning("Native tray IPC peer disconnected: %s", error)
+            finally:
+                if self._ipc_conn is conn:
+                    self._ipc_conn = None
 
     def start_hotkeys(self, *, preload_model: bool = False) -> bool:  # pragma: no cover
         """Start the global hotkey listener."""
@@ -592,9 +660,7 @@ class VoiceTrayService:
             # Preload on its OWN thread, not the shared worker slot: otherwise a
             # dictation in the first few seconds (while the model loads) cannot
             # start its transcription worker and is silently dropped.
-            self.model_loading = True
-            self._notify()
-            threading.Thread(target=self._preload_model_worker, daemon=True).start()
+            self.start_model_preload()
         return True
 
     def stop(self) -> None:  # pragma: no cover
@@ -602,6 +668,18 @@ class VoiceTrayService:
         self.running = False
         self.paused = False
         self._actions.put(None)  # unblock the dispatcher so it can exit
+        ipc_conn = self._ipc_conn
+        self._ipc_conn = None
+        if ipc_conn is not None:
+            with suppress(OSError):
+                ipc_conn.shutdown(socket.SHUT_RDWR)
+            with suppress(OSError):
+                ipc_conn.close()
+        ipc_socket = self._ipc_socket
+        self._ipc_socket = None
+        if ipc_socket is not None:
+            with suppress(OSError):
+                ipc_socket.close()
         listener = self._listener
         self._listener = None
         if listener is not None:
@@ -610,9 +688,12 @@ class VoiceTrayService:
         if self._stream is not None:
             self._stop_stream()
         # Join background threads so no transcription/injection runs after stop.
-        for thread in (self._dispatcher, self._worker):
-            if thread is not None and thread.is_alive():
+        current_thread = threading.current_thread()
+        for thread in (self._dispatcher, self._worker, self._watchdog, self._ipc_thread):
+            if thread is not None and thread is not current_thread and thread.is_alive():
                 thread.join(timeout=2.0)
+        self._ipc_token = None
+        self._ipc_ready.clear()
         self.state = "stopped"
         self.error_message = None
         self._notify()

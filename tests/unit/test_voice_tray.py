@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib.machinery
+import socket
 import sys
 import types
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from hypothesis import strategies as st
@@ -470,7 +472,234 @@ def test_tray_check_reports_missing_dependencies(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr(tray, "missing_dependency_packages", fake_missing)
 
-    assert tray.run_tray_check(Console(record=True), TraySettings(), include_tray=True) == 1
+    console = Console(record=True)
+    assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 1
+    output = console.export_text()
+    assert "Install missing tray packages with:" in output
+    assert "[yellow]" not in output
+
+
+def test_native_tray_selection_does_not_implicitly_use_source_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    monkeypatch.delenv("SCRIBE_TRAY_NATIVE_BIN", raising=False)
+    monkeypatch.setattr(tray, "files", lambda _package: tmp_path)
+
+    selection = tray._resolve_native_tray()
+
+    assert selection.path is None
+    assert selection.source == "python"
+    assert "opt-in" in selection.reason
+
+
+def test_native_tray_selection_prefers_deliberate_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    explicit = tmp_path / "custom-tray.exe"
+    explicit.touch()
+    monkeypatch.setenv("SCRIBE_TRAY_NATIVE_BIN", str(explicit))
+
+    selection = tray._resolve_native_tray()
+
+    assert selection.path == explicit
+    assert selection.source == "explicit"
+    assert str(explicit) in selection.reason
+
+
+def test_native_tray_selection_reports_missing_explicit_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    missing = tmp_path / "missing-tray.exe"
+    monkeypatch.setenv("SCRIBE_TRAY_NATIVE_BIN", str(missing))
+
+    selection = tray._resolve_native_tray()
+
+    assert selection.path is None
+    assert selection.source == "python"
+    assert str(missing) in selection.reason
+
+
+def test_native_tray_compatibility_requires_toggle_function_keys() -> None:
+    from scribe.voice import tray
+
+    assert tray._native_compatibility_issue(TraySettings()) is None
+    assert "toggle" in str(tray._native_compatibility_issue(TraySettings(activation="hold")))
+    assert "F6-F12" in str(
+        tray._native_compatibility_issue(
+            TraySettings(dictate_hotkey="ctrl+alt+space", read_hotkey="f8")
+        )
+    )
+
+
+def test_tray_check_reports_backend_and_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scribe.voice import tray
+
+    monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
+    monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        tray,
+        "_resolve_native_tray",
+        lambda: tray.NativeTraySelection(
+            None,
+            "python",
+            "native daemon is opt-in via SCRIBE_TRAY_NATIVE_BIN",
+        ),
+    )
+    console = Console(record=True)
+
+    assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 0
+    output = console.export_text()
+    assert "backend" in output
+    assert "Python tray" in output
+    assert "opt-in via SCRIBE_TRAY_NATIVE_BIN" in output
+
+
+def test_run_tray_falls_back_to_python_after_native_startup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    selection = tray.NativeTraySelection(native, "explicit", f"explicit path {native}")
+    calls: list[str] = []
+    monkeypatch.setattr(tray, "_resolve_native_tray", lambda: selection)
+    monkeypatch.setattr(
+        tray,
+        "_run_native_tray",
+        lambda *_args: calls.append("native") or None,
+    )
+    monkeypatch.setattr(
+        tray,
+        "_run_python_tray",
+        lambda *_args: calls.append("python") or 0,
+    )
+
+    assert tray.run_tray(Console(record=True), TraySettings(), no_tray=False) == 0
+    assert calls == ["native", "python"]
+
+
+def test_native_runner_keeps_capability_out_of_arguments_and_preloads_after_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    captured: dict[str, object] = {}
+    capability_value = "process-capability"
+
+    class FakeService:
+        def __init__(self, *_args: object) -> None:
+            self.preload_calls = 0
+            self.stopped = False
+            captured["service"] = self
+
+        @property
+        def ipc_token(self) -> str:
+            return capability_value
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def wait_for_ipc_ready(self, *, timeout: float) -> bool:
+            assert timeout > 0
+            return True
+
+        def start_model_preload(self) -> None:
+            self.preload_calls += 1
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    class FakeProcess:
+        def poll(self) -> None:
+            return None
+
+        def wait(self, *, timeout: float | None = None) -> int:
+            assert timeout is None
+            return 0
+
+    def fake_popen(arguments: list[str], *, env: dict[str, str]) -> FakeProcess:
+        captured["arguments"] = arguments
+        captured["environment"] = env
+        return FakeProcess()
+
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    monkeypatch.setattr(tray, "VoiceTrayService", FakeService)
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr(tray, "_await_model_ready", lambda *_args: True)
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+
+    selection = tray.NativeTraySelection(native, "explicit", f"explicit path {native}")
+    result = tray._run_native_tray(Console(record=True), TraySettings(), selection)
+
+    arguments = captured["arguments"]
+    environment = captured["environment"]
+    service = captured["service"]
+    assert isinstance(arguments, list)
+    assert isinstance(environment, dict)
+    assert capability_value not in arguments
+    assert environment["SCRIBE_TRAY_IPC_TOKEN"] == capability_value
+    assert isinstance(service, FakeService)
+    assert service.preload_calls == 1
+    assert service.stopped is True
+    assert result == 0
+
+
+def test_native_runner_does_not_preload_before_failed_readiness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    capability_value = "process-capability"
+
+    class FakeService:
+        def __init__(self, *_args: object) -> None:
+            self.preload_calls = 0
+
+        @property
+        def ipc_token(self) -> str:
+            return capability_value
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def wait_for_ipc_ready(self, *, timeout: float) -> bool:
+            raise AssertionError(f"exited process should not wait {timeout}")
+
+        def start_model_preload(self) -> None:
+            self.preload_calls += 1
+
+        def stop(self) -> None:
+            return None
+
+    class FailedProcess:
+        def poll(self) -> int:
+            return 7
+
+    service = FakeService()
+    monkeypatch.setattr(tray, "VoiceTrayService", lambda *_args: service)
+    monkeypatch.setattr("subprocess.Popen", lambda *_args, **_kwargs: FailedProcess())
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+
+    result = tray._run_native_tray(
+        Console(record=True),
+        TraySettings(),
+        tray.NativeTraySelection(native, "explicit", f"explicit path {native}"),
+    )
+
+    assert result is None
+    assert service.preload_calls == 0
 
 
 def test_tray_command_check_uses_no_tray_dependency_scope(
@@ -572,6 +801,70 @@ def _drain_actions(service: VoiceTrayService) -> None:
             return
         if action is not None:
             action()
+
+
+def test_native_ipc_requires_capability_and_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = VoiceTrayService(TraySettings(preload_model=False), Console(record=True))
+    calls: list[str] = []
+    monkeypatch.setattr(service, "_begin_recording", lambda: calls.append("dictate"))
+    monkeypatch.setattr(service, "read_selection_now", lambda: calls.append("read") or True)
+    monkeypatch.setattr(service, "stop_speaking", lambda: calls.append("stop"))
+    port = service.start_ipc_server()
+
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0) as rejected:
+            rejected.sendall(b"AUTH wrong\nDICTATE\n")
+            rejected.settimeout(1.0)
+            assert rejected.recv(64) == b""
+
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0) as accepted:
+            stream = accepted.makefile("rwb")
+            stream.write(f"AUTH {service.ipc_token}\n".encode())
+            stream.flush()
+            assert stream.readline() == b"AUTH OK\n"
+            assert not service.wait_for_ipc_ready(timeout=0.01)
+
+            stream.write(b"READY\n")
+            stream.flush()
+            assert service.wait_for_ipc_ready(timeout=1.0)
+            assert stream.readline() == b"STATE:idle\n"
+
+            stream.write(b"DICTATE\n")
+            stream.flush()
+            for _ in range(100):
+                if calls:
+                    break
+                import time
+
+                time.sleep(0.01)
+            assert calls == ["dictate"]
+
+            service._dictating = False
+            stream.write(b"READ\n")
+            stream.flush()
+            for _ in range(100):
+                if len(calls) == 2:
+                    break
+                import time
+
+                time.sleep(0.01)
+            assert calls == ["dictate", "read"]
+
+            service.state = "speaking"
+            stream.write(b"READ\n")
+            stream.flush()
+            for _ in range(100):
+                if len(calls) == 3:
+                    break
+                import time
+
+                time.sleep(0.01)
+            assert calls == ["dictate", "read", "stop"]
+    finally:
+        service.stop()
+
+    assert service._ipc_socket is None
+    assert service._ipc_conn is None
 
 
 def test_on_press_enqueues_action_off_the_hook_thread(monkeypatch: pytest.MonkeyPatch) -> None:

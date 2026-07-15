@@ -203,7 +203,7 @@ scribe say --clipboard                   # the clipboard contents
 scribe say notes.md --speed 1.2          # 1.2x speed (0.5-2.0); Esc stops playback
 
 # Resident voice tray utility
-scribe tray --check                      # validate optional deps, hotkeys, and read-aloud
+scribe tray --check                      # validate deps, backend, hotkeys, and read-aloud
 scribe tray                              # tray icon: tap F9 to dictate, tap F8 to read selection
 scribe tray --activation hold            # prefer push-to-talk over tap-to-toggle
 scribe tray --speed 1.2                  # default read-aloud speed
@@ -214,15 +214,22 @@ scribe tray --startup install            # run the tray automatically at login (
 ```
 Dictation and read-aloud both default to **tap-to-toggle**: tap the hotkey to start,
 tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selection).
-The **tray menu** shows the current hotkeys and lets you remap them (F6-F12), pick a
-read-aloud speed, and toggle "Start at login" - all live.
+The default **Python tray menu** shows the current hotkeys and lets you remap them
+(F6-F12), pick a read-aloud speed, pause hotkeys, and toggle "Start at login" - all
+live. The Go tray remains an explicit source prototype with a smaller Dictate,
+Read, and Quit menu and no desktop-notification parity. It is selected only through
+a deliberate `SCRIBE_TRAY_NATIVE_BIN` path, never from a checked-in or merely
+packaged build artifact. Its current protocol supports toggle activation and simple
+F6-F12 keys. It must authenticate, register both keys, and signal readiness before
+Scribe reports it as active; daemon startup failure or a nonzero daemon exit visibly
+returns to the Python tray.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
-The resident tray is live-validated on **Windows**. macOS and Linux support is
-implemented but still needs the platform matrix recorded in the roadmap before it
-is described as validated. Run `scribe tray --check` first on every platform to
-see missing dependencies, the resolved read-aloud backend, and macOS Input
-Monitoring or Linux Wayland permission caveats.
-See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) and [macOS/Linux Validation Notes](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
+The complete Python tray is live-validated on **Windows**. macOS and Linux support
+is implemented but still needs the platform matrix recorded in the roadmap before
+it is described as validated. Run `scribe tray --check` first on every platform to
+see missing dependencies, selected backend and provenance, the resolved read-aloud
+backend, and macOS Input Monitoring or Linux Wayland permission caveats.
+See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) and [macOS/Linux Validation Plan](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
 
 High-quality neural read-aloud uses **Kokoro** (82M, ONNX, CPU-capable, Apache-2.0)
 when installed (`scribe[kokoro]`) and set up; otherwise it falls back to the OS voice.
@@ -920,9 +927,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1496 passed, 2 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1596 passed, 12 skipped, 27 deselected, 82.41% line coverage
-- Current collection: 1635 assertion-based tests
+- Latest CI-safe unit matrix: 1505 passed, 2 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1605 passed, 12 skipped, 27 deselected, 82.52% line coverage
+- Current collection: 1644 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly

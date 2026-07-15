@@ -6,9 +6,10 @@ import os
 import platform
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from scribe.utils.branding import brand_header_markup
 from scribe.voice.service import (
@@ -23,9 +24,63 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+@dataclass(frozen=True)
+class NativeTraySelection:
+    """One deliberate native-daemon selection and its operator-facing provenance."""
+
+    path: Path | None
+    source: Literal["python", "explicit"]
+    reason: str
+
+
+_NATIVE_FUNCTION_KEYS = frozenset(f"f{number}" for number in range(6, 13))
+
+
+def _native_compatibility_issue(settings: TraySettings) -> str | None:
+    """Return why the current native protocol cannot represent these settings."""
+    if settings.activation != "toggle":
+        return "native daemon supports toggle activation only"
+    unsupported = sorted(
+        {
+            settings.dictate_hotkey.lower(),
+            settings.read_hotkey.lower(),
+        }
+        - _NATIVE_FUNCTION_KEYS
+    )
+    if unsupported:
+        return "native daemon supports simple F6-F12 hotkeys only"
+    return None
+
+
+def _resolve_native_tray() -> NativeTraySelection:
+    """Resolve only a deliberately selected daemon, never a build artifact."""
+    explicit_value = os.environ.get("SCRIBE_TRAY_NATIVE_BIN", "").strip()
+    if explicit_value:
+        explicit = Path(os.path.expandvars(explicit_value)).expanduser()
+        if explicit.is_file():
+            return NativeTraySelection(explicit, "explicit", f"explicit path {explicit}")
+        return NativeTraySelection(
+            None,
+            "python",
+            f"configured native path not found: {explicit}",
+        )
+
+    return NativeTraySelection(
+        None,
+        "python",
+        "native daemon is opt-in via SCRIBE_TRAY_NATIVE_BIN",
+    )
+
+
 def packaged_icon_path() -> Path:
     """Return the bundled PNG icon path for the tray."""
     return Path(str(files("scribe") / "assets" / "icons" / "scribe.png"))
+
+
+def packaged_native_icon_path() -> Path:
+    """Return the canonical icon format expected by the native daemon."""
+    icon_name = "scribe.ico" if platform.system() == "Windows" else "scribe.png"
+    return Path(str(files("scribe") / "assets" / "icons" / icon_name))
 
 
 def _await_model_ready(console: Console, service: VoiceTrayService) -> bool:  # pragma: no cover
@@ -103,6 +158,20 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
     console.print(f"[cyan]read[/cyan] {settings.read_hotkey}")
     console.print(f"[cyan]inject[/cyan] {settings.inject}")
     console.print(f"[cyan]read-aloud[/cyan] {tts_desc}")
+    if include_tray:
+        selection = _resolve_native_tray()
+        if selection.path is None:
+            backend = f"Python tray ({selection.reason})"
+        else:
+            compatibility_issue = _native_compatibility_issue(settings)
+            backend = (
+                f"Python tray ({compatibility_issue}; native candidate: {selection.reason})"
+                if compatibility_issue
+                else f"native tray ({selection.reason})"
+            )
+    else:
+        backend = "terminal hotkeys (--no-tray)"
+    console.print(f"[cyan]backend[/cyan] {backend}")
 
     advisories = resident_voice_advisories(
         platform.system(),
@@ -121,7 +190,7 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
     if missing:
         console.print()
         console.print(
-            "[yellow]Install missing tray packages with:[/yellow]\n"
+            "Install missing tray packages with:\n"
             "  uv sync --extra tray --group dev\n"
             'or for an installed package: pip install "scribe[tray]"',
             markup=False,
@@ -150,54 +219,131 @@ def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:
     if no_tray:
         return _run_no_tray(console, settings)
 
-    import importlib.resources
-    import sys
+    selection = _resolve_native_tray()
+    compatibility_issue = _native_compatibility_issue(settings)
+    if selection.path is not None and compatibility_issue is None:
+        native_result = _run_native_tray(console, settings, selection)
+        if native_result is not None:
+            return native_result
+        fallback_reason = "native fallback selected after the reported failure"
+    elif selection.path is not None:
+        fallback_reason = f"{compatibility_issue}; native candidate not selected"
+    else:
+        fallback_reason = selection.reason
 
-    exe_name = "scribe-tray.exe" if sys.platform == "win32" else "scribe-tray"
+    console.print(f"[cyan]Tray backend:[/cyan] Python tray ({fallback_reason}).")
+    return _run_python_tray(console, settings)
+
+
+def _wait_for_native_ready(service: VoiceTrayService, process: Any, *, timeout: float) -> bool:
+    """Wait for READY while also noticing an early daemon exit."""
+    deadline = time.monotonic() + timeout
+    while process.poll() is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        if service.wait_for_ipc_ready(timeout=min(0.1, remaining)):
+            return True
+    return False
+
+
+def _stop_native_process(process: Any) -> None:
+    """Stop a daemon that failed before it could own the tray workflow."""
+    import subprocess
+
+    if process.poll() is not None:
+        return
+    with suppress(OSError):
+        process.terminate()
     try:
-        # Use importlib.resources.files to locate the binary inside the installed package
-        with importlib.resources.as_file(
-            importlib.resources.files("scribe.assets.bin").joinpath(exe_name)
-        ) as bin_path:
-            go_bin = Path(bin_path)
-    except Exception:
-        # Fallback if package is not built or installed correctly
-        go_bin = Path(__file__).parent.parent.parent.parent / "cmd" / "scribe-tray" / exe_name
+        process.wait(timeout=2.0)
+    except (OSError, subprocess.TimeoutExpired):
+        with suppress(OSError):
+            process.kill()
+        with suppress(OSError, subprocess.TimeoutExpired):
+            process.wait(timeout=2.0)
 
-    if go_bin.exists():
-        import subprocess
 
-        service = VoiceTrayService(settings, console)
-        port = service.start_ipc_server(preload_model=settings.preload_model)
+def _run_native_tray(
+    console: Console,
+    settings: TraySettings,
+    selection: NativeTraySelection,
+) -> int | None:
+    """Run a deliberate native selection, returning None when Python should recover."""
+    import subprocess
 
-        console.print("[green]Scribe Voice is running via Go Tray Daemon.[/green]")
+    if selection.path is None:
+        return None
+
+    service = VoiceTrayService(settings, console)
+    process: Any = None
+    try:
+        port = service.start_ipc_server(preload_model=False)
+        environment = os.environ.copy()
+        environment["SCRIBE_TRAY_IPC_TOKEN"] = service.ipc_token
+        arguments = [
+            str(selection.path),
+            "-port",
+            str(port),
+            "-dictate",
+            settings.dictate_hotkey.upper(),
+            "-read",
+            settings.read_hotkey.upper(),
+            "-icon",
+            str(packaged_native_icon_path()),
+        ]
+        console.print(f"[cyan]Starting native tray:[/cyan] {selection.reason}")
+        process = subprocess.Popen(arguments, env=environment)
+        if not _wait_for_native_ready(service, process, timeout=5.0):
+            exit_code = process.poll()
+            detail = (
+                f"exited with status {exit_code}"
+                if exit_code is not None
+                else "did not confirm hotkey readiness within 5 seconds"
+            )
+            _stop_native_process(process)
+            console.print(
+                f"[yellow]Native tray unavailable:[/yellow] {detail}. "
+                "Starting the Python tray fallback."
+            )
+            return None
+
+        console.print(
+            f"[green]Scribe Voice is running via native tray ({selection.source}).[/green]"
+        )
+        if settings.preload_model:
+            service.start_model_preload()
         dictate_hint, read_hint = hotkey_hints(settings)
         if _await_model_ready(console, service):
             console.print(f"[green]Ready.[/green] [dim]{dictate_hint} {read_hint}[/dim]")
         else:
             console.print(f"[dim]{dictate_hint} {read_hint} (model will load on first use)[/dim]")
 
-        try:
-            subprocess.run(
-                [
-                    str(go_bin),
-                    "-port",
-                    str(port),
-                    "-dictate",
-                    settings.dictate_hotkey.upper(),
-                    "-read",
-                    settings.read_hotkey.upper(),
-                ],
-                check=True,
-            )
+        exit_code = process.wait()
+        if exit_code == 0:
             return 0
-        except KeyboardInterrupt:
-            return 0
-        except Exception as e:
-            console.print(f"[red]Go tray daemon stopped unexpectedly:[/red] {e}")
-            return 1
-        finally:
-            service.stop()
+        console.print(
+            f"[yellow]Native tray stopped with status {exit_code}.[/yellow] "
+            "Starting the Python tray fallback."
+        )
+        return None
+    except KeyboardInterrupt:
+        if process is not None:
+            _stop_native_process(process)
+        return 0
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        if process is not None:
+            _stop_native_process(process)
+        console.print(
+            f"[yellow]Native tray unavailable:[/yellow] {error}. Starting the Python tray fallback."
+        )
+        return None
+    finally:
+        service.stop()
+
+
+def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma: no cover
+    """Run the complete Python tray implementation."""
 
     _brand_windows_process()
     missing = missing_dependency_packages(include_tray=True)

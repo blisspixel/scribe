@@ -79,7 +79,8 @@ endpoints = get_split_timestamps(
 
 ### Phase C: Go Tray Daemon (SOURCE PROTOTYPE, DELIVERY PARTIAL)
 1. [x] Create `cmd/scribe-tray/main.go`.
-2. [ ] Replace the transparent 1x1 tray icon with the canonical Scribe icon, honor configured hotkeys in native registration, and validate menu state transitions.
+2. [x] Use the canonical platform icon, honor simple configured F6-F12 keys, reject collisions, and fail startup when either key cannot register.
 3. [x] Implement the IPC boundary (a lightweight Python socket server inside `scribe.voice.service`).
-4. [ ] Add peer authentication and explicit daemon-fallback diagnostics at the IPC boundary.
+4. [x] Require a process-scoped capability and authenticated READY signal, close IPC resources explicitly, report backend provenance, and recover visibly from daemon launch, readiness, and exit failures.
 5. [ ] Reproducibly build and package platform-specific Go binaries with integrity checks.
+6. [ ] Reach Python menu, desktop-notification, activation-mode, and user-facing error parity before any packaged daemon can be selected automatically.

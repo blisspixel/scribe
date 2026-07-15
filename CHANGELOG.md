@@ -10,8 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
-- Polyglot Architecture Phase C: Added a lightweight, pure Go resident tray daemon (`scribe-tray`) that drastically reduces idle background memory usage on Windows and fully decouples global hotkeys from the Python main process.
-- Implemented IPC boundary via a localhost TCP socket server inside `VoiceTrayService` for communication with the Go daemon.
+- Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
+- Protected the local native-tray IPC boundary with a process-scoped capability and authenticated READY handshake. Unauthenticated peers cannot receive state or issue dictation, read, or quit commands.
 
 ### Changed
 - Made the root wheel portable by removing its mandatory dependency on the unpublished workspace-only `scribe-audio-core` artifact. The Rust crate remains an optional workspace acceleration until platform wheels have a verified distribution path.
@@ -19,8 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added a required release-artifact CI job that builds and inspects the root wheel, installs it without workspace packages, and smokes the installed `scribe` entry point.
 - Changed client-side OpenAI chunking to prefer optional native silence analysis while retaining a visible duration-based fallback. Both paths normalize endpoints to a hard cap and export with the configured overlap and bitrate.
 - Refactored `scribe.core.openai_api` to completely eliminate `pydub.silence.split_on_silence` dependency in favor of the new Rust streaming engine.
-- Re-architected `run_tray` in `scribe.voice.tray` to automatically hand off to the Go `scribe-tray` binary if present on Windows (seamless fallback to Python tray on other platforms).
-- Added runtime lookup for a bundled Go tray binary via `importlib.resources`; reproducible Go binary inclusion, integrity checks, and platform validation remain release blockers and are tracked as deferred packaging debt.
+- Kept the complete Python tray as the deterministic default. Native selection now requires an explicit `SCRIBE_TRAY_NATIVE_BIN` path; checked-in and merely packaged builds are never launched implicitly before capability parity.
+- Added backend and executable-provenance output to `scribe tray --check`. Native activation and hotkey incompatibilities are reported as Python fallback decisions before launch.
 - Tightened broad exception handlers across core modules (`openai_api`, `local_whisper`, utilities) to specific typed tuples in compliance with ADR-002, preventing masked errors.
 - Standardized CLI exit boundaries in `main.py` using a single `exit_on_cli_error` handler instead of scattered `typer.Exit(1)` calls.
 - Completed Engineering Excellence Step 4: added SBOM generation documentation, integrated CUDA driver age checks into `scribe doctor`, and formalized the decision against structured JSON logging (ADR-012).
@@ -36,6 +36,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
 
 ### Fixed
+- Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
+- Delayed native model preload until authenticated tray readiness, preventing a failed daemon startup from racing a second model load in the Python fallback.
+- Made native startup timeouts, launch errors, and nonzero exits recover visibly through the complete Python tray instead of ending the resident workflow.
 - Fixed long-audio chunking that could emit an over-cap final chunk when no useful silence was detected. Native decoder failures now become visible fallback events, MP3 encoder padding is reserved inside the cap, and partial ffmpeg exports are removed on failure.
 - Batch and music continuation now has truthful automation semantics: remaining inputs are processed by default, but missing inputs, failed files, partial segment results, or missing requested artifacts appear in the final summary and return exit code 1. Fully complete and confirmed instrumental runs still return 0.
 - Batch sessions now record requested DOCX, notes, joke, and meme failures as partial outcomes instead of reporting the transcript as wholly successful. Explicit provider-backed extras without `OPENAI_API_KEY` remain visible and preserve the usable transcript rather than being silently disabled.

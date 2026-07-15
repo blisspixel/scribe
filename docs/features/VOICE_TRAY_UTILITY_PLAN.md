@@ -369,6 +369,12 @@ Hard requirements:
 - Shipped: tray menu shows + remaps the hotkeys (F6-F12), sets read-aloud speed,
   and toggles start-at-login; same-hotkey collisions are rejected.
 - Shipped: live I/O paths stay behind the `scribe[tray]`/`scribe[kokoro]` extras.
+- Source prototype: the Go tray is explicit opt-in through
+  `SCRIBE_TRAY_NATIVE_BIN`, supports toggle activation and F6-F12 keys, uses the
+  canonical icon, authenticates to Python, and must signal readiness after both
+  hotkeys register. It returns to Python on daemon launch, readiness, or exit failure.
+- Blocked for automatic packaging: the Go tray does not yet provide the Python
+  menu, desktop-notification, hold-activation, or actionable error-detail surface.
 - Removed: the "Read selection now" menu item (opening the menu steals focus, so
   it could not capture a live selection - the read hotkey is the reliable path).
 - Remaining: validate OS-level hotkey conflicts and permission failures on the
@@ -401,6 +407,11 @@ Automated:
 
 - Unit tests for settings, hotkey normalization, config precedence, state machine,
   injection decision logic, and selection cleanup.
+- Socket-level tests for authentication, readiness, command gating, read stop, and
+  shutdown; Go tests for F6-F12 mapping, collision rejection, and authentication.
+- Routing tests prove source artifacts are not selected implicitly, incompatible
+  native settings stay on Python, and failed native readiness does not start model
+  preload before fallback.
 - Mocked integration tests for tray menu callbacks.
 - Mocked STT/TTS adapters so CI does not need a microphone, speaker, or GPU.
 - Coverage stays above the existing 80 percent CI gate.
@@ -440,9 +451,11 @@ Met on Windows:
 - [x] `scribe listen` and `scribe say` still work standalone.
 - [x] Lint, type checks, and coverage-gated tests pass in CI.
 
-Met on macOS and Linux:
-- [x] Advisory output correctly identifies and handles Wayland constraints and macOS permissions.
-- [x] Tray behavior, hotkeys, read-aloud, and startup tested against macOS Aqua and Linux X11 environments.
+Pending on macOS and Linux:
+- [x] Non-live advisory tests identify Wayland, headless-session, and macOS permission constraints.
+- [ ] Record reproducible live tray, hotkey, read-aloud, startup, and audio-device evidence on macOS Aqua.
+- [ ] Record reproducible live tray, hotkey, read-aloud, startup, and audio-device evidence on Linux X11.
+- [ ] Verify and document the supported fallback workflow on Linux Wayland.
 
 ## Open Decisions
 
