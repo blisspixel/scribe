@@ -300,6 +300,12 @@ ffmpeg -v error -i input.mp4 -f null -
 
 **Solutions:**
 
+Scribe treats terminal and progress output as presentation-only. A closed pipe or
+unsupported output encoding cannot rewrite a saved result. When an active log
+exists, it retains both the original error and the terminal-delivery error in
+UTF-8. Scribe then exits 1 and attempts one plain stderr notice. Configure UTF-8
+to retain the complete Rich display:
+
 1. **Set UTF-8 encoding (temporary):**
 ```powershell
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -557,7 +563,10 @@ For `scribe batch` and `scribe music`, `--continue-on-error` means later inputs
 are still attempted. It does not turn a partial run into success. The final summary
 lists every partial or failed item and the command exits 1. Use `--stop-on-error`
 to stop after the first processing failure. A confirmed instrumental track is a
-successful terminal outcome, so it does not stop later tracks.
+successful terminal outcome, so it does not stop later tracks. If every default
+batch input is missing, the command still prints one ASCII-safe summary with zero
+successes and every failed item before exiting 1. Stop mode exits after the first
+literal missing-path warning without an aggregate summary.
 
 Every started file, URL, batch item, recording, and music track writes a unique
 `*_session_summary.json` record. Its `outcome` is `success`, `partial`, `failed`,

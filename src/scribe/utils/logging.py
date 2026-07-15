@@ -243,6 +243,7 @@ module handles both with appropriate detail levels.
 """
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -250,6 +251,35 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from scribe.utils.terminal_ui import get_terminal_ui_config
+
+TERMINAL_OUTPUT_ERRORS = (BrokenPipeError, UnicodeEncodeError, OSError, ValueError)
+
+
+def is_terminal_output_error(error: BaseException) -> bool:
+    """Return whether an exception means the output stream is unavailable."""
+    if isinstance(error, BrokenPipeError | UnicodeEncodeError | OSError):
+        return True
+    return isinstance(error, ValueError) and "closed" in str(error).casefold()
+
+
+class TerminalSafeRichHandler(RichHandler):
+    """Disable a failed terminal sink without affecting file logging."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._terminal_available = True
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self._terminal_available:
+            super().emit(record)
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        error = sys.exc_info()[1]
+        if error is not None and is_terminal_output_error(error):
+            self._terminal_available = False
+            return
+        super().handleError(record)
+
 
 # Global console instance
 _ui_config = get_terminal_ui_config()
@@ -308,7 +338,7 @@ def setup_logging(
     file_handler.setFormatter(file_formatter)
 
     # Console handler with Rich formatting
-    console_handler = RichHandler(
+    console_handler = TerminalSafeRichHandler(
         console=console,
         show_time=True,
         show_path=False,
@@ -359,6 +389,8 @@ def get_current_log_file(logger_name: str = "scribe") -> Path | None:
 
     while active is not None and id(active) not in seen:
         seen.add(id(active))
+        if active.name == "root":
+            break
         for handler in active.handlers:
             filename = getattr(handler, "baseFilename", None)
             if filename:

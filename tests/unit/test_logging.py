@@ -7,6 +7,8 @@ Tests logging configuration, formatting, and system info logging.
 import logging
 from unittest.mock import Mock, patch
 
+from rich.logging import RichHandler
+
 from scribe.utils.logging import (
     get_current_log_file,
     get_logger,
@@ -61,6 +63,21 @@ class TestLoggingSetup:
         assert log_file is not None
         assert log_file.name.startswith("scribe_current_file_")
         assert log_file.exists()
+
+    def test_get_current_log_file_ignores_unrelated_root_handler(self, tmp_path):
+        scribe_logger = logging.getLogger("scribe")
+        for handler in scribe_logger.handlers[:]:
+            handler.close()
+            scribe_logger.removeHandler(handler)
+        root_logger = logging.getLogger()
+        root_handler = logging.FileHandler(tmp_path / "unrelated.log", encoding="utf-8")
+        root_logger.addHandler(root_handler)
+
+        try:
+            assert get_current_log_file() is None
+        finally:
+            root_handler.close()
+            root_logger.removeHandler(root_handler)
 
     def test_setup_logging_with_custom_levels(self, tmp_path):
         """Test logging setup with custom levels."""
@@ -381,3 +398,27 @@ class TestLoggingEdgeCases:
         # Should not crash
         set_log_level(logger, logging.INFO)
         assert logger.level == logging.INFO
+
+
+def test_rich_handler_disables_only_failed_terminal_sink(tmp_path, capsys):
+    logger = setup_logging("broken_console", tmp_path, console_level=logging.WARNING)
+    rich_handler = next(handler for handler in logger.handlers if isinstance(handler, RichHandler))
+
+    try:
+        with patch.object(
+            rich_handler.console,
+            "print",
+            side_effect=BrokenPipeError("closed terminal"),
+        ) as console_print:
+            logger.warning("first warning")
+            logger.warning("second warning")
+    finally:
+        for handler in logger.handlers[:]:
+            handler.close()
+            logger.removeHandler(handler)
+
+    assert console_print.call_count == 1
+    log_text = next(tmp_path.glob("scribe_broken_console_*.log")).read_text(encoding="utf-8")
+    assert "first warning" in log_text
+    assert "second warning" in log_text
+    assert "--- Logging error ---" not in capsys.readouterr().err

@@ -1,6 +1,7 @@
 """Tests for shared CLI error handling."""
 
 from pathlib import PurePosixPath
+from unittest.mock import patch
 
 import pytest
 import typer
@@ -74,3 +75,94 @@ def test_exit_on_cli_error_keeps_long_log_file_path_literal(monkeypatch, capsys)
     out = capsys.readouterr().out
     assert f"Log file: {log_file}" in out
     assert filename in out
+
+
+@pytest.mark.parametrize(
+    "terminal_error",
+    [
+        BrokenPipeError("closed terminal"),
+        OSError("terminal unavailable"),
+        UnicodeEncodeError("cp1252", "\u2500", 0, 1, "character maps to undefined"),
+        ValueError("I/O operation on closed file"),
+    ],
+    ids=["broken-pipe", "os-error", "encoding", "closed-stream"],
+)
+def test_exit_on_cli_error_has_stable_exit_when_terminal_is_unavailable(terminal_error, capsys):
+    original = RuntimeError("backend failed")
+
+    with (
+        patch("scribe.cli.errors.console.print", side_effect=terminal_error),
+        patch("scribe.cli.errors.get_current_log_file", return_value=None),
+        patch("scribe.cli.errors.logger.exception") as unexpected_log,
+        pytest.raises(typer.Exit) as raised,
+    ):
+        exit_on_cli_error(original)
+
+    assert raised.value.exit_code == 1
+    assert raised.value.__cause__ is original
+    unexpected_log.assert_not_called()
+    captured = capsys.readouterr()
+    assert "Terminal output unavailable" in captured.err
+    assert "See log:" not in captured.err
+    assert "Logging error" not in captured.err
+
+
+def test_exit_on_cli_error_fallback_cannot_replace_stable_exit(capsys):
+    original = RuntimeError("backend failed")
+
+    with (
+        patch(
+            "scribe.cli.errors.console.print",
+            side_effect=BrokenPipeError("closed terminal"),
+        ),
+        patch("scribe.cli.errors.get_current_log_file", return_value=None),
+        patch("scribe.cli.errors.sys.stderr.write", side_effect=RuntimeError("stderr wrapper")),
+        pytest.raises(typer.Exit) as raised,
+    ):
+        exit_on_cli_error(original, log_unexpected=False)
+
+    assert raised.value.exit_code == 1
+    assert raised.value.__cause__ is original
+    assert "Logging error" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "terminal_error",
+    [
+        BrokenPipeError("closed terminal"),
+        UnicodeEncodeError("cp1252", "\u2500", 0, 1, "character maps to undefined"),
+    ],
+    ids=["broken-pipe", "encoding"],
+)
+def test_exit_on_cli_error_preserves_file_log_without_recursive_traceback(
+    tmp_path, capsys, terminal_error
+):
+    configured_logger = setup_logging("persistent_terminal", tmp_path)
+    original = RuntimeError("backend failed")
+
+    try:
+        with (
+            patch(
+                "scribe.cli.errors.console.print",
+                side_effect=terminal_error,
+            ),
+            pytest.raises(typer.Exit) as raised,
+        ):
+            try:
+                raise original
+            except RuntimeError as error:
+                exit_on_cli_error(error)
+    finally:
+        for handler in configured_logger.handlers[:]:
+            handler.close()
+            configured_logger.removeHandler(handler)
+
+    assert raised.value.exit_code == 1
+    assert raised.value.__cause__ is original
+    log_text = next(tmp_path.glob("scribe_persistent_terminal_*.log")).read_text(encoding="utf-8")
+    assert "Unexpected CLI error" in log_text
+    assert "backend failed" in log_text
+    assert "Terminal output failed" in log_text
+    captured = capsys.readouterr()
+    assert "Terminal output unavailable" in captured.err
+    assert "--- Logging error ---" not in captured.err

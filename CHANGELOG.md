@@ -67,6 +67,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Prevented post-save terminal failures from rewriting successful or partial file, URL, or recording evidence as failed. Summary notification remains best-effort and cleanup or presentation failures stay visible in logs.
 - Made expected batch exits bypass unexpected-error reporting, escaped dynamic batch and shared error text, and preserved complete literal diagnostic messages without fixed-width truncation or Rich markup injection.
 - Reserved support-bundle destinations exclusively so concurrent and same-second runs cannot overwrite one another, cleaned failed reservations, and replaced circular failure advice with context-aware recovery.
+- Prevented closed pipes, closed streams, and output-encoding failures from recursively replacing CLI errors or saved outcomes. Unexpected failures reach an active UTF-8 file log before best-effort rendering, a failed Rich logging sink disables itself without a traceback, and progress display failure cannot change processing state.
+- Made default batches with every input missing reach one ASCII-safe aggregate summary with exact zero, partial, and failed counts. Stop-on-error mode remains immediate after the first literal missing-path warning.
 
 ### Security
 - Raised the setuptools build requirement and lock to 83.0.0, resolving `PYSEC-2026-3447` in the build toolchain.

@@ -126,15 +126,23 @@ Simple adaptive learning beats static estimates every time.
 """
 
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
-from scribe.utils.logging import console
+from scribe.utils.logging import (
+    TERMINAL_OUTPUT_ERRORS,
+    console,
+    get_logger,
+    is_terminal_output_error,
+)
 from scribe.utils.terminal_ui import get_terminal_ui_config
 
 if TYPE_CHECKING:
     from scribe.utils.performance_tracker import PerformanceTracker
+
+logger = get_logger(__name__)
 
 
 class UnifiedProgress:
@@ -172,6 +180,7 @@ class UnifiedProgress:
         self.include_api_features = include_api_features
         self.ui_config = get_terminal_ui_config()
         self.frame_delay = self.ui_config.frame_delay
+        self._terminal_output_failed = False
 
         # Try to load adaptive phase percentages based on machine performance
         if machine_id and total_duration:
@@ -219,6 +228,9 @@ class UnifiedProgress:
         """Start the unified progress display."""
         from scribe.utils.theme import ScribeTheme
 
+        if self._terminal_output_failed:
+            return
+
         progress = Progress(
             TextColumn(
                 f"[bold {ScribeTheme.PRIMARY}]{{task.description}}[/bold {ScribeTheme.PRIMARY}]"
@@ -232,11 +244,41 @@ class UnifiedProgress:
             auto_refresh=False,
             refresh_per_second=max(2, self.ui_config.fps),
         )
-        progress.start()
-        task = progress.add_task("Starting...", total=100)
-        progress.refresh()
         self.progress = progress
-        self.task = task
+        try:
+            progress.start()
+            self.task = progress.add_task("Starting...", total=100)
+            progress.refresh()
+        except TERMINAL_OUTPUT_ERRORS as error:
+            if not is_terminal_output_error(error):
+                raise
+            self._disable_after_terminal_failure(error)
+
+    def _disable_after_terminal_failure(self, error: BaseException) -> None:
+        """Disable this display after one terminal-delivery failure."""
+        progress = self.progress
+        self.progress = None
+        self.task = None
+        cleanup_error: Exception | None = None
+        if progress is not None:
+            try:
+                progress.stop()
+            except Exception as cleanup_exception:
+                cleanup_error = cleanup_exception
+        if not self._terminal_output_failed:
+            self._terminal_output_failed = True
+            with suppress(Exception):
+                if cleanup_error is None:
+                    logger.warning(
+                        "Progress display disabled after terminal output failure: %s", error
+                    )
+                else:
+                    logger.warning(
+                        "Progress display disabled after terminal output failure: %s; "
+                        "cleanup also failed: %s",
+                        error,
+                        cleanup_error,
+                    )
 
     def update_phase(
         self, phase: str, progress_in_phase: float = 0.0, step_description: str | None = None
@@ -300,8 +342,13 @@ class UnifiedProgress:
             description = descriptions.get(phase, "Processing")
 
         if self.progress is not None and self.task is not None:
-            self.progress.update(self.task, completed=overall_progress, description=description)
-            self.progress.refresh()
+            try:
+                self.progress.update(self.task, completed=overall_progress, description=description)
+                self.progress.refresh()
+            except TERMINAL_OUTPUT_ERRORS as error:
+                if not is_terminal_output_error(error):
+                    raise
+                self._disable_after_terminal_failure(error)
 
     def refresh(self) -> None:
         """Refresh progress based on elapsed time in current phase."""
@@ -317,15 +364,41 @@ class UnifiedProgress:
             minutes = int(elapsed // 60)
             seconds = int(elapsed % 60)
 
-            self.progress.update(
-                self.task,
-                completed=100,
-                description=f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)[/{ScribeTheme.SUCCESS}]",
-            )
-            self.progress.refresh()
-            self.progress.stop()
+            try:
+                self.progress.update(
+                    self.task,
+                    completed=100,
+                    description=(
+                        f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)"
+                        f"[/{ScribeTheme.SUCCESS}]"
+                    ),
+                )
+                self.progress.refresh()
+            except TERMINAL_OUTPUT_ERRORS as error:
+                if not is_terminal_output_error(error):
+                    raise
+                self._disable_after_terminal_failure(error)
+                return
+            self.stop()
 
     def stop(self) -> None:
         """Stop progress display."""
-        if self.progress is not None:
-            self.progress.stop()
+        progress = self.progress
+        if progress is None:
+            return
+        try:
+            progress.stop()
+        except TERMINAL_OUTPUT_ERRORS as error:
+            if not is_terminal_output_error(error):
+                raise
+            self.progress = None
+            self.task = None
+            if not self._terminal_output_failed:
+                self._terminal_output_failed = True
+                with suppress(Exception):
+                    logger.warning(
+                        "Progress display disabled after terminal output failure: %s", error
+                    )
+        else:
+            self.progress = None
+            self.task = None

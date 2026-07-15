@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -9,6 +10,7 @@ from typer.testing import CliRunner
 from scribe.cli.main import _persist_failed_session, _persist_music_session, app
 from scribe.exceptions import ProcessError
 from scribe.models.session import TranscriptionSession
+from scribe.utils.logging import setup_logging as real_setup_logging
 from scribe.utils.support_bundle import get_run_history_summary
 
 
@@ -170,6 +172,62 @@ def test_transcribe_post_save_output_failure_does_not_rewrite_success(tmp_path: 
     assert data["outcome"] == "success"
     assert data["success"] is True
     assert any("already saved" in str(call) for call in warning_log.call_args_list)
+
+
+def test_transcribe_persistent_output_failure_exits_without_recursive_error(tmp_path: Path) -> None:
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio", encoding="utf-8")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text", encoding="utf-8")
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    config = _make_config(tmp_path)
+    output_failed = False
+
+    def fail_from_output_heading(*args, **_kwargs):
+        nonlocal output_failed
+        if output_failed or (args and "Output Files:" in str(args[0])):
+            output_failed = True
+            raise BrokenPipeError("closed terminal")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging", side_effect=real_setup_logging),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.console.print", side_effect=fail_from_output_heading),
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "transcribe",
+                str(audio_file),
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    configured_logger = logging.getLogger("scribe")
+    for handler in configured_logger.handlers[:]:
+        handler.close()
+        configured_logger.removeHandler(handler)
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, BrokenPipeError)
+    data = json.loads(next(tmp_path.glob("*_session_summary.json")).read_text(encoding="utf-8"))
+    assert data["outcome"] == "success"
+    assert data["success"] is True
+    log_text = next(tmp_path.glob("scribe_meeting_*.log")).read_text(encoding="utf-8")
+    assert "already saved before a later error" in log_text
+    assert "Terminal output failed" in log_text
+    assert "--- Logging error ---" not in result.stdout
 
 
 def test_transcribe_failure_persists_unique_session_summary(tmp_path: Path) -> None:
@@ -365,6 +423,41 @@ def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
     assert any(
         summary["success"] is False and summary["error_message"] == "boom" for summary in summaries
     )
+
+
+def test_batch_all_missing_inputs_reach_one_aggregate_summary(tmp_path: Path) -> None:
+    first = tmp_path / "missing_[bold].mp3"
+    second = tmp_path / "missing_second.mp3"
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=_make_config(tmp_path)),
+        patch("scribe.cli.main.setup_logging") as setup_log,
+        patch("scribe.cli.main.Transcriber") as transcriber_class,
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "batch",
+                str(first),
+                str(second),
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert result.stdout.count("Batch Summary") == 1
+    assert "Successful: 0" in result.stdout
+    assert "Partial: 0" in result.stdout
+    assert "Failed: 2" in result.stdout
+    assert str(first) in result.stdout
+    assert str(second) in result.stdout
+    assert "No valid files to process" not in result.stdout
+    assert "\u2500" not in result.stdout
+    setup_log.assert_not_called()
+    transcriber_class.assert_not_called()
 
 
 def test_batch_transcribe_complete_run_exits_zero(tmp_path: Path) -> None:

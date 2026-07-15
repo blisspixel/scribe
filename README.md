@@ -52,6 +52,11 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   success, partial completion, failure, and confirmed instrumentals; incomplete
   output prints the summary location. Repeating a meeting name no longer
   overwrites an earlier record.
+- **Resilient terminal automation**: closed pipes and incompatible output
+  encodings no longer replace a processing result with a Rich traceback. Active
+  file logs retain the original error, progress display failures cannot change
+  workflow state, and all-missing default batches still print one ASCII-safe
+  aggregate summary before exiting 1.
 - **Private support bundles**: bundles read a bounded set of durable session
   summaries across processes, recursively redact known home-identifier and
   credential patterns, and include opaque recent-log metadata without filenames
@@ -945,9 +950,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1531 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1634 passed, 11 skipped, 27 deselected, 83.41% line coverage
-- Current collection: 1672 assertion-based tests
+- Latest CI-safe unit matrix: 1550 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1653 passed, 11 skipped, 27 deselected, 83.48% line coverage
+- Current collection: 1691 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1098,7 +1103,14 @@ Scribe cleans crash sentinel files before launching OBS with `--disable-shutdown
 
 `--continue-on-error` controls whether later batch or music inputs are attempted.
 It does not hide an incomplete final result: any partial or failed item still makes
-the command exit 1 after printing the complete summary.
+the command exit 1 after printing the complete summary. A default batch with no
+valid inputs reports zero successes and every missing input in that same summary.
+`--stop-on-error` remains immediate and stops after the first missing or failed item.
+
+Terminal and progress rendering are presentation-only. If stdout closes or cannot
+encode the output, Scribe preserves any completed session evidence, records the
+original and delivery errors in the active UTF-8 file log, exits 1, and attempts one
+plain stderr notice. A failure in that last notice cannot replace the stable exit.
 
 ### Failure Evidence
 

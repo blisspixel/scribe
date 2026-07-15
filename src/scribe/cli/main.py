@@ -1957,18 +1957,17 @@ def batch_transcribe(
             else:
                 valid_files.append(audio_file)
 
-        if not valid_files:
-            console.print("[red]No valid files to process[/red]")
-            raise typer.Exit(1)
-
         # Display batch header
-        _show_command_banner(console)
-        console.print(
-            Panel.fit(
-                f"[white]{len(valid_files)} file(s)[/white]", border_style="cyan", padding=(0, 1)
+        if valid_files:
+            _show_command_banner(console)
+            console.print(
+                Panel.fit(
+                    f"[white]{len(valid_files)} file(s)[/white]",
+                    border_style="cyan",
+                    padding=(0, 1),
+                )
             )
-        )
-        console.print()
+            console.print()
 
         # Resolve paid AI features once for the whole batch. Missing credentials
         # must remain visible as an incomplete requested outcome.
@@ -2160,7 +2159,7 @@ def batch_transcribe(
                     break
 
         # Summary
-        console.print("─" * 60)
+        console.print("-" * 60)
         console.print()
         console.print("[bold cyan]Batch Summary:[/bold cyan]")
 

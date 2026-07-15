@@ -115,6 +115,105 @@ class TestUnifiedProgress:
         overall = start + (0.5 * (end - start))
         assert overall == 70.5
 
+    @pytest.mark.parametrize(
+        ("operation", "side_effect"),
+        [
+            ("start", BrokenPipeError("closed terminal")),
+            ("update", UnicodeEncodeError("cp1252", "\u2500", 0, 1, "cannot encode")),
+            ("complete", OSError("terminal unavailable")),
+            ("stop", ValueError("I/O operation on closed file")),
+        ],
+    )
+    @patch("scribe.utils.unified_progress.Progress")
+    def test_terminal_failure_disables_progress_without_escaping(
+        self, mock_progress_class, operation, side_effect
+    ):
+        rich_progress = Mock()
+        rich_progress.add_task.return_value = 1
+        mock_progress_class.return_value = rich_progress
+        progress = UnifiedProgress(include_api_features=False)
+
+        with patch("scribe.utils.unified_progress.logger.warning") as warning_log:
+            if operation == "start":
+                rich_progress.start.side_effect = side_effect
+                progress.start()
+            else:
+                progress.start()
+                if operation == "update":
+                    rich_progress.refresh.side_effect = side_effect
+                    progress.update_phase("preparing", 0.5)
+                elif operation == "complete":
+                    rich_progress.refresh.side_effect = side_effect
+                    progress.complete()
+                else:
+                    rich_progress.stop.side_effect = side_effect
+                    progress.stop()
+
+            progress.update_phase("preparing", 0.75)
+            progress.stop()
+
+        assert progress.progress is None
+        assert progress.task is None
+        warning_log.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "render_error",
+        [
+            ValueError("task does not exist"),
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+        ],
+        ids=["value-error", "decode-error"],
+    )
+    @patch("scribe.utils.unified_progress.Progress")
+    def test_non_terminal_progress_error_still_propagates(self, mock_progress_class, render_error):
+        rich_progress = Mock()
+        rich_progress.add_task.return_value = 1
+        mock_progress_class.return_value = rich_progress
+        progress = UnifiedProgress(include_api_features=False)
+        progress.start()
+        rich_progress.refresh.side_effect = render_error
+
+        with pytest.raises(type(render_error), match=str(render_error).split(":", 1)[0]):
+            progress.update_phase("preparing", 0.5)
+
+    @patch("scribe.utils.unified_progress.Progress")
+    def test_non_terminal_stop_failure_retains_progress_for_retry(self, mock_progress_class):
+        rich_progress = Mock()
+        rich_progress.add_task.return_value = 1
+        rich_progress.stop.side_effect = [RuntimeError("teardown bug"), None]
+        mock_progress_class.return_value = rich_progress
+        progress = UnifiedProgress()
+        progress.start()
+
+        with pytest.raises(RuntimeError, match="teardown bug"):
+            progress.stop()
+
+        assert progress.progress is rich_progress
+        assert progress.task == 1
+        progress.stop()
+        assert progress.progress is None
+        assert progress.task is None
+        assert rich_progress.stop.call_count == 2
+
+    @patch("scribe.utils.unified_progress.Progress")
+    def test_terminal_failure_records_cleanup_failure(self, mock_progress_class):
+        rich_progress = Mock()
+        rich_progress.add_task.return_value = 1
+        mock_progress_class.return_value = rich_progress
+        progress = UnifiedProgress(include_api_features=False)
+        progress.start()
+        rich_progress.refresh.side_effect = BrokenPipeError("closed terminal")
+        rich_progress.stop.side_effect = RuntimeError("teardown bug")
+
+        with patch("scribe.utils.unified_progress.logger.warning") as warning_log:
+            progress.update_phase("preparing", 0.5)
+
+        assert progress.progress is None
+        assert progress.task is None
+        warning_log.assert_called_once()
+        assert "cleanup also failed" in warning_log.call_args.args[0]
+        assert warning_log.call_args.args[-1] == rich_progress.stop.side_effect
+
 
 class TestUnifiedProgressIntegration:
     """Integration tests that exercise real code paths without mocking.
