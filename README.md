@@ -138,6 +138,12 @@ scribe transcribe meeting.mp4 --vocabulary tech-terms.txt --language es
 scribe transcribe meeting.mp4 --diarize
 ```
 
+Batch and music commands continue through remaining inputs by default. A fully
+complete run, including a confirmed instrumental track, exits 0. Missing inputs,
+failed files, partial music segments, or requested artifacts that could not be
+generated are listed in the summary and make the command exit 1 after processing.
+Use `--stop-on-error` when later inputs should not be attempted.
+
 ### Recording
 ```bash
 # Record and auto-transcribe
@@ -491,7 +497,7 @@ Music transcription uses a separation-first architecture to improve lyrics captu
 
 **Key Features:**
 - Segment-based transcription with VAD timestamps
-- Complete lyrics capture (no missing verses)
+- Explicit complete, partial, failed, and instrumental outcomes
 - Hallucination filtering (removes "Thanks for watching", "Subscribe", etc.)
 - Multi-language support (99 languages)
 - Intelligent instrumental detection
@@ -505,6 +511,11 @@ Music transcription uses a separation-first architecture to improve lyrics captu
 5. Segment Transcription (~15s): Faster-Whisper transcribes each segment
 6. Hallucination Filtering: Removes false positives per-segment
 7. Reassembly: Combines segments into complete lyrics
+
+If VAD is unavailable, music mode reports the fallback and transcribes the full
+audio instead of calling the track instrumental. If some vocal segments fail, the
+usable lyrics are preserved as a partial result. If every segment fails, the track
+is failed and no instrumental marker is written.
 
 **Total Processing Time**: ~45 seconds for a 3-minute song
 
@@ -901,7 +912,8 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit coverage run: 1504 passed, 5 skipped, 1 deselected, 81.70% line coverage
+- Latest CI-safe unit coverage run: 1519 passed, 5 skipped, 1 deselected, 81.77% line coverage
+- Latest broader CI-equivalent run: 1586 passed, 12 skipped, 27 deselected, 82.43% line coverage
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1044,11 +1056,15 @@ Scribe cleans crash sentinel files before launching OBS with `--disable-shutdown
 5. Run `scribe rec --check` or `scribe doctor` to verify
 
 ### Exit Codes
-- 0: Success
-- 1: General failure
+- 0: All requested work completed, including confirmed instrumental results
+- 1: Failure or partial completion, including missing inputs or requested artifacts
 - 2: Invalid arguments
 - 3: External tool failure (FFmpeg, OBS, CUDA)
 - 4: API error
+
+`--continue-on-error` controls whether later batch or music inputs are attempted.
+It does not hide an incomplete final result: any partial or failed item still makes
+the command exit 1 after printing the complete summary.
 
 See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 

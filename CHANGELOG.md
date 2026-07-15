@@ -32,6 +32,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
 
 ### Fixed
+- Batch and music continuation now has truthful automation semantics: remaining inputs are processed by default, but missing inputs, failed files, partial segment results, or missing requested artifacts appear in the final summary and return exit code 1. Fully complete and confirmed instrumental runs still return 0.
+- Batch sessions now record requested DOCX, notes, joke, and meme failures as partial outcomes instead of reporting the transcript as wholly successful. Explicit provider-backed extras without `OPENAI_API_KEY` remain visible and preserve the usable transcript rather than being silently disabled.
+- Music VAD failures now use the full-audio fallback instead of being mislabeled as instrumental. Mixed segment failures preserve usable lyrics as partial, while all-segment failure is reported as failed and never writes an instrumental marker.
 - `scribe init` now defaults to local `auto` transcription on machines with or without a GPU, and it asks for provider keys only when API transcription or a provider-backed extra is selected.
 - `scribe health --provider NAME` now fails with an actionable message for unknown providers and providers without configured keys instead of treating an empty check set as healthy.
 - `scribe tray --check` now reports a missing optional parent package, including Pillow, as an installable dependency instead of raising `ModuleNotFoundError` while probing a child module.

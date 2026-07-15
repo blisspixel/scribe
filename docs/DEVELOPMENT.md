@@ -96,7 +96,8 @@ uv run pytest -m "not gpu and not slow and not e2e"
 
 ### Test Status
 - CI-safe unit coverage subset: `uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80`
-- Latest local validation: 1504 passed, 5 skipped, 1 deselected, 81.70% line coverage
+- Latest local unit validation: 1519 passed, 5 skipped, 1 deselected, 81.77% line coverage
+- Latest broader CI-equivalent validation: 1586 passed, 12 skipped, 27 deselected, 82.43% line coverage
 - Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`

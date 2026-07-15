@@ -13,9 +13,12 @@ def _make_config(tmp_path: Path, *, api_key: str | None = None) -> Mock:
     config.log_folder = tmp_path
     config.default_model = "large-v3"
     config.default_language = "en"
+    config.default_method = "auto"
     config.openai_api_key = api_key
     config.notes_model = "gpt-5"
     config.enable_notes = False
+    config.enable_joke = False
+    config.enable_meme = False
     config.keep_intermediate_files = False
     config.keep_downloads = False
     config.download_folder = None
@@ -74,6 +77,7 @@ def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
     runner = CliRunner()
     first = tmp_path / "first.mp3"
     second = tmp_path / "second.mp3"
+    missing = tmp_path / "missing.mp3"
     first.write_text("audio1")
     second.write_text("audio2")
     transcript_path = tmp_path / "first_transcript.txt"
@@ -92,12 +96,176 @@ def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
         patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "first.docx"),
     ):
         result = runner.invoke(
-            app, ["batch", str(first), str(second), "--no-joke", "--no-notes", "--no-meme"]
+            app,
+            [
+                "batch",
+                str(first),
+                str(second),
+                str(missing),
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Batch Summary" in result.stdout
+    assert "Successful: 1" in result.stdout
+    assert "Failed: 2" in result.stdout
+    assert "missing.mp3" in result.stdout
+    assert transcriber.transcribe.call_count == 2
+
+
+def test_batch_transcribe_complete_run_exits_zero(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+    ):
+        result = runner.invoke(
+            app,
+            ["batch", str(audio_file), "--no-joke", "--no-notes", "--no-meme"],
         )
 
     assert result.exit_code == 0
-    assert "Batch Summary" in result.stdout
-    assert "Failed" in result.stdout
+    assert "Successful: 1" in result.stdout
+    assert "Partial: 0" in result.stdout
+    assert "Failed: 0" in result.stdout
+
+
+def test_batch_stop_on_error_does_not_attempt_later_files(tmp_path: Path) -> None:
+    runner = CliRunner()
+    first = tmp_path / "first.mp3"
+    second = tmp_path / "second.mp3"
+    first.write_text("audio1")
+    second.write_text("audio2")
+    config = _make_config(tmp_path)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.side_effect = RuntimeError("backend unavailable")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", side_effect=lambda value: Path(value)),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "batch",
+                str(first),
+                str(second),
+                "--stop-on-error",
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert transcriber.transcribe.call_count == 1
+    assert "Failed: 1" in result.stdout
+
+
+def test_batch_transcribe_marks_artifact_failure_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    session = Mock()
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.TranscriptionSession.create", return_value=session),
+        patch("scribe.cli.main.txt_to_docx", side_effect=RuntimeError("conversion boom")),
+    ):
+        result = runner.invoke(
+            app,
+            ["batch", str(audio_file), "--no-joke", "--no-notes", "--no-meme"],
+        )
+
+    assert result.exit_code == 1
+    assert "Partial: 1" in result.stdout
+    assert "DOCX generation failed: conversion boom" in result.stdout
+    session.complete.assert_called_once_with(
+        success=False,
+        error_message="DOCX generation failed: conversion boom",
+    )
+    session.save_summary.assert_called_once_with(tmp_path)
+
+
+def test_batch_transcribe_reports_unavailable_requested_feature(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path, api_key=None)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    session = Mock()
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.TranscriptionSession.create", return_value=session),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "batch",
+                str(audio_file),
+                "--notes",
+                "--no-docx",
+                "--no-joke",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Partial: 1" in result.stdout
+    assert "OPENAI_API_KEY is not configured" in result.stdout
+    transcriber.transcribe.assert_called_once()
+    session.complete.assert_called_once_with(
+        success=False,
+        error_message="Notes not generated: OPENAI_API_KEY is not configured",
+    )
+
+
+def test_batch_help_explains_cost_and_incomplete_exit_status() -> None:
+    result = CliRunner().invoke(app, ["batch", "--help"])
+
+    assert result.exit_code == 0
+    assert "paid cloud" in result.stdout
+    assert "nonzero" in result.stdout
 
 
 def test_record_command_auto_transcribes(tmp_path: Path) -> None:

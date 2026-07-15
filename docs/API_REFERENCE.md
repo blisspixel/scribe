@@ -1,6 +1,6 @@
 # API Reference
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2026-07-15
 
 ## Core Classes
 
@@ -9,23 +9,20 @@
 Main orchestration class for transcription operations.
 
 ```python
+from pathlib import Path
+
 from scribe.core.transcriber import Transcriber
+from scribe.models.config import ScribeConfig
 
-transcriber = Transcriber(
-    method="auto",           # "auto" ($0-first: local, GPU or CPU), "local", or "openai"
-    model="large-v3",        # Whisper model
-    language="en",           # ISO 639-1 language code
-    output_folder=Path("./output")
-)
+config = ScribeConfig()
+config.default_model = "large-v3"
+config.default_language = "en"
+transcriber = Transcriber(config)
 
-# Transcribe a file. The paid AI extras default to OFF (cost safety); opt in
-# explicitly. Meme image generation calls a paid image API.
 transcript_path = transcriber.transcribe(
-    audio_path=Path("meeting.mp4"),
-    vocabulary=None,         # Optional custom vocabulary
-    enable_notes=False,      # Generate meeting notes (paid text API; off by default)
-    enable_joke=False,       # Generate joke (paid text API; off by default)
-    enable_meme=False        # Generate meme (paid image API; off by default)
+    Path("meeting.mp4"),
+    method="auto",           # "auto" and "local" stay local; "openai" is paid cloud
+    custom_vocabulary=None,
 )
 ```
 
@@ -35,15 +32,16 @@ transcript_path = transcriber.transcribe(
 
 **Methods:**
 
-`transcribe(audio_path, vocabulary=None, enable_notes=False, enable_joke=False, enable_meme=False) -> Path`
+`transcribe(audio_path, method="auto", session=None, custom_vocabulary=None, music_mode=False) -> Path`
 - Transcribes audio/video file
 - Returns path to transcript file
 - Raises `TranscriptionError` on failure
 
-`batch_transcribe(files, **kwargs) -> List[Path]`
-- Transcribes multiple files
-- Returns list of transcript paths
-- Continues on error by default
+`batch_transcribe` and `music_transcribe` are CLI command handlers in
+`scribe.cli.main`, not methods on `Transcriber`. They process remaining inputs by
+default and report per-item complete, partial, instrumental, or failed outcomes.
+The CLI exits 1 after the summary if any requested item is partial or failed. A
+fully complete run exits 0.
 
 
 ### LocalWhisperTranscriber

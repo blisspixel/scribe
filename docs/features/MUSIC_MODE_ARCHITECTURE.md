@@ -132,6 +132,14 @@ Multi-language: Works perfectly
 5. **GPU Efficient**: int8 quantization + batching
 6. **Robust**: Works on any genre (rock, EDM, jazz, classical)
 
+## Outcome Semantics
+
+- A successful VAD result with no vocal segments is an instrumental result and exits 0.
+- A VAD exception is operational uncertainty, not evidence of an instrumental track. The pipeline reports the issue and falls back to full-audio transcription.
+- If some sliced vocal segments fail, usable lyrics are retained as a partial result.
+- If every sliced vocal segment fails, the track is failed and no instrumental marker is written.
+- Multi-file runs continue after errors by default, then exit 1 if any input is partial or failed. `--stop-on-error` stops after the first processing failure.
+
 ## Technical Details
 
 ### Dependencies

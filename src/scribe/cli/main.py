@@ -1552,7 +1552,10 @@ def record(
 def batch_transcribe(
     input_files: list[Path] = typer.Argument(..., help="Audio/video files to transcribe"),
     method: TranscriptionMethod = typer.Option(
-        "auto", "--method", "-m", help="Transcription method: auto, local, openai"
+        "auto",
+        "--method",
+        "-m",
+        help="Method: auto/local are local; openai is paid cloud",
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
@@ -1586,7 +1589,7 @@ def batch_transcribe(
     continue_on_error: bool = typer.Option(
         True,
         "--continue-on-error/--stop-on-error",
-        help="Continue processing remaining files if one fails",
+        help="Continue after failures; incomplete runs exit nonzero",
     ),
 ) -> None:
     """
@@ -1605,6 +1608,7 @@ def batch_transcribe(
 
       scribe batch *.mp3 --notes        # add notes to every file (off by default)
     """
+    incomplete_run = False
     try:
         from scribe.utils.vocabulary import CustomVocabulary
 
@@ -1634,11 +1638,15 @@ def batch_transcribe(
                 console.print(f"[red]Failed to load vocabulary: {e}[/red]")
                 raise typer.Exit(1)
 
-        # Validate all files exist
-        valid_files = []
+        # Validate all files exist and retain missing inputs in final accounting.
+        results: list[BatchResult] = []
+        valid_files: list[Path] = []
         for audio_file in input_files:
             if not audio_file.exists():
                 console.print(f"[yellow]Warning: File not found: {audio_file}[/yellow]")
+                results.append(
+                    {"file": audio_file.name, "status": "failed", "error": "File not found"}
+                )
                 if not continue_on_error:
                     raise typer.Exit(1)
             else:
@@ -1657,16 +1665,31 @@ def batch_transcribe(
         )
         console.print()
 
-        # Resolve paid AI features once for the whole batch: a per-run
-        # --notes/--joke/--meme flag overrides the config default, and every
-        # feature additionally requires an API key.
+        # Resolve paid AI features once for the whole batch. Missing credentials
+        # must remain visible as an incomplete requested outcome.
         has_api_key = bool(config.openai_api_key)
-        will_generate_notes = _resolve_feature(notes, config.enable_notes) and has_api_key
-        will_generate_joke = _resolve_feature(joke, config.enable_joke) and has_api_key
-        will_generate_meme = _resolve_feature(meme, config.enable_meme) and has_api_key
+        notes_requested = _resolve_feature(notes, config.enable_notes)
+        joke_requested = _resolve_feature(joke, config.enable_joke)
+        meme_requested = _resolve_feature(meme, config.enable_meme)
+        feature_preflight_errors: list[str] = []
+        if not has_api_key:
+            if notes_requested:
+                feature_preflight_errors.append(
+                    "Notes not generated: OPENAI_API_KEY is not configured"
+                )
+            if joke_requested:
+                feature_preflight_errors.append(
+                    "Joke not generated: OPENAI_API_KEY is not configured"
+                )
+            if meme_requested:
+                feature_preflight_errors.append(
+                    "Meme not generated: OPENAI_API_KEY is not configured"
+                )
+        will_generate_notes = notes_requested and has_api_key
+        will_generate_joke = joke_requested and has_api_key
+        will_generate_meme = meme_requested and has_api_key
 
         # Process each file
-        results: list[BatchResult] = []
         for idx, audio_file in enumerate(valid_files, 1):
             # Bound before the try so the except handler never hits an unbound
             # logger if validation fails before per-file setup_logging runs.
@@ -1687,6 +1710,7 @@ def batch_transcribe(
                 # Create session
                 session = TranscriptionSession.create(meeting_name)
                 session.add_file(audio_path, "source")
+                artifact_errors = feature_preflight_errors.copy()
 
                 # Transcribe
                 transcriber = Transcriber(config)
@@ -1731,6 +1755,7 @@ def batch_transcribe(
                         session.add_file(docx_path, "docx")
                     except Exception as e:
                         logger.error(f"DOCX generation failed: {e}")
+                        artifact_errors.append(f"DOCX generation failed: {e}")
 
                 # Generate notes
                 if will_generate_notes:
@@ -1742,6 +1767,7 @@ def batch_transcribe(
                         session.add_file(notes_path, "notes")
                     except Exception as e:
                         logger.error(f"Notes generation failed: {e}")
+                        artifact_errors.append(f"Notes generation failed: {e}")
 
                 # Generate joke
                 if will_generate_joke:
@@ -1752,8 +1778,11 @@ def batch_transcribe(
                         if joke_result:
                             joke_text, comedy_style = joke_result
                             session.joke_data = {"text": joke_text, "style": comedy_style}
+                        else:
+                            artifact_errors.append("Joke generation returned no result")
                     except Exception as e:
                         logger.error(f"Joke generation failed: {e}")
+                        artifact_errors.append(f"Joke generation failed: {e}")
 
                 # Generate meme
                 if will_generate_meme:
@@ -1770,21 +1799,42 @@ def batch_transcribe(
                                 else meme_result
                             )
                             session.add_file(meme_path, "meme")
+                        else:
+                            artifact_errors.append("Meme generation returned no result")
                     except Exception as e:
                         logger.error(f"Meme generation failed: {e}")
+                        artifact_errors.append(f"Meme generation failed: {e}")
 
                 # Cleanup
                 transcriber.cleanup_intermediate_files(audio_path.parent)
 
-                # Complete session
-                session.complete(success=True)
+                # A usable transcript with a missing requested artifact is partial,
+                # not successful. Persist the reason with the session summary.
+                error_message = "; ".join(artifact_errors) or None
+                session.complete(success=not artifact_errors, error_message=error_message)
                 session.save_summary(config.output_folder)
 
-                results.append(
-                    {"file": audio_file.name, "status": "success", "transcript": transcript_path}
-                )
-
-                console.print(f"[green]+ Completed: {audio_file.name}[/green]")
+                if artifact_errors:
+                    results.append(
+                        {
+                            "file": audio_file.name,
+                            "status": "partial",
+                            "transcript": transcript_path,
+                            "error": error_message or "Requested artifact was not generated",
+                        }
+                    )
+                    console.print(f"[yellow]! Partial: {audio_file.name}[/yellow]")
+                    for artifact_error in artifact_errors:
+                        console.print(f"[dim]  {artifact_error}[/dim]")
+                else:
+                    results.append(
+                        {
+                            "file": audio_file.name,
+                            "status": "success",
+                            "transcript": transcript_path,
+                        }
+                    )
+                    console.print(f"[green]+ Completed: {audio_file.name}[/green]")
                 console.print()
 
             except Exception as e:
@@ -1795,7 +1845,7 @@ def batch_transcribe(
                 console.print()
 
                 if not continue_on_error:
-                    raise typer.Exit(1)
+                    break
 
         # Summary
         console.print("─" * 60)
@@ -1803,25 +1853,31 @@ def batch_transcribe(
         console.print("[bold cyan]Batch Summary:[/bold cyan]")
 
         success_count = sum(1 for r in results if r["status"] == "success")
+        partial_count = sum(1 for r in results if r["status"] == "partial")
         failed_count = sum(1 for r in results if r["status"] == "failed")
 
         console.print(f"  [green]+ Successful:[/green] {success_count}")
+        console.print(f"  [yellow]! Partial:[/yellow] {partial_count}")
         console.print(f"  [red]x Failed:[/red] {failed_count}")
         console.print()
 
-        if failed_count > 0:
-            console.print("[yellow]Failed files:[/yellow]")
+        if partial_count > 0 or failed_count > 0:
+            console.print("[yellow]Incomplete files:[/yellow]")
             for batch_result in results:
-                if batch_result["status"] == "failed":
+                if batch_result["status"] in {"partial", "failed"}:
                     console.print(
-                        f"  - {batch_result['file']}: {batch_result.get('error', 'Unknown error')}"
+                        f"  - {batch_result['file']} ({batch_result['status']}): "
+                        f"{batch_result.get('error', 'Unknown error')}"
                     )
             console.print()
+        incomplete_run = partial_count > 0 or failed_count > 0
 
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
         exit_on_cli_error(e)
+    if incomplete_run:
+        raise typer.Exit(1)
 
 
 @app.command(name="music")
@@ -1830,7 +1886,10 @@ def music_transcribe(
         ..., help="Path to music/audio file(s) or folder to transcribe"
     ),
     method: TranscriptionMethod = typer.Option(
-        "auto", "--method", "-m", help="Transcription method: auto, local, openai"
+        "auto",
+        "--method",
+        "-m",
+        help="Method: auto/local are local; openai is paid cloud",
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
@@ -1839,7 +1898,7 @@ def music_transcribe(
     continue_on_error: bool = typer.Option(
         True,
         "--continue-on-error/--stop-on-error",
-        help="Continue processing remaining files if one fails",
+        help="Continue after failures; incomplete runs exit nonzero",
     ),
 ) -> None:
     """
@@ -1867,6 +1926,7 @@ def music_transcribe(
     # Bound up front so the outer except never hits an unbound logger if an error
     # occurs before the per-track setup_logging runs.
     logger = get_logger(__name__)
+    incomplete_run = False
     try:
         # Load configuration
         config = ScribeConfig()
@@ -1889,10 +1949,12 @@ def music_transcribe(
             config.default_language = None
 
         # Collect all audio files to process
+        results: list[MusicResult] = []
         files_to_process: list[Path] = []
         for path in audio_files:
             if not path.exists():
                 console.print(f"[yellow]Warning: Path not found: {path}[/yellow]")
+                results.append({"file": path.name, "status": "failed", "error": "Path not found"})
                 if not continue_on_error:
                     raise typer.Exit(1)
                 continue
@@ -1907,6 +1969,17 @@ def music_transcribe(
                     and not f.stem.endswith("_vocals")  # Skip intermediate vocals files
                     and not f.stem.endswith("_16k_mono")  # Skip converted WAV files
                 ]
+                if not dir_files:
+                    console.print(f"[yellow]Warning: No supported audio files in: {path}[/yellow]")
+                    results.append(
+                        {
+                            "file": path.name,
+                            "status": "failed",
+                            "error": "No supported audio files found",
+                        }
+                    )
+                    if not continue_on_error:
+                        raise typer.Exit(1)
                 files_to_process.extend(dir_files)
             else:
                 # Skip intermediate files
@@ -1926,12 +1999,12 @@ def music_transcribe(
         transcriber = Transcriber(config)
 
         # Process each file
-        results: list[MusicResult] = []
         for idx, audio_path in enumerate(files_to_process, 1):
             track_name = audio_path.stem
             vocals_path = None  # Initialize for cleanup in exception handler
             vocal_segments: list[dict[str, float]] | None = None
             slice_dir: Path | None = None  # cleaned in the finally regardless of outcome
+            segment_failure_count = 0
 
             try:
                 # Setup logging for this track
@@ -1969,6 +2042,8 @@ def music_transcribe(
                         results.append(
                             {"file": audio_path.name, "status": "failed", "error": "Not music"}
                         )
+                        if not continue_on_error:
+                            break
                         continue
 
                     tempo = music_metadata.get("tempo")
@@ -2007,41 +2082,44 @@ def music_transcribe(
                     from scribe.utils.vad import detect_vocal_segments
 
                     vocal_segments = detect_vocal_segments(vocals_path)
-
+                except Exception as e:
+                    console.print(" [yellow]unavailable, using full audio[/yellow]")
+                    logger.warning(f"VAD failed, will transcribe full audio: {e}")
+                    vocal_segments = None
+                else:
                     if not vocal_segments:
                         # No vocals detected - it's instrumental music
                         console.print(" [yellow]none found[/yellow]")
                         raise TranscriptionError("No speech detected in audio (instrumental track)")
 
                     console.print(f" [green]found {len(vocal_segments)}[/green]")
-                except Exception as e:
-                    if "No speech detected" in str(e) or not vocal_segments:
-                        raise TranscriptionError("No speech detected in audio (instrumental track)")
-                    logger.warning(f"VAD failed, will transcribe full audio: {e}")
-                    vocal_segments = None
 
                 # Step 4: Slice audio by vocal segments
                 console.print("  [dim]Slicing audio...[/dim]", end="")
-                try:
-                    import tempfile
-
-                    from scribe.utils.audio_slicer import slice_audio_by_segments
-
-                    # Create temp directory for slices
-                    slice_dir = Path(tempfile.mkdtemp(prefix="vocal_slices_"))
-                    if vocal_segments is None:
-                        raise ValueError("No vocal segments available for slicing")
-                    sliced_paths = slice_audio_by_segments(vocals_path, vocal_segments, slice_dir)
-                    console.print(f" [green]{len(sliced_paths)} slices[/green]")
-                except Exception as e:
-                    logger.warning(f"Audio slicing failed, will transcribe full audio: {e}")
+                if vocal_segments is None:
+                    console.print(" [yellow]full audio fallback[/yellow]")
                     sliced_paths = None
-                    slice_dir = None
+                else:
+                    try:
+                        import tempfile
+
+                        from scribe.utils.audio_slicer import slice_audio_by_segments
+
+                        # Create temp directory for slices
+                        slice_dir = Path(tempfile.mkdtemp(prefix="vocal_slices_"))
+                        sliced_paths = slice_audio_by_segments(
+                            vocals_path, vocal_segments, slice_dir
+                        )
+                        console.print(f" [green]{len(sliced_paths)} slices[/green]")
+                    except Exception as e:
+                        logger.warning(f"Audio slicing failed, will transcribe full audio: {e}")
+                        console.print(" [yellow]full audio fallback[/yellow]")
+                        sliced_paths = None
 
                 # Step 5: Transcribe segments
                 console.print("  [dim]Transcribing...[/dim]", end="")
                 try:
-                    all_lyrics = []
+                    all_lyrics: list[str] = []
 
                     if sliced_paths:
                         # Transcribe each segment separately
@@ -2092,11 +2170,23 @@ def music_transcribe(
                                 segment_transcript.unlink()
 
                             except Exception as e:
-                                logger.debug(f"Segment {i + 1} transcription failed: {e}")
+                                segment_failure_count += 1
+                                logger.warning(
+                                    f"Segment {i + 1}/{len(sliced_paths)} transcription failed: {e}"
+                                )
                                 continue
 
                         # Combine all segments
                         lyrics = "\n\n".join(all_lyrics)
+                        if segment_failure_count == len(sliced_paths):
+                            raise TranscriptionError(
+                                f"Transcription failed for all {len(sliced_paths)} vocal segments"
+                            )
+                        if segment_failure_count and not lyrics.strip():
+                            raise TranscriptionError(
+                                "No usable lyrics remained after "
+                                f"{segment_failure_count} vocal segment failures"
+                            )
                         # (sliced audio is cleaned in the per-file finally below)
                     else:
                         # Fallback: transcribe full audio
@@ -2121,7 +2211,12 @@ def music_transcribe(
                         if transcript_path.exists():
                             transcript_path.unlink()
 
-                    console.print(" [green]done[/green]")
+                    if segment_failure_count:
+                        console.print(
+                            f" [yellow]partial ({segment_failure_count} segment failures)[/yellow]"
+                        )
+                    else:
+                        console.print(" [green]done[/green]")
 
                     # Clean up intermediate files immediately after transcription
                     # 1. Converted WAV file (created by converter)
@@ -2203,6 +2298,12 @@ def music_transcribe(
                         or (line_count == 1 and has_hallucination_phrase)
                     )
 
+                    if is_hallucination and segment_failure_count:
+                        raise TranscriptionError(
+                            "No usable lyrics remained after "
+                            f"{segment_failure_count} vocal segment failures"
+                        )
+
                     if is_hallucination:
                         logger.debug(
                             f"Detected hallucination: '{lyrics[:50]}...' ({word_count} words)"
@@ -2239,6 +2340,21 @@ def music_transcribe(
                                 "file": audio_path.name,
                                 "status": "instrumental",
                                 "lyrics": lyrics_path,
+                            }
+                        )
+                    elif segment_failure_count:
+                        partial_reason = (
+                            f"{segment_failure_count} of {len(sliced_paths or [])} "
+                            "vocal segments failed"
+                        )
+                        console.print(f"  [yellow]PARTIAL[/yellow] Lyrics: {lyrics_path.name}")
+                        console.print(f"  [dim]{partial_reason}[/dim]")
+                        results.append(
+                            {
+                                "file": audio_path.name,
+                                "status": "partial",
+                                "lyrics": lyrics_path,
+                                "error": partial_reason,
                             }
                         )
                     else:
@@ -2330,7 +2446,7 @@ def music_transcribe(
                     results.append({"file": audio_path.name, "status": "failed", "error": str(e)})
 
                 if not continue_on_error:
-                    raise typer.Exit(1)
+                    break
             finally:
                 # Remove the per-track temp slice directory on every outcome
                 # (success, instrumental, or failure), so a many-file run does not
@@ -2345,24 +2461,32 @@ def music_transcribe(
         console.print("[bold]Summary:[/bold]")
         success_count = sum(1 for r in results if r["status"] == "success")
         instrumental_count = sum(1 for r in results if r["status"] == "instrumental")
+        partial_count = sum(1 for r in results if r["status"] == "partial")
         failed_count = sum(1 for r in results if r["status"] == "failed")
 
         console.print(f"  [green]With Lyrics:[/green] {success_count}")
         console.print(f"  [yellow]Instrumental:[/yellow] {instrumental_count}")
+        console.print(f"  [yellow]Partial:[/yellow] {partial_count}")
         console.print(f"  [red]Failed:[/red] {failed_count}")
         console.print()
 
-        if failed_count > 0:
-            console.print("[yellow]Failed files:[/yellow]")
+        if partial_count > 0 or failed_count > 0:
+            console.print("[yellow]Incomplete files:[/yellow]")
             for result in results:
-                if result["status"] == "failed":
-                    console.print(f"  - {result['file']}: {result.get('error', 'Unknown error')}")
+                if result["status"] in {"partial", "failed"}:
+                    console.print(
+                        f"  - {result['file']} ({result['status']}): "
+                        f"{result.get('error', 'Unknown error')}"
+                    )
             console.print()
+        incomplete_run = partial_count > 0 or failed_count > 0
 
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
         exit_on_cli_error(e)
+    if incomplete_run:
+        raise typer.Exit(1)
 
 
 @app.command(name="rec")

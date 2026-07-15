@@ -93,7 +93,7 @@ The product surface is already useful, so polish work should improve what exists
 - **Copy and comprehension debt:** keep cost, provider, and recovery language explicit at the decision point rather than relying on later documentation.
 - **Visual polish debt:** keep terminal output restrained, scannable, and useful in plain terminals as well as Rich-capable terminals.
 - **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home; populate support-bundle run history only from real persisted run data.
-- **Reliability debt:** make partial batch and artifact failures return a non-zero status, then continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
+- **Reliability debt:** truthful batch and music outcomes are shipped: missing inputs, failed files, partial segment results, and requested artifact failures are summarized and return non-zero after continue-on-error processing. Next, persist failed run summaries and continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
 - **Security debt:** remove stale security assumptions, keep cloud transmission explicit, and review all eight documented Torch dependency-audit exceptions as the GPU stack moves.
 - **Accessibility debt:** keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
 - **Test coverage debt:** keep the meaningful coverage gate above 80 percent with failure-path assertions, and replace legacy hardware probes with marked manual checks rather than counting returned booleans as tests.

@@ -746,6 +746,8 @@ class TestMusicCommand:
         assert "music" in result.stdout.lower()
         assert "lyrics" in result.stdout.lower()
         assert "instrumental" in result.stdout.lower()
+        assert "paid cloud" in result.stdout.lower()
+        assert "nonzero" in result.stdout.lower()
 
     @patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[])
     @patch("scribe.utils.audio.get_audio_duration")
@@ -872,7 +874,7 @@ class TestMusicCommand:
 
         def create_transcript(*_args, **_kwargs):
             transcript_path = tmp_path / "transcript.txt"
-            transcript_path.write_text("Lyrics here\n")
+            transcript_path.write_text("These are usable lyrics\n")
             return transcript_path
 
         mock_transcriber.transcribe.side_effect = create_transcript
@@ -977,6 +979,7 @@ class TestMusicCommand:
             audio_file = music_folder / f"song{i}.mp3"
             audio_file.write_text(f"fake audio {i}")
             files.append(audio_file)
+        missing_file = tmp_path / "missing.mp3"
 
         mock_config = Mock()
         mock_config.default_model = "large-v3"
@@ -1008,26 +1011,171 @@ class TestMusicCommand:
         # Mock VAD
         mock_detect_vocals.return_value = [(0.0, 10.0), (15.0, 25.0)]
 
-        # Mock transcriber
+        # Mock transcriber. The first track fails, then the remaining tracks succeed.
         mock_transcriber = Mock()
+        transcription_attempt = 0
 
         def create_transcript(*_args, **_kwargs):
+            nonlocal transcription_attempt
+            transcription_attempt += 1
+            if transcription_attempt == 1:
+                raise RuntimeError("Transcription unavailable")
             transcript_path = tmp_path / "transcript.txt"
-            transcript_path.write_text("Lyrics here\n")
+            transcript_path.write_text("These are usable lyrics\n")
             return transcript_path
 
         mock_transcriber.transcribe.side_effect = create_transcript
         mock_transcriber_class.return_value = mock_transcriber
 
         # Execute
-        result = cli_runner.invoke(app, ["music", str(music_folder)])
+        result = cli_runner.invoke(app, ["music", str(music_folder), str(missing_file)])
 
         # Should continue processing despite first file failure
-        assert result.exit_code == 0
-        # At least 2 files should succeed
-        assert mock_transcriber.transcribe.call_count >= 2
+        assert result.exit_code == 1
+        assert mock_transcriber.transcribe.call_count == 3
         assert mock_slice_audio.call_count == 3
-        assert "Failed: 0" in result.stdout
+        assert "With Lyrics: 2" in result.stdout
+        assert "Failed: 2" in result.stdout
+        assert "missing.mp3" in result.stdout
+
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments")
+    @patch("scribe.utils.audio.get_audio_duration", return_value=180.0)
+    @patch("scribe.utils.vad.detect_vocal_segments", side_effect=RuntimeError("VAD unavailable"))
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_vad_failure_falls_back_without_instrumental_claim(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        _mock_detect_vocals,
+        _mock_get_duration,
+        mock_slice_audio,
+        cli_runner,
+        tmp_path,
+    ):
+        audio_file = tmp_path / "song.mp3"
+        audio_file.write_text("fake audio")
+        vocals_path = tmp_path / "song_vocals.wav"
+        vocals_path.write_text("fake vocals")
+        transcript_path = tmp_path / "fallback_transcript.txt"
+        transcript_path.write_text("These are usable fallback lyrics")
+
+        mock_config = Mock(default_model="large-v3", default_language="en")
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        mock_music_detector_class.return_value.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"},
+        }
+        mock_separate_vocals.return_value = vocals_path
+        mock_transcriber_class.return_value.transcribe.return_value = transcript_path
+
+        result = cli_runner.invoke(app, ["music", str(audio_file)])
+
+        assert result.exit_code == 0
+        assert "With Lyrics: 1" in result.stdout
+        assert "Instrumental: 0" in result.stdout
+        mock_slice_audio.assert_not_called()
+
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments")
+    @patch("scribe.utils.audio.get_audio_duration", return_value=180.0)
+    @patch("scribe.utils.vad.detect_vocal_segments", return_value=[(0.0, 10.0), (15.0, 25.0)])
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_all_segment_failures_are_not_instrumental(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        _mock_detect_vocals,
+        _mock_get_duration,
+        mock_slice_audio,
+        cli_runner,
+        tmp_path,
+    ):
+        audio_file = tmp_path / "song.mp3"
+        audio_file.write_text("fake audio")
+        vocals_path = tmp_path / "song_vocals.wav"
+        vocals_path.write_text("fake vocals")
+        slices = [tmp_path / "slice1.wav", tmp_path / "slice2.wav"]
+
+        mock_config = Mock(default_model="large-v3", default_language="en")
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        mock_music_detector_class.return_value.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"},
+        }
+        mock_separate_vocals.return_value = vocals_path
+        mock_slice_audio.return_value = slices
+        mock_transcriber_class.return_value.transcribe.side_effect = RuntimeError(
+            "segment backend unavailable"
+        )
+
+        result = cli_runner.invoke(app, ["music", str(audio_file)])
+
+        assert result.exit_code == 1
+        assert "Failed: 1" in result.stdout
+        assert "all 2 vocal segments" in result.stdout
+        assert "Instrumental: 0" in result.stdout
+        assert not (tmp_path / "song_lyrics.txt").exists()
+
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments")
+    @patch("scribe.utils.audio.get_audio_duration", return_value=180.0)
+    @patch("scribe.utils.vad.detect_vocal_segments", return_value=[(0.0, 10.0), (15.0, 25.0)])
+    @patch("scribe.utils.source_separation.separate_vocals")
+    @patch("scribe.utils.music_detection.MusicDetector")
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_music_mixed_segment_results_are_partial(
+        self,
+        mock_config_class,
+        mock_transcriber_class,
+        mock_music_detector_class,
+        mock_separate_vocals,
+        _mock_detect_vocals,
+        _mock_get_duration,
+        mock_slice_audio,
+        cli_runner,
+        tmp_path,
+    ):
+        audio_file = tmp_path / "song.mp3"
+        audio_file.write_text("fake audio")
+        vocals_path = tmp_path / "song_vocals.wav"
+        vocals_path.write_text("fake vocals")
+        segment_transcript = tmp_path / "segment_transcript.txt"
+        segment_transcript.write_text("These surviving lyrics remain useful")
+        slices = [tmp_path / "slice1.wav", tmp_path / "slice2.wav"]
+
+        mock_config = Mock(default_model="large-v3", default_language="en")
+        mock_config.log_folder = tmp_path / "logs"
+        mock_config_class.return_value = mock_config
+        mock_music_detector_class.return_value.analyze_music.return_value = {
+            "is_music": True,
+            "metadata": {"tempo": 120, "key": "C"},
+        }
+        mock_separate_vocals.return_value = vocals_path
+        mock_slice_audio.return_value = slices
+        mock_transcriber_class.return_value.transcribe.side_effect = [
+            RuntimeError("first segment failed"),
+            segment_transcript,
+        ]
+
+        result = cli_runner.invoke(app, ["music", str(audio_file)])
+
+        assert result.exit_code == 1
+        assert "Partial: 1" in result.stdout
+        assert "1 of 2 vocal segments failed" in result.stdout
+        lyrics_path = tmp_path / "song_lyrics.txt"
+        assert lyrics_path.exists()
+        assert "These surviving lyrics remain useful" in lyrics_path.read_text()
 
     def test_music_method_option(self, cli_runner, tmp_path):
         """Test music command respects method option."""

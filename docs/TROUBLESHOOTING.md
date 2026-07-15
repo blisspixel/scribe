@@ -547,11 +547,16 @@ python --version  # Should be 3.10+
 
 Scribe uses specific exit codes:
 
-- **0:** Success
-- **1:** General failure
-- **2:** Invalid arguments or missing input
+- **0:** All requested work completed, including confirmed instrumental results
+- **1:** Failure or partial completion, including missing inputs or requested artifacts
+- **2:** Invalid arguments
 - **3:** External tool failure (FFmpeg, OBS, CUDA)
 - **4:** API error
+
+For `scribe batch` and `scribe music`, `--continue-on-error` means later inputs
+are still attempted. It does not turn a partial run into success. The final summary
+lists every partial or failed item and the command exits 1. Use `--stop-on-error`
+to stop after the first processing failure.
 
 ## Logging
 
