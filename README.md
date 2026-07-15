@@ -47,8 +47,14 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   provider is unknown or has no configured key instead of reporting an empty
   check as healthy. `scribe tray --check` turns missing optional parent packages
   into actionable dependency output instead of a traceback.
-- **Private support bundles**: API-key values are reported only as
-  `[CONFIGURED]`; no prefix or suffix fragments are included.
+- **Durable failure evidence**: started file, URL, and batch-item runs save a
+  unique session summary on success or failure. Repeating a meeting name no
+  longer overwrites the earlier record, and failure output prints the summary
+  location.
+- **Private support bundles**: bundles read a bounded set of durable session
+  summaries across processes, recursively redact known home-identifier and
+  credential patterns, and include opaque recent-log metadata without filenames
+  or log contents. Review the generated JSON before sharing it.
 - **Reproducible quality gates**: CI uses the committed lockfile, includes the
   toolchain check in the aggregate result, enforces formatting, lint, strict
   typing, dependency audit policy, and at least 80 percent meaningful coverage.
@@ -1081,6 +1087,22 @@ Scribe cleans crash sentinel files before launching OBS with `--disable-shutdown
 `--continue-on-error` controls whether later batch or music inputs are attempted.
 It does not hide an incomplete final result: any partial or failed item still makes
 the command exit 1 after printing the complete summary.
+
+### Failure Evidence
+
+After a file, URL, or batch-item session starts, Scribe writes a uniquely named
+`*_session_summary.json` record for both successful and failed terminal outcomes.
+Failure output prints the exact local summary path and the active timestamped log
+path when one is available. The summary retains local artifact paths so you can
+recover a surviving transcript or inspect the precise failed stage.
+
+`scribe support-bundle` discovers a bounded newest-first set of those summaries in
+the configured output folder and recent logs in the configured log folder. The
+shareable bundle contains only a redacted session projection and opaque log
+metadata. Structured session filenames, meeting names, artifact paths, log
+filenames, and log contents are excluded. Redacted error and diagnostic text is
+retained because it is needed for troubleshooting, so review the JSON before
+sharing it.
 
 See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 

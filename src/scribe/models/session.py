@@ -5,7 +5,9 @@ This module provides models for tracking transcription sessions,
 including metadata, files, processing stats, and results.
 """
 
+import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +31,7 @@ class TranscriptionSession:
         audio_file: Processed audio file (WAV or MP3)
         transcript_file: Output transcript file (TXT)
         docx_file: Output formatted document (DOCX)
+        log_file: Correlated local diagnostic log
         transcription_method: Method used (local, openai)
         model_used: Model name (large-v3, gpt-4o-transcribe, etc.)
         gpu_info: GPU information if GPU was used
@@ -51,6 +54,7 @@ class TranscriptionSession:
     transcript_file: Path | None = None
     docx_file: Path | None = None
     meme_file: Path | None = None
+    log_file: Path | None = None
     joke_data: dict[str, str] | None = None
 
     # Method and settings
@@ -86,9 +90,7 @@ class TranscriptionSession:
         """
         import uuid
 
-        session_id = (
-            f"{meeting_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-        )
+        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
         return cls(session_id=session_id, meeting_name=meeting_name, start_time=datetime.now())
 
@@ -159,6 +161,7 @@ class TranscriptionSession:
             "transcript_file",
             "docx_file",
             "meme_file",
+            "log_file",
         ]:
             if data.get(key):
                 data[key] = str(data[key])
@@ -194,8 +197,24 @@ class TranscriptionSession:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Sanitize meeting name for filename
-        safe_name = sanitize_meeting_name(self.meeting_name)
-        summary_file = output_dir / f"{safe_name}_session_summary.json"
+        safe_name = Path(sanitize_meeting_name(self.meeting_name)).name[:80].rstrip(" .")
+        if not safe_name or safe_name in {".", ".."}:
+            safe_name = "session"
+
+        if re.fullmatch(r"session_[0-9]{8}_[0-9]{6}_[a-f0-9]{8}", self.session_id):
+            session_component = self.session_id
+        else:
+            digest = hashlib.sha256(self.session_id.encode("utf-8", errors="replace")).hexdigest()[
+                :16
+            ]
+            session_component = f"session_legacy_{digest}"
+
+        resolved_output = output_dir.resolve()
+        summary_file = (
+            resolved_output / f"{safe_name}_{session_component}_session_summary.json"
+        ).resolve()
+        if not summary_file.is_relative_to(resolved_output):
+            raise ValueError("Session summary path escaped the output directory")
 
         # Use atomic write to prevent corruption
         atomic_write_json(summary_file, self.to_dict())

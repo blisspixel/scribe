@@ -33,7 +33,7 @@ from scribe.utils.joke_generator import (
     ARCHETYPE_DISPLAY_NAMES,
     generate_transcript_joke,
 )
-from scribe.utils.logging import console, get_logger, setup_logging
+from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
 from scribe.utils.theme import ScribeTheme, file_uri
 from scribe.utils.transcript_loader import is_supported_transcript_file, load_transcript_text
 from scribe.utils.validation import sanitize_meeting_name, validate_file_path
@@ -121,6 +121,53 @@ def _resolve_feature(override: bool | None, config_default: bool) -> bool:
     truth so the display panel and the generation step can never disagree.
     """
     return config_default if override is None else override
+
+
+def _failure_message(error: BaseException) -> str:
+    """Return the most useful nonempty message from a terminal command error."""
+    if isinstance(error, typer.Exit):
+        if error.__cause__ is None:
+            return f"Command exited with status {error.exit_code}"
+        candidate = error.__cause__
+    else:
+        candidate = error
+    message = str(candidate).strip()
+    if message:
+        return message
+    exit_code = getattr(error, "exit_code", None)
+    return (
+        f"Command exited with status {exit_code}" if exit_code is not None else type(error).__name__
+    )
+
+
+def _persist_failed_session(
+    session: TranscriptionSession | None,
+    output_dir: Path | None,
+    error: BaseException,
+) -> Path | None:
+    """Persist a started failed session without masking the original command error."""
+    if session is None or output_dir is None:
+        return None
+    try:
+        session.complete(success=False, error_message=_failure_message(error))
+        summary_path = session.save_summary(output_dir)
+    except Exception as persistence_error:
+        with suppress(Exception):
+            logger.warning(
+                "Could not persist failed session summary: %s", persistence_error, exc_info=True
+            )
+        return None
+
+    try:
+        console.print(f"Failure summary: {escape(str(summary_path))}")
+    except Exception as notification_error:
+        with suppress(Exception):
+            logger.warning(
+                "Failure summary was saved to %s but could not be shown: %s",
+                summary_path,
+                notification_error,
+            )
+    return summary_path
 
 
 # Custom help formatter that's minimal and clean
@@ -285,6 +332,8 @@ def transcribe_command(
       scribe transcribe technical.mp4 --vocabulary terms.txt
     """
     unified_progress = None
+    config: ScribeConfig | None = None
+    session: TranscriptionSession | None = None
     try:
         from scribe.utils.vocabulary import CustomVocabulary
 
@@ -401,6 +450,7 @@ def transcribe_command(
 
         # Create session
         session = TranscriptionSession.create(meeting_name)
+        session.log_file = get_current_log_file()
         session.add_file(audio_path, "source")
 
         # Determine transcription method (local GPU vs OpenAI API)
@@ -470,13 +520,10 @@ def transcribe_command(
                     # Verify the compressed file is under the limit
                     compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
                     if compressed_size_mb > 24:
-                        console.print(
-                            f"[bold red]Error:[/bold red] Compressed file still too large ({compressed_size_mb:.1f}MB)"
+                        raise TranscriptionError(
+                            f"Compressed file is still too large ({compressed_size_mb:.1f}MB). "
+                            "Use --method local for this recording."
                         )
-                        console.print(
-                            "[yellow]Tip: Try using local GPU transcription for very long recordings[/yellow]"
-                        )
-                        raise typer.Exit(1)
 
                     console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
                 except ProcessError as e:
@@ -485,6 +532,8 @@ def transcribe_command(
                         "[yellow]Tip: Check that ffmpeg is installed and the audio file is valid[/yellow]"
                     )
                     raise typer.Exit(1) from e
+                except ScribeError:
+                    raise
                 except Exception as e:
                     console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
                     raise typer.Exit(1) from e
@@ -521,12 +570,10 @@ def transcribe_command(
 
         # Verify transcript was created and has content
         if not transcript_path or not transcript_path.exists():
-            console.print("[red]Error: Transcription failed - no output file created[/red]")
-            raise typer.Exit(1)
+            raise TranscriptionError("Transcription produced no output file")
 
         if transcript_path.stat().st_size < 10:
-            console.print("[red]Error: Transcription failed - output file is empty[/red]")
-            raise typer.Exit(1)
+            raise TranscriptionError("Transcription output file is empty")
 
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
         _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
@@ -651,8 +698,15 @@ def transcribe_command(
         console.print()
 
     except ScribeError as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
         exit_on_cli_error(e, log_unexpected=False)
+    except typer.Exit as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
+        if e.__cause__ is not None:
+            exit_on_cli_error(e.__cause__, log_unexpected=not isinstance(e.__cause__, ScribeError))
+        raise
     except Exception as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
@@ -746,6 +800,7 @@ def url_command(
     unified_progress = None
     downloaded_file = None
     config = None
+    session: TranscriptionSession | None = None
     try:
         from scribe.core.downloader import URLDownloader
         from scribe.utils.validation import validate_media_url
@@ -920,6 +975,7 @@ def url_command(
 
         # Create session
         session = TranscriptionSession.create(meeting_name)
+        session.log_file = get_current_log_file()
         session.add_file(audio_path, "source")
 
         # Determine transcription method
@@ -965,14 +1021,16 @@ def url_command(
                     audio_file = converter.convert_to_mp3(audio_path, bitrate=48)
                     compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
                     if compressed_size_mb > 24:
-                        console.print(
-                            f"[bold red]Error:[/bold red] Compressed file still too large ({compressed_size_mb:.1f}MB)"
+                        raise TranscriptionError(
+                            f"Compressed file is still too large ({compressed_size_mb:.1f}MB). "
+                            "Use --method local for this recording."
                         )
-                        raise typer.Exit(1)
                     console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
                 except ProcessError as e:
                     console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                     raise typer.Exit(1) from e
+                except ScribeError:
+                    raise
                 except Exception as e:
                     console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
                     raise typer.Exit(1) from e
@@ -1006,12 +1064,10 @@ def url_command(
         unified_progress.update_phase("transcribing", 1.0)
 
         if not transcript_path or not transcript_path.exists():
-            console.print("[red]Error: Transcription failed - no output file created[/red]")
-            raise typer.Exit(1)
+            raise TranscriptionError("Transcription produced no output file")
 
         if transcript_path.stat().st_size < 10:
-            console.print("[red]Error: Transcription failed - output file is empty[/red]")
-            raise typer.Exit(1)
+            raise TranscriptionError("Transcription output file is empty")
 
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
         _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
@@ -1123,8 +1179,15 @@ def url_command(
         console.print()
 
     except ScribeError as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
         exit_on_cli_error(e, log_unexpected=False)
+    except typer.Exit as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
+        if e.__cause__ is not None:
+            exit_on_cli_error(e.__cause__, log_unexpected=not isinstance(e.__cause__, ScribeError))
+        raise
     except Exception as e:
+        _persist_failed_session(session, config.output_folder if config else None, e)
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
@@ -1138,6 +1201,8 @@ def url_command(
         ):
             try:
                 downloaded_file.unlink()
+                if session is not None:
+                    session.add_cleaned_file(downloaded_file)
                 logger.info(f"Cleaned up downloaded file: {downloaded_file}")
                 parent = downloaded_file.parent
                 if parent.name.startswith("scribe_dl_") and parent.exists():
@@ -1146,6 +1211,15 @@ def url_command(
                     shutil.rmtree(parent, ignore_errors=True)
             except Exception as cleanup_err:
                 logger.warning(f"Could not clean up download: {cleanup_err}")
+            else:
+                if session is not None and session.end_time is not None:
+                    try:
+                        session.save_summary(config.output_folder)
+                    except Exception as summary_err:
+                        logger.warning(
+                            "Could not refresh session summary after URL cleanup: %s",
+                            summary_err,
+                        )
 
 
 def _run_obs_preflight() -> int:
@@ -1694,6 +1768,7 @@ def batch_transcribe(
             # Bound before the try so the except handler never hits an unbound
             # logger if validation fails before per-file setup_logging runs.
             logger = get_logger(__name__)
+            session: TranscriptionSession | None = None
             console.print(
                 f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {audio_file.name}"
             )
@@ -1709,6 +1784,7 @@ def batch_transcribe(
 
                 # Create session
                 session = TranscriptionSession.create(meeting_name)
+                session.log_file = get_current_log_file()
                 session.add_file(audio_path, "source")
                 artifact_errors = feature_preflight_errors.copy()
 
@@ -1839,6 +1915,7 @@ def batch_transcribe(
 
             except Exception as e:
                 logger.error(f"Failed to process {audio_file}: {e}")
+                _persist_failed_session(session, config.output_folder, e)
                 results.append({"file": audio_file.name, "status": "failed", "error": str(e)})
                 console.print(f"[red]x Failed: {audio_file.name}[/red]")
                 console.print(f"[dim]Error: {e}[/dim]")
@@ -3555,11 +3632,12 @@ def support_bundle(
     """
     Generate a support bundle for troubleshooting.
 
-    Creates a comprehensive diagnostic package containing system information,
-    environment configuration, recent run history, and diagnostic results.
+    Creates a diagnostic package containing system information, recursively
+    redacted environment and diagnostic values, bounded durable session outcomes,
+    and opaque recent-log metadata. Log filenames and contents are excluded.
 
-    The bundle is saved as a JSON file that can be shared with support
-    or used for debugging issues.
+    The bundle is saved as JSON for local debugging or support. Review it before
+    sharing because diagnostic text can still be sensitive.
 
     Examples:
 
@@ -3580,7 +3658,7 @@ def support_bundle(
 
         console.print("[cyan]Collecting system information...[/cyan]")
         console.print("[cyan]Running diagnostics...[/cyan]")
-        console.print("[cyan]Gathering run history...[/cyan]")
+        console.print("[cyan]Gathering durable session and log metadata...[/cyan]")
 
         bundle_path = generate_support_bundle_cli(output_dir)
 
@@ -3591,12 +3669,14 @@ def support_bundle(
         console.print()
         console.print("[dim]This bundle contains:[/dim]")
         console.print("[dim]  - System information (OS, Python, GPU)[/dim]")
-        console.print("[dim]  - Environment configuration (sanitized)[/dim]")
+        console.print("[dim]  - Redacted environment configuration[/dim]")
         console.print("[dim]  - Diagnostic results[/dim]")
-        console.print("[dim]  - Recent run history[/dim]")
+        console.print("[dim]  - Redacted recent session summaries[/dim]")
+        console.print("[dim]  - Recent log metadata[/dim]")
         console.print()
-        console.print("[dim]You can share this file for troubleshooting.[/dim]")
-        console.print("[dim]API keys are automatically redacted.[/dim]")
+        console.print("Log contents are not included.")
+        console.print("Automated redaction covers known home-identifier and credential patterns.")
+        console.print("[bold]Review the file before sharing it for troubleshooting.[/bold]")
         console.print()
 
     except ScribeError as e:

@@ -19,7 +19,8 @@ class TestSessionCreation:
 
         assert session.meeting_name == "Test Meeting"
         assert session.session_id is not None
-        assert "Test Meeting" in session.session_id
+        assert session.session_id.startswith("session_")
+        assert "Test Meeting" not in session.session_id
         assert session.start_time is not None
         assert session.end_time is None
         assert session.success is False
@@ -267,6 +268,48 @@ class TestSessionSummary:
         assert data["transcription_method"] == "openai"
         assert data["model_used"] == "gpt-4o-transcribe-diarize"
         assert data["success"] is True
+
+    def test_same_name_sessions_save_distinct_summaries(self, tmp_path):
+        """Every run keeps its own evidence even when meeting names repeat."""
+        first = TranscriptionSession.create("Meeting")
+        second = TranscriptionSession.create("Meeting")
+        first.complete(success=False, error_message="first failure")
+        second.complete(success=True)
+
+        first_path = first.save_summary(tmp_path)
+        second_path = second.save_summary(tmp_path)
+
+        assert first_path != second_path
+        assert first.session_id in first_path.name
+        assert second.session_id in second_path.name
+        assert json.loads(first_path.read_text(encoding="utf-8"))["error_message"] == (
+            "first failure"
+        )
+
+    def test_summary_serializes_correlated_log_file(self, tmp_path):
+        """Session evidence records the exact local log without copying its contents."""
+        session = TranscriptionSession.create("Meeting")
+        session.log_file = tmp_path / "scribe_meeting_20260715_120000.log"
+        session.complete(success=False, error_message="failure")
+
+        summary_path = session.save_summary(tmp_path)
+        data = json.loads(summary_path.read_text(encoding="utf-8"))
+
+        assert data["log_file"] == str(session.log_file)
+
+    def test_save_summary_contains_crafted_session_id(self, tmp_path):
+        """A caller-supplied session ID cannot escape the output directory."""
+        output_dir = tmp_path / "output"
+        session = TranscriptionSession.create("Meeting")
+        session.session_id = "x/../../escaped"
+        session.complete(success=False, error_message="failure")
+
+        summary_path = session.save_summary(output_dir)
+
+        assert summary_path.is_relative_to(output_dir.resolve())
+        assert summary_path.parent == output_dir.resolve()
+        assert ".." not in summary_path.name
+        assert len(list(output_dir.glob("*.json"))) == 1
 
     def test_get_summary_text(self):
         """Test getting human-readable summary."""

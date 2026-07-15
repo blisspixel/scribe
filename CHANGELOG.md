@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
 - Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
 - Protected the local native-tray IPC boundary with a process-scoped capability and authenticated READY handshake. Unauthenticated peers cannot receive state or issue dictation, read, or quit commands.
+- Added durable terminal evidence for started file, URL, and batch-item transcription sessions. Failed runs now save and print a unique atomic session summary with surviving artifact and correlated local-log paths.
 
 ### Changed
 - Made the root wheel portable by removing its mandatory dependency on the unpublished workspace-only `scribe-audio-core` artifact. The Rust crate remains an optional workspace acceleration until platform wheels have a verified distribution path.
@@ -34,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Clarified the unresolved license state instead of claiming both Apache 2.0 + Commons Clause and MIT across README, disclaimer, and ADR docs.
 - Kept shared CLI error log-file paths on one literal line so CI and Linux terminals do not wrap the filename out of diagnostic output.
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
+- Upgraded support bundles to read bounded durable session summaries across CLI processes and include opaque recent-log metadata. Log filenames, paths, and contents are excluded, and the CLI now asks users to review the redacted JSON before sharing it.
 
 ### Fixed
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
@@ -47,6 +49,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `scribe health --provider NAME` now fails with an actionable message for unknown providers and providers without configured keys instead of treating an empty check set as healthy.
 - `scribe tray --check` now reports a missing optional parent package, including Pillow, as an installable dependency instead of raising `ModuleNotFoundError` while probing a child module.
 - Support bundles now report API keys only as `[CONFIGURED]`; they never include key prefixes or suffixes, including for short values.
+- Recursively redacted known home-identifier and credential patterns, including configured secrets, authorization headers, quoted credentials, camelCase credential fields, and nested diagnostic or error values. Noncanonical legacy session IDs are opaque, and local path-bearing session errors omit their private tails.
+- Included the privacy-safe session ID in summary filenames so repeated meeting names no longer overwrite earlier success or failure evidence.
+- Replaced troubleshooting guidance for the nonexistent `logs/latest.log` alias with the exact active timestamped log path printed by command failures.
 - The custom help screen now lists every registered command, including `record`, `init`, `shortcut`, `support-bundle`, and `version`.
 - Restored clean Ruff format and lint gates, converted hardware-dependent boolean scripts from misleading pytest tests into explicit standalone checks, and raised meaningful CI-safe unit coverage above the 80 percent floor.
 - CI now syncs from the committed lockfile and includes `toolchain-check` in the aggregate pass/fail decision.

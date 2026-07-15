@@ -567,11 +567,12 @@ scribe transcribe audio.mp4
 ```
 
 ### Check Log Files
-```bash
-# Logs stored in ./logs directory
-ls -la logs/
-cat logs/scribe_YYYYMMDD_HHMMSS.log
-```
+
+Use the exact `Log file:` path printed with a command error. Scribe writes
+timestamped `scribe_<session>_<timestamp>.log` files in the configured log
+folder. If the command did not print a path, run `scribe support-bundle` to
+collect opaque recent-log metadata, then inspect the configured log folder
+locally. Bundle JSON never includes log filenames or contents.
 
 ### Log Levels
 - **DEBUG:** Detailed information for debugging
@@ -619,10 +620,14 @@ nslookup api.openai.com
 scribe doctor
 ```
 
-2. Check logs:
+2. Check the exact `Log file:` path printed with the command error. Scribe uses
+   timestamped `scribe_<session>_<timestamp>.log` files and does not create a
+   `logs/latest.log` alias. If no log path was printed, run:
 ```bash
-cat logs/latest.log
+scribe support-bundle
 ```
+   The bundle includes opaque recent-log metadata, not log filenames or contents.
+   Review the JSON before sharing it.
 
 3. Test with simple file:
 ```bash
@@ -641,9 +646,9 @@ Include:
 1. Scribe version: `scribe version`
 2. System info: `scribe info`
 3. Diagnostic output: `scribe doctor`
-4. Error message (full traceback)
+4. Complete error message and the printed failure-summary path
 5. Steps to reproduce
-6. Log file (if applicable)
+6. Log file (if applicable, shared separately because support bundles exclude contents)
 
 ### Resources
 

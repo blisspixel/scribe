@@ -1,10 +1,12 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
 
-from scribe.cli.main import app
+from scribe.cli.main import _persist_failed_session, app
+from scribe.models.session import TranscriptionSession
 
 
 def _make_config(tmp_path: Path, *, api_key: str | None = None) -> Mock:
@@ -73,6 +75,130 @@ def test_url_command_success(tmp_path: Path) -> None:
     transcriber.transcribe.assert_called_once()
 
 
+def test_transcribe_failure_persists_unique_session_summary(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio")
+    config = _make_config(tmp_path)
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.side_effect = RuntimeError("backend unavailable")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+    ):
+        result = runner.invoke(
+            app,
+            ["transcribe", str(audio_file), "--no-docx", "--no-joke", "--no-notes", "--no-meme"],
+        )
+
+    assert result.exit_code == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "backend unavailable"
+    assert "Failure summary:" in result.stdout
+
+
+def test_transcribe_no_output_persists_precise_failure_stage(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio")
+    config = _make_config(tmp_path)
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = None
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+    ):
+        result = runner.invoke(
+            app,
+            ["transcribe", str(audio_file), "--no-docx", "--no-joke", "--no-notes", "--no-meme"],
+        )
+
+    assert result.exit_code == 1
+    assert "Transcription produced no output file" in result.stdout
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["error_message"] == "Transcription produced no output file"
+
+
+def test_failure_summary_notification_cannot_mask_original_failure(tmp_path: Path) -> None:
+    session = TranscriptionSession.create("Meeting")
+    session.add_file(tmp_path / "meeting.wav", "source")
+
+    with patch("scribe.cli.main.console.print", side_effect=BrokenPipeError("closed terminal")):
+        summary_path = _persist_failed_session(session, tmp_path, RuntimeError("backend failed"))
+
+    assert summary_path is not None
+    data = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "backend failed"
+
+
+def test_url_failure_persists_session_before_download_cleanup(tmp_path: Path) -> None:
+    runner = CliRunner()
+    downloaded_file = tmp_path / "downloaded.mp3"
+    downloaded_file.write_text("audio")
+    config = _make_config(tmp_path)
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.side_effect = RuntimeError("remote media failed")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch(
+            "scribe.utils.validation.validate_media_url", return_value="https://example.com/video"
+        ),
+        patch("scribe.core.downloader.URLDownloader") as mock_downloader_class,
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+    ):
+        mock_downloader_class.return_value.download.return_value = SimpleNamespace(
+            file_path=downloaded_file,
+            title="Example Video",
+            duration=120.0,
+        )
+        result = runner.invoke(
+            app,
+            [
+                "url",
+                "https://example.com/video",
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "remote media failed"
+    assert str(downloaded_file) in data["files_cleaned"]
+    assert not downloaded_file.exists()
+
+
 def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
     runner = CliRunner()
     first = tmp_path / "first.mp3"
@@ -114,6 +240,13 @@ def test_batch_transcribe_reports_success_and_failure(tmp_path: Path) -> None:
     assert "Failed: 2" in result.stdout
     assert "missing.mp3" in result.stdout
     assert transcriber.transcribe.call_count == 2
+    summaries = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in tmp_path.glob("*_session_summary.json")
+    ]
+    assert any(
+        summary["success"] is False and summary["error_message"] == "boom" for summary in summaries
+    )
 
 
 def test_batch_transcribe_complete_run_exits_zero(tmp_path: Path) -> None:
@@ -460,6 +593,10 @@ def test_support_bundle_command_success(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Support bundle created successfully" in result.stdout
+    assert "Redacted recent session summaries" in result.stdout
+    assert "Recent log metadata" in result.stdout
+    assert "Log contents are not included" in result.stdout
+    assert "Review the file before sharing" in result.stdout
 
 
 def test_clean_command_analyze_mode(tmp_path: Path) -> None:
