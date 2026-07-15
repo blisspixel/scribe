@@ -8,7 +8,6 @@ version = "2.8.1"
 description = "Professional GPU-accelerated speech-to-text transcription system"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
-license = "MIT"
 authors = [
     {name = "blisspixel", email = "blisspixel@users.noreply.github.com"}
 ]
@@ -50,14 +49,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "ruff>=0.9",
-    "mypy>=1.13",
-    "pre-commit>=4.0",
-    "types-tqdm",
-    "types-requests",
-]
-
 whisperx = [
     "whisperx>=3.1.0",
     "pyannote.audio>=3.0.0",

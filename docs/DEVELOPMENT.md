@@ -21,21 +21,12 @@ uv run scribe init          # polished interactive first-run (review + verificat
 uv run scribe doctor        # diagnostics + offers to re-run init on failures
 ```
 
-**Classic pip path** (still supported but not recommended for development):
+Contributor environments use uv so local gates and CI share the exact lockfile.
+Pip remains supported for installing the product directly from `pyproject.toml`,
+but it is not the contributor environment manager.
 
-```bash
-git clone https://github.com/blisspixel/scribe.git
-cd scribe
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pip install -e .
-```
-
-> **Note:** The requirements*.txt files are now legacy. The single source of truth is `pyproject.toml` + `uv.lock`. The legacy files may drift.
-
-See [ROADMAP.md](ROADMAP.md) Step 1 (Reproducible Environment Foundation - now complete) for the rationale and current state.
+See [ROADMAP.md](../ROADMAP.md) Step 1 (Reproducible Environment Foundation,
+now complete) for the rationale and current state.
 
 ### Configuration
 ```bash
@@ -67,12 +58,12 @@ scribe/
 
 ### Quick Test
 ```bash
-pytest tests/unit/ --tb=no -q
+uv run pytest tests/unit/ --tb=no -q
 ```
 
 ### Full Test Suite
 ```bash
-pytest
+uv run pytest
 ```
 
 ### With Coverage
@@ -85,10 +76,10 @@ uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe 
 ### Specific Tests
 ```bash
 # Single file
-pytest tests/unit/test_vocabulary.py
+uv run pytest tests/unit/test_vocabulary.py
 
 # Single test
-pytest tests/unit/test_vocabulary.py::TestCustomVocabularyInit::test_init_empty
+uv run pytest tests/unit/test_vocabulary.py::TestCustomVocabularyInit::test_init_empty
 
 # By marker
 uv run pytest -m "not gpu and not slow and not e2e"
@@ -97,9 +88,9 @@ uv run pytest -m "not gpu and not slow and not e2e"
 ### Test Status
 - CI-safe unit matrix: `uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q`
 - Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
-- Latest CI-safe unit matrix: 1550 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent validation: 1653 passed, 11 skipped, 27 deselected, 83.48% line coverage
-- Current collection: 1691 assertion-based tests
+- Latest CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent validation: 1665 passed, 11 skipped, 27 deselected, 83.51% line coverage
+- Current collection: 1703 assertion-based tests
 - Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
@@ -150,7 +141,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
-uv build --package scribe --out-dir .agent/build
+uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
 
@@ -324,8 +315,9 @@ watch -n 1 nvidia-smi
 
 ### Update Dependencies
 ```bash
-pip install --upgrade -r requirements.txt
-pip install --upgrade -r requirements-dev.txt
+uv lock --upgrade
+uv sync --locked --group dev
+uv run scribe doctor
 ```
 
 ### Clean Build Artifacts
@@ -340,29 +332,29 @@ rm -rf htmlcov
 rm .coverage
 ```
 
-### Regenerate Requirements
+### Verify the Lockfile
 ```bash
-pip freeze > requirements.txt
+uv lock --check
 ```
 
 ## Troubleshooting Development Issues
 
 ### Import Errors
 ```bash
-# Reinstall in editable mode
-pip install -e .
+# Reconcile the checkout with the committed lockfile
+uv sync --locked --group dev
 ```
 
 ### Test Failures
 ```bash
 # Run with verbose output
-pytest -vv
+uv run pytest -vv
 
 # Run with full traceback
-pytest --tb=long
+uv run pytest --tb=long
 
 # Run single failing test
-pytest tests/unit/test_file.py::test_name -vv
+uv run pytest tests/unit/test_file.py::test_name -vv
 ```
 
 ### GPU Issues
@@ -371,19 +363,22 @@ pytest tests/unit/test_file.py::test_name -vv
 nvcc --version
 
 # Check PyTorch CUDA
-python -c "import torch; print(torch.version.cuda)"
+uv run python -c "import torch; print(torch.version.cuda)"
 
 # Reinstall PyTorch with CUDA
-pip uninstall torch torchvision torchaudio
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+uv pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ## Release Process
 
 ### 1. Update Version
-```python
-# src/scribe/__init__.py
-__version__ = "2.4.0"
+
+Set the same release version in `pyproject.toml` and
+`src/scribe/__init__.py`, then refresh the lockfile and verify agreement:
+
+```bash
+uv lock
+uv run python -c "import tomllib; from pathlib import Path; import scribe; project = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8')); assert scribe.__version__ == project['project']['version']; print(scribe.__version__)"
 ```
 
 ### 2. Update Changelog
@@ -391,10 +386,25 @@ Add a new section at the top of the root `CHANGELOG.md` following the existing f
 
 ### 3. Run Full Test Suite And Artifact Contract
 ```bash
-uv run pytest
-uv build --package scribe --out-dir .agent/build
+uv lock --check
+uv run pre-commit run --all-files
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow"
+uv run pip-audit --local --progress-spinner off --desc on \
+  --ignore-vuln PYSEC-2025-203 \
+  --ignore-vuln PYSEC-2025-204 \
+  --ignore-vuln PYSEC-2025-206 \
+  --ignore-vuln PYSEC-2026-139 \
+  --ignore-vuln PYSEC-2026-2286 \
+  --ignore-vuln CVE-2025-2999 \
+  --ignore-vuln CVE-2025-3000 \
+  --ignore-vuln CVE-2025-3001
+uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
+
+The eight explicit Torch exceptions are accepted security debt under
+[ADR-004](adr/ADR-004-dependency-vulnerability-audit-policy.md). Do not add or
+remove an exception without updating the ADR and CI in the same change.
 
 The root wheel is the portable product artifact. `scribe-audio-core` is an
 optional workspace acceleration and must not appear as a mandatory root-wheel
@@ -405,11 +415,19 @@ requirement until matching platform wheels are published and clean-install teste
 - ROADMAP.md
 - Any affected docs
 
-### 5. Tag Release
-```bash
-git tag -a v2.4.0 -m "Release v2.4.0"
-git push origin v2.4.0
-```
+### 5. Resolve the Public License Gate
+
+Do not publish an artifact or create a release tag while license terms remain
+pending. The owner must select canonical terms, add the matching root `LICENSE`
+file and `pyproject.toml` SPDX expression, and align README and
+`docs/RESPONSIBLE_USE.md`. The artifact checker then requires the license text
+inside the wheel and matching metadata.
+
+### 6. Tag Release
+
+Create and push an annotated `v<version>` tag using the exact version printed
+by step 1. Do not tag if the working tree is dirty, the license gate is open, or
+any gate in step 3 fails.
 
 ## Contributing Guidelines
 

@@ -1,6 +1,3 @@
-License: pending owner confirmation.
-Historical project metadata is inconsistent: earlier README copy referenced Apache 2.0 + Commons Clause, while `pyproject.toml` currently declares MIT and no LICENSE file is present. Treat licensing as unresolved until the owner chooses the canonical license and aligns README, `pyproject.toml`, and LICENSE.
-
 # Scribe
 
 **Speech Transcription and Summarization CLI**
@@ -34,7 +31,7 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 > **Cloud-synced home folder (OneDrive, Dropbox)?** If the install errors with a hardlink failure (Windows `os error 396`), add `--link-mode=copy` to the install command.
 >
-> **Want to hack on Scribe instead?** Clone the repo and use the project-local dev workflow (`uv sync`, then `uv run scribe ...`), or do an editable global install: `uv tool install --editable . --python 3.12`. See [Installation](#installation).
+> **Want to hack on Scribe instead?** Clone the repo and use the project-local dev workflow (`uv sync --locked --group dev`, then `uv run scribe ...`), or do an editable global install: `uv tool install --editable . --python 3.12`. See [Installation](#installation).
 
 ---
 
@@ -358,42 +355,45 @@ Now `scribe rec`, `scribe doctor`, etc. work from anywhere, and OS shortcuts tha
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-uv sync
+uv sync --locked --group dev
 uv run scribe init
 uv run scribe info
 ```
 
-`uv sync` keeps everything project-local: you invoke it with `uv run scribe ...` from inside the repo. This is the right setup for hacking on Scribe, but note it creates **no global `scribe` command**: a bare `scribe` in another folder or a shortcut will fail with `'scribe' is not recognized` / `command not found`. Use the global install above for daily use.
+`uv sync --locked --group dev` keeps everything project-local and installs the
+locked contributor tools: invoke commands with `uv run scribe ...` from inside
+the repo. This setup creates **no global `scribe` command**: a bare `scribe` in
+another folder or a shortcut will fail with `'scribe' is not recognized` /
+`command not found`. Use the global install above for daily use.
 
-**Option A: pip (widely compatible, classic)**
+**Classic pip installation**
+
+Pip reads the same dependency metadata from `pyproject.toml`; no separate
+requirements file is maintained.
+
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-pip install -r requirements.txt
-pip install -e .
-```
-
-**Option B: Local GPU Transcription (pip path)**
-```bash
-git clone https://github.com/blisspixel/scribe.git
-cd scribe
-pip install -r requirements.txt
-pip install -e .
+python -m pip install .
 scribe info
 ```
 
-If `scribe info` does not show your GPU, verify that CTranslate2 can see CUDA:
+Local transcription is included. If `scribe info` does not show your NVIDIA GPU,
+verify that CTranslate2 can see CUDA:
 ```bash
 python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
 ```
 
-**Option C: PyTorch-backed GPU Features (music/source separation, extra tooling)**
+**Custom PyTorch wheel installation**
+
+If a PyTorch-backed optional workflow needs a specific CUDA wheel, install that
+wheel before Scribe:
+
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip install -r requirements.txt
-pip install -e .
+python -m pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -m pip install .
 ```
 
 **Optional: Additional AI Providers**
@@ -930,11 +930,8 @@ See [Architecture Guide](docs/ARCHITECTURE.md) for detailed technical discussion
 # Recommended with uv
 uv run pytest
 
-# Or classic
-pytest
-
 # Unit tests only
-pytest tests/unit/
+uv run pytest tests/unit/
 
 # CI-safe unit matrix
 uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q
@@ -950,9 +947,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1550 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1653 passed, 11 skipped, 27 deselected, 83.48% line coverage
-- Current collection: 1691 assertion-based tests
+- Latest CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1665 passed, 11 skipped, 27 deselected, 83.51% line coverage
+- Current collection: 1703 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -970,7 +967,7 @@ See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the order
 - Type hints on public APIs and core logic
 
 **Primary Tools:**
-- **uv** - sole package + project manager (uv sync, uv run, uv.lock for reproducibility)
+- **uv** - sole package and project manager (`uv sync --locked --group dev`, `uv run`, and `uv.lock` for reproducibility)
 - **ruff** - universal linter + formatter (replaced Black + isort)
 - **mypy --strict** on src/ (enforced in CI)
 - **pre-commit** - local gates before every commit (ruff + mypy + basic checks)
@@ -1172,7 +1169,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 ## Responsible Use and Legal
 
 This section is for general awareness only and is not legal advice. See
-[DISCLAIMER.md](DISCLAIMER.md) for the full notice.
+[the Responsible Use and Legal guide](docs/RESPONSIBLE_USE.md) for the full notice.
 
 ### Recording consent
 Scribe can record conversations and calls. Recording laws vary by jurisdiction.
@@ -1204,7 +1201,9 @@ solely responsible for how you use Scribe and for complying with applicable laws
 
 ## License
 
-License terms are pending owner confirmation. Current repository evidence is inconsistent: earlier README copy referenced Apache 2.0 + Commons Clause, `pyproject.toml` declares MIT, and no LICENSE file is present.
+License terms are pending owner confirmation. No `LICENSE` file is currently
+present, and package metadata intentionally makes no license claim until the
+owner selects canonical terms.
 
 ---
 

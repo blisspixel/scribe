@@ -1,0 +1,83 @@
+"""Repository structure and documentation integrity contracts."""
+
+from __future__ import annotations
+
+import re
+import tomllib
+from collections.abc import Iterator
+from pathlib import Path
+from urllib.parse import unquote
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+INLINE_LINK = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+FORBIDDEN_ROOT_FILES = {
+    "CURRENT-STATE-ANALYSIS.md",
+    "DISCLAIMER.md",
+    "PROGRESS-LOG.md",
+    "SKILLS.md",
+    "requirements-dev.txt",
+    "requirements.txt",
+}
+
+
+def _markdown_files() -> Iterator[Path]:
+    yield from sorted(REPOSITORY_ROOT.glob("*.md"))
+    yield from sorted((REPOSITORY_ROOT / "docs").rglob("*.md"))
+    yield from sorted((REPOSITORY_ROOT / "tests").rglob("*.md"))
+
+
+def _inline_link_target(raw_target: str) -> str:
+    target = raw_target.strip()
+    if target.startswith("<") and ">" in target:
+        return target[1 : target.index(">")]
+    return target.split(maxsplit=1)[0]
+
+
+def test_agent_state_and_dependency_shims_stay_out_of_repository_root() -> None:
+    present = sorted(name for name in FORBIDDEN_ROOT_FILES if (REPOSITORY_ROOT / name).exists())
+
+    assert present == []
+    ignore_rules = {
+        line.strip()
+        for line in (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert ".agent/" in ignore_rules
+    assert "logs/" in ignore_rules
+
+
+def test_development_dependencies_have_one_canonical_group() -> None:
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as pyproject:
+        configuration = tomllib.load(pyproject)
+
+    optional_dependencies = configuration["project"].get("optional-dependencies", {})
+    assert "dev" not in optional_dependencies
+    assert "dev" in configuration["dependency-groups"]
+
+
+def test_local_markdown_links_resolve() -> None:
+    broken: list[str] = []
+    for document in _markdown_files():
+        text = document.read_text(encoding="utf-8")
+        for match in INLINE_LINK.finditer(text):
+            target = _inline_link_target(match.group(1))
+            if target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            relative_path = unquote(target.split("#", maxsplit=1)[0])
+            if relative_path and not (document.parent / relative_path).resolve().exists():
+                broken.append(f"{document.relative_to(REPOSITORY_ROOT)} -> {target}")
+
+    assert broken == []
+
+
+def test_markdown_code_fences_are_balanced() -> None:
+    unbalanced: list[str] = []
+    for document in _markdown_files():
+        fence_count = sum(
+            line.lstrip().startswith("```")
+            for line in document.read_text(encoding="utf-8").splitlines()
+        )
+        if fence_count % 2:
+            unbalanced.append(str(document.relative_to(REPOSITORY_ROOT)))
+
+    assert unbalanced == []

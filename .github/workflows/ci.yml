@@ -250,7 +250,7 @@ jobs:
       - name: Build and inspect root wheel
         shell: bash
         run: |
-          uv build --package scribe --out-dir .agent/build
+          uv build --clear --package scribe --out-dir .agent/build
           wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
           test -n "$wheel"
           python_path=$(uv python find 3.12)

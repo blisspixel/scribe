@@ -1,21 +1,38 @@
 # SBOM Compliance
 
-Scribe users who require compliance artifacts can generate a Software Bill of Materials (SBOM) using \pip-audit\, which is already integrated into the Scribe development and CI pipeline.
+Scribe can generate a local Software Bill of Materials (SBOM) with `pip-audit`,
+which is part of the locked development environment.
 
-## Generating an SBOM
+## Generate a CycloneDX SBOM
 
-To generate an SBOM in CycloneDX format, run the following command from the Scribe project root:
+From the project root:
 
-\\ash
-uv run pip-audit --format cyclonedx-json -o scribe-sbom.json
-\
-This command will output a file named \scribe-sbom.json\ containing the complete list of dependencies and their versions, structured according to the CycloneDX standard.
+```bash
+uv sync --locked --group dev
+uv run python -c "from pathlib import Path; Path('.agent/build').mkdir(parents=True, exist_ok=True)"
+uv run pip-audit --format cyclonedx-json --output .agent/build/scribe-sbom.cdx.json \
+  --ignore-vuln PYSEC-2025-203 \
+  --ignore-vuln PYSEC-2025-204 \
+  --ignore-vuln PYSEC-2025-206 \
+  --ignore-vuln PYSEC-2026-139 \
+  --ignore-vuln PYSEC-2026-2286 \
+  --ignore-vuln CVE-2025-2999 \
+  --ignore-vuln CVE-2025-3000 \
+  --ignore-vuln CVE-2025-3001
+```
 
-## Security Scanning
+The command writes the complete resolved environment inventory to an ignored
+build directory. Review the file before sharing it because dependency and local
+environment details can be operationally sensitive.
 
-Scribe uses \pip-audit\ internally to scan for known vulnerabilities. This check is run automatically in CI and can be triggered locally via:
+## Scan for Known Vulnerabilities
 
-\\ash
-scribe doctor
-\
-Any detected vulnerabilities will be highlighted in the doctor report.
+Run the local diagnostic surface, which applies the documented ADR-004 policy:
+
+```bash
+uv run scribe doctor
+```
+
+The exact blocking release command, including every reviewed Torch exception,
+is documented in `docs/DEVELOPMENT.md` and enforced by
+`.github/workflows/ci.yml`. CI remains the release gate.

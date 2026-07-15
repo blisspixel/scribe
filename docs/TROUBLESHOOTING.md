@@ -523,30 +523,25 @@ scribe meme transcript.md --provider xai
 
 **Solutions:**
 
-1. **Reinstall in editable mode:**
+1. **Reconcile the locked development environment:**
 ```bash
-pip install -e .
+uv sync --locked --group dev
 ```
 
-2. **Install dev dependencies:**
-```bash
-pip install -r requirements-dev.txt
-```
-
-3. **Clear Python cache:**
+2. **Clear Python cache:**
 ```bash
 find . -type d -name __pycache__ -exec rm -rf {} +
 find . -type f -name "*.pyc" -delete
 ```
 
-4. **Run specific test:**
+3. **Run a specific test:**
 ```bash
-pytest tests/unit/test_file.py::test_name -vv
+uv run pytest tests/unit/test_file.py::test_name -vv
 ```
 
-5. **Check Python version:**
+4. **Check Python version:**
 ```bash
-python --version  # Should be 3.10+
+uv run python --version  # Must be 3.12 through 3.14
 ```
 
 ## Error Codes

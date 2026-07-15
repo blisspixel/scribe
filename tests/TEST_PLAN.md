@@ -4,9 +4,9 @@
 
 Date: 2026-07-15
 
-- 1635 assertion-based tests collected.
-- Latest local CI-safe unit matrix: 1496 passed, 2 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1596 passed, 12 skipped, 27 deselected, no warnings, and 82.41 percent coverage.
+- 1703 assertion-based tests collected.
+- Latest local CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1665 passed, 11 skipped, 27 deselected, no warnings, and 83.51 percent coverage.
 - Current enforced coverage floor: 80 percent.
 - CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit,
   pip-audit, and the root-wheel build and isolated-install contract.

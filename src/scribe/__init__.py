@@ -1,17 +1,16 @@
 """
-Scribe: Professional GPU-accelerated speech-to-text transcription system.
+Scribe: Local-first speech-to-text transcription system.
 
-A production-grade transcription system optimized for NVIDIA RTX GPUs with
-automatic fallback to OpenAI API. Features include speaker diarization,
-silence detection, multiple output formats, and beautiful terminal progress tracking.
+A transcription system with local CPU and GPU backends, explicit opt-in cloud
+processing, speaker diarization, multiple output formats, and terminal progress.
 
 Author: blissplixel
-License: MIT
+License: terms pending owner confirmation
 """
 
 __version__ = "2.8.1"
 __author__ = "Nick Seal"
-__license__ = "MIT"
+__license__ = "License terms pending owner confirmation"
 
 import contextlib as _contextlib
 import warnings as _warnings

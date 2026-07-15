@@ -6780,13 +6780,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "ruff" },
-    { name = "types-requests" },
-    { name = "types-tqdm" },
-]
 diarize = [
     { name = "pyannote-audio" },
 ]
@@ -6845,12 +6838,10 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "kokoro-onnx", marker = "extra == 'kokoro'", specifier = ">=0.4.0" },
     { name = "mlx-whisper", marker = "extra == 'mlx'", specifier = ">=0.4.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "obsws-python", specifier = ">=1.5.0" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pillow", marker = "extra == 'tray'", specifier = ">=10.0.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pyannote-audio", marker = "extra == 'diarize'", specifier = ">=3.0.0" },
     { name = "pyannote-audio", marker = "extra == 'whisperx'", specifier = ">=3.0.0" },
@@ -6868,7 +6859,6 @@ requires-dist = [
     { name = "pyttsx3", marker = "extra == 'voice'", specifier = ">=2.90" },
     { name = "pywhispercpp", marker = "extra == 'whispercpp'", specifier = ">=1.2.0" },
     { name = "rich", specifier = ">=13.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
     { name = "sounddevice", marker = "extra == 'kokoro'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'tray'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'voice'", specifier = ">=0.4.6" },
@@ -6877,12 +6867,10 @@ requires-dist = [
     { name = "torchaudio", specifier = ">=2.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
     { name = "typer", specifier = ">=0.9.0" },
-    { name = "types-requests", marker = "extra == 'dev'" },
-    { name = "types-tqdm", marker = "extra == 'dev'" },
     { name = "whisperx", marker = "extra == 'whisperx'", specifier = ">=3.1.0" },
     { name = "yt-dlp", specifier = ">=2026.6.9" },
 ]
-provides-extras = ["dev", "whisperx", "mlx", "whispercpp", "diarize", "voice", "tray", "kokoro"]
+provides-extras = ["whisperx", "mlx", "whispercpp", "diarize", "voice", "tray", "kokoro"]
 
 [package.metadata.requires-dev]
 dev = [

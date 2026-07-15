@@ -25,7 +25,7 @@ Add lightweight responsible-use guardrails:
   (no TTY: scheduled jobs, pipes, CI) prints a one-line reminder and proceeds, and
   `SCRIBE_ASSUME_CONSENT=1` silences even that. Declining in an interactive run
   cancels the recording.
-- **Disclaimers.** A `DISCLAIMER.md` and a README "Responsible Use and Legal"
+- **Disclaimers.** A `docs/RESPONSIBLE_USE.md` guide and a README "Responsible Use and Legal"
   section cover recording consent, regulated/sensitive data, cloud data sharing,
   output accuracy, the no-warranty disclaimer, the unresolved license state, and
   user responsibility.

@@ -125,6 +125,28 @@ class TestFFmpegCheck:
         assert "not working" in result.message
 
 
+class TestPythonPackagesCheck:
+    """Test required package recovery guidance."""
+
+    def test_missing_package_points_to_authoritative_package_source(self):
+        """A missing dependency must not point to a duplicate requirements shim."""
+
+        def import_for_check(name, *_args, **_kwargs):
+            if name == "typer":
+                raise ImportError(name)
+            return Mock()
+
+        diagnostics = SystemDiagnostics()
+        with patch("builtins.__import__", side_effect=import_for_check):
+            result = diagnostics.check_python_packages()
+
+        assert result.status == "fail"
+        assert result.details == "Missing: typer"
+        assert result.fix_suggestion is not None
+        assert "uv sync --locked" in result.fix_suggestion
+        assert "requirements" not in result.fix_suggestion
+
+
 class TestCUDACheck:
     """Test CUDA checking."""
 
@@ -539,6 +561,7 @@ class TestDependencySecurityCheck:
         assert result.name == "Dependency Security"
         assert "pip-audit not installed" in result.message
         assert result.fix_suggestion is not None
+        assert "uv sync --locked --group dev" in result.fix_suggestion
 
     @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")

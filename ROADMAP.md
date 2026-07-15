@@ -155,18 +155,18 @@ Establish a single source of truth for Python version, dependencies, and develop
 
 **Work in this step:**
 - Add `.python-version` pinned to 3.12 and set `requires-python = ">=3.12"` in pyproject.toml. Update classifiers and all documentation.
-- Adopt uv as the canonical package and project manager. Generate and commit `uv.lock`. Update all development and CI commands to use `uv sync` and `uv run`.
+- Adopt uv as the canonical package and project manager. Generate and commit `uv.lock`. Update development setup to use `uv sync --locked --group dev` and all project commands to use `uv run`.
 - Consolidate configuration into pyproject.toml: remove duplicate settings from pytest.ini, retire the Black configuration, and expand the Ruff configuration with preview rules, security rules, and appropriate complexity limits.
 - Add `.pre-commit-config.yaml` with ruff (lint + format), mypy, and basic test hooks. Make `pre-commit install` part of the documented onboarding.
 - Overhaul CI to use uv for all jobs, expand the Python matrix to 3.12 and 3.13, add a dedicated lint + types job, a coverage gate job, and a dependency vulnerability scan step.
-- Update README, DEVELOPMENT.md, and related docs to present the uv workflow first while retaining pip instructions for accessibility.
-- Mark `requirements.txt` and `requirements-dev.txt` as legacy compatibility shims with clear pointers to the pyproject/uv approach.
+- Update README, DEVELOPMENT.md, and related docs to present the locked uv workflow first while retaining direct pyproject-based pip installation for accessibility.
+- Retire hand-maintained requirements shims so pip, uv, CI, and release artifacts all resolve dependencies from `pyproject.toml`.
 
 **Definition of Done:**
-- A fresh clone on Windows, macOS, or Linux followed by `uv sync` and `uv run scribe doctor` produces a working, identical environment.
+- A fresh clone on Windows, macOS, or Linux followed by `uv sync --locked --group dev` and `uv run scribe doctor` produces a working, identical environment.
 - All CI jobs pass using the new uv-based pipeline.
 - `pre-commit run --all-files` passes cleanly for any contributor who has run the install step.
-- No developer or CI runner can accidentally use an inconsistent Python version or dependency set.
+- No developer or CI runner can accidentally use an inconsistent Python version or duplicate dependency set.
 
 This step must be finished before meaningful progress on later steps. Reproducible environments are the prerequisite for reliable type checking, testing, and security scanning.
 
@@ -208,7 +208,7 @@ Make the public surface and core logic statically verifiable.
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
 
-**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation/recording_policy/vocabulary, Hypothesis property + HotkeyState + RecordingPhase state machine tests). Step 4 is operational but retains explicit security debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and audit results, and eight Torch advisories remain accepted under ADR-004 until compatible CPU and CUDA dependency sets can be locked and validated. Broad exception handlers are tightened to ADR-002 typed tuples across the codebase; ADR-012 records the decision against structured logging. See PROGRESS-LOG.md.
+**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation/recording_policy/vocabulary, Hypothesis property + HotkeyState + RecordingPhase state machine tests). Step 4 is operational but retains explicit security debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and audit results, and eight Torch advisories remain accepted under ADR-004 until compatible CPU and CUDA dependency sets can be locked and validated. Broad exception handlers are tightened to ADR-002 typed tuples across the codebase; ADR-012 records the decision against structured logging.
 
 **Work in this step:**
 - Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.

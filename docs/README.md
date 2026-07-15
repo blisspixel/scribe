@@ -7,6 +7,7 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 ### Getting Started
 - [Main README](../README.md) - Overview, installation, quickstart, polished init + shortcut launchers with taskbar support
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
+- [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) - Recording consent, sensitive data, cloud sharing, accuracy, and legal limits
 
 ### Architecture & Design
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and design patterns
@@ -22,6 +23,7 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 ### Operations
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
 - [PERFORMANCE_TUNING.md](PERFORMANCE_TUNING.md) - Optimization and benchmarking
+- [SBOM Compliance](features/SBOM_COMPLIANCE.md) - Generate a local CycloneDX software bill of materials
 
 ### Project Status
 - [ROADMAP](../ROADMAP.md) - Feature roadmap and version history
@@ -29,8 +31,7 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 ## Additional Resources
 
 - **features/** - Feature-specific documentation
-- **archive/** - Historical documentation and session summaries
-- **research/** - API documentation and planning notes
+- **adr/** - Accepted architecture and policy decisions
 
 ## Documentation Philosophy
 

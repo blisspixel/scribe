@@ -209,7 +209,7 @@ Regular checks:
 
 Dependency policy:
 - `pyproject.toml` and `uv.lock` are authoritative.
-- `requirements.txt` and `requirements-dev.txt` are legacy compatibility shims.
+- Pip installs the project directly from `pyproject.toml`; no hand-maintained requirements shim is supported.
 - Heavy or platform-specific capabilities should remain optional extras.
 
 ## Troubleshooting

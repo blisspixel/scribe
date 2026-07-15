@@ -809,7 +809,10 @@ class SystemDiagnostics:
                 status="fail",
                 message=f"{len(missing)} critical package(s) missing",
                 details=f"Missing: {', '.join(missing)}",
-                fix_suggestion="Run: pip install -r requirements.txt",
+                fix_suggestion=(
+                    "Reinstall Scribe from its original package source; "
+                    "checkout users can run: uv sync --locked"
+                ),
             )
         else:
             result = DiagnosticResult(
@@ -832,7 +835,9 @@ class SystemDiagnostics:
                 status="warn",
                 message="pip-audit not installed",
                 details="Dependency vulnerability scan is only available in the dev environment.",
-                fix_suggestion="Developers: run `uv sync --group dev` then re-run `scribe doctor`.",
+                fix_suggestion=(
+                    "Developers: run `uv sync --locked --group dev` then re-run `scribe doctor`."
+                ),
             )
             self.results.append(result)
             return result

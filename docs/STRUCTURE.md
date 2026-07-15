@@ -1,7 +1,7 @@
 # Documentation Structure
 
-**Last Updated**: 2026-06-23 (reflects polished init + robust shortcut launchers)
-**Status**: Clean and organized
+**Last Updated**: 2026-07-15
+**Status**: Canonical documentation map
 
 ---
 
@@ -13,12 +13,14 @@
 - **README.md** - Documentation index and navigation
 - **TROUBLESHOOTING.md** - Common issues and solutions
 - **API_REFERENCE.md** - Complete API documentation
+- **RESPONSIBLE_USE.md** - Recording, privacy, cloud-sharing, accuracy, and legal guardrails
 
 **Developer Documentation**:
 - **ARCHITECTURE.md** - System architecture and design patterns
 - **DEVELOPMENT.md** - Development setup and workflows
 - **DEPLOYMENT.md** - Production deployment guide
 - **PERFORMANCE_TUNING.md** - Optimization and benchmarking
+- **features/SBOM_COMPLIANCE.md** - Local dependency inventory generation
 
 ---
 
@@ -31,15 +33,9 @@
 
 ---
 
-### docs/archive/ (Historical Documentation)
+### docs/adr/ (Architecture Decision Records)
 
-Contains completed plans, session logs, and superseded documentation.
-
----
-
-### docs/research/ (Research Notes)
-
-Contains API research, feature research notes, and implementation experiments.
+Contains accepted architecture, security, and operational policy decisions.
 
 ---
 
@@ -48,33 +44,23 @@ Contains API research, feature research notes, and implementation experiments.
 ### What Goes Where
 
 **docs/ (Root)**:
-- [done] Current, actively maintained documentation
-- [done] User-facing guides
-- [done] Developer references
-- [done] Architecture and design docs
-- [needs-work] Historical or completed plans
-- [needs-work] Session-specific logs
-- [needs-work] Research notes
+- Current, actively maintained documentation
+- User-facing guides
+- Developer references
+- Architecture and design docs
+- Responsible-use policy
+- Not temporary plans, session logs, or raw research
 
 **docs/features/**:
-- [done] Feature-specific architecture
-- [done] Detailed implementation guides
-- [done] Complex feature documentation
-- [needs-work] General architecture (goes in docs/)
+- Feature-specific architecture
+- Detailed implementation and validation guides
+- Complex feature documentation
+- Not general architecture, which belongs in docs/
 
-**docs/archive/**:
-- [done] Completed plans and initiatives
-- [done] Historical documentation
-- [done] Session logs and summaries
-- [done] Superseded documentation
-- [needs-work] Current, active documentation
-
-**docs/research/**:
-- [done] API research and exploration
-- [done] Feature research notes
-- [done] Implementation experiments
-- [done] Raw research data
-- [needs-work] Finalized documentation
+**docs/adr/**:
+- Accepted decisions with durable architectural or policy consequences
+- Context, decision, and consequences kept together
+- Not temporary analysis or session state
 
 ---
 
@@ -94,21 +80,20 @@ Contains API research, feature research notes, and implementation experiments.
 ### For Feature Details
 1. Music mode? → **docs/features/MUSIC_MODE_ARCHITECTURE.md**
 
-### For History
-1. Past decisions? → **docs/archive/**
-2. Research notes? → **docs/research/**
+### For Decisions
+1. Accepted architecture and policy decisions? → **docs/adr/**
 
 ---
 
-## [done] Maintenance
+## Maintenance
 
 ### When Adding New Docs
 
 **Ask**:
 1. Is this current and actively maintained? → docs/
 2. Is this feature-specific? → docs/features/
-3. Is this historical? → docs/archive/
-4. Is this research? → docs/research/
+3. Is this a durable architecture or policy decision? → docs/adr/
+4. Is this temporary analysis or session state? → ignored .agent/
 
 ### When Updating Docs
 
@@ -118,6 +103,5 @@ Contains API research, feature research notes, and implementation experiments.
 - Can this be consolidated?
 - Is it in the right location?
 
----
-
-**Everything has its place!**
+Keep temporary agent state in the ignored `.agent/` directory, not in tracked
+project documentation.
