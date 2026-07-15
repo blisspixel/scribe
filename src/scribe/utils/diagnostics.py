@@ -1193,9 +1193,10 @@ class SystemDiagnostics:
         except ImportError:
             result = DiagnosticResult(
                 name="System Resources",
-                status="pass",
+                status="warn",
                 message="Resource monitor unavailable (psutil not installed)",
                 details="Cannot check system memory",
+                fix_suggestion="Reinstall Scribe; psutil is a required dependency",
             )
         except Exception as e:
             result = DiagnosticResult(

@@ -45,6 +45,8 @@ warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
 
 logger = get_logger(__name__)
 
+_TRANSCRIPTION_METHOD_HELP = "Method: auto/local are $0 local (GPU or CPU); openai is paid cloud"
+
 
 class BatchResult(TypedDict, total=False):
     file: str
@@ -174,6 +176,40 @@ def _persist_failed_session(
                 notification_error,
             )
     return summary_path
+
+
+def _notify_saved_summary(summary_path: Path, label: str = "Session summary") -> None:
+    """Show a saved evidence path without allowing terminal failure to change its outcome."""
+    try:
+        console.print(f"{label}: {escape(str(summary_path))}", soft_wrap=True)
+    except Exception as notification_error:
+        with suppress(Exception):
+            logger.warning(
+                "%s was saved to %s but could not be shown: %s",
+                label,
+                summary_path,
+                notification_error,
+            )
+
+
+def _warn_saved_outcome_error(error: BaseException) -> None:
+    """Log a post-save command error through the module logger without masking it."""
+    with suppress(Exception):
+        logger.warning("Session outcome was already saved before a later error: %s", error)
+
+
+def _persist_terminal_session_error(
+    session: TranscriptionSession | None,
+    output_dir: Path | None,
+    error: BaseException,
+    *,
+    summary_saved: bool,
+) -> Path | None:
+    """Persist a failure unless a durable terminal outcome already exists."""
+    if summary_saved:
+        _warn_saved_outcome_error(error)
+        return None
+    return _persist_failed_session(session, output_dir, error)
 
 
 def _add_music_issue(result: MusicResult, message: str) -> None:
@@ -384,7 +420,7 @@ def transcribe_command(
         "auto",
         "--method",
         "-m",
-        help="Transcription method: auto (intelligent choice), local (GPU), openai (API)",
+        help=_TRANSCRIPTION_METHOD_HELP,
     ),
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
@@ -452,6 +488,7 @@ def transcribe_command(
     unified_progress = None
     config: ScribeConfig | None = None
     session: TranscriptionSession | None = None
+    summary_saved = False
     try:
         from scribe.utils.vocabulary import CustomVocabulary
 
@@ -777,6 +814,7 @@ def transcribe_command(
         # Complete session
         session.complete(success=True)
         session.save_summary(config.output_folder)
+        summary_saved = True
         console.print()
 
         # Display joke if generated
@@ -816,15 +854,21 @@ def transcribe_command(
         console.print()
 
     except ScribeError as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         exit_on_cli_error(e, log_unexpected=False)
     except typer.Exit as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         if e.__cause__ is not None:
             exit_on_cli_error(e.__cause__, log_unexpected=not isinstance(e.__cause__, ScribeError))
         raise
     except Exception as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
@@ -840,7 +884,7 @@ def url_command(
         "auto",
         "--method",
         "-m",
-        help="Transcription method: auto (intelligent choice), local (GPU), openai (API)",
+        help=_TRANSCRIPTION_METHOD_HELP,
     ),
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
@@ -919,6 +963,7 @@ def url_command(
     downloaded_file = None
     config = None
     session: TranscriptionSession | None = None
+    summary_saved = False
     try:
         from scribe.core.downloader import URLDownloader
         from scribe.utils.validation import validate_media_url
@@ -1259,6 +1304,7 @@ def url_command(
 
         session.complete(success=True)
         session.save_summary(config.output_folder)
+        summary_saved = True
         console.print()
 
         if hasattr(session, "joke_data") and session.joke_data:
@@ -1297,15 +1343,21 @@ def url_command(
         console.print()
 
     except ScribeError as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         exit_on_cli_error(e, log_unexpected=False)
     except typer.Exit as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         if e.__cause__ is not None:
             exit_on_cli_error(e.__cause__, log_unexpected=not isinstance(e.__cause__, ScribeError))
         raise
     except Exception as e:
-        _persist_failed_session(session, config.output_folder if config else None, e)
+        _persist_terminal_session_error(
+            session, config.output_folder if config else None, e, summary_saved=summary_saved
+        )
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
@@ -1377,7 +1429,7 @@ def record(
         help="Automatically transcribe after recording (default: True)",
     ),
     method: TranscriptionMethod = typer.Option(
-        "auto", "--method", "-m", help="Transcription method (if auto-transcribe enabled)"
+        "auto", "--method", "-m", help=_TRANSCRIPTION_METHOD_HELP
     ),
     notes: bool | None = typer.Option(
         None,
@@ -1426,6 +1478,7 @@ def record(
 
     session: TranscriptionSession | None = None
     session_output_dir: Path | None = None
+    summary_saved = False
     incomplete_run = False
     try:
         # Load configuration
@@ -1486,7 +1539,8 @@ def record(
         if not auto_transcribe:
             session.complete(success=True)
             summary_path = session.save_summary(config.output_folder)
-            console.print(f"Session summary: {escape(str(summary_path))}", soft_wrap=True)
+            summary_saved = True
+            _notify_saved_summary(summary_path)
 
             # For non-auto case on shortcut launch, pause here.
             if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
@@ -1743,6 +1797,7 @@ def record(
                 outcome="partial" if artifact_errors else "success",
             )
             summary_path = session.save_summary(config.output_folder)
+            summary_saved = True
             incomplete_run = bool(artifact_errors)
 
             console.print()
@@ -1753,7 +1808,7 @@ def record(
                     console.print(f"  - {escape(reason)}")
             else:
                 console.print("[bold green]Recording & Transcription Complete[/bold green]")
-            console.print(f"Session summary: {escape(str(summary_path))}", soft_wrap=True)
+            _notify_saved_summary(summary_path)
             console.print()
 
             # Display output files with clickable links
@@ -1786,10 +1841,10 @@ def record(
     except typer.Exit:
         raise
     except ScribeError as e:
-        _persist_failed_session(session, session_output_dir, e)
+        _persist_terminal_session_error(session, session_output_dir, e, summary_saved=summary_saved)
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        _persist_failed_session(session, session_output_dir, e)
+        _persist_terminal_session_error(session, session_output_dir, e, summary_saved=summary_saved)
         exit_on_cli_error(e)
     if incomplete_run:
         raise typer.Exit(1)
@@ -1802,7 +1857,7 @@ def batch_transcribe(
         "auto",
         "--method",
         "-m",
-        help="Method: auto/local are local; openai is paid cloud",
+        help=_TRANSCRIPTION_METHOD_HELP,
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
@@ -1872,7 +1927,7 @@ def batch_transcribe(
                 validated_lang = validate_language_code(language)
                 config.default_language = validated_lang
             except Exception:
-                console.print(f"[red]Invalid language code: {language}[/red]")
+                console.print(f"[red]Invalid language code: {escape(language)}[/red]")
                 raise typer.Exit(1)
 
         # Load custom vocabulary if provided
@@ -1882,7 +1937,7 @@ def batch_transcribe(
                 custom_vocab = CustomVocabulary.load(vocabulary)
                 console.print(f"[cyan]Loaded {len(custom_vocab)} custom vocabulary terms[/cyan]")
             except Exception as e:
-                console.print(f"[red]Failed to load vocabulary: {e}[/red]")
+                console.print(f"[red]Failed to load vocabulary: {escape(str(e))}[/red]")
                 raise typer.Exit(1)
 
         # Validate all files exist and retain missing inputs in final accounting.
@@ -1890,7 +1945,10 @@ def batch_transcribe(
         valid_files: list[Path] = []
         for audio_file in input_files:
             if not audio_file.exists():
-                console.print(f"[yellow]Warning: File not found: {audio_file}[/yellow]")
+                console.print(
+                    f"[yellow]Warning: File not found: {escape(str(audio_file))}[/yellow]",
+                    soft_wrap=True,
+                )
                 results.append(
                     {"file": audio_file.name, "status": "failed", "error": "File not found"}
                 )
@@ -1943,7 +2001,7 @@ def batch_transcribe(
             logger = get_logger(__name__)
             session: TranscriptionSession | None = None
             console.print(
-                f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {audio_file.name}"
+                f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {escape(audio_file.name)}"
             )
             console.print()
 
@@ -2076,9 +2134,9 @@ def batch_transcribe(
                             "error": error_message or "Requested artifact was not generated",
                         }
                     )
-                    console.print(f"[yellow]! Partial: {audio_file.name}[/yellow]")
+                    console.print(f"[yellow]! Partial: {escape(audio_file.name)}[/yellow]")
                     for artifact_error in artifact_errors:
-                        console.print(f"[dim]  {artifact_error}[/dim]")
+                        console.print(f"[dim]  {escape(artifact_error)}[/dim]")
                 else:
                     results.append(
                         {
@@ -2087,15 +2145,15 @@ def batch_transcribe(
                             "transcript": transcript_path,
                         }
                     )
-                    console.print(f"[green]+ Completed: {audio_file.name}[/green]")
+                    console.print(f"[green]+ Completed: {escape(audio_file.name)}[/green]")
                 console.print()
 
             except Exception as e:
                 logger.error(f"Failed to process {audio_file}: {e}")
                 _persist_failed_session(session, config.output_folder, e)
                 results.append({"file": audio_file.name, "status": "failed", "error": str(e)})
-                console.print(f"[red]x Failed: {audio_file.name}[/red]")
-                console.print(f"[dim]Error: {e}[/dim]")
+                console.print(f"[red]x Failed: {escape(audio_file.name)}[/red]")
+                console.print(f"[dim]Error: {escape(str(e))}[/dim]")
                 console.print()
 
                 if not continue_on_error:
@@ -2120,12 +2178,15 @@ def batch_transcribe(
             for batch_result in results:
                 if batch_result["status"] in {"partial", "failed"}:
                     console.print(
-                        f"  - {batch_result['file']} ({batch_result['status']}): "
-                        f"{batch_result.get('error', 'Unknown error')}"
+                        f"  - {escape(str(batch_result['file']))} "
+                        f"({escape(str(batch_result['status']))}): "
+                        f"{escape(str(batch_result.get('error', 'Unknown error')))}"
                     )
             console.print()
         incomplete_run = partial_count > 0 or failed_count > 0
 
+    except typer.Exit:
+        raise
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
@@ -2143,7 +2204,7 @@ def music_transcribe(
         "auto",
         "--method",
         "-m",
-        help="Method: auto/local are local; openai is paid cloud",
+        help=_TRANSCRIPTION_METHOD_HELP,
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
@@ -3574,10 +3635,11 @@ def doctor(
         console.print(f"[bold {ScribeTheme.ERROR}]FAILED[/bold {ScribeTheme.ERROR}]")
         for result in failures:
             console.print(
-                f"  [{ScribeTheme.ERROR}]×[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_PRIMARY}]{result.name}[/{ScribeTheme.TEXT_PRIMARY}]"
+                f"  [{ScribeTheme.ERROR}]×[/{ScribeTheme.ERROR}] "
+                f"[{ScribeTheme.TEXT_PRIMARY}]{escape(result.name)}[/{ScribeTheme.TEXT_PRIMARY}]"
             )
             console.print(
-                f"    [{ScribeTheme.TEXT_MUTED}]{result.message}[/{ScribeTheme.TEXT_MUTED}]"
+                f"    [{ScribeTheme.TEXT_MUTED}]{escape(result.message)}[/{ScribeTheme.TEXT_MUTED}]"
             )
             if result.fix_suggestion:
                 console.print(
@@ -3590,10 +3652,11 @@ def doctor(
         console.print(f"[bold {ScribeTheme.WARNING}]WARNINGS[/bold {ScribeTheme.WARNING}]")
         for result in warnings:
             console.print(
-                f"  [{ScribeTheme.WARNING}]![/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_PRIMARY}]{result.name}[/{ScribeTheme.TEXT_PRIMARY}]"
+                f"  [{ScribeTheme.WARNING}]![/{ScribeTheme.WARNING}] "
+                f"[{ScribeTheme.TEXT_PRIMARY}]{escape(result.name)}[/{ScribeTheme.TEXT_PRIMARY}]"
             )
             console.print(
-                f"    [{ScribeTheme.TEXT_MUTED}]{result.message}[/{ScribeTheme.TEXT_MUTED}]"
+                f"    [{ScribeTheme.TEXT_MUTED}]{escape(result.message)}[/{ScribeTheme.TEXT_MUTED}]"
             )
             if result.fix_suggestion:
                 console.print(
@@ -3614,9 +3677,8 @@ def doctor(
         table.add_column(style=ScribeTheme.TEXT_MUTED)
 
         for result in passed:
-            # Extract key info from message (first line or short version)
-            short_msg = result.message.split("\n")[0][:40]
-            table.add_row("+", result.name, short_msg)
+            first_line = result.message.splitlines()[0] if result.message else ""
+            table.add_row("+", escape(result.name), escape(first_line))
 
         console.print(table)
         console.print()
@@ -3625,18 +3687,23 @@ def doctor(
     pass_count, warn_count, fail_count = diagnostics.get_summary()
 
     if fail_count == 0 and warn_count == 0:
-        console.print(f"[{ScribeTheme.SUCCESS}]+ All systems ready[/] ({pass_count} checks)")
+        check_label = "check" if pass_count == 1 else "checks"
+        console.print(f"[{ScribeTheme.SUCCESS}]+ All systems ready[/] ({pass_count} {check_label})")
         console.print(
             '[dim]Try: [cyan]scribe rec "Team sync"[/cyan] or create a launcher with [cyan]scribe shortcut[/cyan][/dim]'
         )
     elif fail_count == 0:
+        warning_label = "warning" if warn_count == 1 else "warnings"
         console.print(
             f"[{ScribeTheme.WARNING}]Ready with warnings[/] "
-            f"({pass_count} passed, {warn_count} warnings)"
+            f"({pass_count} passed, {warn_count} {warning_label})"
         )
     else:
+        failed_label = "failure" if fail_count == 1 else "failures"
+        warning_label = "warning" if warn_count == 1 else "warnings"
         console.print(
-            f"[{ScribeTheme.ERROR}]Needs attention[/] ({fail_count} failed, {warn_count} warnings)"
+            f"[{ScribeTheme.ERROR}]Needs attention[/] "
+            f"({fail_count} {failed_label}, {warn_count} {warning_label})"
         )
 
     console.print()
@@ -3835,7 +3902,7 @@ def support_bundle(
         console.print()
         console.print("[bold green]Support bundle created successfully[/bold green]")
         console.print()
-        console.print(f"[cyan]Location:[/cyan] {bundle_path}")
+        console.print(f"[cyan]Location:[/cyan] {escape(str(bundle_path))}", soft_wrap=True)
         console.print()
         console.print("[dim]This bundle contains:[/dim]")
         console.print("[dim]  - System information (OS, Python, GPU)[/dim]")
@@ -3852,9 +3919,13 @@ def support_bundle(
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
-        console.print("[bold red]Error:[/bold red] Failed to create support bundle")
-        console.print(f"[dim]{e}[/dim]")
-        exit_on_cli_error(e)
+        exit_on_cli_error(
+            e,
+            recovery_hint=(
+                "Check the error above and output-directory permissions. "
+                "If a log path is shown, inspect it, then retry."
+            ),
+        )
 
 
 @app.command()

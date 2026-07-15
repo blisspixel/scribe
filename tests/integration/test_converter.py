@@ -4,6 +4,7 @@ Integration tests for audio/video conversion.
 Tests conversion with real ffmpeg, handling various formats and edge cases.
 """
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -82,8 +83,8 @@ class TestConverter:
         # This test is simplified - the timeout logic is present in the code
         # and works in production, but is difficult to test with mocks
 
-    def test_convert_to_wav_idempotent(self, tmp_path):
-        """Test WAV conversion is idempotent (doesn't reconvert if output exists)."""
+    def test_convert_to_wav_failure_preserves_existing_output(self, tmp_path):
+        """A failed reconversion must not destroy the prior usable WAV."""
         converter = Converter()
 
         # Create fake input and output files
@@ -93,10 +94,98 @@ class TestConverter:
         output_file = tmp_path / "input_16k_mono.wav"
         output_file.write_bytes(b"old cached data")
 
-        # Converter now always deletes cached files and reconverts
-        # This will fail with fake data, which is expected
         with pytest.raises(ProcessError):
             converter.convert_to_wav(input_file, output_file)
+
+        assert output_file.read_bytes() == b"old cached data"
+
+    def test_convert_to_wav_replace_failure_preserves_existing_output(self, tmp_path):
+        converter = Converter()
+        input_file = tmp_path / "input.mp4"
+        input_file.write_bytes(b"fake audio")
+        output_file = tmp_path / "input_16k_mono.wav"
+        output_file.write_bytes(b"stable cached data")
+        loudness = {
+            "measured_i": "-20",
+            "measured_tp": "-2",
+            "measured_lra": "5",
+            "measured_thresh": "-30",
+        }
+
+        def write_staged_output(command, *_args):
+            Path(command[-1]).write_bytes(b"replacement" * 200)
+
+        with (
+            patch.object(converter, "_analyze_audio_loudness", return_value=loudness),
+            patch.object(
+                converter,
+                "_execute_conversion_with_progress",
+                side_effect=write_staged_output,
+            ),
+            patch(
+                "scribe.core.converter.os.replace",
+                side_effect=OSError("destination locked"),
+            ),
+        ):
+            with pytest.raises(ProcessError, match="destination locked"):
+                converter.convert_to_wav(input_file, output_file, show_progress=False)
+
+        assert output_file.read_bytes() == b"stable cached data"
+        assert list(tmp_path.glob(".input_16k_mono.*.wav")) == []
+
+    def test_convert_to_wav_close_failure_preserves_output_and_cleans_stage(self, tmp_path):
+        converter = Converter()
+        input_file = tmp_path / "input.mp4"
+        input_file.write_bytes(b"fake audio")
+        output_file = tmp_path / "input_16k_mono.wav"
+        output_file.write_bytes(b"stable cached data")
+        loudness = {
+            "measured_i": "-20",
+            "measured_tp": "-2",
+            "measured_lra": "5",
+            "measured_thresh": "-30",
+        }
+
+        with (
+            patch.object(converter, "_analyze_audio_loudness", return_value=loudness),
+            patch("scribe.core.converter.os.close", side_effect=OSError("close failed")),
+        ):
+            with pytest.raises(ProcessError, match="close failed"):
+                converter.convert_to_wav(input_file, output_file, show_progress=False)
+
+        assert output_file.read_bytes() == b"stable cached data"
+        assert list(tmp_path.glob(".input_16k_mono.*.wav")) == []
+
+    def test_convert_to_wav_cleanup_failure_is_logged(self, tmp_path):
+        converter = Converter()
+        input_file = tmp_path / "input.mp4"
+        input_file.write_bytes(b"fake audio")
+        loudness = {
+            "measured_i": "-20",
+            "measured_tp": "-2",
+            "measured_lra": "5",
+            "measured_thresh": "-30",
+        }
+
+        with (
+            patch.object(converter, "_analyze_audio_loudness", return_value=loudness),
+            patch.object(
+                converter,
+                "_execute_conversion_with_progress",
+                side_effect=ProcessError("conversion stopped"),
+            ),
+            patch.object(Path, "unlink", side_effect=OSError("cleanup denied")),
+            patch("scribe.core.converter.logger.warning") as warning_log,
+        ):
+            with pytest.raises(ProcessError, match="conversion stopped"):
+                converter.convert_to_wav(input_file, show_progress=False)
+
+        staged_files = list(tmp_path.glob(".input_16k_mono.*.wav"))
+        assert len(staged_files) == 1
+        assert any(
+            "Could not remove staged WAV" in str(call) for call in warning_log.call_args_list
+        )
+        staged_files[0].unlink()
 
     def test_convert_to_mp3_idempotent(self, tmp_path):
         """Test MP3 conversion is idempotent."""

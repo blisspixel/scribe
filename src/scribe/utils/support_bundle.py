@@ -23,6 +23,7 @@ import platform
 import re
 import stat
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -627,13 +628,41 @@ def generate_support_bundle_cli(output_dir: Path | None = None) -> Path:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate filename with timestamp
+    # Reserve the destination exclusively so concurrent or same-second invocations
+    # cannot select and overwrite the same diagnostic artifact.
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"scribe_support_bundle_{timestamp}.json"
-    output_path = output_dir / filename
+    fd, reserved_name = tempfile.mkstemp(
+        prefix=f"scribe_support_bundle_{timestamp}_",
+        suffix=".json",
+        dir=output_dir,
+    )
+    output_path = Path(reserved_name)
 
-    # Create and save bundle
-    bundle = create_support_bundle()
-    save_support_bundle(bundle, output_path)
+    try:
+        try:
+            os.close(fd)
+        except OSError as close_error:
+            try:
+                os.fdopen(fd, "wb").close()
+            except OSError as fallback_error:
+                logger.warning(
+                    "Could not close support-bundle reservation %s after close failure: %s",
+                    output_path,
+                    fallback_error,
+                )
+            raise close_error
+
+        bundle = create_support_bundle()
+        save_support_bundle(bundle, output_path)
+    except BaseException:
+        try:
+            output_path.unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            logger.warning(
+                "Could not remove incomplete support-bundle reservation %s: %s",
+                output_path,
+                cleanup_error,
+            )
+        raise
 
     return output_path

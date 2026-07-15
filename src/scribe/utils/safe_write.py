@@ -33,7 +33,7 @@ The atomic write pattern solves this by using a two-phase commit:
 Phase 1: WRITE TO TEMPORARY FILE
   ├─ Create temp file in same directory as target (same filesystem)
   ├─ Write all data to temp file
-  ├─ Flush and sync to disk (ensure data is physically written)
+  ├─ Flush language-level buffers
   └─ Close temp file
 
 Phase 2: ATOMIC RENAME
@@ -41,22 +41,22 @@ Phase 2: ATOMIC RENAME
   ├─ This operation is atomic at the filesystem level
   └─ Either succeeds completely or fails completely (no partial state)
 
-If the process crashes during Phase 1, the temp file is left behind but the
-original file (if it existed) is untouched. If the process crashes during
-Phase 2, the rename either completed or didn't - no partial state.
+If the process crashes during Phase 1, the temp file may be left behind but the
+original file (if it existed) is untouched. The replacement does not expose a
+partially written destination. This module does not fsync file or directory
+metadata, so it does not claim power-loss durability.
 
 FILESYSTEM ATOMICITY GUARANTEES:
 ────────────────────────────────
-The rename() system call provides atomicity guarantees on POSIX systems:
+Same-filesystem replacement provides atomicity guarantees on supported systems:
 
 1. ATOMIC REPLACEMENT: If target exists, it's atomically replaced
 2. NO PARTIAL STATE: Rename either succeeds completely or fails completely
-3. CRASH SAFE: If system crashes during rename, filesystem recovers to either
-   old state (rename didn't happen) or new state (rename completed)
+3. PROCESS INTERRUPTION: Callers never observe a partially copied destination
 
 Platform-specific handling:
-- POSIX (Linux, macOS): rename() is atomic, even if target exists
-- Windows: Must delete target first, then rename (not fully atomic but close)
+- POSIX (Linux, macOS): os.replace() atomically replaces an existing target
+- Windows: os.replace() replaces an existing target without a delete-first window
 
 USAGE PATTERNS:
 ───────────────
@@ -224,12 +224,10 @@ def atomic_write(
             with os.fdopen(fd, "w", encoding=encoding) as f:
                 f.write(content)
 
-        # Atomic rename (overwrites existing file)
-        # On Windows, need to remove target first if it exists
-        if os.name == "nt" and path.exists():
-            path.unlink()
-
-        temp_path.rename(path)
+        # Replace in one filesystem operation. os.replace supports an existing
+        # destination on Windows and POSIX, so the original remains intact if
+        # replacement itself fails.
+        os.replace(temp_path, path)
         completed = True
         logger.debug(f"Atomically wrote file: {path}")
         return path
@@ -305,11 +303,8 @@ def safe_write_context(
         finally:
             f.close()
 
-        # Atomic rename on success
-        if os.name == "nt" and path.exists():
-            path.unlink()
-
-        temp_path.rename(path)
+        # Replace without exposing a delete-before-rename data-loss window.
+        os.replace(temp_path, path)
         completed = True
         logger.debug(f"Atomically wrote file: {path}")
 
@@ -355,11 +350,8 @@ def safe_copy(src: str | Path, dst: str | Path) -> Path:
         # Copy to temp file
         shutil.copy2(src, temp_path)
 
-        # Atomic rename
-        if os.name == "nt" and dst.exists():
-            dst.unlink()
-
-        temp_path.rename(dst)
+        # Replace without deleting a usable destination first.
+        os.replace(temp_path, dst)
         completed = True
         logger.debug(f"Safely copied: {src} -> {dst}")
         return dst

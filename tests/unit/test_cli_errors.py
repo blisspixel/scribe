@@ -19,6 +19,18 @@ def test_exit_on_cli_error_scribe_error():
     assert exc.value.exit_code == 1
 
 
+def test_exit_on_cli_error_renders_dynamic_markup_literally(capsys):
+    with pytest.raises(typer.Exit):
+        exit_on_cli_error(
+            ValidationError("bad [/] input", context={"field": "value [/]"}),
+            log_unexpected=False,
+        )
+
+    out = capsys.readouterr().out
+    assert "bad [/] input" in out
+    assert "value [/]" in out
+
+
 def test_exit_on_cli_error_prints_recovery_hint(capsys):
     with pytest.raises(typer.Exit) as exc:
         exit_on_cli_error(RuntimeError("boom"), log_unexpected=False)

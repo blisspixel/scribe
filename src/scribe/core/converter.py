@@ -7,7 +7,9 @@ This module provides conversion to optimal formats for transcription:
 """
 
 import math
+import os
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -363,11 +365,6 @@ class Converter:
         if output_file is None:
             output_file = input_file.with_name(f"{input_file.stem}_16k_mono.wav")
 
-        # Delete any existing cached file
-        if output_file.exists():
-            logger.info(f"Removing cached WAV: {output_file.name}")
-            output_file.unlink()
-
         logger.info(f"Converting {input_file.name} to 16kHz mono WAV...")
 
         # Get duration for progress estimation
@@ -377,6 +374,7 @@ class Converter:
 
         start_time = time.time()
 
+        staged_output: Path | None = None
         try:
             # Pass 1: Analyze audio for optimal normalization
             loudness_params = self._analyze_audio_loudness(
@@ -388,8 +386,27 @@ class Converter:
                 console.print()
             logger.info("Applying normalization and processing...")
 
+            fd, staged_name = tempfile.mkstemp(
+                prefix=f".{output_file.stem}.",
+                suffix=output_file.suffix or ".wav",
+                dir=output_file.parent,
+            )
+            staged_output = Path(staged_name)
+            try:
+                os.close(fd)
+            except OSError as close_error:
+                try:
+                    os.fdopen(fd, "wb").close()
+                except OSError as fallback_error:
+                    logger.warning(
+                        "Could not close staged WAV descriptor %s after close failure: %s",
+                        staged_output,
+                        fallback_error,
+                    )
+                raise close_error
+
             command = self._build_conversion_command(
-                input_file, output_file, sample_rate, channels, loudness_params
+                input_file, staged_output, sample_rate, channels, loudness_params
             )
 
             self._execute_conversion_with_progress(
@@ -397,16 +414,18 @@ class Converter:
             )
 
             # Verify output
-            if not output_file.exists():
+            if not staged_output.exists():
                 raise ProcessError(
                     "Conversion completed but output file not found",
-                    context={"output_file": str(output_file)},
+                    context={"output_file": str(staged_output)},
                 )
 
-            verify_file_content(output_file, min_size=1024)
+            verify_file_content(staged_output, min_size=1024)
+            output_size_mb = staged_output.stat().st_size / (1024 * 1024)
+            os.replace(staged_output, output_file)
+            staged_output = None
 
             elapsed = time.time() - start_time
-            output_size_mb = output_file.stat().st_size / (1024 * 1024)
             logger.info(
                 f"Conversion complete: {output_file.name} ({output_size_mb:.1f}MB, {elapsed:.1f}s)"
             )
@@ -419,6 +438,16 @@ class Converter:
             raise ProcessError(
                 f"Conversion failed: {e}", context={"input": str(input_file), "error": str(e)}
             )
+        finally:
+            if staged_output is not None:
+                try:
+                    staged_output.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    logger.warning(
+                        "Could not remove staged WAV %s after conversion failure: %s",
+                        staged_output,
+                        cleanup_error,
+                    )
 
     def _execute_simple_conversion(
         self,

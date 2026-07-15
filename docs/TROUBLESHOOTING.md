@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-**Last Updated:** 2026-06-23 (polished init review+verification, robust launcher quoting + taskbar icon, doctor offers init)
+**Last Updated:** 2026-07-15 (truthful diagnostics, unique support bundles, and literal recovery output)
 
 ## Quick Diagnostics
 
@@ -636,7 +636,10 @@ scribe doctor
 scribe support-bundle
 ```
    The bundle includes opaque recent-log metadata, not log filenames or contents.
-   Review the JSON before sharing it.
+   Each run reserves a unique output file, including concurrent or same-second
+   runs. Review the JSON before sharing it. If bundle creation itself fails,
+   inspect any log path that was actually printed and verify the output directory
+   is writable before retrying.
 
 3. Test with simple file:
 ```bash

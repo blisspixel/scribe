@@ -8,6 +8,7 @@ from contextlib import suppress
 from typing import NoReturn
 
 import typer
+from rich.markup import escape
 from rich.text import Text
 
 from scribe.exceptions import ScribeError
@@ -17,21 +18,29 @@ from scribe.utils.theme import ScribeTheme
 logger = get_logger(__name__)
 
 
-def exit_on_cli_error(exc: BaseException, *, log_unexpected: bool = True) -> NoReturn:
+def exit_on_cli_error(
+    exc: BaseException,
+    *,
+    log_unexpected: bool = True,
+    recovery_hint: str | None = None,
+) -> NoReturn:
     """Print a user-facing message and exit with code 1.
 
     On Windows we force a final input() so desktop/shortcut launches
     never silently disappear on error.
     """
     if isinstance(exc, ScribeError):
-        console.print(f"\n[bold {ScribeTheme.ERROR}]Error:[/bold {ScribeTheme.ERROR}] {exc}")
+        console.print(
+            f"\n[bold {ScribeTheme.ERROR}]Error:[/bold {ScribeTheme.ERROR}] {escape(str(exc))}"
+        )
         if exc.context:
             user_ctx = {k: v for k, v in exc.context.items() if k != "phase"}
             if user_ctx:
-                console.print(f"[dim]Context: {user_ctx}[/dim]")
+                console.print(f"[dim]Context: {escape(str(user_ctx))}[/dim]")
     else:
         console.print(
-            f"\n[bold {ScribeTheme.ERROR}]Unexpected error:[/bold {ScribeTheme.ERROR}] {exc}"
+            f"\n[bold {ScribeTheme.ERROR}]Unexpected error:[/bold {ScribeTheme.ERROR}] "
+            f"{escape(str(exc))}"
         )
         if log_unexpected:
             logger.exception("Unexpected CLI error")
@@ -39,10 +48,13 @@ def exit_on_cli_error(exc: BaseException, *, log_unexpected: bool = True) -> NoR
     log_file = get_current_log_file()
     if log_file is not None:
         console.print(Text(f"Log file: {log_file}", style="dim"), soft_wrap=True)
-    console.print(
-        "[dim]Next: run `scribe doctor` to check setup. "
-        "Use `scribe support-bundle` when sharing diagnostics.[/dim]"
-    )
+    if recovery_hint is None:
+        console.print(
+            "[dim]Next: run `scribe doctor` to check setup. "
+            "Use `scribe support-bundle` when sharing diagnostics.[/dim]"
+        )
+    else:
+        console.print(Text(recovery_hint, style="dim"), soft_wrap=True)
 
     if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
         # Guarantees the window stays for desktop/taskbar .lnk launches; a

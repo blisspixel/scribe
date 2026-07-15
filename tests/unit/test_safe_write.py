@@ -4,8 +4,6 @@ Unit tests for safe file writing utilities.
 Tests atomic writes, safe copies, and backup functionality.
 """
 
-import os
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -179,19 +177,36 @@ class TestAtomicWriteChaos:
         assert target.read_text(encoding="utf-8") == "original transcript"
         assert list(tmp_path.glob(".*.tmp")) == []
 
-    def test_rename_failure_preserves_original_on_posix(self, tmp_path) -> None:
-        if os.name == "nt":
-            pytest.skip("Windows removes the target before rename")
-
+    def test_replacement_failure_preserves_original(self, tmp_path) -> None:
         target = tmp_path / "transcript.txt"
         target.write_text("keep this", encoding="utf-8")
 
-        with patch.object(Path, "rename", side_effect=OSError("simulated rename failure")):
+        with patch(
+            "scribe.utils.safe_write.os.replace",
+            side_effect=OSError("simulated replacement failure"),
+        ):
             with pytest.raises(OSError):
                 atomic_write(target, "should not land")
 
         assert target.read_text(encoding="utf-8") == "keep this"
-        assert list(tmp_path.glob("*.tmp")) == []
+        assert list(tmp_path.glob(".*.tmp")) == []
+
+    def test_context_replacement_failure_preserves_original(self, tmp_path) -> None:
+        target = tmp_path / "transcript.txt"
+        target.write_text("stable original", encoding="utf-8")
+
+        with (
+            patch(
+                "scribe.utils.safe_write.os.replace",
+                side_effect=OSError("simulated replacement failure"),
+            ),
+            pytest.raises(OSError, match="simulated replacement failure"),
+            safe_write_context(target) as handle,
+        ):
+            handle.write("replacement")
+
+        assert target.read_text(encoding="utf-8") == "stable original"
+        assert list(tmp_path.glob(".*.tmp")) == []
 
     def test_context_manager_failure_preserves_existing_file(self, tmp_path) -> None:
         target = tmp_path / "transcript.txt"
@@ -276,6 +291,22 @@ class TestSafeCopy:
 
         with pytest.raises(FileNotFoundError):
             safe_copy(src, dst)
+
+    def test_safe_copy_replacement_failure_preserves_destination(self, tmp_path) -> None:
+        src = tmp_path / "source.txt"
+        dst = tmp_path / "dest.txt"
+        src.write_text("new content", encoding="utf-8")
+        dst.write_text("stable destination", encoding="utf-8")
+
+        with patch(
+            "scribe.utils.safe_write.os.replace",
+            side_effect=OSError("simulated replacement failure"),
+        ):
+            with pytest.raises(OSError, match="Failed to copy file"):
+                safe_copy(src, dst)
+
+        assert dst.read_text(encoding="utf-8") == "stable destination"
+        assert list(tmp_path.glob(".*.tmp")) == []
 
 
 class TestBackupFile:

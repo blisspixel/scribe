@@ -78,6 +78,100 @@ def test_url_command_success(tmp_path: Path) -> None:
     transcriber.transcribe.assert_called_once()
 
 
+def test_url_post_save_output_failure_does_not_rewrite_success(tmp_path: Path) -> None:
+    downloaded_file = tmp_path / "downloaded.mp3"
+    downloaded_file.write_text("audio", encoding="utf-8")
+    transcript_path = tmp_path / "downloaded_transcript.txt"
+    transcript_path.write_text("transcript text", encoding="utf-8")
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    config = _make_config(tmp_path)
+
+    def fail_output_heading(*args, **_kwargs):
+        if args and "Output Files:" in str(args[0]):
+            raise BrokenPipeError("closed terminal")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch(
+            "scribe.utils.validation.validate_media_url",
+            return_value="https://example.com/video",
+        ),
+        patch("scribe.core.downloader.URLDownloader") as downloader_class,
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.console.print", side_effect=fail_output_heading),
+        patch("scribe.cli.main.logger.warning") as warning_log,
+    ):
+        downloader_class.return_value.download.return_value = SimpleNamespace(
+            file_path=downloaded_file,
+            title="Example Video",
+            duration=120.0,
+        )
+        result = CliRunner().invoke(
+            app,
+            ["url", "https://example.com/video", "--no-joke", "--no-notes", "--no-meme"],
+        )
+
+    assert result.exit_code == 1
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "success"
+    assert data["success"] is True
+    assert any("already saved" in str(call) for call in warning_log.call_args_list)
+
+
+def test_transcribe_post_save_output_failure_does_not_rewrite_success(tmp_path: Path) -> None:
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio", encoding="utf-8")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text", encoding="utf-8")
+    progress = Mock(frame_delay=0.001)
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+    config = _make_config(tmp_path)
+
+    def fail_output_heading(*args, **_kwargs):
+        if args and "Output Files:" in str(args[0]):
+            raise BrokenPipeError("closed terminal")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.validate_file_path", return_value=audio_file),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.unified_progress.UnifiedProgress", return_value=progress),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.console.print", side_effect=fail_output_heading),
+        patch("scribe.cli.main.logger.warning") as warning_log,
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "transcribe",
+                str(audio_file),
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "success"
+    assert data["success"] is True
+    assert any("already saved" in str(call) for call in warning_log.call_args_list)
+
+
 def test_transcribe_failure_persists_unique_session_summary(tmp_path: Path) -> None:
     runner = CliRunner()
     audio_file = tmp_path / "meeting.mp3"
@@ -339,6 +433,70 @@ def test_batch_stop_on_error_does_not_attempt_later_files(tmp_path: Path) -> Non
     assert "Failed: 1" in result.stdout
 
 
+def test_batch_missing_input_stop_is_not_reported_as_unexpected(tmp_path: Path) -> None:
+    missing = tmp_path / "missing_[bold].mp3"
+
+    with patch("scribe.cli.errors.logger.exception") as unexpected_log:
+        result = CliRunner().invoke(
+            app,
+            [
+                "batch",
+                str(missing),
+                "--stop-on-error",
+                "--no-docx",
+                "--no-joke",
+                "--no-notes",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert str(missing) in result.stdout
+    assert "Unexpected error" not in result.stdout
+    assert "scribe doctor" not in result.stdout
+    unexpected_log.assert_not_called()
+
+
+def test_batch_expected_validation_errors_render_literal_text(tmp_path: Path) -> None:
+    audio_file = tmp_path / "meeting.mp3"
+    audio_file.write_text("audio", encoding="utf-8")
+    runner = CliRunner()
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=_make_config(tmp_path)),
+        patch("scribe.cli.errors.logger.exception") as unexpected_log,
+    ):
+        language_result = runner.invoke(
+            app,
+            ["batch", str(audio_file), "--language", "[/]"],
+        )
+
+    assert language_result.exit_code == 1
+    assert "Invalid language code: [/]" in language_result.stdout
+    assert language_result.exception is not None
+    assert type(language_result.exception).__name__ == "SystemExit"
+    unexpected_log.assert_not_called()
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=_make_config(tmp_path)),
+        patch(
+            "scribe.utils.vocabulary.CustomVocabulary.load",
+            side_effect=ValueError("invalid [/] glossary"),
+        ),
+        patch("scribe.cli.errors.logger.exception") as unexpected_log,
+    ):
+        vocabulary_result = runner.invoke(
+            app,
+            ["batch", str(audio_file), "--vocabulary", str(tmp_path / "terms.txt")],
+        )
+
+    assert vocabulary_result.exit_code == 1
+    assert "Failed to load vocabulary: invalid [/] glossary" in vocabulary_result.stdout
+    assert vocabulary_result.exception is not None
+    assert type(vocabulary_result.exception).__name__ == "SystemExit"
+    unexpected_log.assert_not_called()
+
+
 def test_batch_transcribe_marks_artifact_failure_partial(tmp_path: Path) -> None:
     runner = CliRunner()
     audio_file = tmp_path / "meeting.mp3"
@@ -484,6 +642,76 @@ def test_record_only_persists_session_with_log_correlation(tmp_path: Path) -> No
     assert data["source_file"] == str(recording_path)
     assert data["log_file"] == str(log_path)
     assert f"Session summary: {summaries[0]}" in result.stdout
+
+
+def test_record_summary_notification_failure_preserves_saved_success(tmp_path: Path) -> None:
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+
+    def fail_summary_notification(*args, **_kwargs):
+        if args and str(args[0]).startswith("Session summary:"):
+            raise BrokenPipeError("closed terminal")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.console.print", side_effect=fail_summary_notification),
+        patch("scribe.cli.main.logger.warning") as warning_log,
+    ):
+        result = CliRunner().invoke(
+            app,
+            ["record", "--name", "Weekly Sync", "--no-auto-transcribe"],
+        )
+
+    assert result.exit_code == 0
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "success"
+    assert data["success"] is True
+    assert warning_log.call_count == 1
+
+
+def test_record_post_save_output_failure_does_not_rewrite_success(tmp_path: Path) -> None:
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    def fail_output_heading(*args, **_kwargs):
+        if args and "Output:" in str(args[0]):
+            raise BrokenPipeError("closed terminal")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+        patch("scribe.cli.main.console.print", side_effect=fail_output_heading),
+        patch("scribe.cli.main.logger.warning") as warning_log,
+    ):
+        result = CliRunner().invoke(
+            app,
+            ["record", "--name", "Weekly Sync", "--no-joke", "--no-meme"],
+        )
+
+    assert result.exit_code == 1
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "success"
+    assert data["success"] is True
+    assert any("already saved" in str(call) for call in warning_log.call_args_list)
 
 
 def test_record_failure_before_media_persists_started_session(tmp_path: Path) -> None:
@@ -1314,6 +1542,78 @@ def test_doctor_command_warning_summary_is_clear() -> None:
     assert "Ready with notes" not in result.stdout
 
 
+def test_doctor_renders_complete_literal_diagnostic_text() -> None:
+    diagnostics = Mock()
+    diagnostics.run_all_checks.return_value = [
+        SimpleNamespace(
+            name="Probe [name]",
+            status="pass",
+            message="[red]literal[/red] C:\\Audio[/] decisive-tail-after-forty-characters",
+            fix_suggestion=None,
+        )
+    ]
+    diagnostics.get_summary.return_value = (1, 0, 0)
+
+    with patch("scribe.utils.diagnostics.SystemDiagnostics", return_value=diagnostics):
+        result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "Probe [name]" in result.stdout
+    assert "[red]literal[/red]" in result.stdout
+    assert "C:\\Audio[/]" in result.stdout
+    assert "characters" in result.stdout
+    assert "1 check)" in result.stdout
+    assert "1 checks" not in result.stdout
+
+
+def test_doctor_warning_and_failure_text_cannot_inject_markup() -> None:
+    diagnostics = Mock()
+    diagnostics.run_all_checks.return_value = [
+        SimpleNamespace(
+            name="Warning [path]",
+            status="warn",
+            message="C:\\Audio[/] warning",
+            fix_suggestion="Use [literal] path",
+        ),
+        SimpleNamespace(
+            name="Failure [path]",
+            status="fail",
+            message="C:\\Output[/] failure",
+            fix_suggestion="Fix [literal] path",
+        ),
+    ]
+    diagnostics.get_summary.return_value = (0, 1, 1)
+
+    with patch("scribe.utils.diagnostics.SystemDiagnostics", return_value=diagnostics):
+        result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    for literal in (
+        "Warning [path]",
+        "C:\\Audio[/] warning",
+        "Use [literal] path",
+        "Failure [path]",
+        "C:\\Output[/] failure",
+        "Fix [literal] path",
+    ):
+        assert literal in result.stdout
+
+
+def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
+    runner = CliRunner()
+
+    for command in ("transcribe", "url", "record", "batch", "music"):
+        result = runner.invoke(app, [command, "--help"])
+        linear_output = result.stdout.replace("│", " ").replace("|", " ")
+        normalized_output = " ".join(linear_output.split())
+        assert result.exit_code == 0
+        assert "auto/local" in normalized_output
+        assert "$0 local" in normalized_output
+        assert "GPU or CPU" in normalized_output
+        assert "paid cloud" in normalized_output
+        assert "local (GPU)" not in result.stdout
+
+
 def test_health_check_success() -> None:
     runner = CliRunner()
     status = SimpleNamespace(is_healthy=True, response_time_ms=123.0, error_message=None)
@@ -1376,6 +1676,39 @@ def test_support_bundle_command_success(tmp_path: Path) -> None:
     assert "Recent log metadata" in result.stdout
     assert "Log contents are not included" in result.stdout
     assert "Review the file before sharing" in result.stdout
+
+
+def test_support_bundle_command_renders_literal_location(tmp_path: Path) -> None:
+    bundle_path = tmp_path / "support_[bold red]literal[/bold red].json"
+
+    with patch(
+        "scribe.utils.support_bundle.generate_support_bundle_cli",
+        return_value=bundle_path,
+    ):
+        result = CliRunner().invoke(app, ["support-bundle", "--output", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert str(bundle_path) in result.stdout
+
+
+def test_support_bundle_failure_has_context_aware_recovery(tmp_path: Path) -> None:
+    with (
+        patch(
+            "scribe.utils.support_bundle.generate_support_bundle_cli",
+            side_effect=OSError("disk [/] full"),
+        ),
+        patch("scribe.cli.errors.get_current_log_file", return_value=None),
+    ):
+        result = CliRunner().invoke(app, ["support-bundle", "--output", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert result.stdout.count("Unexpected error:") == 1
+    assert "disk [/] full" in result.stdout
+    assert "Check the error above and output-directory permissions" in result.stdout
+    assert "If a log path is shown, inspect it" in result.stdout
+    assert "Log file:" not in result.stdout
+    assert "Failed to create support bundle" not in result.stdout
+    assert "Use `scribe support-bundle`" not in result.stdout
 
 
 def test_clean_command_analyze_mode(tmp_path: Path) -> None:

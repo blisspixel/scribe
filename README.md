@@ -945,9 +945,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1512 passed, 2 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1612 passed, 12 skipped, 27 deselected, 83.07% line coverage
-- Current collection: 1651 assertion-based tests
+- Latest CI-safe unit matrix: 1531 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1634 passed, 11 skipped, 27 deselected, 83.41% line coverage
+- Current collection: 1672 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1118,7 +1118,8 @@ shareable bundle contains only a redacted session projection and opaque log
 metadata. Structured session filenames, meeting names, artifact paths, log
 filenames, and log contents are excluded. Redacted error and diagnostic text is
 retained because it is needed for troubleshooting, so review the JSON before
-sharing it.
+sharing it. Each invocation reserves a unique destination before collecting data,
+so concurrent or same-second support runs cannot overwrite an earlier bundle.
 
 See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 

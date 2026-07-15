@@ -4,9 +4,9 @@
 
 As of 2026-07-15:
 
-- Pytest collection: 1651 assertion-based tests across unit, integration, e2e, and manual coverage.
-- Latest local CI-safe unit matrix: 1512 passed, 2 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1612 passed, 12 skipped, 27 deselected, and 83.07 percent coverage.
+- Pytest collection: 1672 assertion-based tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit matrix: 1531 passed, 1 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1634 passed, 11 skipped, 27 deselected, and 83.41 percent coverage.
 - Enforced project coverage floor: 80 percent.
 - Standard quality gates: Ruff check, Ruff format check, mypy strict, 80 percent coverage, root-wheel artifact and isolated-install verification, build, and pip-audit with the documented CI ignores.
 
@@ -39,6 +39,7 @@ uv run pytest tests/integration/test_converter.py -q
 - Voice tray, shortcut, and startup logic.
 - Vocabulary parsing and transcript output helpers.
 - Fault-injection coverage for atomic writes and provider circuit breaker paths.
+- Post-save outcome preservation, staged WAV replacement, exclusive support-bundle allocation, and literal CLI error rendering.
 
 ## Known Gaps
 

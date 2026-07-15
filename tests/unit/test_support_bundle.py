@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from scribe.utils import support_bundle
 
 _REDACTED = "[" + "REDACTED]"
@@ -394,17 +396,61 @@ def test_save_support_bundle_uses_pretty_writer(tmp_path: Path) -> None:
     mock_atomic_write.assert_called_once()
 
 
-def test_generate_support_bundle_cli_creates_timestamped_file(tmp_path: Path) -> None:
-    saved_path = tmp_path / "scribe_support_bundle_20260508_000000.json"
-
+def test_generate_support_bundle_cli_avoids_same_second_collisions(tmp_path: Path) -> None:
     with (
-        patch("scribe.utils.support_bundle.create_support_bundle", return_value={"ok": True}),
-        patch("scribe.utils.support_bundle.save_support_bundle") as mock_save,
+        patch(
+            "scribe.utils.support_bundle.create_support_bundle",
+            side_effect=[{"sequence": 1}, {"sequence": 2}],
+        ),
         patch("scribe.utils.support_bundle.datetime") as mock_datetime,
     ):
         mock_datetime.now.return_value.strftime.return_value = "20260508_000000"
-        mock_save.return_value = saved_path
-        result = support_bundle.generate_support_bundle_cli(tmp_path)
+        first = support_bundle.generate_support_bundle_cli(tmp_path)
+        second = support_bundle.generate_support_bundle_cli(tmp_path)
 
-    assert result == saved_path
-    mock_save.assert_called_once()
+    assert first != second
+    assert first.name.startswith("scribe_support_bundle_20260508_000000_")
+    assert second.name.startswith("scribe_support_bundle_20260508_000000_")
+    assert json.loads(first.read_text(encoding="utf-8"))["sequence"] == 1
+    assert json.loads(second.read_text(encoding="utf-8"))["sequence"] == 2
+    assert len(list(tmp_path.glob("scribe_support_bundle_*.json"))) == 2
+
+
+def test_generate_support_bundle_cli_cleans_reservation_on_failure(tmp_path: Path) -> None:
+    with patch(
+        "scribe.utils.support_bundle.create_support_bundle",
+        side_effect=RuntimeError("diagnostics unavailable"),
+    ):
+        with pytest.raises(RuntimeError, match="diagnostics unavailable"):
+            support_bundle.generate_support_bundle_cli(tmp_path)
+
+    assert list(tmp_path.glob("scribe_support_bundle_*.json")) == []
+
+
+def test_generate_support_bundle_cli_close_failure_cleans_reservation(tmp_path: Path) -> None:
+    with patch("scribe.utils.support_bundle.os.close", side_effect=OSError("close failed")):
+        with pytest.raises(OSError, match="close failed"):
+            support_bundle.generate_support_bundle_cli(tmp_path)
+
+    assert list(tmp_path.glob("scribe_support_bundle_*.json")) == []
+
+
+def test_generate_support_bundle_cli_cleanup_failure_is_logged(tmp_path: Path) -> None:
+    with (
+        patch(
+            "scribe.utils.support_bundle.create_support_bundle",
+            side_effect=RuntimeError("diagnostics unavailable"),
+        ),
+        patch.object(Path, "unlink", side_effect=OSError("cleanup denied")),
+        patch("scribe.utils.support_bundle.logger.warning") as warning_log,
+    ):
+        with pytest.raises(RuntimeError, match="diagnostics unavailable"):
+            support_bundle.generate_support_bundle_cli(tmp_path)
+
+    reservations = list(tmp_path.glob("scribe_support_bundle_*.json"))
+    assert len(reservations) == 1
+    assert any(
+        "Could not remove incomplete support-bundle reservation" in str(call)
+        for call in warning_log.call_args_list
+    )
+    reservations[0].unlink()

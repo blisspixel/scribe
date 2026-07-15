@@ -37,6 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
 - Upgraded support bundles to read bounded durable session summaries across CLI processes and include opaque recent-log metadata. Log filenames, paths, and contents are excluded, and the CLI now asks users to review the redacted JSON before sharing it.
 - Removed the unused parallel `RunContext` implementation so terminal evidence has one maintained session model and archive format.
+- Standardized method help across file, URL, recording, batch, and music commands so `auto/local` is explicitly `$0` local on GPU or CPU and `openai` is explicitly paid cloud.
+- Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
@@ -60,6 +62,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Restored clean Ruff format and lint gates, converted hardware-dependent boolean scripts from misleading pytest tests into explicit standalone checks, and raised meaningful CI-safe unit coverage above the 80 percent floor.
 - CI now syncs from the committed lockfile and includes `toolchain-check` in the aggregate pass/fail decision.
 - Synchronized the 2.8.1 workspace version in `uv.lock` with package metadata.
+- Replaced Windows delete-before-rename behavior in every safe-write path with atomic same-filesystem replacement. Replacement failure preserves the prior file, and the documentation no longer overstates power-loss durability.
+- Staged and verified WAV reconversion before atomic replacement, preserving an earlier usable WAV across analysis, conversion, verification, descriptor, cleanup, and replacement failures.
+- Prevented post-save terminal failures from rewriting successful or partial file, URL, or recording evidence as failed. Summary notification remains best-effort and cleanup or presentation failures stay visible in logs.
+- Made expected batch exits bypass unexpected-error reporting, escaped dynamic batch and shared error text, and preserved complete literal diagnostic messages without fixed-width truncation or Rich markup injection.
+- Reserved support-bundle destinations exclusively so concurrent and same-second runs cannot overwrite one another, cleaned failed reservations, and replaced circular failure advice with context-aware recovery.
 
 ### Security
 - Raised the setuptools build requirement and lock to 83.0.0, resolving `PYSEC-2026-3447` in the build toolchain.

@@ -700,6 +700,16 @@ class TestSystemDiagnostics:
         assert warn_count == 1
         assert fail_count == 1
 
+    def test_missing_psutil_is_a_visible_warning(self):
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict("sys.modules", {"psutil": None}):
+            result = diagnostics.check_system_resources()
+
+        assert result.status == "warn"
+        assert result.message == "Resource monitor unavailable (psutil not installed)"
+        assert result.fix_suggestion == "Reinstall Scribe; psutil is a required dependency"
+
 
 class TestLocalReadiness:
     """The $0-local readiness assessment used by doctor/info."""
