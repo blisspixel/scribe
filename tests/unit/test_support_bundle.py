@@ -164,6 +164,7 @@ def _write_session_summary(
     success: bool,
     error_message: str | None = None,
     log_file: Path | None = None,
+    outcome: str | None = None,
 ) -> None:
     path.write_text(
         json.dumps(
@@ -173,6 +174,7 @@ def _write_session_summary(
                 "start_time": "2026-07-15T12:00:00",
                 "end_time": "2026-07-15T12:01:00",
                 "success": success,
+                **({"outcome": outcome} if outcome is not None else {}),
                 "error_message": error_message,
                 "transcription_method": "local",
                 "model_used": "large-v3",
@@ -214,6 +216,44 @@ def test_get_run_history_summary_reads_durable_sessions_newest_first(tmp_path: P
     assert "Private Board Meeting" not in serialized
     assert "private-recording.wav" not in serialized
     assert "private-transcript.txt" not in serialized
+
+
+def test_run_history_preserves_precise_terminal_outcomes(tmp_path: Path) -> None:
+    cases = [
+        ("success", True),
+        ("instrumental", True),
+        ("partial", False),
+        ("failed", False),
+    ]
+    for index, (outcome, success) in enumerate(cases):
+        path = tmp_path / f"{outcome}_session_summary.json"
+        _write_session_summary(
+            path,
+            session_id=f"session_20260715_12000{index}_deadbee{index}",
+            success=success,
+            error_message="incomplete" if not success else None,
+            outcome=outcome,
+        )
+        os.utime(path, (index + 1, index + 1))
+
+    history = support_bundle.get_run_history_summary(max_runs=10, output_dir=tmp_path)
+
+    assert {run["outcome"] for run in history["recent_runs"]} == {
+        "success",
+        "instrumental",
+        "partial",
+        "failed",
+    }
+    assert [run["outcome"] for run in history["failed_runs"]] == ["failed"]
+    assert [run["outcome"] for run in history["partial_runs"]] == ["partial"]
+    assert [run["outcome"] for run in history["instrumental_runs"]] == ["instrumental"]
+    assert history["summary"] == {
+        "total": 4,
+        "recent_count": 4,
+        "failed_count": 1,
+        "partial_count": 1,
+        "instrumental_count": 1,
+    }
 
 
 def test_shareable_session_hashes_legacy_ids_and_removes_local_error_paths() -> None:

@@ -6,6 +6,7 @@ transcription, recording, and system information.
 """
 
 import os
+import shutil
 import sys
 import time
 import warnings
@@ -25,7 +26,7 @@ from scribe.core.transcriber import Transcriber
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
 from scribe.models.gpu import GPUConfig
-from scribe.models.session import TranscriptionSession
+from scribe.models.session import SessionOutcome, TranscriptionSession
 from scribe.models.transcript import Transcript
 from scribe.utils.branding import brand_header_markup
 from scribe.utils.docx_converter import txt_to_docx
@@ -34,6 +35,7 @@ from scribe.utils.joke_generator import (
     generate_transcript_joke,
 )
 from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
+from scribe.utils.safe_write import atomic_write
 from scribe.utils.theme import ScribeTheme, file_uri
 from scribe.utils.transcript_loader import is_supported_transcript_file, load_transcript_text
 from scribe.utils.validation import sanitize_meeting_name, validate_file_path
@@ -56,6 +58,7 @@ class MusicResult(TypedDict, total=False):
     status: str
     lyrics: Path
     error: str
+    summary: Path
 
 
 def _write_structured_outputs(
@@ -152,14 +155,17 @@ def _persist_failed_session(
         session.complete(success=False, error_message=_failure_message(error))
         summary_path = session.save_summary(output_dir)
     except Exception as persistence_error:
+        issue = f"Failure summary could not be saved: {_failure_message(persistence_error)}"
         with suppress(Exception):
             logger.warning(
                 "Could not persist failed session summary: %s", persistence_error, exc_info=True
             )
+        with suppress(Exception):
+            console.print(f"[bold red]{escape(issue)}[/bold red]", soft_wrap=True)
         return None
 
     try:
-        console.print(f"Failure summary: {escape(str(summary_path))}")
+        console.print(f"Failure summary: {escape(str(summary_path))}", soft_wrap=True)
     except Exception as notification_error:
         with suppress(Exception):
             logger.warning(
@@ -168,6 +174,118 @@ def _persist_failed_session(
                 notification_error,
             )
     return summary_path
+
+
+def _add_music_issue(result: MusicResult, message: str) -> None:
+    """Make a track result incomplete while preserving its primary failure."""
+    current_error = result.get("error", "").strip()
+    if message not in current_error:
+        result["error"] = f"{current_error}; {message}" if current_error else message
+    if result.get("status") in {"success", "instrumental"}:
+        result["status"] = "partial"
+
+
+def _persist_music_session(
+    session: TranscriptionSession,
+    result: MusicResult,
+    output_dir: Path,
+) -> Path | None:
+    """Persist one terminal track result without hiding summary-write failures."""
+    lyrics_path = result.get("lyrics")
+    if lyrics_path is not None and session.transcript_file != lyrics_path:
+        session.add_file(lyrics_path, "transcript")
+
+    status = result.get("status", "failed")
+    outcome_by_status: dict[str, SessionOutcome] = {
+        "success": "success",
+        "instrumental": "instrumental",
+        "partial": "partial",
+        "failed": "failed",
+    }
+    outcome = outcome_by_status.get(status, "failed")
+    error_message = result.get("error")
+    session.complete(
+        success=status in {"success", "instrumental"},
+        error_message=error_message,
+        outcome=outcome,
+    )
+    try:
+        summary_path = session.save_summary(output_dir)
+    except Exception as error:
+        issue = f"Session summary could not be saved: {_failure_message(error)}"
+        _add_music_issue(result, issue)
+        failed_outcome = outcome_by_status.get(result.get("status", "failed"), "failed")
+        session.complete(
+            success=False,
+            error_message=result.get("error"),
+            outcome=failed_outcome,
+        )
+        with suppress(Exception):
+            logger.error(issue, exc_info=True)
+        with suppress(Exception):
+            console.print(f"  [yellow]{escape(issue)}[/yellow]")
+        return None
+
+    result["summary"] = summary_path
+    label = "Failure summary" if status == "failed" else "Evidence"
+    try:
+        console.print(f"  {label}: {escape(str(summary_path))}", soft_wrap=True)
+    except Exception as notification_error:
+        with suppress(Exception):
+            logger.warning(
+                "Music session summary was saved to %s but could not be shown: %s",
+                summary_path,
+                notification_error,
+            )
+    return summary_path
+
+
+def _write_instrumental_marker(audio_path: Path, metadata: dict[str, Any]) -> Path:
+    """Write the same truthful marker for every confirmed instrumental path."""
+    return _write_music_lyrics(
+        audio_path,
+        metadata,
+        "[Instrumental - No Speech Detected]",
+    )
+
+
+def _write_music_lyrics(audio_path: Path, metadata: dict[str, Any], lyrics: str) -> Path:
+    """Atomically replace a lyrics output without following an existing symlink."""
+    lines = [f"Track: {audio_path.stem}"]
+    duration_formatted = metadata.get("duration_formatted")
+    if duration_formatted:
+        lines.append(f"Duration: {duration_formatted}")
+    tempo = metadata.get("tempo")
+    if isinstance(tempo, int | float) and tempo > 0:
+        lines.append(f"Tempo: {tempo:.0f} BPM")
+    key = metadata.get("key")
+    if isinstance(key, str) and key and key != "Unknown":
+        lines.append(f"Key: {key}")
+    if lyrics == "[Instrumental - No Speech Detected]":
+        genre_hints = metadata.get("genre_hints")
+        if isinstance(genre_hints, list) and genre_hints:
+            lines.append(f"Style: {', '.join(str(hint) for hint in genre_hints)}")
+    lines.extend(["", lyrics])
+
+    lyrics_path = audio_path.parent / f"{audio_path.stem}_lyrics.txt"
+    lyrics_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(lyrics_path, "\n".join(lines) + "\n", encoding="utf-8")
+    return lyrics_path
+
+
+def _require_music_transcript_output(
+    transcript_path: Path | None,
+    *,
+    context: str,
+) -> Path:
+    """Reject missing transcriber output before it reaches readers or cleanup."""
+    if transcript_path is None:
+        raise TranscriptionError(f"{context} produced no transcript output")
+
+    output_path = Path(transcript_path)
+    if not output_path.is_file():
+        raise TranscriptionError(f"{context} did not create transcript output: {output_path}")
+    return output_path
 
 
 # Custom help formatter that's minimal and clean
@@ -1306,9 +1424,13 @@ def record(
     if check:
         raise typer.Exit(_run_obs_preflight())
 
+    session: TranscriptionSession | None = None
+    session_output_dir: Path | None = None
+    incomplete_run = False
     try:
         # Load configuration
         config = ScribeConfig()
+        session_output_dir = config.output_folder
 
         # Display header first
         _show_command_banner(console)
@@ -1346,17 +1468,26 @@ def record(
         # Setup logging
         logger = setup_logging(name, config.log_folder)
 
+        # Start durable evidence before OBS or post-processing can fail.
+        session = TranscriptionSession.create(name)
+        session.log_file = get_current_log_file()
+
         # Show meeting name
         console.print(f"\n[cyan]Meeting:[/cyan] [white]{name}[/white]\n")
 
         # Record
         recorder = OBSRecorder(config)
         recording_path = recorder.record(name)
+        session.add_file(recording_path, "source")
 
-        console.print("\n[bold green]Recording Complete![/bold green]")
+        console.print("\n[bold green]Media capture complete[/bold green]")
         console.print(f"File: {recording_path}\n")
 
         if not auto_transcribe:
+            session.complete(success=True)
+            summary_path = session.save_summary(config.output_folder)
+            console.print(f"Session summary: {escape(str(summary_path))}", soft_wrap=True)
+
             # For non-auto case on shortcut launch, pause here.
             if sys.platform == "win32" and os.environ.get("SCRIBE_FROM_SHORTCUT"):
                 # Cosmetic "keep the window open" pause; the only ways input() can
@@ -1370,9 +1501,7 @@ def record(
         # progress bars for each step which provides more detail during the workflow
         if auto_transcribe:
             console.print("[cyan]Starting automatic transcription...[/cyan]\n")
-
-            session = TranscriptionSession.create(name)
-            session.add_file(recording_path, "source")
+            artifact_errors: list[str] = []
 
             # Determine method and convert
             transcriber = Transcriber(config)
@@ -1394,23 +1523,18 @@ def record(
                     console.print()
                     console.print("[cyan]Transcribing with local NVIDIA GPU...[/cyan]")
                 except ProcessError as e:
-                    console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                     console.print(
                         "[yellow]Tip: Check that ffmpeg is installed and the recording file is valid[/yellow]"
                     )
-                    raise typer.Exit(1)
+                    raise TranscriptionError(f"Recording conversion failed: {e}") from e
                 except Exception as e:
-                    console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
-                    raise typer.Exit(1)
+                    raise TranscriptionError(f"Recording conversion failed: {e}") from e
             else:
                 # OpenAI API accepts multiple formats but has 25MB limit
                 try:
                     file_size_mb = recording_path.stat().st_size / (1024 * 1024)
                 except (FileNotFoundError, OSError):
-                    console.print(
-                        f"[bold red]Error:[/bold red] Cannot access recording file: {recording_path}"
-                    )
-                    raise typer.Exit(1)
+                    raise TranscriptionError(f"Cannot access recording file: {recording_path}")
 
                 if file_size_mb > 24:
                     # File too large - compress to MP3 with normalized audio
@@ -1431,23 +1555,23 @@ def record(
                         compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
                         if compressed_size_mb > 24:
                             console.print(
-                                f"[bold red]Error:[/bold red] Compressed file still too large ({compressed_size_mb:.1f}MB)"
-                            )
-                            console.print(
                                 "[yellow]Tip: Try using local GPU transcription for very long recordings[/yellow]"
                             )
-                            raise typer.Exit(1)
+                            raise TranscriptionError(
+                                "Compressed recording is still too large "
+                                f"({compressed_size_mb:.1f}MB)"
+                            )
 
                         console.print(f"Converted to MP3 ({compressed_size_mb:.1f}MB)")
                     except ProcessError as e:
-                        console.print(f"[bold red]Conversion failed:[/bold red] {e}")
                         console.print(
                             "[yellow]Tip: Check that ffmpeg is installed and the recording file is valid[/yellow]"
                         )
-                        raise typer.Exit(1)
+                        raise TranscriptionError(f"Recording conversion failed: {e}") from e
                     except Exception as e:
-                        console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
-                        raise typer.Exit(1)
+                        if isinstance(e, TranscriptionError):
+                            raise
+                        raise TranscriptionError(f"Recording conversion failed: {e}") from e
                 else:
                     # File size OK - use original recording
                     audio_file = recording_path
@@ -1459,6 +1583,10 @@ def record(
             transcript_path = transcriber.transcribe(
                 audio_file, method=chosen_method, session=session
             )
+            if not transcript_path:
+                raise TranscriptionError("Recording transcription produced no output file")
+            if session.transcript_file != transcript_path:
+                session.add_file(transcript_path, "transcript")
 
             # Structured sidecars (json/vtt/srt/md) so `scribe query` can find these too
             _write_structured_outputs(transcriber, transcript_path, config, None, session)
@@ -1466,40 +1594,55 @@ def record(
             # Generate DOCX
             try:
                 docx_path = txt_to_docx(transcript_path)
+                if not docx_path:
+                    raise RuntimeError("no output file was returned")
                 session.add_file(docx_path, "docx")
             except Exception as e:
-                console.print(f"[yellow]DOCX generation failed: {e}[/yellow]")
+                reason = f"DOCX generation failed: {e}"
+                artifact_errors.append(reason)
+                console.print(f"[yellow]{escape(reason)}[/yellow]")
 
             # Generate meeting notes if enabled
             notes_path = None
-            if _resolve_feature(notes, config.enable_notes) and config.openai_api_key:
-                console.print("[cyan]Generating meeting notes...[/cyan]")
-                try:
-                    from scribe.utils.notes_generator import NotesGenerator
+            notes_requested = _resolve_feature(notes, config.enable_notes)
+            if notes_requested:
+                if config.openai_api_key:
+                    console.print("[cyan]Generating meeting notes...[/cyan]")
+                    try:
+                        from scribe.utils.notes_generator import NotesGenerator
 
-                    notes_generator = NotesGenerator(
-                        api_key=None,  # Let provider factory get the right key
-                        model=config.notes_model,
-                        provider_name=None,  # Will use SCRIBE_NOTES_PROVIDER env var
-                    )
-                    notes_path = notes_generator.generate_notes(transcript_path)
-                    session.add_file(notes_path, "notes")
-                except Exception as e:
-                    logger.error(f"Notes generation failed: {e}")
-                    console.print(f"[yellow]Notes generation failed: {e}[/yellow]")
+                        notes_generator = NotesGenerator(
+                            api_key=None,  # Let provider factory get the right key
+                            model=config.notes_model,
+                            provider_name=None,  # Will use SCRIBE_NOTES_PROVIDER env var
+                        )
+                        notes_path = notes_generator.generate_notes(transcript_path)
+                        if not notes_path:
+                            raise RuntimeError("no output file was returned")
+                        session.add_file(notes_path, "notes")
+                    except Exception as e:
+                        reason = f"Notes generation failed: {e}"
+                        artifact_errors.append(reason)
+                        logger.error(reason)
+                        console.print(f"[yellow]{escape(reason)}[/yellow]")
+                else:
+                    reason = "Notes requested but OPENAI_API_KEY is not configured"
+                    artifact_errors.append(reason)
+                    logger.warning(reason)
+                    console.print(f"[yellow]{reason}[/yellow]")
 
             # Cleanup
-            deleted = transcriber.cleanup_intermediate_files(recording_path.parent)
-            if deleted:
-                logger.debug(f"Cleaned up {len(deleted)} intermediate files")
-
-            # Complete session
-            session.complete(success=True)
-            summary_path = session.save_summary(config.output_folder)
-
-            console.print()
-            console.print("[bold green]Recording & Transcription Complete[/bold green]")
-            console.print()
+            try:
+                deleted = transcriber.cleanup_intermediate_files(recording_path.parent)
+                if deleted:
+                    logger.debug(f"Cleaned up {len(deleted)} intermediate files")
+                    for deleted_file in deleted:
+                        session.add_cleaned_file(Path(deleted_file))
+            except Exception as e:
+                reason = f"Intermediate cleanup failed: {e}"
+                artifact_errors.append(reason)
+                logger.warning(reason)
+                console.print(f"[yellow]{escape(reason)}[/yellow]")
 
             # Debug: Log the resolved feature decisions
             logger.info(
@@ -1534,28 +1677,25 @@ def record(
                             console.print(f"[white]{joke_text}[/white]")
                             console.print()
 
-                            # Add joke to session summary
-                            if summary_path:
-                                import json
-
-                                try:
-                                    with open(summary_path, encoding="utf-8") as f:
-                                        summary_data = json.load(f)
-                                    summary_data["joke"] = {
-                                        "text": joke_text,
-                                        "style": comedy_style,
-                                    }
-                                    with open(summary_path, "w", encoding="utf-8") as f:
-                                        json.dump(summary_data, f, indent=2)
-                                except Exception as e:
-                                    logger.warning(f"Failed to add joke to summary: {e}")
+                            session.joke_data = {
+                                "text": joke_text,
+                                "style": comedy_style,
+                            }
                         else:
-                            logger.warning("Joke generation returned no result")
+                            reason = "Joke generation returned no result"
+                            artifact_errors.append(reason)
+                            logger.warning(reason)
+                            console.print(f"[yellow]{reason}[/yellow]")
                     except Exception as e:
-                        logger.error(f"Joke generation failed: {e}")
-                        console.print(f"[yellow]Joke generation failed: {e}[/yellow]")
+                        reason = f"Joke generation failed: {e}"
+                        artifact_errors.append(reason)
+                        logger.error(reason)
+                        console.print(f"[yellow]{escape(reason)}[/yellow]")
                 else:
-                    logger.info("Skipping joke generation - OpenAI API key not configured")
+                    reason = "Joke requested but OPENAI_API_KEY is not configured"
+                    artifact_errors.append(reason)
+                    logger.warning(reason)
+                    console.print(f"[yellow]{reason}[/yellow]")
 
             # Generate meme from transcript if enabled
             if _resolve_feature(meme, config.enable_meme):
@@ -1581,13 +1721,40 @@ def record(
                             console.print()
                             session.add_file(meme_path, "meme")
                         else:
-                            logger.warning("Failed to generate meme")
-                            console.print("[yellow]Meme generation returned no result[/yellow]")
+                            reason = "Meme generation returned no result"
+                            artifact_errors.append(reason)
+                            logger.warning(reason)
+                            console.print(f"[yellow]{reason}[/yellow]")
                     except Exception as e:
-                        logger.error(f"Meme generation failed: {e}")
-                        console.print(f"[yellow]Meme generation failed: {e}[/yellow]")
+                        reason = f"Meme generation failed: {e}"
+                        artifact_errors.append(reason)
+                        logger.error(reason)
+                        console.print(f"[yellow]{escape(reason)}[/yellow]")
                 else:
-                    logger.info("Skipping meme generation - OpenAI API key not configured")
+                    reason = "Meme requested but OPENAI_API_KEY is not configured"
+                    artifact_errors.append(reason)
+                    logger.warning(reason)
+                    console.print(f"[yellow]{reason}[/yellow]")
+
+            error_message = "; ".join(artifact_errors) if artifact_errors else None
+            session.complete(
+                success=not artifact_errors,
+                error_message=error_message,
+                outcome="partial" if artifact_errors else "success",
+            )
+            summary_path = session.save_summary(config.output_folder)
+            incomplete_run = bool(artifact_errors)
+
+            console.print()
+            if incomplete_run:
+                console.print("[bold yellow]Recording & Transcription Partial[/bold yellow]")
+                console.print("[yellow]Incomplete requested outputs:[/yellow]")
+                for reason in artifact_errors:
+                    console.print(f"  - {escape(reason)}")
+            else:
+                console.print("[bold green]Recording & Transcription Complete[/bold green]")
+            console.print(f"Session summary: {escape(str(summary_path))}", soft_wrap=True)
+            console.print()
 
             # Display output files with clickable links
             # Order: Transcript (txt) -> Document (docx) -> Notes -> Recording -> Meme
@@ -1616,10 +1783,16 @@ def record(
                 with suppress(EOFError, KeyboardInterrupt):
                     input("\n[Shortcut launcher] Press Enter to close this window...")
 
+    except typer.Exit:
+        raise
     except ScribeError as e:
+        _persist_failed_session(session, session_output_dir, e)
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:
+        _persist_failed_session(session, session_output_dir, e)
         exit_on_cli_error(e)
+    if incomplete_run:
+        raise typer.Exit(1)
 
 
 @app.command(name="batch")
@@ -1887,7 +2060,11 @@ def batch_transcribe(
                 # A usable transcript with a missing requested artifact is partial,
                 # not successful. Persist the reason with the session summary.
                 error_message = "; ".join(artifact_errors) or None
-                session.complete(success=not artifact_errors, error_message=error_message)
+                session.complete(
+                    success=not artifact_errors,
+                    error_message=error_message,
+                    outcome="partial" if artifact_errors else "success",
+                )
                 session.save_summary(config.output_folder)
 
                 if artifact_errors:
@@ -2081,11 +2258,18 @@ def music_transcribe(
             vocals_path = None  # Initialize for cleanup in exception handler
             vocal_segments: list[dict[str, float]] | None = None
             slice_dir: Path | None = None  # cleaned in the finally regardless of outcome
+            sliced_paths: list[Path] | None = None
+            transient_outputs: list[Path] = []
             segment_failure_count = 0
+            session: TranscriptionSession | None = None
+            result_start = len(results)
 
             try:
                 # Setup logging for this track
                 logger = setup_logging(track_name, config.log_folder)
+                session = TranscriptionSession.create(track_name)
+                session.log_file = get_current_log_file()
+                session.add_file(audio_path, "source")
 
                 # Display header
                 from scribe.utils.audio import format_duration, get_audio_duration
@@ -2113,11 +2297,16 @@ def music_transcribe(
 
                     if not music_analysis["is_music"]:
                         # Not music - skip processing
+                        not_music_reason = str(music_analysis.get("reason") or "Not music")
                         console.print(" [red]not music[/red]")
-                        console.print(f"  [dim]{music_analysis['reason']}[/dim]")
+                        console.print(f"  [dim]{escape(not_music_reason)}[/dim]")
                         console.print()
                         results.append(
-                            {"file": audio_path.name, "status": "failed", "error": "Not music"}
+                            {
+                                "file": audio_path.name,
+                                "status": "failed",
+                                "error": f"Not music: {not_music_reason}",
+                            }
                         )
                         if not continue_on_error:
                             break
@@ -2203,8 +2392,16 @@ def music_transcribe(
                         for i, slice_path in enumerate(sliced_paths):
                             try:
                                 segment_transcript = transcriber.transcribe(
-                                    slice_path, method=method, music_mode=True
+                                    slice_path,
+                                    method=method,
+                                    music_mode=True,
+                                    session=session,
                                 )
+                                segment_transcript = _require_music_transcript_output(
+                                    segment_transcript,
+                                    context=f"Segment {i + 1} transcription",
+                                )
+                                transient_outputs.append(segment_transcript)
 
                                 # Read segment transcript
                                 with open(segment_transcript, encoding="utf-8") as f:
@@ -2243,9 +2440,6 @@ def music_transcribe(
                                     if not is_hallucination:
                                         all_lyrics.append(segment_text)
 
-                                # Clean up segment transcript
-                                segment_transcript.unlink()
-
                             except Exception as e:
                                 segment_failure_count += 1
                                 logger.warning(
@@ -2268,8 +2462,16 @@ def music_transcribe(
                     else:
                         # Fallback: transcribe full audio
                         transcript_path = transcriber.transcribe(
-                            vocals_path, method=method, music_mode=True
+                            vocals_path,
+                            method=method,
+                            music_mode=True,
+                            session=session,
                         )
+                        transcript_path = _require_music_transcript_output(
+                            transcript_path,
+                            context="Full-track transcription",
+                        )
+                        transient_outputs.append(transcript_path)
 
                         with open(transcript_path, encoding="utf-8") as f:
                             transcript_content = f.read()
@@ -2284,33 +2486,12 @@ def music_transcribe(
                         else:
                             lyrics = transcript_content.strip()
 
-                        # Clean up transcript
-                        if transcript_path.exists():
-                            transcript_path.unlink()
-
                     if segment_failure_count:
                         console.print(
                             f" [yellow]partial ({segment_failure_count} segment failures)[/yellow]"
                         )
                     else:
                         console.print(" [green]done[/green]")
-
-                    # Clean up intermediate files immediately after transcription
-                    # 1. Converted WAV file (created by converter)
-                    wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
-                    if wav_file.exists() and wav_file != audio_path:
-                        wav_file.unlink()
-                        logger.debug(f"Cleaned up converted WAV: {wav_file.name}")
-
-                    # 2. Separated vocals file (created by demucs)
-                    vocals_file = audio_path.parent / f"{track_name}_vocals.wav"
-                    if vocals_file.exists() and vocals_file != audio_path:
-                        vocals_file.unlink()
-                        logger.debug(f"Cleaned up separated vocals: {vocals_file.name}")
-
-                    # Create clean lyrics file
-                    lyrics_path = audio_path.parent / f"{track_name}_lyrics.txt"
-                    lyrics_path.parent.mkdir(parents=True, exist_ok=True)
 
                     # Smart hallucination detection for instrumental music
                     # Whisper sometimes generates common phrases when there's no actual speech
@@ -2387,27 +2568,7 @@ def music_transcribe(
                         )
                         lyrics = "[Instrumental - No Speech Detected]"
 
-                    # Reuse metadata from initial analysis (no need to analyze again)
-                    metadata = music_metadata
-
-                    # Write clean lyrics file with metadata header
-                    with open(lyrics_path, "w", encoding="utf-8") as f:
-                        # Write metadata header (only measurable facts)
-                        f.write(f"Track: {audio_path.stem}\n")
-                        if metadata:
-                            duration_formatted = metadata.get("duration_formatted")
-                            if duration_formatted:
-                                f.write(f"Duration: {duration_formatted}\n")
-                            tempo_value = metadata.get("tempo")
-                            if isinstance(tempo_value, int | float) and tempo_value > 0:
-                                f.write(f"Tempo: {tempo_value:.0f} BPM\n")
-                            key_value = metadata.get("key")
-                            if isinstance(key_value, str) and key_value != "Unknown":
-                                f.write(f"Key: {key_value}\n")
-                        f.write("\n")
-
-                        # Write lyrics
-                        f.write(lyrics + "\n")
+                    lyrics_path = _write_music_lyrics(audio_path, music_metadata, lyrics)
 
                     # Report status based on content
                     if lyrics == "[Instrumental - No Speech Detected]":
@@ -2446,48 +2607,8 @@ def music_transcribe(
                     # Check if it's instrumental (no speech detected)
                     if "No speech detected" in str(e) or "instrumental" in str(e).lower():
                         console.print("  [dim]Cleaning up...[/dim]", end="")
-
-                        # Clean up intermediate files
-                        # 1. Converted WAV file
-                        wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
-                        if wav_file.exists() and wav_file != audio_path:
-                            wav_file.unlink()
-                            logger.debug(f"Cleaned up converted WAV: {wav_file.name}")
-
-                        # 2. Separated vocals file (use vocals_path directly)
-                        if vocals_path and vocals_path.exists() and vocals_path != audio_path:
-                            vocals_path.unlink()
-                            logger.debug(f"Cleaned up separated vocals: {vocals_path.name}")
-
                         console.print(" [green]done[/green]")
-
-                        # Reuse music metadata from initial analysis
-                        metadata = music_metadata
-
-                        # Create instrumental marker file with metadata
-                        lyrics_path = audio_path.parent / f"{track_name}_lyrics.txt"
-                        lyrics_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(lyrics_path, "w", encoding="utf-8") as f:
-                            # Write metadata header
-                            f.write(f"Track: {audio_path.stem}\n")
-                            if metadata:
-                                duration_formatted = metadata.get("duration_formatted")
-                                if duration_formatted:
-                                    f.write(f"Duration: {duration_formatted}\n")
-                                tempo_value = metadata.get("tempo")
-                                if isinstance(tempo_value, int | float):
-                                    f.write(f"Tempo: {tempo_value:.0f} BPM\n")
-                                key_value = metadata.get("key")
-                                if key_value:
-                                    f.write(f"Key: {key_value}\n")
-                                genre_hints = metadata.get("genre_hints")
-                                if isinstance(genre_hints, list):
-                                    f.write(
-                                        f"Style: {', '.join(str(hint) for hint in genre_hints)}\n"
-                                    )
-                            f.write("\n")
-                            f.write("[Instrumental - No Speech Detected]\n")
-
+                        lyrics_path = _write_instrumental_marker(audio_path, music_metadata)
                         console.print(f"  [yellow]INST[/yellow] Instrumental: {lyrics_path.name}")
                         console.print()
 
@@ -2504,17 +2625,16 @@ def music_transcribe(
             except Exception as e:
                 # Check if it's instrumental (expected, not an error)
                 if "No speech detected" in str(e) or "instrumental" in str(e).lower():
-                    # Clean up intermediate files
-                    wav_file = audio_path.parent / f"{track_name}_16k_mono.wav"
-                    if wav_file.exists() and wav_file != audio_path:
-                        wav_file.unlink()
-
-                    if vocals_path and vocals_path.exists() and vocals_path != audio_path:
-                        vocals_path.unlink()
-
+                    lyrics_path = _write_instrumental_marker(audio_path, music_metadata)
                     console.print("  [yellow]INST[/yellow] Instrumental (no vocals detected)")
                     console.print()
-                    results.append({"file": audio_path.name, "status": "instrumental"})
+                    results.append(
+                        {
+                            "file": audio_path.name,
+                            "status": "instrumental",
+                            "lyrics": lyrics_path,
+                        }
+                    )
                 else:
                     # Actual failure
                     logger.error(f"Failed to process {audio_path.name}: {e}")
@@ -2522,16 +2642,64 @@ def music_transcribe(
                     console.print()
                     results.append({"file": audio_path.name, "status": "failed", "error": str(e)})
 
-                if not continue_on_error:
-                    break
             finally:
-                # Remove the per-track temp slice directory on every outcome
-                # (success, instrumental, or failure), so a many-file run does not
-                # accumulate vocal_slices_* directories.
-                if slice_dir and slice_dir.exists():
-                    import shutil
+                if len(results) == result_start:
+                    results.append(
+                        {
+                            "file": audio_path.name,
+                            "status": "failed",
+                            "error": "Track ended without a terminal result",
+                        }
+                    )
 
-                    shutil.rmtree(slice_dir, ignore_errors=True)
+                terminal_result = results[-1]
+                cleanup_errors: list[str] = []
+                final_paths = {audio_path}
+                terminal_lyrics = terminal_result.get("lyrics")
+                if terminal_lyrics is not None:
+                    final_paths.add(terminal_lyrics)
+
+                cleanup_candidates = list(transient_outputs)
+                if session is not None and session.audio_file is not None:
+                    cleanup_candidates.append(session.audio_file)
+                if vocals_path is not None:
+                    cleanup_candidates.append(vocals_path)
+
+                seen_cleanup_paths: set[Path] = set()
+                for cleanup_path in cleanup_candidates:
+                    if cleanup_path in final_paths or cleanup_path in seen_cleanup_paths:
+                        continue
+                    seen_cleanup_paths.add(cleanup_path)
+                    try:
+                        if cleanup_path.exists() or cleanup_path.is_symlink():
+                            cleanup_path.unlink()
+                            logger.debug("Cleaned up intermediate file: %s", cleanup_path.name)
+                            if session is not None:
+                                session.add_cleaned_file(cleanup_path)
+                    except OSError as cleanup_error:
+                        cleanup_errors.append(f"Cleanup failed: {cleanup_error}")
+
+                if slice_dir is not None:
+                    try:
+                        if slice_dir.exists():
+                            shutil.rmtree(slice_dir)
+                            if session is not None:
+                                for created_path in session.files_created:
+                                    if created_path.is_relative_to(slice_dir):
+                                        session.add_cleaned_file(created_path)
+                    except OSError as cleanup_error:
+                        cleanup_errors.append(f"Cleanup failed: {cleanup_error}")
+
+                for cleanup_issue in cleanup_errors:
+                    _add_music_issue(terminal_result, cleanup_issue)
+                    logger.warning(cleanup_issue)
+                    console.print(f"  [yellow]{escape(cleanup_issue)}[/yellow]")
+
+                if session is not None:
+                    _persist_music_session(session, terminal_result, config.output_folder)
+
+            if not continue_on_error and terminal_result["status"] in {"partial", "failed"}:
+                break
 
         # Print summary
         console.print()
@@ -2558,6 +2726,8 @@ def music_transcribe(
             console.print()
         incomplete_run = partial_count > 0 or failed_count > 0
 
+    except typer.Exit:
+        raise
     except ScribeError as e:
         exit_on_cli_error(e, log_unexpected=False)
     except Exception as e:

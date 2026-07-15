@@ -50,6 +50,7 @@ class TestSessionCreation:
         assert session.docx_file is None
         assert session.transcription_method is None
         assert session.model_used is None
+        assert session.outcome == "in_progress"
         assert session.files_created == []
         assert session.files_cleaned == []
 
@@ -65,6 +66,7 @@ class TestSessionCompletion:
         session.complete(success=True)
 
         assert session.success is True
+        assert session.outcome == "success"
         assert session.end_time is not None
         assert session.duration_seconds is not None
         assert session.duration_seconds > 0
@@ -78,9 +80,23 @@ class TestSessionCompletion:
         session.complete(success=False, error_message="Test error")
 
         assert session.success is False
+        assert session.outcome == "failed"
         assert session.error_message == "Test error"
         assert session.end_time is not None
         assert session.duration_seconds is not None
+
+    def test_complete_preserves_precise_terminal_outcome(self):
+        """Partial and instrumental states are not collapsed into a boolean."""
+        partial = TranscriptionSession.create("Partial")
+        instrumental = TranscriptionSession.create("Instrumental")
+
+        partial.complete(success=False, error_message="one segment failed", outcome="partial")
+        instrumental.complete(success=True, outcome="instrumental")
+
+        assert partial.success is False
+        assert partial.outcome == "partial"
+        assert instrumental.success is True
+        assert instrumental.outcome == "instrumental"
 
     def test_duration_calculation(self):
         """Test duration is calculated correctly."""

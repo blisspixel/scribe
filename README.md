@@ -47,10 +47,11 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   provider is unknown or has no configured key instead of reporting an empty
   check as healthy. `scribe tray --check` turns missing optional parent packages
   into actionable dependency output instead of a traceback.
-- **Durable failure evidence**: started file, URL, and batch-item runs save a
-  unique session summary on success or failure. Repeating a meeting name no
-  longer overwrites the earlier record, and failure output prints the summary
-  location.
+- **Durable terminal evidence**: started file, URL, batch-item, recording, and
+  music-track runs save a unique session summary. Exact outcomes distinguish
+  success, partial completion, failure, and confirmed instrumentals; incomplete
+  output prints the summary location. Repeating a meeting name no longer
+  overwrites an earlier record.
 - **Private support bundles**: bundles read a bounded set of durable session
   summaries across processes, recursively redact known home-identifier and
   credential patterns, and include opaque recent-log metadata without filenames
@@ -171,6 +172,12 @@ scribe shortcut
 scribe shortcut --desktop   # also drop one on the Desktop
 scribe shortcut --remove    # remove it
 ```
+
+Every started recording saves a session summary, including record-only success
+and failures before transcription. If transcription succeeds but a requested
+DOCX, notes, joke, meme, or cleanup step fails, the surviving artifacts are kept,
+the outcome is `partial`, and the command exits 1 instead of claiming complete
+success.
 
 ### Intelligence
 ```bash
@@ -536,7 +543,9 @@ Music transcription uses a separation-first architecture to improve lyrics captu
 If VAD is unavailable, music mode reports the fallback and transcribes the full
 audio instead of calling the track instrumental. If some vocal segments fail, the
 usable lyrics are preserved as a partial result. If every segment fails, the track
-is failed and no instrumental marker is written.
+is failed and no instrumental marker is written. Every started track writes a
+session summary. Lyrics and instrumental markers are replaced atomically, and
+cleanup is limited to temporary artifacts created by the current track run.
 
 **Total Processing Time**: ~45 seconds for a 3-minute song
 
@@ -922,8 +931,11 @@ pytest
 # Unit tests only
 pytest tests/unit/
 
-# CI-safe unit coverage gate
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
+# CI-safe unit matrix
+uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q
+
+# Meaningful coverage gate
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
 
 # Quick check
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" --tb=no -q
@@ -933,9 +945,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1505 passed, 2 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1605 passed, 12 skipped, 27 deselected, 82.52% line coverage
-- Current collection: 1644 assertion-based tests
+- Latest CI-safe unit matrix: 1512 passed, 2 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1612 passed, 12 skipped, 27 deselected, 83.07% line coverage
+- Current collection: 1651 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1090,11 +1102,15 @@ the command exit 1 after printing the complete summary.
 
 ### Failure Evidence
 
-After a file, URL, or batch-item session starts, Scribe writes a uniquely named
-`*_session_summary.json` record for both successful and failed terminal outcomes.
-Failure output prints the exact local summary path and the active timestamped log
-path when one is available. The summary retains local artifact paths so you can
-recover a surviving transcript or inspect the precise failed stage.
+After a file, URL, batch-item, recording, or music-track session starts, Scribe
+writes a uniquely named `*_session_summary.json` record for its terminal outcome.
+The record distinguishes `success`, `partial`, `failed`, and `instrumental` rather
+than reducing every usable-but-incomplete result to success or failure. Incomplete
+output prints the exact local summary path. The summary retains the active
+timestamped log path when one is available, plus local artifact paths, so you can
+recover a surviving recording, transcript, or lyrics file and inspect the precise
+failed stage. If the summary itself cannot be written, Scribe reports that
+evidence gap without hiding the original command failure.
 
 `scribe support-bundle` discovers a bounded newest-first set of those summaries in
 the configured output folder and recent logs in the configured log folder. The

@@ -556,7 +556,16 @@ Scribe uses specific exit codes:
 For `scribe batch` and `scribe music`, `--continue-on-error` means later inputs
 are still attempted. It does not turn a partial run into success. The final summary
 lists every partial or failed item and the command exits 1. Use `--stop-on-error`
-to stop after the first processing failure.
+to stop after the first processing failure. A confirmed instrumental track is a
+successful terminal outcome, so it does not stop later tracks.
+
+Every started file, URL, batch item, recording, and music track writes a unique
+`*_session_summary.json` record. Its `outcome` is `success`, `partial`, `failed`,
+or `instrumental`. A recording can therefore retain usable audio or a transcript
+while reporting a failed requested extra as `partial`; music can retain usable
+lyrics when only some vocal segments fail. Incomplete commands print the exact
+summary path. If summary persistence fails, Scribe reports that evidence gap
+separately without replacing the original error.
 
 ## Logging
 
@@ -646,7 +655,7 @@ Include:
 1. Scribe version: `scribe version`
 2. System info: `scribe info`
 3. Diagnostic output: `scribe doctor`
-4. Complete error message and the printed failure-summary path
+4. Complete error message and the printed session-summary path
 5. Steps to reproduce
 6. Log file (if applicable, shared separately because support bundles exclude contents)
 

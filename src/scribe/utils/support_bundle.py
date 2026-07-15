@@ -295,11 +295,18 @@ def _shareable_session_record(data: dict[str, Any]) -> dict[str, Any]:
     }
     artifact_types = sorted(name for name, value in artifact_fields.items() if value)
     log_file = data.get("log_file")
+    raw_outcome = data.get("outcome")
+    outcome = (
+        raw_outcome
+        if raw_outcome in {"success", "partial", "failed", "instrumental"}
+        else ("success" if data.get("success") is True else "failed")
+    )
     record: dict[str, Any] = {
         "session_id": session_id,
         "start_time": data.get("start_time"),
         "end_time": data.get("end_time"),
         "success": data.get("success"),
+        "outcome": outcome,
         "error_message": _redact_session_error(data.get("error_message")),
         "duration_seconds": data.get("duration_seconds"),
         "transcription_method": data.get("transcription_method"),
@@ -485,18 +492,24 @@ def get_run_history_summary(max_runs: int = 20, output_dir: Path | None = None) 
         except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, RecursionError):
             skipped += 1
 
-    failed = [run for run in recent if run.get("success") is False][:10]
+    failed = [run for run in recent if run.get("outcome") == "failed"][:10]
+    partial = [run for run in recent if run.get("outcome") == "partial"][:10]
+    instrumental = [run for run in recent if run.get("outcome") == "instrumental"][:10]
     return {
         "source": "durable_session_summaries",
         "total_runs": len(candidates),
         "recent_runs": recent,
         "failed_runs": failed,
+        "partial_runs": partial,
+        "instrumental_runs": instrumental,
         "skipped_count": skipped,
         "discovery_truncated": truncated,
         "summary": {
             "total": len(candidates),
             "recent_count": len(recent),
             "failed_count": len(failed),
+            "partial_count": len(partial),
+            "instrumental_count": len(instrumental),
         },
     }
 

@@ -3,10 +3,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
 from typer.testing import CliRunner
 
-from scribe.cli.main import _persist_failed_session, app
+from scribe.cli.main import _persist_failed_session, _persist_music_session, app
+from scribe.exceptions import ProcessError
 from scribe.models.session import TranscriptionSession
+from scribe.utils.support_bundle import get_run_history_summary
 
 
 def _make_config(tmp_path: Path, *, api_key: str | None = None) -> Mock:
@@ -149,6 +152,27 @@ def test_failure_summary_notification_cannot_mask_original_failure(tmp_path: Pat
     data = json.loads(summary_path.read_text(encoding="utf-8"))
     assert data["success"] is False
     assert data["error_message"] == "backend failed"
+
+
+def test_failed_session_summary_write_failure_is_visible(tmp_path: Path) -> None:
+    session = TranscriptionSession.create("Meeting")
+
+    with (
+        patch.object(session, "save_summary", side_effect=OSError("disk full")),
+        patch("scribe.cli.main.console.print") as print_message,
+    ):
+        summary_path = _persist_failed_session(
+            session,
+            tmp_path,
+            RuntimeError("backend failed"),
+        )
+
+    assert summary_path is None
+    assert session.error_message == "backend failed"
+    assert any(
+        "Failure summary could not be saved: disk full" in str(call.args[0])
+        for call in print_message.call_args_list
+    )
 
 
 def test_url_failure_persists_session_before_download_cleanup(tmp_path: Path) -> None:
@@ -347,6 +371,7 @@ def test_batch_transcribe_marks_artifact_failure_partial(tmp_path: Path) -> None
     session.complete.assert_called_once_with(
         success=False,
         error_message="DOCX generation failed: conversion boom",
+        outcome="partial",
     )
     session.save_summary.assert_called_once_with(tmp_path)
 
@@ -390,6 +415,7 @@ def test_batch_transcribe_reports_unavailable_requested_feature(tmp_path: Path) 
     session.complete.assert_called_once_with(
         success=False,
         error_message="Notes not generated: OPENAI_API_KEY is not configured",
+        outcome="partial",
     )
 
 
@@ -426,6 +452,759 @@ def test_record_command_auto_transcribes(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Recording & Transcription Complete" in result.stdout
+
+
+def test_record_only_persists_session_with_log_correlation(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    log_path = tmp_path / "scribe_weekly.log"
+    log_path.write_text("log")
+    config = _make_config(tmp_path)
+    recorder = Mock()
+    recorder.record.return_value = recording_path
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.get_current_log_file", return_value=log_path),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+    ):
+        result = runner.invoke(
+            app,
+            ["record", "--name", "Weekly Sync", "--no-auto-transcribe"],
+        )
+
+    assert result.exit_code == 0
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is True
+    assert data["source_file"] == str(recording_path)
+    assert data["log_file"] == str(log_path)
+    assert f"Session summary: {summaries[0]}" in result.stdout
+
+
+def test_record_failure_before_media_persists_started_session(tmp_path: Path) -> None:
+    runner = CliRunner()
+    config = _make_config(tmp_path)
+    recorder = Mock()
+    recorder.record.side_effect = RuntimeError("OBS connection dropped")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+    ):
+        result = runner.invoke(app, ["record", "--name", "Weekly Sync"])
+
+    assert result.exit_code == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "OBS connection dropped"
+    assert data["source_file"] is None
+    assert "Failure summary:" in result.stdout
+
+
+def test_record_transcription_failure_retains_recording_evidence(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.side_effect = RuntimeError("transcription backend stopped")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+    ):
+        result = runner.invoke(app, ["record", "--name", "Weekly Sync"])
+
+    assert result.exit_code == 1
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "transcription backend stopped"
+    assert data["source_file"] == str(recording_path)
+    assert data["transcript_file"] is None
+    assert f"Failure summary: {summary}" in result.stdout
+
+
+def test_record_conversion_failure_retains_source_log_and_cause(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    log_path = tmp_path / "record.log"
+    log_path.write_text("log")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "local"
+    converter = Mock()
+    converter.convert_to_wav.side_effect = ProcessError("ffmpeg stopped")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.get_current_log_file", return_value=log_path),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.core.converter.Converter", return_value=converter),
+    ):
+        result = runner.invoke(app, ["record", "--name", "Weekly Sync"])
+
+    assert result.exit_code == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["outcome"] == "failed"
+    assert data["error_message"] == "Recording conversion failed: ffmpeg stopped"
+    assert data["source_file"] == str(recording_path)
+    assert data["log_file"] == str(log_path)
+
+
+def test_record_requested_docx_failure_is_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    recorder = Mock()
+    recorder.record.return_value = recording_path
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", side_effect=RuntimeError("document unavailable")),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--no-notes",
+                "--no-joke",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Recording & Transcription Partial" in result.stdout
+    assert "DOCX generation failed: document unavailable" in result.stdout
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "DOCX generation failed: document unavailable"
+    assert data["transcript_file"] == str(transcript_path)
+
+
+def test_record_saves_final_meme_state_atomically(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    docx_path = tmp_path / "meeting.docx"
+    docx_path.write_text("document")
+    meme_path = tmp_path / "meeting_meme.png"
+    meme_path.write_text("image")
+    config = _make_config(tmp_path, api_key="configured-key")
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=docx_path),
+        patch(
+            "scribe.utils.meme_generator.generate_meeting_meme",
+            return_value={"final_path": meme_path},
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--no-notes",
+                "--no-joke",
+                "--meme",
+            ],
+        )
+
+    assert result.exit_code == 0
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is True
+    assert data["meme_file"] == str(meme_path)
+
+
+def test_record_does_not_double_count_transcriber_registered_transcript(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    session = TranscriptionSession.create("Weekly Sync")
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    def transcribe_with_session(*_args: object, **kwargs: object) -> Path:
+        active_session = kwargs["session"]
+        assert isinstance(active_session, TranscriptionSession)
+        active_session.add_file(transcript_path, "transcript")
+        return transcript_path
+
+    transcriber.transcribe.side_effect = transcribe_with_session
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.TranscriptionSession.create", return_value=session),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--no-notes",
+                "--no-joke",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 0
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["files_created"].count(str(transcript_path)) == 1
+
+
+def test_record_requested_notes_without_key_is_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--notes",
+                "--no-joke",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Notes requested but OPENAI_API_KEY is not configured" in result.stdout
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "Notes requested but OPENAI_API_KEY is not configured"
+
+
+def test_record_configured_joke_no_result_and_meme_error_are_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path, api_key="configured-key")
+    config.enable_joke = True
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.return_value = []
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+        patch("scribe.cli.main.generate_transcript_joke", return_value=None),
+        patch(
+            "scribe.utils.meme_generator.generate_meeting_meme",
+            side_effect=RuntimeError("renderer unavailable"),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--no-notes",
+                "--meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Joke generation returned no result" in result.stdout
+    assert "Meme generation failed: renderer unavailable" in result.stdout
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "partial"
+    assert data["error_message"] == (
+        "Joke generation returned no result; Meme generation failed: renderer unavailable"
+    )
+
+
+def test_record_cleanup_failure_preserves_outputs_and_is_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    recording_path = tmp_path / "meeting.mp4"
+    recording_path.write_text("video")
+    transcript_path = tmp_path / "meeting_transcript.txt"
+    transcript_path.write_text("transcript text")
+    config = _make_config(tmp_path)
+    recorder = Mock(record=Mock(return_value=recording_path))
+    transcriber = Mock()
+    transcriber.choose_method.return_value = "openai"
+    transcriber.transcribe.return_value = transcript_path
+    transcriber.cleanup_intermediate_files.side_effect = OSError("locked intermediate")
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.consent.ensure_recording_consent", return_value=True),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.OBSRecorder", return_value=recorder),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--name",
+                "Weekly Sync",
+                "--no-notes",
+                "--no-joke",
+                "--no-meme",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "Intermediate cleanup failed: locked intermediate" in result.stdout
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "Intermediate cleanup failed: locked intermediate"
+    assert data["source_file"] == str(recording_path)
+    assert data["transcript_file"] == str(transcript_path)
+
+
+def test_music_instrumental_persists_terminal_session(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "instrumental.mp3"
+    audio_path.write_text("audio")
+    vocals_path = tmp_path / "instrumental_vocals.wav"
+    vocals_path.write_text("vocals")
+    log_path = tmp_path / "scribe_instrumental.log"
+    log_path.write_text("log")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 90, "key": "C"},
+    }
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.get_current_log_file", return_value=log_path),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", return_value=vocals_path),
+        patch("scribe.utils.vad.detect_vocal_segments", return_value=[]),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 0
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is True
+    assert data["source_file"] == str(audio_path)
+    assert data["log_file"] == str(log_path)
+    assert data["transcript_file"] == str(tmp_path / "instrumental_lyrics.txt")
+    assert f"Evidence: {summaries[0]}" in result.stdout
+    history = get_run_history_summary(output_dir=tmp_path)
+    assert history["total_runs"] == 1
+    assert history["recent_runs"][0]["artifact_types"] == ["source", "transcript"]
+    assert history["recent_runs"][0]["outcome"] == "instrumental"
+
+
+def test_music_lyrics_atomic_write_does_not_follow_symlink(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "song.mp3"
+    audio_path.write_text("audio")
+    protected = tmp_path / "protected.txt"
+    protected.write_text("do not overwrite")
+    lyrics_path = tmp_path / "song_lyrics.txt"
+    try:
+        lyrics_path.symlink_to(protected)
+    except OSError as error:
+        pytest.skip(f"Symlinks are unavailable: {error}")
+
+    vocals_path = tmp_path / "song_vocals.wav"
+    vocals_path.write_text("vocals")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 90, "key": "C"},
+    }
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", return_value=vocals_path),
+        patch("scribe.utils.vad.detect_vocal_segments", return_value=[]),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 0
+    assert protected.read_text() == "do not overwrite"
+    assert not lyrics_path.is_symlink()
+    assert "[Instrumental - No Speech Detected]" in lyrics_path.read_text()
+
+
+def test_music_stop_on_error_continues_after_instrumental(tmp_path: Path) -> None:
+    runner = CliRunner()
+    tracks = [tmp_path / "first.mp3", tmp_path / "second.mp3"]
+    for track in tracks:
+        track.write_text("audio")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 90, "key": "C"},
+    }
+
+    def separated(audio_path: Path) -> Path:
+        vocals_path = audio_path.with_name(f"{audio_path.stem}_vocals.wav")
+        vocals_path.write_text("vocals")
+        return vocals_path
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0) as duration,
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", side_effect=separated),
+        patch("scribe.utils.vad.detect_vocal_segments", return_value=[]),
+    ):
+        result = runner.invoke(
+            app,
+            ["music", *(str(track) for track in tracks), "--stop-on-error"],
+        )
+
+    assert result.exit_code == 0
+    assert duration.call_count == 2
+    assert "Instrumental: 2" in result.stdout
+    assert len(list(tmp_path.glob("*_session_summary.json"))) == 2
+
+
+def test_music_non_music_reason_is_durable(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "podcast.mp3"
+    audio_path.write_text("audio")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": False,
+        "reason": "speech-only podcast",
+        "metadata": {},
+    }
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 1
+    summary = next(tmp_path.glob("*_session_summary.json"))
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    assert data["outcome"] == "failed"
+    assert data["error_message"] == "Not music: speech-only podcast"
+
+
+def test_music_full_audio_no_output_preserves_precise_failure(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "song.mp3"
+    audio_path.write_text("audio")
+    vocals_path = tmp_path / "song_vocals.wav"
+    vocals_path.write_text("vocals")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 90, "key": "C"},
+    }
+    transcriber = Mock()
+    transcriber.transcribe.return_value = None
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", return_value=vocals_path),
+        patch(
+            "scribe.utils.vad.detect_vocal_segments",
+            side_effect=RuntimeError("VAD unavailable"),
+        ),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 1
+    assert "Full-track transcription produced no transcript output" in result.stdout
+    assert "NoneType" not in result.stdout
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["outcome"] == "failed"
+    assert data["error_message"] == "Full-track transcription produced no transcript output"
+
+
+def test_music_segment_no_output_cannot_mask_terminal_summary(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "song.mp3"
+    audio_path.write_text("audio")
+    vocals_path = tmp_path / "song_vocals.wav"
+    vocals_path.write_text("vocals")
+    slice_dir = tmp_path / "vocal_slices"
+    slice_dir.mkdir()
+    slice_path = slice_dir / "slice.wav"
+    slice_path.write_text("slice")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 90, "key": "C"},
+    }
+    transcriber = Mock()
+    transcriber.transcribe.return_value = None
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", return_value=vocals_path),
+        patch("scribe.utils.vad.detect_vocal_segments", return_value=[(0.0, 10.0)]),
+        patch("tempfile.mkdtemp", return_value=str(slice_dir)),
+        patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[slice_path]),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 1
+    assert "Transcription failed for all 1 vocal segments" in result.stdout
+    assert "NoneType" not in result.stdout
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["outcome"] == "failed"
+    assert data["error_message"] == "Transcription failed for all 1 vocal segments"
+
+
+def test_music_failure_persists_precise_terminal_session(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "broken.mp3"
+    audio_path.write_text("audio")
+    preexisting_intermediate = tmp_path / "broken_16k_mono.wav"
+    preexisting_intermediate.write_text("keep me")
+    config = _make_config(tmp_path)
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=0.0),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == (
+        "Could not read audio duration (invalid or unsupported audio file)"
+    )
+    assert "Failure summary:" in result.stdout
+    assert preexisting_intermediate.read_text() == "keep me"
+
+
+def test_music_stop_on_error_persists_only_started_track(tmp_path: Path) -> None:
+    runner = CliRunner()
+    first = tmp_path / "broken.mp3"
+    second = tmp_path / "unstarted.mp3"
+    first.write_text("audio")
+    second.write_text("audio")
+    config = _make_config(tmp_path)
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.utils.audio.get_audio_duration", return_value=0.0) as duration,
+    ):
+        result = runner.invoke(
+            app,
+            ["music", str(first), str(second), "--stop-on-error"],
+        )
+
+    assert result.exit_code == 1
+    assert duration.call_count == 1
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["source_file"] == str(first)
+    assert str(second) not in summaries[0].read_text(encoding="utf-8")
+
+
+def test_music_cleanup_failure_is_visible_and_partial(tmp_path: Path) -> None:
+    runner = CliRunner()
+    audio_path = tmp_path / "song.mp3"
+    audio_path.write_text("audio")
+    vocals_path = tmp_path / "song_vocals.wav"
+    vocals_path.write_text("vocals")
+    slice_dir = tmp_path / "vocal_slices"
+    slice_dir.mkdir()
+    slice_path = slice_dir / "slice.wav"
+    slice_path.write_text("slice")
+    segment_transcript = tmp_path / "segment.txt"
+    segment_transcript.write_text("These are durable lyrics")
+    config = _make_config(tmp_path)
+    detector = Mock()
+    detector.analyze_music.return_value = {
+        "is_music": True,
+        "metadata": {"tempo": 120, "key": "D"},
+    }
+    transcriber = Mock()
+    transcriber.transcribe.return_value = segment_transcript
+
+    with (
+        patch("scribe.cli.main.ScribeConfig", return_value=config),
+        patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber", return_value=transcriber),
+        patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
+        patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
+        patch("scribe.utils.source_separation.separate_vocals", return_value=vocals_path),
+        patch("scribe.utils.vad.detect_vocal_segments", return_value=[(0.0, 10.0)]),
+        patch("tempfile.mkdtemp", return_value=str(slice_dir)),
+        patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[slice_path]),
+        patch("shutil.rmtree", side_effect=OSError("directory busy")),
+    ):
+        result = runner.invoke(app, ["music", str(audio_path)])
+
+    assert result.exit_code == 1
+    assert "Cleanup failed: directory busy" in result.stdout
+    summaries = list(tmp_path.glob("*_session_summary.json"))
+    assert len(summaries) == 1
+    data = json.loads(summaries[0].read_text(encoding="utf-8"))
+    assert data["success"] is False
+    assert data["error_message"] == "Cleanup failed: directory busy"
+    assert (tmp_path / "song_lyrics.txt").exists()
+
+
+def test_music_summary_write_failure_marks_complete_result_partial(tmp_path: Path) -> None:
+    session = TranscriptionSession.create("Song")
+    session.add_file(tmp_path / "song.mp3", "source")
+    result = {
+        "file": "song.mp3",
+        "status": "instrumental",
+        "lyrics": tmp_path / "song_lyrics.txt",
+    }
+
+    with patch.object(session, "save_summary", side_effect=OSError("disk full")):
+        summary_path = _persist_music_session(session, result, tmp_path)
+
+    assert summary_path is None
+    assert result["status"] == "partial"
+    assert result["error"] == "Session summary could not be saved: disk full"
+    assert session.success is False
+    assert session.error_message == "Session summary could not be saved: disk full"
+
+
+def test_music_evidence_notification_cannot_mask_saved_outcome(tmp_path: Path) -> None:
+    session = TranscriptionSession.create("Song")
+    lyrics_path = tmp_path / "song_lyrics.txt"
+    lyrics_path.write_text("lyrics")
+    result = {
+        "file": "song.mp3",
+        "status": "success",
+        "lyrics": lyrics_path,
+    }
+
+    with patch("scribe.cli.main.console.print", side_effect=BrokenPipeError("closed terminal")):
+        summary_path = _persist_music_session(session, result, tmp_path)
+
+    assert summary_path is not None
+    assert summary_path.exists()
+    assert session.success is True
+    assert session.outcome == "success"
 
 
 def test_meme_command_success_with_custom_output(tmp_path: Path) -> None:

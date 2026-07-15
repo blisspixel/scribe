@@ -5,6 +5,7 @@ Tests command-line interface including argument parsing,
 command execution, and error handling.
 """
 
+import json
 import re
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -777,6 +778,7 @@ class TestMusicCommand:
         mock_config.default_model = "large-v3"
         mock_config.default_language = "en"
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
 
         # Mock music detection
@@ -801,8 +803,16 @@ class TestMusicCommand:
         # Mock transcriber
         mock_transcriber = Mock()
         transcript_path = tmp_path / "song_lyrics.txt"
-        transcript_path.write_text("Lyrics here\n")
-        mock_transcriber.transcribe.return_value = transcript_path
+        transcript_path.write_text("These are usable song lyrics\n")
+
+        def transcribe_with_metadata(*_args, **kwargs):
+            session = kwargs["session"]
+            session.transcription_method = "local"
+            session.model_used = "faster-whisper-large-v3"
+            session.add_file(transcript_path, "transcript")
+            return transcript_path
+
+        mock_transcriber.transcribe.side_effect = transcribe_with_metadata
         mock_transcriber_class.return_value = mock_transcriber
 
         # Execute
@@ -812,6 +822,13 @@ class TestMusicCommand:
         assert result.exit_code == 0
         assert mock_transcriber.transcribe.called
         mock_slice_audio.assert_called_once()
+        summaries = list(tmp_path.glob("*_session_summary.json"))
+        assert len(summaries) == 1
+        summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+        assert summary["outcome"] == "success"
+        assert summary["transcription_method"] == "local"
+        assert summary["model_used"] == "faster-whisper-large-v3"
+        assert summary["files_created"].count(str(transcript_path)) == 1
 
     @patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[])
     @patch("scribe.utils.audio.get_audio_duration")
@@ -845,6 +862,7 @@ class TestMusicCommand:
         mock_config.default_model = "large-v3"
         mock_config.default_language = "en"
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
 
         # Mock music detection
@@ -888,6 +906,7 @@ class TestMusicCommand:
         assert mock_transcriber.transcribe.call_count >= 3
         assert mock_slice_audio.call_count == 3
         assert "Failed: 0" in result.stdout
+        assert len(list(tmp_path.glob("*_session_summary.json"))) == 3
 
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.vad.detect_vocal_segments")
@@ -916,6 +935,7 @@ class TestMusicCommand:
         mock_config.default_model = "large-v3"
         mock_config.default_language = "en"
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
 
         # Mock music detection
@@ -985,6 +1005,7 @@ class TestMusicCommand:
         mock_config.default_model = "large-v3"
         mock_config.default_language = "en"
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
 
         # Mock music detection
@@ -1066,6 +1087,7 @@ class TestMusicCommand:
 
         mock_config = Mock(default_model="large-v3", default_language="en")
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
         mock_music_detector_class.return_value.analyze_music.return_value = {
             "is_music": True,
@@ -1108,6 +1130,7 @@ class TestMusicCommand:
 
         mock_config = Mock(default_model="large-v3", default_language="en")
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
         mock_music_detector_class.return_value.analyze_music.return_value = {
             "is_music": True,
@@ -1126,6 +1149,12 @@ class TestMusicCommand:
         assert "all 2 vocal segments" in result.stdout
         assert "Instrumental: 0" in result.stdout
         assert not (tmp_path / "song_lyrics.txt").exists()
+        summaries = list(tmp_path.glob("*_session_summary.json"))
+        assert len(summaries) == 1
+        summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+        assert summary["success"] is False
+        assert summary["error_message"] == "Transcription failed for all 2 vocal segments"
+        assert not vocals_path.exists()
 
     @patch("scribe.utils.audio_slicer.slice_audio_by_segments")
     @patch("scribe.utils.audio.get_audio_duration", return_value=180.0)
@@ -1156,6 +1185,7 @@ class TestMusicCommand:
 
         mock_config = Mock(default_model="large-v3", default_language="en")
         mock_config.log_folder = tmp_path / "logs"
+        mock_config.output_folder = tmp_path
         mock_config_class.return_value = mock_config
         mock_music_detector_class.return_value.analyze_music.return_value = {
             "is_music": True,
@@ -1176,6 +1206,12 @@ class TestMusicCommand:
         lyrics_path = tmp_path / "song_lyrics.txt"
         assert lyrics_path.exists()
         assert "These surviving lyrics remain useful" in lyrics_path.read_text()
+        summaries = list(tmp_path.glob("*_session_summary.json"))
+        assert len(summaries) == 1
+        summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+        assert summary["success"] is False
+        assert summary["error_message"] == "1 of 2 vocal segments failed"
+        assert summary["transcript_file"] == str(lyrics_path)
 
     def test_music_method_option(self, cli_runner, tmp_path):
         """Test music command respects method option."""

@@ -11,7 +11,9 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+SessionOutcome = Literal["in_progress", "success", "partial", "failed", "instrumental"]
 
 
 @dataclass
@@ -36,6 +38,7 @@ class TranscriptionSession:
         model_used: Model name (large-v3, gpt-4o-transcribe, etc.)
         gpu_info: GPU information if GPU was used
         success: Whether transcription succeeded
+        outcome: Precise terminal outcome, including partial and instrumental states
         error_message: Error message if failed
         duration_seconds: Total processing time
         processing_speed_ratio: Speed ratio (e.g., 8.5x realtime)
@@ -64,6 +67,7 @@ class TranscriptionSession:
 
     # Results
     success: bool = False
+    outcome: SessionOutcome = "in_progress"
     error_message: str | None = None
     duration_seconds: float | None = None
     processing_speed_ratio: float | None = None
@@ -94,16 +98,24 @@ class TranscriptionSession:
 
         return cls(session_id=session_id, meeting_name=meeting_name, start_time=datetime.now())
 
-    def complete(self, success: bool = True, error_message: str | None = None) -> None:
+    def complete(
+        self,
+        success: bool = True,
+        error_message: str | None = None,
+        outcome: SessionOutcome | None = None,
+    ) -> None:
         """
         Mark session as complete.
 
         Args:
             success: Whether the session succeeded
             error_message: Error message if failed
+            outcome: Optional precise terminal outcome; inferred from success when omitted
         """
+        resolved_outcome: SessionOutcome = outcome or ("success" if success else "failed")
         self.end_time = datetime.now()
-        self.success = success
+        self.outcome = resolved_outcome
+        self.success = resolved_outcome in {"success", "instrumental"}
         self.error_message = error_message
 
         if self.start_time and self.end_time:

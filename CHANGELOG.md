@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
 - Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
 - Protected the local native-tray IPC boundary with a process-scoped capability and authenticated READY handshake. Unauthenticated peers cannot receive state or issue dictation, read, or quit commands.
-- Added durable terminal evidence for started file, URL, and batch-item transcription sessions. Failed runs now save and print a unique atomic session summary with surviving artifact and correlated local-log paths.
+- Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
 - Made the root wheel portable by removing its mandatory dependency on the unpublished workspace-only `scribe-audio-core` artifact. The Rust crate remains an optional workspace acceleration until platform wheels have a verified distribution path.
@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Kept shared CLI error log-file paths on one literal line so CI and Linux terminals do not wrap the filename out of diagnostic output.
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
 - Upgraded support bundles to read bounded durable session summaries across CLI processes and include opaque recent-log metadata. Log filenames, paths, and contents are excluded, and the CLI now asks users to review the redacted JSON before sharing it.
+- Removed the unused parallel `RunContext` implementation so terminal evidence has one maintained session model and archive format.
 
 ### Fixed
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
@@ -45,6 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Batch and music continuation now has truthful automation semantics: remaining inputs are processed by default, but missing inputs, failed files, partial segment results, or missing requested artifacts appear in the final summary and return exit code 1. Fully complete and confirmed instrumental runs still return 0.
 - Batch sessions now record requested DOCX, notes, joke, and meme failures as partial outcomes instead of reporting the transcript as wholly successful. Explicit provider-backed extras without `OPENAI_API_KEY` remain visible and preserve the usable transcript rather than being silently disabled.
 - Music VAD failures now use the full-audio fallback instead of being mislabeled as instrumental. Mixed segment failures preserve usable lyrics as partial, while all-segment failure is reported as failed and never writes an instrumental marker.
+- Recording commands now start evidence capture before OBS setup, retain the source recording when transcription fails, and report requested DOCX, notes, joke, meme, or cleanup failures as partial instead of complete success. Record-only runs also save a terminal summary.
+- Music commands now save one durable outcome for every started track, retain the selected transcription backend and model, report exact non-music and cleanup failures, continue past confirmed instrumentals under `--stop-on-error`, write lyrics and markers atomically, and never delete conventionally named sibling files that were not created by the current run.
+- A session-summary write failure is now visible without masking the original processing error, and evidence-path output can no longer turn a saved music result into a command failure when stdout closes early.
 - `scribe init` now defaults to local `auto` transcription on machines with or without a GPU, and it asks for provider keys only when API transcription or a provider-backed extra is selected.
 - `scribe health --provider NAME` now fails with an actionable message for unknown providers and providers without configured keys instead of treating an empty check set as healthy.
 - `scribe tray --check` now reports a missing optional parent package, including Pillow, as an installable dependency instead of raising `ModuleNotFoundError` while probing a child module.
