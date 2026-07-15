@@ -38,7 +38,22 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 
 ---
 
-## What's New in v2.8.0
+## What's New in v2.8.1 (in development)
+
+- **Safer setup defaults**: `scribe init` keeps transcription on `auto` for
+  both GPU and CPU machines. It asks about provider keys only when a paid or
+  provider-backed feature is selected.
+- **Truthful diagnostics**: `scribe health --provider NAME` fails when that
+  provider is unknown or has no configured key instead of reporting an empty
+  check as healthy. `scribe tray --check` turns missing optional parent packages
+  into actionable dependency output instead of a traceback.
+- **Private support bundles**: API-key values are reported only as
+  `[CONFIGURED]`; no prefix or suffix fragments are included.
+- **Reproducible quality gates**: CI uses the committed lockfile, includes the
+  toolchain check in the aggregate result, enforces formatting, lint, strict
+  typing, dependency audit policy, and at least 80 percent meaningful coverage.
+
+## v2.8.0 Highlights
 
 - **$0-first, runs anywhere**: `--method auto` always transcribes locally (GPU when present, CPU otherwise) and never auto-selects the paid API. The paid OpenAI API is an explicit opt-in via `--method openai`.
 - **Cost safety by default**: the paid AI extras (notes, jokes, memes) are off by default. Turn them on per run with `--notes`/`--joke`/`--meme`, persistently via `scribe init` or `SCRIBE_ENABLE_*`, or on demand with `scribe notes|joke|meme`.
@@ -56,7 +71,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 - Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
 - Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
 - Step 3 in progress: mypy --strict clean; `deal` contracts on pure modules (`costs`, transcript model, validation helpers); Hypothesis property tests expanding.
-- Step 4 complete: pip-audit blocking in CI; SBOM generation documented; `scribe doctor` enhanced with CUDA driver age and pip-audit; broad exception handlers tightened to ADR-002 typed tuples across the entire codebase; ADR-012 created to evaluate and reject structured logging.
+- Step 4 operational with tracked debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and dependency-audit results, and accepted Torch advisories are explicit in ADR-004 while compatible CPU/CUDA upgrade validation remains open.
 
 ---
 
@@ -222,7 +237,7 @@ scribe vocab finance         # show a glossary's terms
 # System diagnostics
 scribe doctor
 
-# Provider health check
+# Provider health check (fails if no provider can actually be checked)
 scribe health
 scribe health --provider xai
 
@@ -369,7 +384,8 @@ scribe init   # auto-prompts on first run; rerun anytime
 ```
 
 The wizard is interactive and defensive:
-- Smart defaults (GPU detection, existing config / env / OBS settings).
+- Smart defaults (local `auto` transcription on GPU or CPU, existing config / env / OBS settings).
+- Provider keys are requested only when you choose API transcription or a provider-backed extra.
 - Review step with confirmation before writing.
 - Post-save verification (including real OBS preflight if you supplied a password).
 - Offers to create a Quick Record launcher immediately.
@@ -1125,7 +1141,7 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 
 ---
 
-**Current Version:** 2.8.0 ($0-first local transcription, cost-safe defaults, local-only mode, and $0 readiness in doctor/info)
+**Workspace Version:** 2.8.1 in development (latest release tag: v2.8.0)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-07-08
+**Last Updated:** 2026-07-15

@@ -39,7 +39,7 @@ def test_get_system_info_handles_missing_torch() -> None:
     assert info["gpu"] == {"available": False, "reason": "PyTorch not installed"}
 
 
-def test_get_environment_config_redacts_api_key() -> None:
+def test_get_environment_config_fully_redacts_api_key() -> None:
     with patch.dict(
         "os.environ",
         {
@@ -53,7 +53,16 @@ def test_get_environment_config_redacts_api_key() -> None:
 
     assert config["SCRIBE_OUTPUT_FOLDER"] == "C:\\output"
     assert config["SCRIBE_DEFAULT_MODEL"] == "large-v3"
-    assert config["OPENAI_API_KEY"].startswith("sk-test-12...")
+    assert config["OPENAI_API_KEY"] == "[CONFIGURED]"
+    assert "sk-test-1234567890abcd" not in str(config)
+
+
+def test_get_environment_config_fully_redacts_short_api_key() -> None:
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-short"}, clear=True):
+        config = support_bundle.get_environment_config()
+
+    assert config["OPENAI_API_KEY"] == "[CONFIGURED]"
+    assert "sk-short" not in str(config)
 
 
 def test_get_diagnostics_results_summarizes_statuses() -> None:

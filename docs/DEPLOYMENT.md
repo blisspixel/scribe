@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Updated:** 2026-07-07
+**Last Updated:** 2026-07-15
 
 ## Scope
 
@@ -41,7 +41,7 @@ Use a project-local install when developing Scribe:
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-uv sync
+uv sync --locked --group dev
 uv run scribe init
 uv run scribe doctor
 ```
@@ -132,7 +132,7 @@ Output and cleanup:
 Use this only when one trusted operator controls the machine, inputs, outputs, secrets, and logs.
 
 Recommended pattern:
-- Install with `uv sync` or a uv tool install.
+- Install with `uv sync --locked` or a uv tool install.
 - Keep input and output directories outside the repo.
 - Use filesystem permissions so only trusted users can read media, transcripts, and logs.
 - Run jobs as one service user rather than exposing Scribe directly to multiple untrusted users.
@@ -142,7 +142,7 @@ Recommended pattern:
 Example:
 
 ```bash
-uv sync
+uv sync --locked
 $env:SCRIBE_OUTPUT_FOLDER = "D:\scribe-output"
 uv run scribe doctor
 uv run scribe batch D:\incoming\*.mp4 --no-notes --no-joke --no-meme

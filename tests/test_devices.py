@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""
-Improved audio device testing for Scribe transcription system.
-Tests audio device detection, configuration, and compatibility.
+"""Standalone manual checks for audio-device configuration and compatibility.
+
+These hardware-dependent probes feed the script's exit status. They are named
+``check_*`` so pytest does not report returned booleans as passing tests.
 """
 
 import os
@@ -32,7 +33,7 @@ def print_test(name: str, status: str, details: str = ""):
         print(f"{Fore.CYAN}   Details: {details}")
 
 
-def test_pycaw_import():
+def check_pycaw_import():
     """Test if pycaw is available for Windows audio control."""
     print_header("AUDIO LIBRARY TESTS")
 
@@ -118,7 +119,7 @@ def get_audio_devices():
     return devices
 
 
-def test_audio_device_detection():
+def check_audio_device_detection():
     """Test audio device detection capabilities."""
     print_header("AUDIO DEVICE DETECTION TESTS")
 
@@ -146,7 +147,7 @@ def test_audio_device_detection():
     return True
 
 
-def test_expected_device_configuration():
+def check_expected_device_configuration():
     """Test if expected audio device is configured correctly."""
     print_header("EXPECTED DEVICE CONFIGURATION TESTS")
 
@@ -183,7 +184,7 @@ def test_expected_device_configuration():
         return False
 
 
-def test_audio_device_switching():
+def check_audio_device_switching():
     """Test audio device switching capabilities (informational)."""
     print_header("AUDIO DEVICE SWITCHING TESTS")
 
@@ -229,7 +230,7 @@ def test_audio_device_switching():
         return False
 
 
-def test_audio_system_health():
+def check_audio_system_health():
     """Test overall audio system health."""
     print_header("AUDIO SYSTEM HEALTH TESTS")
 
@@ -273,11 +274,11 @@ def main():
 
     # Run all test suites
     test_results = {
-        "Audio Libraries": test_pycaw_import(),
-        "Device Detection": test_audio_device_detection(),
-        "Expected Configuration": test_expected_device_configuration(),
-        "Device Switching": test_audio_device_switching(),
-        "System Health": test_audio_system_health(),
+        "Audio Libraries": check_pycaw_import(),
+        "Device Detection": check_audio_device_detection(),
+        "Expected Configuration": check_expected_device_configuration(),
+        "Device Switching": check_audio_device_switching(),
+        "System Health": check_audio_system_health(),
     }
 
     # Summary

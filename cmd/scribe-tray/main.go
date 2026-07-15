@@ -75,7 +75,7 @@ func updateTrayState(state string) {
 func onReady() {
 	systray.SetTitle("Scribe")
 	systray.SetTooltip("Scribe (Go Tray)")
-	
+
 	// A simple colored icon placeholder (or we can load bytes)
 	// For now just use a simple 1x1 transparent pixel so it doesn't crash
 	systray.SetIcon([]byte{
@@ -120,7 +120,7 @@ func setupHotkeys() {
 	go func() {
 		// Currently golang.design/x/hotkey requires modifiers + key
 		// To match Python's global keyboard hook, we map strings like "F9" to hotkey.KeyF9
-		
+
 		dKey := hotkey.New([]hotkey.Modifier{}, hotkey.KeyF9)
 		if err := dKey.Register(); err == nil {
 			go func() {

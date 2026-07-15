@@ -93,6 +93,15 @@ class TestCLIHelp:
         assert "info" in result.stdout
         assert "help" in result.stdout
 
+        output = _strip_ansi(result.stdout)
+        listed_commands = {line.strip().split()[0] for line in output.splitlines() if line.strip()}
+        registered_commands = {
+            command.name or command.callback.__name__.replace("_", "-")
+            for command in app.registered_commands
+            if command.callback is not None
+        }
+        assert registered_commands <= listed_commands
+
     def test_transcribe_help(self, cli_runner):
         """Test transcribe command help."""
         result = cli_runner.invoke(app, ["transcribe", "--help"])
@@ -738,6 +747,7 @@ class TestMusicCommand:
         assert "lyrics" in result.stdout.lower()
         assert "instrumental" in result.stdout.lower()
 
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[])
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.vad.detect_vocal_segments")
     @patch("scribe.utils.source_separation.separate_vocals")
@@ -752,6 +762,7 @@ class TestMusicCommand:
         mock_separate_vocals,
         mock_detect_vocals,
         mock_get_duration,
+        mock_slice_audio,
         cli_runner,
         tmp_path,
     ):
@@ -798,7 +809,9 @@ class TestMusicCommand:
         # Verify
         assert result.exit_code == 0
         assert mock_transcriber.transcribe.called
+        mock_slice_audio.assert_called_once()
 
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[])
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.vad.detect_vocal_segments")
     @patch("scribe.utils.source_separation.separate_vocals")
@@ -813,6 +826,7 @@ class TestMusicCommand:
         mock_separate_vocals,
         mock_detect_vocals,
         mock_get_duration,
+        mock_slice_audio,
         cli_runner,
         tmp_path,
     ):
@@ -855,7 +869,13 @@ class TestMusicCommand:
 
         # Mock transcriber
         mock_transcriber = Mock()
-        mock_transcriber.transcribe.return_value = tmp_path / "transcript.txt"
+
+        def create_transcript(*_args, **_kwargs):
+            transcript_path = tmp_path / "transcript.txt"
+            transcript_path.write_text("Lyrics here\n")
+            return transcript_path
+
+        mock_transcriber.transcribe.side_effect = create_transcript
         mock_transcriber_class.return_value = mock_transcriber
 
         # Execute
@@ -864,6 +884,8 @@ class TestMusicCommand:
         # Verify - should process all 3 files
         assert result.exit_code == 0
         assert mock_transcriber.transcribe.call_count >= 3
+        assert mock_slice_audio.call_count == 3
+        assert "Failed: 0" in result.stdout
 
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.vad.detect_vocal_segments")
@@ -925,6 +947,7 @@ class TestMusicCommand:
         # Should log instrumental detection
         assert "instrumental" in result.stdout.lower() or "inst" in result.stdout.lower()
 
+    @patch("scribe.utils.audio_slicer.slice_audio_by_segments", return_value=[])
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.vad.detect_vocal_segments")
     @patch("scribe.utils.source_separation.separate_vocals")
@@ -939,6 +962,7 @@ class TestMusicCommand:
         mock_separate_vocals,
         mock_detect_vocals,
         mock_get_duration,
+        mock_slice_audio,
         cli_runner,
         tmp_path,
     ):
@@ -986,7 +1010,13 @@ class TestMusicCommand:
 
         # Mock transcriber
         mock_transcriber = Mock()
-        mock_transcriber.transcribe.return_value = tmp_path / "transcript.txt"
+
+        def create_transcript(*_args, **_kwargs):
+            transcript_path = tmp_path / "transcript.txt"
+            transcript_path.write_text("Lyrics here\n")
+            return transcript_path
+
+        mock_transcriber.transcribe.side_effect = create_transcript
         mock_transcriber_class.return_value = mock_transcriber
 
         # Execute
@@ -996,6 +1026,8 @@ class TestMusicCommand:
         assert result.exit_code == 0
         # At least 2 files should succeed
         assert mock_transcriber.transcribe.call_count >= 2
+        assert mock_slice_audio.call_count == 3
+        assert "Failed: 0" in result.stdout
 
     def test_music_method_option(self, cli_runner, tmp_path):
         """Test music command respects method option."""

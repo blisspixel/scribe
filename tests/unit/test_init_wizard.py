@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import StringIO
 from unittest.mock import Mock, patch
 
+import pytest
 from rich.console import Console
 
 from scribe.cli import init as init_wizard
@@ -122,6 +123,44 @@ def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
         "port": 4455,
         "password": "obs-secret",
     }
+
+
+@pytest.mark.parametrize(
+    ("has_gpu", "gpu_summary"),
+    [(True, "NVIDIA RTX 4090"), (False, "No CUDA GPU detected")],
+)
+def test_run_wizard_defaults_to_local_first_auto(
+    tmp_path, monkeypatch, has_gpu: bool, gpu_summary: str
+) -> None:
+    config_path = tmp_path / "config.toml"
+    save_config = Mock(return_value=config_path)
+    prompt_defaults: list[tuple[str, str | None]] = []
+
+    def answer_with_default(prompt: str, **kwargs: object) -> str:
+        default = kwargs.get("default")
+        prompt_defaults.append((prompt, default if isinstance(default, str) else None))
+        assert isinstance(default, str)
+        return default
+
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(init_wizard, "save_config_file", save_config)
+    monkeypatch.setattr(init_wizard, "_detect_gpu_summary", lambda: (has_gpu, gpu_summary))
+    monkeypatch.setattr(init_wizard, "_detected_keys", lambda: {"openai": False, "xai": False})
+    monkeypatch.setattr(init_wizard, "_resolve_env_conflicts", Mock())
+    monkeypatch.setattr(init_wizard, "_maybe_setup_voice", Mock())
+
+    console = _console()
+    with (
+        patch("scribe.cli.init.Prompt.ask", side_effect=answer_with_default),
+        patch("scribe.cli.init.Confirm.ask", side_effect=[False, False, False, False, False]),
+        patch("scribe.models.config.ScribeConfig", return_value=Mock(obs_password=None)),
+    ):
+        init_wizard.run_wizard(console=console, force=True)
+
+    saved_data = save_config.call_args.args[0]
+    assert saved_data["transcription"]["method"] == "auto"
+    assert ("[bold]Transcription method[/bold]", "auto") in prompt_defaults
+    assert "No AI vendor keys detected" not in console.file.getvalue()
 
 
 def test_default_obs_settings_reads_existing_config(tmp_path, monkeypatch):

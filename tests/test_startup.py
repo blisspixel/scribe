@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""
-Improved startup and system health tests for Scribe transcription system.
+"""Standalone manual startup and system-health checks.
+
+These environment-dependent probes feed the script's exit status. They are
+named ``check_*`` so pytest does not report returned booleans as passing tests.
 """
 
 import contextlib
@@ -34,7 +36,7 @@ def print_test(name: str, status: str, details: str = ""):
         print(f"{Fore.CYAN}   Details: {details}")
 
 
-def test_imports():
+def check_imports():
     """Test all critical imports."""
     print_header("IMPORT TESTS")
 
@@ -62,7 +64,7 @@ def test_imports():
     return all(results)
 
 
-def test_path_handling():
+def check_path_handling():
     """Test path handling with various quote combinations."""
     print_header("PATH HANDLING TESTS")
 
@@ -113,7 +115,7 @@ def test_path_handling():
             os.unlink(tmp_path)
 
 
-def test_script_syntax():
+def check_script_syntax():
     """Test that all main scripts have valid syntax."""
     print_header("SYNTAX TESTS")
 
@@ -151,7 +153,7 @@ def test_script_syntax():
     return all_passed
 
 
-def test_gpu_detection():
+def check_gpu_detection():
     """Test GPU detection capability."""
     print_header("GPU DETECTION TESTS")
 
@@ -187,7 +189,7 @@ def test_gpu_detection():
         return False
 
 
-def test_environment():
+def check_environment():
     """Test environment configuration."""
     print_header("ENVIRONMENT TESTS")
 
@@ -211,7 +213,7 @@ def test_environment():
     return True
 
 
-def test_file_operations():
+def check_file_operations():
     """Test file operations and permissions."""
     print_header("FILE OPERATION TESTS")
 
@@ -240,7 +242,7 @@ def test_file_operations():
     return True
 
 
-def test_external_tools():
+def check_external_tools():
     """Test availability of external tools."""
     print_header("EXTERNAL TOOLS TESTS")
 
@@ -278,13 +280,13 @@ def main():
 
     # Run all test suites
     test_results = {
-        "Imports": test_imports(),
-        "Path Handling": test_path_handling(),
-        "Script Syntax": test_script_syntax(),
-        "GPU Detection": test_gpu_detection(),
-        "Environment": test_environment(),
-        "File Operations": test_file_operations(),
-        "External Tools": test_external_tools(),
+        "Imports": check_imports(),
+        "Path Handling": check_path_handling(),
+        "Script Syntax": check_script_syntax(),
+        "GPU Detection": check_gpu_detection(),
+        "Environment": check_environment(),
+        "File Operations": check_file_operations(),
+        "External Tools": check_external_tools(),
     }
 
     # Summary

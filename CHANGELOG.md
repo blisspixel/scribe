@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 - Refactored `scribe.core.openai_api` to completely eliminate `pydub.silence.split_on_silence` dependency in favor of the new Rust streaming engine.
 - Re-architected `run_tray` in `scribe.voice.tray` to automatically hand off to the Go `scribe-tray` binary if present on Windows (seamless fallback to Python tray on other platforms).
-- Packaged the Go binary gracefully via `importlib.resources` inside `pyproject.toml` data to distribute within standard Python wheels.
+- Added runtime lookup for a bundled Go tray binary via `importlib.resources`; wheel inclusion and fresh-environment installation remain release blockers and are tracked as deferred packaging debt.
 - Tightened broad exception handlers across core modules (`openai_api`, `local_whisper`, utilities) to specific typed tuples in compliance with ADR-002, preventing masked errors.
 - Standardized CLI exit boundaries in `main.py` using a single `exit_on_cli_error` handler instead of scattered `typer.Exit(1)` calls.
 - Completed Engineering Excellence Step 4: added SBOM generation documentation, integrated CUDA driver age checks into `scribe doctor`, and formalized the decision against structured JSON logging (ADR-012).
@@ -30,6 +30,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Clarified the unresolved license state instead of claiming both Apache 2.0 + Commons Clause and MIT across README, disclaimer, and ADR docs.
 - Kept shared CLI error log-file paths on one literal line so CI and Linux terminals do not wrap the filename out of diagnostic output.
 - Added the MCP `2026-07-28` release candidate as a deferred roadmap watch item for possible future agent-facing local tool surfaces.
+
+### Fixed
+- `scribe init` now defaults to local `auto` transcription on machines with or without a GPU, and it asks for provider keys only when API transcription or a provider-backed extra is selected.
+- `scribe health --provider NAME` now fails with an actionable message for unknown providers and providers without configured keys instead of treating an empty check set as healthy.
+- `scribe tray --check` now reports a missing optional parent package, including Pillow, as an installable dependency instead of raising `ModuleNotFoundError` while probing a child module.
+- Support bundles now report API keys only as `[CONFIGURED]`; they never include key prefixes or suffixes, including for short values.
+- The custom help screen now lists every registered command, including `record`, `init`, `shortcut`, `support-bundle`, and `version`.
+- Restored clean Ruff format and lint gates, converted hardware-dependent boolean scripts from misleading pytest tests into explicit standalone checks, and raised meaningful CI-safe unit coverage above the 80 percent floor.
+- CI now syncs from the committed lockfile and includes `toolchain-check` in the aggregate pass/fail decision.
+- Synchronized the 2.8.1 workspace version in `uv.lock` with package metadata.
+
+### Security
+- Raised the setuptools build requirement and lock to 83.0.0, resolving `PYSEC-2026-3447` in the build toolchain.
+- Documented and enforced the narrowly scoped `PYSEC-2026-2286` Torch exception in ADR-004. Scribe does not call `torch.load` or accept user checkpoint paths; an attempted Torch 2.10 upgrade was rejected because the default lock resolution disabled the validated CUDA path. The exception remains reviewable security debt, not a claim that Torch 2.8 is vulnerability-free.
 
 ## [2.8.0] - 2026-07-01
 

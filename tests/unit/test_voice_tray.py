@@ -203,6 +203,23 @@ def test_dependency_report_deduplicates_missing_packages(monkeypatch: pytest.Mon
     assert missing == sorted(set(missing))
 
 
+def test_dependency_report_handles_missing_parent_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_find_spec(module: str) -> importlib.machinery.ModuleSpec | None:
+        if module == "PIL.Image":
+            raise ModuleNotFoundError("No module named 'PIL'")
+        return None
+
+    monkeypatch.setattr("scribe.voice.service.importlib.util.find_spec", fake_find_spec)
+
+    report = dependency_report(include_tray=True)
+
+    pillow = next(status for status in report if status.dependency.package == "Pillow")
+    assert pillow.available is False
+    assert "Pillow" in missing_dependency_packages(include_tray=True)
+
+
 class _CharKey:
     char = "A"
     name = None

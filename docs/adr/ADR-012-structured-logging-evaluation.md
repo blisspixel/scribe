@@ -6,7 +6,7 @@ Accepted
 ## Context
 Step 4 of the Engineering Excellence roadmap includes the following item: "Evaluate minimal structured logging additions only behind an opt-in flag that does not change the default excellent Rich console + detailed file log experience."
 
-Scribe's current logging strategy uses standard Python `logging` with Rich handlers for CLI output and file handlers for debug logs. While structured logging (e.g. JSON logs, OpenTelemetry) is standard for cloud-native services, Scribe is a local-first desktop CLI tool. 
+Scribe's current logging strategy uses standard Python `logging` with Rich handlers for CLI output and file handlers for debug logs. While structured logging (e.g. JSON logs, OpenTelemetry) is standard for cloud-native services, Scribe is a local-first desktop CLI tool.
 
 ## Decision
 We have decided **against** implementing structured JSON logging or an OpenTelemetry stack for the following reasons:

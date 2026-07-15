@@ -143,6 +143,7 @@ class CleanGroup(typer.core.TyperGroup):
             ("url LINK         ", "transcribe from URL"),
             ("batch FILES      ", "process multiple files"),
             ("rec NAME         ", "record via OBS"),
+            ("record NAME      ", "advanced OBS recording"),
             ("music FILE       ", "extract lyrics"),
             ("notes TRANSCRIPT ", "meeting notes"),
             ("joke TRANSCRIPT ", "generate joke"),
@@ -157,6 +158,10 @@ class CleanGroup(typer.core.TyperGroup):
             ("health           ", "provider health check"),
             ("doctor           ", "diagnostics"),
             ("info             ", "configuration"),
+            ("init             ", "first-run setup"),
+            ("shortcut         ", "install Quick Record launcher"),
+            ("support-bundle   ", "create a diagnostic bundle"),
+            ("version          ", "show version"),
             ("help             ", "show this help"),
         ]
 
@@ -3313,19 +3318,46 @@ def health_check(
     xai_key = os.getenv("XAI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY")
-    if openai_key is not None:
+    if openai_key:
         api_keys["openai"] = openai_key
-    if xai_key is not None:
+    if xai_key:
         api_keys["xai"] = xai_key
-    if anthropic_key is not None:
+    if anthropic_key:
         api_keys["anthropic"] = anthropic_key
-    if gemini_key is not None:
+    if gemini_key:
         api_keys["gemini"] = gemini_key
+
+    provider_key_names = {
+        "openai": "OPENAI_API_KEY",
+        "xai": "XAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+    }
+    if provider is not None and provider not in provider_key_names:
+        console.print(
+            f"[{ScribeTheme.ERROR}]Unknown provider: {escape(provider)}[/{ScribeTheme.ERROR}]"
+        )
+        console.print(
+            f"[{ScribeTheme.TEXT_MUTED}]Choose one of: openai, xai, anthropic, gemini.[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print()
+        raise typer.Exit(1)
 
     if not api_keys:
         console.print(f"[{ScribeTheme.WARNING}]no api keys configured[/{ScribeTheme.WARNING}]")
         console.print(
             f"[{ScribeTheme.TEXT_MUTED}]set OPENAI_API_KEY, XAI_API_KEY, etc.[/{ScribeTheme.TEXT_MUTED}]"
+        )
+        console.print()
+        raise typer.Exit(1)
+
+    if provider is not None and provider not in api_keys:
+        key_name = provider_key_names[provider]
+        console.print(
+            f"[{ScribeTheme.WARNING}]{key_name} is not configured[/{ScribeTheme.WARNING}]"
+        )
+        console.print(
+            f"[{ScribeTheme.TEXT_MUTED}]Set {key_name}, then retry `scribe health --provider {provider}`.[/{ScribeTheme.TEXT_MUTED}]"
         )
         console.print()
         raise typer.Exit(1)

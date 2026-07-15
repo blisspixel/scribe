@@ -39,7 +39,8 @@ High-level summary. Full details live in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Primary Focus                  | Status    |
 |---------|--------------------------------|-----------|
-| 2.8.0   | $0-first defaults, local-only mode, tray polish, readiness diagnostics | Current   |
+| 2.8.1   | Setup, diagnostic, privacy, and CI truthfulness | In development |
+| 2.8.0   | $0-first defaults, local-only mode, tray polish, readiness diagnostics | Current release |
 | 2.7.0   | Tray utility + voice hardening + ruff gate fixes | Released  |
 | 2.6.0   | Roadmap product items 2-5 + structured output, glossaries | Released  |
 | 2.5.0   | Cross-platform launcher + icon | Released  |
@@ -89,12 +90,15 @@ Roadmap watch item, not current scope: the May 21, 2026 MCP `2026-07-28` release
 The product surface is already useful, so polish work should improve what exists rather than expand scope:
 
 - **UX flow debt:** keep `init`, `doctor`, `info`, `shortcut`, `rec`, and `tray --check` aligned so setup, verification, and recovery never disagree.
+- **Copy and comprehension debt:** keep cost, provider, and recovery language explicit at the decision point rather than relying on later documentation.
 - **Visual polish debt:** keep terminal output restrained, scannable, and useful in plain terminals as well as Rich-capable terminals.
-- **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home.
-- **Reliability debt:** continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
-- **Security debt:** remove stale security assumptions, keep cloud transmission explicit, and review dependency-audit exceptions as the GPU stack moves.
+- **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home; populate support-bundle run history only from real persisted run data.
+- **Reliability debt:** make partial batch and artifact failures return a non-zero status, then continue hardening local backend routing, OBS recovery, filesystem operations, and voice tray state transitions.
+- **Security debt:** remove stale security assumptions, keep cloud transmission explicit, and review all eight documented Torch dependency-audit exceptions as the GPU stack moves.
 - **Accessibility debt:** keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
+- **Test coverage debt:** keep the meaningful coverage gate above 80 percent with failure-path assertions, and replace legacy hardware probes with marked manual checks rather than counting returned booleans as tests.
 - **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
+- **Deferred product debt:** verify that built wheels contain or can install every native Rust and Go runtime artifact before describing those artifacts as distributable.
 
 ---
 
@@ -204,7 +208,7 @@ Make the public surface and core logic statically verifiable.
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
 
-**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation/recording_policy/vocabulary, Hypothesis property + HotkeyState + RecordingPhase state machine tests). Step 4 complete: pip-audit blocking in CI; SBOM generation documented; `scribe doctor` enhanced with CUDA driver age and pip-audit; broad exception handlers tightened to ADR-002 typed tuples across the codebase; ADR-012 created to evaluate and reject structured logging. See PROGRESS-LOG.md.
+**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation/recording_policy/vocabulary, Hypothesis property + HotkeyState + RecordingPhase state machine tests). Step 4 is operational but retains explicit security debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and audit results, and eight Torch advisories remain accepted under ADR-004 until compatible CPU and CUDA dependency sets can be locked and validated. Broad exception handlers are tightened to ADR-002 typed tuples across the codebase; ADR-012 records the decision against structured logging. See PROGRESS-LOG.md.
 
 **Work in this step:**
 - Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.
@@ -255,4 +259,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-07-08 (next resident-tray roadmap task, acceptance criteria, and MCP watch item refreshed)
+**Last Updated:** 2026-07-15 (v2.8.1 product-polish status, dependency exceptions, and deferred packaging verification refreshed)

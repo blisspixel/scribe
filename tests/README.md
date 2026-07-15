@@ -2,15 +2,17 @@
 
 ## Current Status
 
-- 1592 tests collected across unit, integration, e2e, and manual paths.
-- Latest local CI-safe unit coverage run: 1499 passed, 5 skipped, 1 deselected.
-- Latest local CI-safe coverage: 81.69 percent.
+- 1617 assertion-based tests collected across unit, integration, e2e, and manual paths.
+- Latest local CI-safe unit coverage run: 1478 passed, 2 skipped, 37 deselected.
+- Latest local CI-safe unit coverage: 80.04 percent.
+- Latest broader CI-equivalent gate: 1578 passed, 12 skipped, 27 deselected, no warnings, and 82.19 percent coverage.
 - Enforced coverage floor: 80 percent.
 - Quality gates: Ruff check, Ruff format, mypy strict, pytest, pytest-cov, pre-commit, and pip-audit in CI.
 
 ## Standard Commands
 
 ```bash
+uv sync --locked --group dev
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
@@ -26,7 +28,7 @@ The full suite includes integration, e2e, GPU, FFmpeg, provider, Pillow, and man
 - `tests/integration/`: component interaction tests for converter, local Whisper, and OpenAI API paths.
 - `tests/e2e/`: full workflow tests that may be slower or depend on heavier setup.
 - `tests/manual/`: live provider, device, or timing checks that are not CI-safe.
-- Root-level `tests/test_*.py`: legacy device/platform scripts kept for compatibility and gradual migration.
+- Root-level `tests/test_audio.py`, `test_devices.py`, and `test_startup.py`: standalone hardware and environment checks whose `check_*` functions feed script exit status and are intentionally not collected as pytest tests. Other root-level `test_*.py` files contain assertion-based platform tests.
 
 ## Markers
 

@@ -35,6 +35,7 @@ _ACCEPTED_TORCH_VULN_IGNORES: tuple[str, ...] = (
     "PYSEC-2025-204",
     "PYSEC-2025-206",
     "PYSEC-2026-139",
+    "PYSEC-2026-2286",
     "CVE-2025-2999",
     "CVE-2025-3000",
     "CVE-2025-3001",

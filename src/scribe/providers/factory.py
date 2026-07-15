@@ -89,7 +89,7 @@ def _resolve_api_key(provider_name: str, api_key: str | None) -> str:
 
     if not api_key:
         raise ValueError(f"No API key found for provider: {provider_name}")
-    
+
     return api_key
 
 

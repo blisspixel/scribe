@@ -2,11 +2,12 @@
 
 ## Current Status
 
-Date: 2026-07-07
+Date: 2026-07-15
 
-- 1592 tests collected.
-- Latest local CI-safe unit coverage run: 1499 passed, 5 skipped, 1 deselected.
-- Latest local CI-safe coverage: 81.69 percent.
+- 1617 assertion-based tests collected.
+- Latest local CI-safe unit coverage run: 1478 passed, 2 skipped, 37 deselected.
+- Latest local CI-safe unit coverage: 80.04 percent.
+- Latest broader CI-equivalent gate: 1578 passed, 12 skipped, 27 deselected, no warnings, and 82.19 percent coverage.
 - Current enforced coverage floor: 80 percent.
 - CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit, and pip-audit.
 
@@ -92,6 +93,7 @@ uv run pytest tests/unit/test_target.py -q
 Then run local gates before a commit:
 
 ```bash
+uv sync --locked --group dev
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe

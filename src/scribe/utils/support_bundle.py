@@ -148,9 +148,7 @@ def get_environment_config() -> dict[str, Any]:
     # API key status (sanitized)
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
     if api_key:
-        config["OPENAI_API_KEY"] = (
-            f"{api_key[:10]}...{api_key[-4:]}" if len(api_key) > 14 else "[REDACTED]"
-        )
+        config["OPENAI_API_KEY"] = "[CONFIGURED]"
     else:
         config["OPENAI_API_KEY"] = None
 

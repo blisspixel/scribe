@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""
-Audio processing and device tests for Scribe transcription system.
+"""Standalone manual checks for local audio and device capabilities.
+
+These checks print an operator-oriented report and return process status from
+``main``. They are intentionally named ``check_*`` because hardware-dependent
+boolean probes are not assertion-based pytest tests.
 """
 
 import contextlib
@@ -59,7 +62,7 @@ def create_test_wav_file(duration_seconds: float = 1.0, sample_rate: int = 44100
     return temp_path
 
 
-def test_audio_file_handling():
+def check_audio_file_handling():
     """Test audio file reading and validation."""
     print_header("AUDIO FILE HANDLING TESTS")
 
@@ -105,7 +108,7 @@ def test_audio_file_handling():
                 os.unlink(test_file)
 
 
-def test_audio_device_detection():
+def check_audio_device_detection():
     """Test audio device detection and configuration."""
     print_header("AUDIO DEVICE TESTS")
 
@@ -160,7 +163,7 @@ def test_audio_device_detection():
         return False
 
 
-def test_path_normalization():
+def check_path_normalization():
     """Test path normalization with various input formats."""
     print_header("PATH NORMALIZATION TESTS")
 
@@ -206,7 +209,7 @@ def test_path_normalization():
             os.unlink(temp_path)
 
 
-def test_audio_format_validation():
+def check_audio_format_validation():
     """Test audio format validation and error handling."""
     print_header("AUDIO FORMAT VALIDATION TESTS")
 
@@ -261,7 +264,7 @@ def test_audio_format_validation():
         return False
 
 
-def test_file_size_handling():
+def check_file_size_handling():
     """Test handling of various file sizes."""
     print_header("FILE SIZE HANDLING TESTS")
 
@@ -320,11 +323,11 @@ def main():
 
     # Run all test suites
     test_results = {
-        "Audio File Handling": test_audio_file_handling(),
-        "Audio Device Detection": test_audio_device_detection(),
-        "Path Normalization": test_path_normalization(),
-        "Format Validation": test_audio_format_validation(),
-        "File Size Handling": test_file_size_handling(),
+        "Audio File Handling": check_audio_file_handling(),
+        "Audio Device Detection": check_audio_device_detection(),
+        "Path Normalization": check_path_normalization(),
+        "Format Validation": check_audio_format_validation(),
+        "File Size Handling": check_file_size_handling(),
     }
 
     # Summary

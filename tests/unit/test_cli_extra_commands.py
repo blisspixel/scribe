@@ -250,6 +250,38 @@ def test_health_check_success() -> None:
     assert "all providers healthy" in result.stdout
 
 
+def test_health_check_fails_when_requested_provider_has_no_key() -> None:
+    runner = CliRunner()
+    monitor = Mock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch("scribe.providers.health.get_health_monitor", return_value=monitor),
+    ):
+        result = runner.invoke(app, ["health", "--provider", "xai"])
+
+    assert result.exit_code == 1
+    assert "XAI_API_KEY is not configured" in result.stdout
+    assert "all providers healthy" not in result.stdout
+    monitor.check_provider_health.assert_not_called()
+
+
+def test_health_check_rejects_unknown_provider() -> None:
+    runner = CliRunner()
+    monitor = Mock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch("scribe.providers.health.get_health_monitor", return_value=monitor),
+    ):
+        result = runner.invoke(app, ["health", "--provider", "unknown"])
+
+    assert result.exit_code == 1
+    assert "Unknown provider: unknown" in result.stdout
+    assert "openai, xai, anthropic, gemini" in result.stdout
+    monitor.check_provider_health.assert_not_called()
+
+
 def test_support_bundle_command_success(tmp_path: Path) -> None:
     runner = CliRunner()
     bundle_path = tmp_path / "bundle.json"

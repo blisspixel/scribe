@@ -546,7 +546,7 @@ class TestDependencySecurityCheck:
         """A clean pip-audit run passes with ADR-004 torch ignores applied."""
         mock_run.return_value = SimpleNamespace(
             returncode=0,
-            stdout="No known vulnerabilities found, 7 ignored\n",
+            stdout="No known vulnerabilities found, 8 ignored\n",
             stderr="",
         )
         diagnostics = SystemDiagnostics()
@@ -557,6 +557,7 @@ class TestDependencySecurityCheck:
         cmd = mock_run.call_args[0][0]
         assert "--ignore-vuln" in cmd
         assert "PYSEC-2025-203" in cmd
+        assert "PYSEC-2026-2286" in cmd
 
     @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")

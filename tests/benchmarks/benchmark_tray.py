@@ -22,7 +22,7 @@ def benchmark_tray():
         # In a real environment, pystray spawns children or uses threads.
         # Let's sum up memory for the whole process tree
         children = ps_proc.children(recursive=True)
-        all_procs = [ps_proc] + children
+        all_procs = [ps_proc, *children]
 
         total_rss = sum(p.memory_info().rss for p in all_procs)
 

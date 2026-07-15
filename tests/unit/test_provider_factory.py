@@ -1,3 +1,4 @@
+import os
 from unittest.mock import Mock, patch
 
 import pytest
@@ -177,7 +178,6 @@ def test_local_only_off_when_unset() -> None:
     from scribe.providers.factory import _local_only_enabled
 
     # Ensure the var is removed for this test
-    import os
     with (
         patch.dict("os.environ", {}, clear=False),
         patch("scribe.config_file.load_config_file", return_value={}),

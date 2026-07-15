@@ -2,17 +2,19 @@
 
 ## Current Reality
 
-As of 2026-07-07:
+As of 2026-07-15:
 
-- Pytest collection: 1592 tests across unit, integration, e2e, and manual coverage.
-- Latest local CI-safe unit coverage gate: 1499 passed, 5 skipped, 1 deselected.
-- Latest measured total coverage: 81.69 percent.
+- Pytest collection: 1617 assertion-based tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit coverage gate: 1478 passed, 2 skipped, 37 deselected.
+- Latest measured CI-safe unit coverage: 80.04 percent.
+- Latest broader CI-equivalent gate: 1578 passed, 12 skipped, 27 deselected, no warnings, and 82.19 percent coverage.
 - Enforced project coverage floor: 80 percent.
 - Standard quality gates: Ruff check, Ruff format check, mypy strict, CI-safe unit coverage, build, and pip-audit with the documented CI ignores.
 
 ## Standard Local Commands
 
 ```bash
+uv sync --locked --group dev
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
@@ -41,7 +43,8 @@ uv run pytest tests/integration/test_converter.py -q
 
 - Live GPU, microphone, OBS, diarization, and provider API paths require marked integration or manual validation.
 - Some broad CLI, converter, provider, and media-composition branches remain below the project average and should receive targeted regression tests when touched.
-- TorchAudio emits deprecation warnings that should be handled in a future TorchCodec migration cycle.
+- Runtime TorchAudio calls remain a future TorchCodec migration concern; unit tests mock invalid media boundaries explicitly and the current CI-equivalent run is warning-free.
+- The three standalone hardware/environment scripts use `check_*` probes and are not pytest coverage; live device validation remains manual.
 
 ## Manual Or Slow Validation
 

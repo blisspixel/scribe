@@ -42,7 +42,7 @@ def benchmark_rust():
     chunks_count = len(split_points)
 
     end_time = time.time()
-    current, peak = tracemalloc.get_traced_memory()
+    _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     mem_after = process.memory_info().rss / 1024 / 1024

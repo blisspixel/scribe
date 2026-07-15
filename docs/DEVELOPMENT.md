@@ -1,6 +1,6 @@
 # Development Guide
 
-**Last Updated:** 2026-07-08 (current local validation gates and CI-safe coverage subset)
+**Last Updated:** 2026-07-15 (locked setup and current local validation gates)
 
 ## Getting Started
 
@@ -16,7 +16,7 @@
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-uv sync
+uv sync --locked --group dev
 uv run scribe init          # polished interactive first-run (review + verification + optional launcher)
 uv run scribe doctor        # diagnostics + offers to re-run init on failures
 ```

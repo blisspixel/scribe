@@ -455,6 +455,7 @@ class OpenAITranscriber:
         )
 
         from scribe.utils.platform import get_ffmpeg_path
+
         ffmpeg_bin = str(get_ffmpeg_path() or "ffmpeg")
 
         out_paths: list[Path] = []

@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 import tracemalloc
 from pathlib import Path
@@ -10,19 +11,23 @@ from pydub.silence import split_on_silence
 
 def generate_test_audio(path: Path, duration_min: int = 60) -> None:
     print(f"Generating {duration_min}-minute test audio...")
-    # Generate 1 minute of audio (alternating noise and silence)
-    # Then multiply by duration_min to get the full audio
-    sound = AudioSegment.silent(duration=5000)  # 5 seconds of silence
-    noise = AudioSegment.silent(
-        duration=55000
-    )  # 55 seconds of "noise" (we use silence here for speed, but pydub split_on_silence processes it the same if we set thresholds right)
-
-    # Actually, we need real noise so it doesn't just split everywhere.
-    # Let's generate a 1 minute segment of white noise using ffmpeg
     if not path.parent.exists():
         path.parent.mkdir(parents=True)
 
-    os.system(f'ffmpeg -f lavfi -i "anoisesrc=d=60:c=white:r=16000" -y {path} > NUL 2>&1')
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-f",
+            "lavfi",
+            "-i",
+            "anoisesrc=d=60:c=white:r=16000",
+            "-y",
+            str(path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     audio = AudioSegment.from_file(str(path))
     full_audio = audio * duration_min
@@ -57,7 +62,7 @@ def benchmark_pydub():
     chunks = split_on_silence(audio, min_silence_len=500, silence_thresh=-40, keep_silence=200)
 
     end_time = time.time()
-    current, peak = tracemalloc.get_traced_memory()
+    _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     mem_after = process.memory_info().rss / 1024 / 1024

@@ -205,12 +205,16 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     # 2. Transcription method
     has_gpu, gpu_desc = _detect_gpu_summary()
     console.print(f"\n[dim]GPU check:[/dim] {gpu_desc}")
+    method_default = "auto"
     if has_gpu:
-        method_default = "local"
-        method_help = "[green]GPU detected[/green] - local recommended for speed and privacy"
+        method_help = (
+            "[green]GPU detected[/green] - auto stays local and uses the GPU for speed and privacy"
+        )
     else:
-        method_default = "openai"
-        method_help = "[yellow]No GPU[/yellow] - OpenAI API recommended"
+        method_help = (
+            "[yellow]No CUDA GPU[/yellow] - auto stays local on CPU at no cost, but runs slower. "
+            "Choose openai only for explicit paid cloud transcription."
+        )
     console.print(method_help)
     method = Prompt.ask(
         "[bold]Transcription method[/bold]",
@@ -231,10 +235,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         console=console,
     )
 
-    # 4. AI vendor
+    # 4. AI vendor. Skip this entirely when no optional AI output is enabled;
+    # cloud provider keys are not prerequisites for the default local transcript.
     keys = _detected_keys()
     vendor_choice: str | None = None
-    if keys["openai"] and keys["xai"]:
+    needs_ai_vendor = generate_notes or generate_joke or generate_meme
+    if needs_ai_vendor and keys["openai"] and keys["xai"]:
         console.print("\n[bold]AI vendor[/bold] [dim](both keys detected)[/dim]")
         vendor_choice = Prompt.ask(
             "  Default vendor for joke / meme",
@@ -242,16 +248,21 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             default="xai",
             console=console,
         )
-    elif keys["openai"]:
+    elif needs_ai_vendor and keys["openai"]:
         vendor_choice = "openai"
         console.print("\n[dim]Only OPENAI_API_KEY detected - using openai.[/dim]")
-    elif keys["xai"]:
+    elif needs_ai_vendor and keys["xai"]:
         vendor_choice = "xai"
         console.print("\n[dim]Only XAI_API_KEY detected - using xai.[/dim]")
-    else:
+    elif needs_ai_vendor:
         console.print(
             "\n[yellow]No AI vendor keys detected.[/yellow] "
             "[dim]Set OPENAI_API_KEY or XAI_API_KEY in .env then re-run `scribe init`.[/dim]"
+        )
+    elif method == "openai" and not keys["openai"]:
+        console.print(
+            "\n[yellow]OpenAI transcription requires OPENAI_API_KEY.[/yellow] "
+            "[dim]Set it before transcribing, or choose auto for local processing.[/dim]"
         )
 
     # 5. OBS WebSocket

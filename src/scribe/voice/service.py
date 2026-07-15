@@ -59,14 +59,25 @@ TRAY_DEPENDENCIES: tuple[Dependency, ...] = (
 )
 
 
+def _module_available(module: str) -> bool:
+    """Return whether an optional module can be discovered safely.
+
+    ``find_spec("PIL.Image")`` raises when the parent ``PIL`` package is absent.
+    That is an expected missing-extra state, not a tray diagnostic failure.
+    """
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 def dependency_report(*, include_tray: bool) -> list[DependencyStatus]:
     """Return optional dependency availability for the requested resident mode."""
     deps = [*VOICE_DEPENDENCIES]
     if include_tray:
         deps.extend(TRAY_DEPENDENCIES)
     return [
-        DependencyStatus(dependency=dep, available=importlib.util.find_spec(dep.module) is not None)
-        for dep in deps
+        DependencyStatus(dependency=dep, available=_module_available(dep.module)) for dep in deps
     ]
 
 
