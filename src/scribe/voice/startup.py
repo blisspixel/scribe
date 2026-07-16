@@ -174,7 +174,7 @@ def remove_startup() -> Path | None:  # pragma: no cover - per-OS I/O
     return None
 
 
-def run_tray_startup(console: Console, action: str) -> int:  # pragma: no cover - CLI wrapper
+def run_tray_startup(console: Console, action: str) -> int:
     """CLI handler for ``scribe tray --startup install|remove|status``."""
     choice = (action or "status").strip().lower()
     if choice not in {"install", "remove", "status"}:
