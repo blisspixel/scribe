@@ -81,6 +81,7 @@ endpoints = get_split_timestamps(
 1. [x] Create `cmd/scribe-tray/main.go`.
 2. [x] Use the canonical platform icon, honor simple configured F6-F12 keys, reject collisions, and fail startup when either key cannot register.
 3. [x] Implement the IPC boundary (a lightweight Python socket server inside `scribe.voice.service`).
-4. [x] Require a process-scoped capability and authenticated READY signal, close IPC resources explicitly, report backend provenance, and recover visibly from daemon launch, readiness, and exit failures.
-5. [ ] Reproducibly build and package platform-specific Go binaries with integrity checks.
-6. [ ] Reach Python menu, desktop-notification, activation-mode, and user-facing error parity before any packaged daemon can be selected automatically.
+4. [x] Require a process-scoped capability and authenticated READY signal, close IPC resources explicitly, report the selected backend and override trust state, and recover visibly from daemon launch, readiness, and exit failures.
+5. [x] Enforce a Windows source contract for tidy and verified modules, tests, vet, reachable vulnerabilities, deterministic build hashes, and embedded commit identity.
+6. [ ] Sign, attest, reproducibly package, and clean-install platform-specific Go binaries before describing them as official artifacts.
+7. [ ] Reach Python menu, desktop-notification, activation-mode, and user-facing error parity before any packaged daemon can be selected automatically.

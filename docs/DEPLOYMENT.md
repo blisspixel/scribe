@@ -65,6 +65,17 @@ Optional:
   development. The portable root wheel uses bounded duration-based chunking when
   that unpublished acceleration artifact is absent.
 
+The Go tray is also source-only. Scribe ships no native tray executable and never
+selects one implicitly. Developers can run `pwsh -File
+scripts/check_native_tray.ps1` to produce ignored, unsigned verification builds
+under `.agent/native-tray`, then deliberately point `SCRIBE_TRAY_NATIVE_BIN` at
+one. Preflight labels any such path an unverified developer override. Do not treat
+that local build as an official release artifact.
+
+The portable root-wheel contract rejects platform-native payload members. Native
+components require separate platform-tagged, signed, and attested distribution
+contracts before they can become official release artifacts.
+
 ## Configuration
 
 Configuration layers, highest precedence first:

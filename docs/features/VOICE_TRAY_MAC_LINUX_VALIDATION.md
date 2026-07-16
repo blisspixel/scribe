@@ -11,13 +11,25 @@ live-validated resident-tray platform.
 
 ## Automated Evidence Available
 
-- `tray_platform_matrix` classifies macOS and Linux as experimental.
-- `scribe tray --check` reports the selected backend and local dependency state.
-- macOS output explains Input Monitoring and Microphone permission requirements.
-- Linux output distinguishes X11, Wayland, graphical, and headless sessions.
-- Unit tests cover those advisories without claiming that hardware behavior passed.
+As of 2026-07-15 non-live hardening:
+
+- `tray_platform_matrix` classifies Windows as `validated`, macOS/Linux as
+  `experimental`, and other systems as `unsupported`.
+- `scribe tray --check` prints `platform` (system + tier), dependency markers,
+  backend trust state, startup enablement path, and readiness advisories without
+  requiring paid services or network keys.
+- macOS advisories cover Input Monitoring, Microphone, LaunchAgent run-at-login,
+  and Accessibility when `inject=type`.
+- Linux advisories distinguish headless (no false X11 support claim), X11
+  (AppIndicator / `--no-tray` note), Wayland (portal GlobalShortcuts caveat +
+  desktop-shortcut fallback), and XDG autostart.
+- Unit tests cover matrix tiers, headless contradiction guards, Wayland/X11
+  branches, macOS permission and Accessibility copy, and check presentation of
+  `platform` / `startup` lines.
 - The complete Python tray is the default. The native Go source prototype remains
   explicit opt-in and is not a substitute for this platform matrix.
+
+Automated evidence does **not** satisfy the completion rule below.
 
 ## Required macOS Record
 

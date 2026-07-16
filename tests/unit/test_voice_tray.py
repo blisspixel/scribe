@@ -494,7 +494,7 @@ def test_native_tray_selection_does_not_implicitly_use_source_binary(
     assert "opt-in" in selection.reason
 
 
-def test_native_tray_selection_prefers_deliberate_provenance(
+def test_native_tray_selection_labels_developer_override_unverified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from scribe.voice import tray
@@ -507,6 +507,7 @@ def test_native_tray_selection_prefers_deliberate_provenance(
 
     assert selection.path == explicit
     assert selection.source == "explicit"
+    assert "unverified developer override" in selection.reason
     assert str(explicit) in selection.reason
 
 
@@ -537,7 +538,7 @@ def test_native_tray_compatibility_requires_toggle_function_keys() -> None:
     )
 
 
-def test_tray_check_reports_backend_and_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tray_check_reports_backend_and_selection_state(monkeypatch: pytest.MonkeyPatch) -> None:
     from scribe.voice import tray
 
     monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
@@ -555,9 +556,87 @@ def test_tray_check_reports_backend_and_provenance(monkeypatch: pytest.MonkeyPat
 
     assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 0
     output = console.export_text()
+    assert "platform" in output
     assert "backend" in output
+    assert "startup" in output
     assert "Python tray" in output
     assert "opt-in via SCRIBE_TRAY_NATIVE_BIN" in output
+
+
+def test_tray_check_darwin_emits_permission_advisories(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scribe.voice import tray
+
+    monkeypatch.setattr(tray.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
+    monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        tray,
+        "_resolve_native_tray",
+        lambda: tray.NativeTraySelection(
+            None,
+            "python",
+            "native daemon is opt-in via SCRIBE_TRAY_NATIVE_BIN",
+        ),
+    )
+    console = Console(record=True)
+
+    assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 0
+    output = console.export_text()
+    assert "experimental" in output.lower()
+    assert "Input Monitoring" in output
+    assert "LaunchAgent" in output
+
+
+def test_tray_check_linux_headless_warns_without_x11_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tray
+
+    monkeypatch.setattr(tray.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
+    monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        tray,
+        "_resolve_native_tray",
+        lambda: tray.NativeTraySelection(
+            None,
+            "python",
+            "native daemon is opt-in via SCRIBE_TRAY_NATIVE_BIN",
+        ),
+    )
+    console = Console(record=True)
+
+    assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 0
+    output = console.export_text()
+    assert "DISPLAY" in output or "WAYLAND_DISPLAY" in output
+    assert "global hotkeys via pynput are expected to work" not in output
+
+
+def test_tray_check_labels_explicit_native_override_unverified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tray
+
+    monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
+    monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        tray,
+        "_resolve_native_tray",
+        lambda: tray.NativeTraySelection(
+            Path("developer-tray.exe"),
+            "explicit",
+            "unverified developer override at developer-tray.exe",
+        ),
+    )
+    console = Console(record=True)
+
+    assert tray.run_tray_check(console, TraySettings(), include_tray=True) == 0
+    output = console.export_text()
+    assert "native tray" in output
+    assert "unverified developer override at developer-tray.exe" in output
 
 
 def test_run_tray_falls_back_to_python_after_native_startup_failure(
@@ -727,11 +806,13 @@ def test_tray_platform_matrix_tiers() -> None:
     from scribe.voice.service import graphical_session_detected, tray_platform_matrix
 
     assert tray_platform_matrix("Windows").tier == "validated"
+    assert "live-validated" in tray_platform_matrix("Windows").headline
     assert tray_platform_matrix("Darwin").tier == "experimental"
     assert tray_platform_matrix("Linux").tier == "experimental"
     assert tray_platform_matrix("FreeBSD").tier == "unsupported"
     assert graphical_session_detected(display=":0")
     assert graphical_session_detected(wayland_display="wayland-0")
+    assert graphical_session_detected(session_type="x11")
     assert not graphical_session_detected()
 
 
@@ -747,6 +828,13 @@ def test_resident_voice_advisories_macos_warns_about_permissions() -> None:
     advisories = resident_voice_advisories("Darwin")
     assert any(a.level == "warning" and "Input Monitoring" in a.message for a in advisories)
     assert any(a.level == "warning" and "experimental" in a.message.lower() for a in advisories)
+    assert any(a.level == "info" and "LaunchAgent" in a.message for a in advisories)
+
+
+def test_resident_voice_advisories_macos_type_mentions_accessibility() -> None:
+    advisories = resident_voice_advisories("Darwin", inject="type")
+    assert any(a.level == "warning" and "Accessibility" in a.message for a in advisories)
+    assert any(a.level == "warning" and "keyboard layout" in a.message for a in advisories)
 
 
 def test_resident_voice_advisories_linux_wayland_warns() -> None:
@@ -755,12 +843,24 @@ def test_resident_voice_advisories_linux_wayland_warns() -> None:
     by_display = resident_voice_advisories("Linux", wayland_display="wayland-0")
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_session)
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_display)
+    assert any("GlobalShortcuts" in a.message for a in by_session)
+    assert any(a.level == "info" and "autostart" in a.message for a in by_session)
 
 
 def test_resident_voice_advisories_linux_x11_includes_matrix_and_session_notes() -> None:
     advisories = resident_voice_advisories("Linux", session_type="x11", display=":0")
     assert any(a.level == "info" and "X11" in a.message for a in advisories)
+    assert any(a.level == "info" and "AppIndicator" in a.message for a in advisories)
     assert any(a.level == "warning" and "experimental" in a.message.lower() for a in advisories)
+    assert any(a.level == "info" and "autostart" in a.message for a in advisories)
+
+
+def test_resident_voice_advisories_linux_headless_does_not_claim_x11_support() -> None:
+    advisories = resident_voice_advisories("Linux")
+    joined = " ".join(a.message for a in advisories)
+    assert "DISPLAY" in joined or "WAYLAND_DISPLAY" in joined
+    assert "global hotkeys via pynput are expected to work" not in joined
+    assert "Linux/X11" not in joined
 
 
 def test_resident_voice_advisories_windows_paste_is_clean() -> None:

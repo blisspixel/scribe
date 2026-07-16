@@ -4368,8 +4368,9 @@ def tray_command(
     """
     Run the resident voice tray utility.
 
-    Hold the dictation hotkey to speak into the focused field. Press the read
-    hotkey to read the selected text aloud. This is a separate opt-in voice
+    Tap the dictation hotkey to start speaking into the focused field, then tap
+    it again to stop. Press the read hotkey to read selected text aloud. The
+    configurable hold mode remains available. This is a separate opt-in voice
     surface behind the tray optional extra.
     """
     from scribe.voice.settings import resolve_tray_settings

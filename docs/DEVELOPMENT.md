@@ -88,9 +88,9 @@ uv run pytest -m "not gpu and not slow and not e2e"
 ### Test Status
 - CI-safe unit matrix: `uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q`
 - Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
-- Latest CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent validation: 1665 passed, 11 skipped, 27 deselected, 83.51% line coverage
-- Current collection: 1703 assertion-based tests
+- Latest CI-safe unit matrix: 1570 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent validation: 1673 passed, 11 skipped, 27 deselected, 83.54% line coverage
+- Current collection: 1711 assertion-based tests
 - Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
@@ -143,6 +143,12 @@ uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
 uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
+```
+
+On Windows, also verify the explicit native source prototype:
+
+```powershell
+pwsh -File scripts/check_native_tray.ps1
 ```
 
 ### 4. Full Local Verification
@@ -409,6 +415,19 @@ remove an exception without updating the ADR and CI in the same change.
 The root wheel is the portable product artifact. `scribe-audio-core` is an
 optional workspace acceleration and must not appear as a mandatory root-wheel
 requirement until matching platform wheels are published and clean-install tested.
+
+On Windows, also run:
+
+```powershell
+pwsh -File scripts/check_native_tray.ps1
+```
+
+The Go command verifies source only. It writes two unsigned Windows amd64
+developer builds and `manifest.json` under `.agent/native-tray`, requires their
+hashes to match, and records module, commit, toolchain, signature, and build
+metadata. A passing local source contract does not authorize publication. An
+official native artifact still requires signing, timestamping, platform release
+ownership, and verifiable provenance.
 
 ### 4. Update Documentation
 - README.md

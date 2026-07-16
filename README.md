@@ -64,6 +64,10 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 - **Portable release artifact**: the root wheel no longer requires an unpublished
   workspace-only Rust package. Required CI now builds and inspects the wheel,
   installs it without workspace packages, and smokes the installed command.
+- **Native source integrity**: the stale checked-in Go executable is gone. A
+  required Windows gate now verifies tidy modules, tests, vet, reachable
+  vulnerabilities, reproducible hashes, and embedded build identity without
+  publishing the unsigned developer artifact.
 - **Bounded long-audio fallback**: client-side OpenAI chunking uses native silence
   analysis when available and a visible portable fallback otherwise. Both paths
   enforce the configured duration cap before exporting chunks.
@@ -231,19 +235,32 @@ Dictation and read-aloud both default to **tap-to-toggle**: tap the hotkey to st
 tap again to stop (matching Windows Voice Access and macOS dictation/Speak Selection).
 The default **Python tray menu** shows the current hotkeys and lets you remap them
 (F6-F12), pick a read-aloud speed, pause hotkeys, and toggle "Start at login" - all
-live. The Go tray remains an explicit source prototype with a smaller Dictate,
-Read, and Quit menu and no desktop-notification parity. It is selected only through
-a deliberate `SCRIBE_TRAY_NATIVE_BIN` path, never from a checked-in or merely
-packaged build artifact. Its current protocol supports toggle activation and simple
-F6-F12 keys. It must authenticate, register both keys, and signal readiness before
-Scribe reports it as active; daemon startup failure or a nonzero daemon exit visibly
-returns to the Python tray.
+live. The Go tray remains an explicit source prototype with a smaller Dictate and
+Quit menu, read-aloud through its configured hotkey, and no desktop-notification
+parity. It is selected only through a deliberate `SCRIBE_TRAY_NATIVE_BIN` path,
+never from a checked-in or merely packaged build artifact. Scribe labels that path
+an unverified developer override because authenticated IPC does not establish the
+file's publisher or source. Its current protocol supports toggle activation and
+simple F6-F12 keys. It must authenticate, register both keys, and signal readiness
+before Scribe reports it as active; daemon startup failure or a nonzero daemon exit
+visibly returns to the Python tray.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
-The complete Python tray is live-validated on **Windows**. macOS and Linux support
-is implemented but still needs the platform matrix recorded in the roadmap before
-it is described as validated. Run `scribe tray --check` first on every platform to
-see missing dependencies, selected backend and provenance, the resolved read-aloud
-backend, and macOS Input Monitoring or Linux Wayland permission caveats.
+The complete Python tray is live-validated on **Windows**. macOS and Linux share
+the same implementation but remain **experimental** until live hardware records
+exist (see the validation plan). Run `scribe tray --check` first on every
+platform: it reports missing packages, platform tier, backend trust state,
+run-at-login path, read-aloud backend, and OS readiness notes without paid APIs.
+
+**Platform readiness (actionable):**
+
+| Platform | What `tray --check` expects you to verify |
+|----------|-------------------------------------------|
+| Windows | Live-validated default. Startup uses the per-user Startup folder. |
+| macOS | Grant **Input Monitoring** and **Microphone** under System Settings > Privacy & Security to the terminal or app binary, then fully quit and relaunch. `inject=type` also needs **Accessibility**. Run-at-login installs a user LaunchAgent. |
+| Linux X11 | Graphical `DISPLAY` required. Tray icons may need an AppIndicator/StatusNotifier host (GNOME often needs an extension); otherwise use `--no-tray`. Run-at-login uses XDG autostart. |
+| Linux Wayland | Global hotkeys via pynput are unreliable; prefer `--no-tray` plus desktop shortcuts to `scribe listen` / `scribe say --selection`, or an X11 session. Portal GlobalShortcuts support varies by desktop. |
+| Headless / SSH | Tray and global hotkeys are unsupported without a local graphical session. |
+
 See the [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md) and [macOS/Linux Validation Plan](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
 
 High-quality neural read-aloud uses **Kokoro** (82M, ONNX, CPU-capable, Apache-2.0)
@@ -947,9 +964,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1665 passed, 11 skipped, 27 deselected, 83.51% line coverage
-- Current collection: 1703 assertion-based tests
+- Latest CI-safe unit matrix: 1570 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1673 passed, 11 skipped, 27 deselected, 83.54% line coverage
+- Current collection: 1711 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly

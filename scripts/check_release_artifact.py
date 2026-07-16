@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 WORKSPACE_ONLY_REQUIREMENTS = {"scribe-audio-core"}
 REQUIRED_RUNTIME_REQUIREMENTS = {"deal"}
 REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+NATIVE_ARTIFACT_SUFFIXES = frozenset({".dll", ".dylib", ".exe", ".pyd", ".so"})
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -91,6 +92,12 @@ def check_wheel(wheel_path: Path) -> None:
             raise ValueError("Wheel must contain exactly one dist-info/entry_points.txt file")
         if "scribe/__init__.py" not in names:
             raise ValueError("Wheel is missing the scribe package")
+        native_members = sorted(
+            name for name in names if PurePosixPath(name).suffix.lower() in NATIVE_ARTIFACT_SUFFIXES
+        )
+        if native_members:
+            joined = ", ".join(native_members)
+            raise ValueError(f"Portable root wheel contains platform-native payload: {joined}")
 
         metadata = BytesParser().parsebytes(wheel.read(metadata_names[0]))
         if metadata.get("Name", "").lower() != "scribe":

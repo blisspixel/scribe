@@ -20,6 +20,7 @@ def _write_wheel(
     license_file: str | None = None,
     classifiers: tuple[str, ...] = (),
     include_license_member: bool = False,
+    extra_members: tuple[str, ...] = (),
 ) -> None:
     metadata = ["Metadata-Version: 2.4", "Name: scribe", f"Version: {version}"]
     if license_expression is not None:
@@ -38,6 +39,8 @@ def _write_wheel(
         )
         if include_license_member and license_file is not None:
             wheel.writestr(f"scribe-2.8.1.dist-info/licenses/{license_file}", "terms\n")
+        for member in extra_members:
+            wheel.writestr(member, b"native payload")
 
 
 def _run_check(repo_root: Path, wheel: Path) -> subprocess.CompletedProcess[str]:
@@ -80,6 +83,22 @@ def test_release_artifact_check_rejects_workspace_native_requirement(tmp_path):
 
     assert result.returncode == 1
     assert "workspace-only dependency" in result.stderr
+
+
+def test_release_artifact_check_rejects_native_payload_in_portable_wheel(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
+    _write_wheel(
+        wheel,
+        requirements=("deal>=4.1", "typer>=0.9"),
+        extra_members=("scribe/assets/bin/scribe-tray.exe",),
+    )
+
+    result = _run_check(repo_root, wheel)
+
+    assert result.returncode == 1
+    assert "platform-native payload" in result.stderr
+    assert "scribe-tray.exe" in result.stderr
 
 
 def test_release_artifact_check_rejects_missing_runtime_requirement(tmp_path):

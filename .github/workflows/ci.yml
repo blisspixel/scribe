@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -110,7 +110,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -163,7 +163,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -204,7 +204,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -233,7 +233,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -266,6 +266,29 @@ jobs:
           ../.venv/bin/scribe --version
 
   # ---------------------------------------------------------------------------
+  # Native Tray Source Contract
+  # Verifies the explicit-only Windows Go prototype without publishing it.
+  # ---------------------------------------------------------------------------
+  native-tray:
+    name: Native Tray Source Contract (Windows amd64)
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Go from module
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: cmd/scribe-tray/go.mod
+          cache-dependency-path: cmd/scribe-tray/go.sum
+
+      - name: Verify native tray source and reproducible build
+        shell: pwsh
+        run: ./scripts/check_native_tray.ps1 -OutputDirectory "$env:RUNNER_TEMP/native-tray"
+
+  # ---------------------------------------------------------------------------
   # Mutation Testing (advisory, non-blocking)
   # Runs mutmut over the pure, property-tested core (transcript model, backend
   # selection, diarization alignment, voice endpointing, output writers). A
@@ -283,7 +306,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -312,12 +335,12 @@ jobs:
   # ---------------------------------------------------------------------------
   # CI Gate Aggregator
   # Single status that can be required in branch protection rules.
-  # All of lint-and-types, toolchain-check (pre-commit), test (matrix), coverage (80% gate), and security must pass.
+  # All required Python and native-source jobs must pass.
   # ---------------------------------------------------------------------------
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint-and-types, toolchain-check, test, coverage, security, package]
+    needs: [lint-and-types, toolchain-check, test, coverage, security, package, native-tray]
     if: always()
 
     steps:
@@ -331,6 +354,7 @@ jobs:
           echo "  coverage:       ${{ needs.coverage.result }}"
           echo "  security:       ${{ needs.security.result }}"
           echo "  package:        ${{ needs.package.result }}"
+          echo "  native-tray:    ${{ needs.native-tray.result }}"
 
           failed=0
           for result in "${{ needs.lint-and-types.result }}" \
@@ -338,7 +362,8 @@ jobs:
                         "${{ needs.test.result }}" \
                         "${{ needs.coverage.result }}" \
                         "${{ needs.security.result }}" \
-                        "${{ needs.package.result }}"; do
+                        "${{ needs.package.result }}" \
+                        "${{ needs.native-tray.result }}"; do
             if [[ "$result" != "success" ]]; then
               failed=1
             fi

@@ -9,8 +9,10 @@ Shipped and validated on Windows (real dictation, read-aloud, hotkeys, run-at-lo
   push-to-talk. Hotkey actions run on a dispatcher thread, not the keyboard-hook
   callback, and a watchdog recreates the listener if Windows silently removes the
   low-level hook.
-- `scribe tray --check` reports dependencies, the resolved read-aloud backend, and
-  macOS Input-Monitoring / Linux-Wayland permission caveats.
+- `scribe tray --check` reports dependencies, platform validation tier, startup
+  path state, the resolved read-aloud backend, native override trust labeling,
+  and macOS / Linux readiness advisories (permissions, Wayland, headless, tray
+  host caveats) without paid services.
 - `scribe tray --setup` pre-downloads the dictation model and a read-aloud voice
   (with byte-verified downloads) and saves the choice.
 - `scribe tray --startup install|remove|status` runs the tray at login
@@ -214,7 +216,7 @@ Menu items:
 - Dictation: enabled or paused.
 - Profile: fast, balanced, accurate.
 - Injection: paste or type.
-- Read selection now.
+- Read selection through the configured global hotkey.
 - Open config.
 - Run doctor.
 - Start at login.
@@ -372,11 +374,16 @@ Hard requirements:
 - Source prototype: the Go tray is explicit opt-in through
   `SCRIBE_TRAY_NATIVE_BIN`, supports toggle activation and F6-F12 keys, uses the
   canonical icon, authenticates to Python, and must signal readiness after both
-  hotkeys register. It returns to Python on daemon launch, readiness, or exit failure.
+  hotkeys register. Explicit paths are unverified developer overrides. It returns
+  to Python on daemon launch, readiness, or exit failure.
 - Blocked for automatic packaging: the Go tray does not yet provide the Python
   menu, desktop-notification, hold-activation, or actionable error-detail surface.
 - Removed: the "Read selection now" menu item (opening the menu steals focus, so
   it could not capture a live selection - the read hotkey is the reliable path).
+- Verified source gate: Windows CI requires tidy and verified modules, Go tests
+  and vet, reachable-vulnerability scanning, matching hashes from two builds,
+  current embedded VCS metadata, and a local evidence manifest. Generated
+  executables remain ignored and unpublished.
 - Remaining: validate OS-level hotkey conflicts and permission failures on the
   macOS/Linux matrix.
 

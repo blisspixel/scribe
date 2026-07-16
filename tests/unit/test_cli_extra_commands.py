@@ -678,6 +678,17 @@ def test_batch_help_explains_cost_and_incomplete_exit_status() -> None:
     assert "nonzero" in result.stdout
 
 
+def test_tray_help_explains_default_toggle_interaction() -> None:
+    result = CliRunner().invoke(app, ["tray", "--help"])
+    normalized_output = " ".join(result.stdout.split())
+
+    assert result.exit_code == 0
+    assert "Tap the dictation hotkey" in normalized_output
+    assert "tap it again to stop" in normalized_output
+    assert "configurable hold mode remains available" in normalized_output
+    assert "Hold the dictation hotkey" not in normalized_output
+
+
 def test_record_command_auto_transcribes(tmp_path: Path) -> None:
     runner = CliRunner()
     recording_path = tmp_path / "meeting.mp4"

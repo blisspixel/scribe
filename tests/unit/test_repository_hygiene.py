@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
@@ -53,6 +54,26 @@ def test_development_dependencies_have_one_canonical_group() -> None:
     optional_dependencies = configuration["project"].get("optional-dependencies", {})
     assert "dev" not in optional_dependencies
     assert "dev" in configuration["dependency-groups"]
+
+
+def test_native_executables_are_generated_and_ignored() -> None:
+    ignore_rules = {
+        line.strip()
+        for line in (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert "cmd/scribe-tray/*.exe" in ignore_rules
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "cmd/scribe-tray/*.exe"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout.splitlines()
+    tracked_existing = [path for path in tracked if (REPOSITORY_ROOT / path).is_file()]
+    assert tracked_existing == []
 
 
 def test_local_markdown_links_resolve() -> None:

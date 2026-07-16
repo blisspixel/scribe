@@ -2,9 +2,9 @@
 
 ## Current Status
 
-- 1703 assertion-based tests collected across unit, integration, e2e, and manual paths.
-- Latest local CI-safe unit matrix: 1562 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1665 passed, 11 skipped, 27 deselected, no warnings, and 83.51 percent coverage.
+- 1711 assertion-based tests collected across unit, integration, e2e, and manual paths.
+- Latest local CI-safe unit matrix: 1570 passed, 1 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1673 passed, 11 skipped, 27 deselected, no warnings, and 83.54 percent coverage.
 - Enforced coverage floor: 80 percent.
 - Quality gates: Ruff check, Ruff format, mypy strict, pytest, pytest-cov, pre-commit, and pip-audit in CI.
 

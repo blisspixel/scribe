@@ -35,6 +35,9 @@ MANIFEST
 *.manifest
 *.spec
 
+# Native tray developer builds are generated from source and never tracked.
+cmd/scribe-tray/*.exe
+
 # ----------------------------------------------------------------------------
 # Virtual Environments
 # ----------------------------------------------------------------------------

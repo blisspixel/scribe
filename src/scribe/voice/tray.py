@@ -17,6 +17,7 @@ from scribe.voice.service import (
     dependency_report,
     missing_dependency_packages,
     resident_voice_advisories,
+    tray_platform_matrix,
 )
 from scribe.voice.settings import TraySettings
 
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class NativeTraySelection:
-    """One deliberate native-daemon selection and its operator-facing provenance."""
+    """One deliberate native-daemon selection and its operator-facing trust state."""
 
     path: Path | None
     source: Literal["python", "explicit"]
@@ -53,12 +54,16 @@ def _native_compatibility_issue(settings: TraySettings) -> str | None:
 
 
 def _resolve_native_tray() -> NativeTraySelection:
-    """Resolve only a deliberately selected daemon, never a build artifact."""
+    """Resolve only a deliberate unverified override, never implicit build output."""
     explicit_value = os.environ.get("SCRIBE_TRAY_NATIVE_BIN", "").strip()
     if explicit_value:
         explicit = Path(os.path.expandvars(explicit_value)).expanduser()
         if explicit.is_file():
-            return NativeTraySelection(explicit, "explicit", f"explicit path {explicit}")
+            return NativeTraySelection(
+                explicit,
+                "explicit",
+                f"unverified developer override at {explicit}",
+            )
         return NativeTraySelection(
             None,
             "python",
@@ -151,7 +156,11 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
     else:
         tts_desc = f"pyttsx3 (system voice, {settings.tts_speed:g}x)"
 
+    system_name = platform.system()
+    matrix = tray_platform_matrix(system_name)
+
     console.print()
+    console.print(f"[cyan]platform[/cyan] {matrix.system} ({matrix.tier})")
     console.print(f"[cyan]profile[/cyan] {settings.profile}")
     console.print(f"[cyan]activation[/cyan] {settings.activation}")
     console.print(f"[cyan]dictate[/cyan] {settings.dictate_hotkey}")
@@ -173,8 +182,16 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
         backend = "terminal hotkeys (--no-tray)"
     console.print(f"[cyan]backend[/cyan] {backend}")
 
+    try:
+        from scribe.voice.startup import is_startup_enabled, startup_path
+
+        startup_state = "enabled" if is_startup_enabled() else "disabled"
+        console.print(f"[cyan]startup[/cyan] {startup_state} ({startup_path()})")
+    except OSError:
+        console.print("[cyan]startup[/cyan] unavailable (could not resolve autostart path)")
+
     advisories = resident_voice_advisories(
-        platform.system(),
+        system_name,
         inject=settings.inject,
         session_type=os.environ.get("XDG_SESSION_TYPE", ""),
         wayland_display=os.environ.get("WAYLAND_DISPLAY", ""),

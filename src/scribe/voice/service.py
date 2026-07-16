@@ -130,26 +130,27 @@ def tray_platform_matrix(system: str) -> TrayPlatformMatrix:
         return TrayPlatformMatrix(
             system,
             "validated",
-            "Windows tray, hotkeys, and startup are CI-validated",
+            "Windows tray, hotkeys, and startup are live-validated",
         )
     if system == "Darwin":
         return TrayPlatformMatrix(
             system,
             "experimental",
-            "macOS tray is experimental: grant Input Monitoring and Microphone "
-            "privacy permissions; hardware matrix is not CI-proven",
+            "macOS tray is experimental: live hardware matrix not yet recorded; "
+            "grant Input Monitoring and Microphone under Privacy & Security",
         )
     if system == "Linux":
         return TrayPlatformMatrix(
             system,
             "experimental",
-            "Linux tray is experimental: requires a graphical session (X11 or Wayland); "
-            "Wayland global hotkeys are unreliable",
+            "Linux tray is experimental: live hardware matrix not yet recorded; "
+            "requires a graphical session (X11 preferred; Wayland hotkeys unreliable)",
         )
     return TrayPlatformMatrix(
         system,
         "unsupported",
-        f"Resident tray is not validated on {system}",
+        f"Resident tray is not supported on {system}; use `scribe listen` / "
+        f"`scribe say` only where a display session allows it",
     )
 
 
@@ -223,32 +224,65 @@ def resident_voice_advisories(
                 "warning",
                 "macOS: grant Input Monitoring (global hotkeys) and Microphone "
                 "(dictation) to your terminal or the packaged app under System "
-                "Settings > Privacy & Security, then restart it. Until granted, "
-                "F9/F8 and mic capture silently do nothing.",
+                "Settings > Privacy & Security, then fully quit and relaunch it. "
+                "Until granted, F9/F8 and mic capture silently do nothing.",
+            )
+        )
+        advisories.append(
+            ReadinessAdvisory(
+                "info",
+                "macOS run-at-login uses a user LaunchAgent "
+                "(`scribe tray --startup install`); remove with "
+                "`scribe tray --startup remove`.",
             )
         )
     elif system == "Linux":
+        is_graphical = graphical_session_detected(
+            display=display,
+            wayland_display=wayland_display,
+            session_type=session_type,
+        )
         is_wayland = session_type.strip().lower() == "wayland" or bool(wayland_display.strip())
-        if is_wayland:
+        # Headless warnings already come from tray_environment_advisories; do not
+        # claim X11 hotkey support when no graphical session was detected.
+        if is_graphical and is_wayland:
             advisories.append(
                 ReadinessAdvisory(
                     "warning",
                     "Linux/Wayland detected: global hotkeys via pynput are "
-                    "unreliable here. Use `scribe tray --no-tray` and bind a "
-                    "desktop shortcut to `scribe listen` / `scribe say --selection`, "
-                    "or run an X11 session.",
+                    "unreliable here (portal GlobalShortcuts support varies by DE). "
+                    "Prefer `scribe tray --no-tray` with desktop shortcuts to "
+                    "`scribe listen` / `scribe say --selection`, or an X11 session.",
                 )
             )
-        else:
+        elif is_graphical:
             advisories.append(
                 ReadinessAdvisory(
                     "info",
-                    "Linux/X11: global hotkeys via pynput are supported; a local "
-                    "display is still required (not headless/SSH without X).",
+                    "Linux/X11: global hotkeys via pynput are expected to work. "
+                    "Some desktops need an AppIndicator / StatusNotifier host for "
+                    "the tray icon (GNOME often needs an extension); otherwise use "
+                    "`scribe tray --no-tray`.",
                 )
             )
+        advisories.append(
+            ReadinessAdvisory(
+                "info",
+                "Linux run-at-login uses XDG autostart "
+                "(`~/.config/autostart` via `scribe tray --startup install`).",
+            )
+        )
 
     if inject.strip().lower() == "type":
+        if system == "Darwin":
+            advisories.append(
+                ReadinessAdvisory(
+                    "warning",
+                    "macOS inject=type also needs Accessibility permission for the "
+                    "same app under Privacy & Security so keystrokes can reach other "
+                    "windows; inject=paste avoids that path when the clipboard works.",
+                )
+            )
         advisories.append(
             ReadinessAdvisory(
                 "warning",

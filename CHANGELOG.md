@@ -12,19 +12,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
 - Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
 - Protected the local native-tray IPC boundary with a process-scoped capability and authenticated READY handshake. Unauthenticated peers cannot receive state or issue dictation, read, or quit commands.
+- Added a required Windows native-tray source contract that checks module tidiness and integrity, Go tests and vet, reachable vulnerabilities, reproducible build hashes, embedded commit identity, and a local evidence manifest.
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Hardened `scribe tray --check` and resident-voice readiness advisories for macOS and Linux: platform validation tier and startup path are printed, headless Linux no longer claims X11 hotkey support, Wayland guidance references portal GlobalShortcuts and desktop-shortcut fallbacks, macOS notes LaunchAgent login plus Accessibility for `inject=type`, and setup docs state experimental status until live hardware records exist.
 - Consolidated installation and contributor setup on `pyproject.toml` and one locked uv development group, removing two drifting legacy requirements files, a duplicate incomplete dev extra, and contradictory commands.
 - Moved responsible-use guidance into the canonical documentation tree, removed stale tracked agent-loop files from the root, and repaired documentation discovery and release instructions.
 - Removed unsupported MIT claims from package metadata while canonical license terms remain pending owner confirmation; release validation now checks project, source, packaged runtime, and wheel versions and rejects incomplete or contradictory license evidence.
+- Removed the stale unsigned Go executable from tracking and ignored generated native developer builds. The source prototype remains explicit-only and is not published by the portable package.
+- Hardened artifact boundaries by rejecting platform-native payloads from the portable wheel, isolating native verification from external Go workspaces, resolving modules read-only, and pinning checkout to a reviewed immutable revision.
 - Made the root wheel portable by removing its mandatory dependency on the unpublished workspace-only `scribe-audio-core` artifact. The Rust crate remains an optional workspace acceleration until platform wheels have a verified distribution path.
 - Promoted `deal` to a runtime dependency because contract-decorated production modules import it during normal CLI startup; clean wheel installs no longer fail after dependency resolution.
 - Added a required release-artifact CI job that builds and inspects the root wheel, installs it without workspace packages, and smokes the installed `scribe` entry point.
 - Changed client-side OpenAI chunking to prefer optional native silence analysis while retaining a visible duration-based fallback. Both paths normalize endpoints to a hard cap and export with the configured overlap and bitrate.
 - Refactored `scribe.core.openai_api` to completely eliminate `pydub.silence.split_on_silence` dependency in favor of the new Rust streaming engine.
 - Kept the complete Python tray as the deterministic default. Native selection now requires an explicit `SCRIBE_TRAY_NATIVE_BIN` path; checked-in and merely packaged builds are never launched implicitly before capability parity.
-- Added backend and executable-provenance output to `scribe tray --check`. Native activation and hotkey incompatibilities are reported as Python fallback decisions before launch.
+- Added backend and native selection-state output to `scribe tray --check`. Explicit files are labeled unverified developer overrides, and activation or hotkey incompatibilities are reported as Python fallback decisions before launch.
 - Tightened broad exception handlers across core modules (`openai_api`, `local_whisper`, utilities) to specific typed tuples in compliance with ADR-002, preventing masked errors.
 - Standardized CLI exit boundaries in `main.py` using a single `exit_on_cli_error` handler instead of scattered `typer.Exit(1)` calls.
 - Completed Engineering Excellence Step 4: added SBOM generation documentation, integrated CUDA driver age checks into `scribe doctor`, and formalized the decision against structured JSON logging (ADR-012).
@@ -45,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
+- Removed the Go tray's focus-breaking read-selection menu action; the configured read hotkey remains the reliable native path.
+- Updated the native verification toolchain past known unreachable Go and `x/sys` advisories, made its evidence fail-clean and atomic, and recorded the actual resolved module graph.
 - Delayed native model preload until authenticated tray readiness, preventing a failed daemon startup from racing a second model load in the Python fallback.
 - Made native startup timeouts, launch errors, and nonzero exits recover visibly through the complete Python tray instead of ending the resident workflow.
 - Fixed long-audio chunking that could emit an over-cap final chunk when no useful silence was detected. Native decoder failures now become visible fallback events, MP3 encoder padding is reserved inside the cap, and partial ffmpeg exports are removed on failure.

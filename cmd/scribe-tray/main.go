@@ -154,7 +154,6 @@ func onReady() {
 	}
 
 	mDictate := systray.AddMenuItem("Start/Stop Dictation ("+dictateKey+")", "Toggle dictation")
-	mRead := systray.AddMenuItem("Read Selected Text ("+readKey+")", "Read out loud")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Quit Scribe")
 
@@ -170,11 +169,6 @@ func onReady() {
 			select {
 			case <-mDictate.ClickedCh:
 				if err := sendCommand("DICTATE"); err != nil {
-					failTray(err)
-					return
-				}
-			case <-mRead.ClickedCh:
-				if err := sendCommand("READ"); err != nil {
 					failTray(err)
 					return
 				}
