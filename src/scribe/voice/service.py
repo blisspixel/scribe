@@ -160,12 +160,14 @@ def graphical_session_detected(
     wayland_display: str = "",
     session_type: str = "",
 ) -> bool:
-    """Return True when a Linux graphical session is likely present."""
-    if display.strip():
-        return True
-    if wayland_display.strip():
-        return True
-    return session_type.strip().lower() in ("x11", "wayland")
+    """Return True when a Linux graphical session is likely present.
+
+    Require a display socket env var (``DISPLAY`` or ``WAYLAND_DISPLAY``).
+    ``session_type`` / ``XDG_SESSION_TYPE`` alone is not enough: SSH and some
+    headless units leave a stale session type without a usable local display.
+    """
+    _ = session_type
+    return bool(display.strip() or wayland_display.strip())
 
 
 def tray_environment_advisories(
@@ -225,7 +227,8 @@ def resident_voice_advisories(
                 "macOS: grant Input Monitoring (global hotkeys) and Microphone "
                 "(dictation) to your terminal or the packaged app under System "
                 "Settings > Privacy & Security, then fully quit and relaunch it. "
-                "Until granted, F9/F8 and mic capture silently do nothing.",
+                "Without Input Monitoring, hotkeys may never fire; without "
+                "Microphone, dictation reports a capture error instead of inserting text.",
             )
         )
         advisories.append(
@@ -259,7 +262,8 @@ def resident_voice_advisories(
             advisories.append(
                 ReadinessAdvisory(
                     "info",
-                    "Linux/X11: global hotkeys via pynput are expected to work. "
+                    "Linux/X11: a local DISPLAY is present so pynput global hotkeys "
+                    "may work, but the platform matrix is still experimental. "
                     "Some desktops need an AppIndicator / StatusNotifier host for "
                     "the tray icon (GNOME often needs an extension); otherwise use "
                     "`scribe tray --no-tray`.",
@@ -605,9 +609,7 @@ class VoiceTrayService:
                 with conn, conn.makefile("r", encoding="utf-8") as stream:
                     conn.settimeout(2.0)
                     auth_line = stream.readline(512)
-                    token = self._ipc_token
-                    expected = f"AUTH {token}\n" if token is not None else ""
-                    if not auth_line.endswith("\n") or not hmac.compare_digest(auth_line, expected):
+                    if not self._ipc_auth_matches(auth_line):
                         logger.warning("Rejected unauthenticated native tray IPC peer")
                         continue
 
@@ -653,6 +655,20 @@ class VoiceTrayService:
             finally:
                 if self._ipc_conn is conn:
                     self._ipc_conn = None
+
+    def _ipc_auth_matches(self, auth_line: str) -> bool:
+        """Return True only for an exact capability line, without crashing on length.
+
+        ``hmac.compare_digest`` raises ``TypeError`` when string lengths differ.
+        A wrong-length probe must reject the peer and keep the accept loop alive.
+        """
+        token = self._ipc_token
+        if token is None or not auth_line.endswith("\n"):
+            return False
+        expected = f"AUTH {token}\n"
+        if len(auth_line) != len(expected):
+            return False
+        return hmac.compare_digest(auth_line, expected)
 
     def start_hotkeys(self, *, preload_model: bool = False) -> bool:  # pragma: no cover
         """Start the global hotkey listener."""

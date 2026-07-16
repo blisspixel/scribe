@@ -49,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Native tray IPC auth rejects wrong-length capability lines without killing the accept loop (`hmac.compare_digest` length safety).
+- Linux tray readiness no longer treats `XDG_SESSION_TYPE` alone as proof of a graphical session, and macOS permission copy no longer claims silent mic failure when capture reports an error.
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
 - Removed the Go tray's focus-breaking read-selection menu action; the configured read hotkey remains the reliable native path.
 - Updated the native verification toolchain past known unreachable Go and `x/sys` advisories, made its evidence fail-clean and atomic, and recorded the actual resolved module graph.

@@ -222,7 +222,7 @@ scribe say --clipboard                   # the clipboard contents
 scribe say notes.md --speed 1.2          # 1.2x speed (0.5-2.0); Esc stops playback
 
 # Resident voice tray utility
-scribe tray --check                      # validate deps, backend, hotkeys, and read-aloud
+scribe tray --check                      # deps, backend, platform advisories, read-aloud
 scribe tray                              # tray icon: tap F9 to dictate, tap F8 to read selection
 scribe tray --activation hold            # prefer push-to-talk over tap-to-toggle
 scribe tray --speed 1.2                  # default read-aloud speed

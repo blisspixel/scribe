@@ -812,7 +812,9 @@ def test_tray_platform_matrix_tiers() -> None:
     assert tray_platform_matrix("FreeBSD").tier == "unsupported"
     assert graphical_session_detected(display=":0")
     assert graphical_session_detected(wayland_display="wayland-0")
-    assert graphical_session_detected(session_type="x11")
+    # Stale XDG_SESSION_TYPE without a display socket is not a graphical proof.
+    assert not graphical_session_detected(session_type="x11")
+    assert not graphical_session_detected(session_type="wayland")
     assert not graphical_session_detected()
 
 
@@ -838,13 +840,15 @@ def test_resident_voice_advisories_macos_type_mentions_accessibility() -> None:
 
 
 def test_resident_voice_advisories_linux_wayland_warns() -> None:
-    # Either XDG_SESSION_TYPE=wayland or a set WAYLAND_DISPLAY counts as Wayland.
-    by_session = resident_voice_advisories("Linux", session_type="wayland")
+    # WAYLAND_DISPLAY proves a graphical Wayland session. Session type alone does not.
     by_display = resident_voice_advisories("Linux", wayland_display="wayland-0")
-    assert any(a.level == "warning" and "Wayland" in a.message for a in by_session)
+    by_both = resident_voice_advisories(
+        "Linux", session_type="wayland", wayland_display="wayland-0"
+    )
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_display)
-    assert any("GlobalShortcuts" in a.message for a in by_session)
-    assert any(a.level == "info" and "autostart" in a.message for a in by_session)
+    assert any(a.level == "warning" and "Wayland" in a.message for a in by_both)
+    assert any("GlobalShortcuts" in a.message for a in by_display)
+    assert any(a.level == "info" and "autostart" in a.message for a in by_display)
 
 
 def test_resident_voice_advisories_linux_x11_includes_matrix_and_session_notes() -> None:
@@ -859,8 +863,15 @@ def test_resident_voice_advisories_linux_headless_does_not_claim_x11_support() -
     advisories = resident_voice_advisories("Linux")
     joined = " ".join(a.message for a in advisories)
     assert "DISPLAY" in joined or "WAYLAND_DISPLAY" in joined
-    assert "global hotkeys via pynput are expected to work" not in joined
+    assert "pynput global hotkeys may work" not in joined
     assert "Linux/X11" not in joined
+
+
+def test_resident_voice_advisories_linux_stale_session_type_without_display() -> None:
+    advisories = resident_voice_advisories("Linux", session_type="x11")
+    joined = " ".join(a.message for a in advisories)
+    assert "DISPLAY" in joined or "WAYLAND_DISPLAY" in joined
+    assert "pynput global hotkeys may work" not in joined
 
 
 def test_resident_voice_advisories_windows_paste_is_clean() -> None:
@@ -912,10 +923,19 @@ def test_native_ipc_requires_capability_and_readiness(monkeypatch: pytest.Monkey
     port = service.start_ipc_server()
 
     try:
+        # Wrong-length AUTH must reject without killing the accept loop.
         with socket.create_connection(("127.0.0.1", port), timeout=1.0) as rejected:
             rejected.sendall(b"AUTH wrong\nDICTATE\n")
             rejected.settimeout(1.0)
             assert rejected.recv(64) == b""
+
+        # Equal-length wrong token must also reject cleanly.
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0) as rejected_equal:
+            token = service.ipc_token or ""
+            wrong = ("x" * len(token)).encode()
+            rejected_equal.sendall(b"AUTH " + wrong + b"\n")
+            rejected_equal.settimeout(1.0)
+            assert rejected_equal.recv(64) == b""
 
         with socket.create_connection(("127.0.0.1", port), timeout=1.0) as accepted:
             stream = accepted.makefile("rwb")
