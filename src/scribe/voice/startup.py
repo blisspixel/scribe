@@ -12,6 +12,7 @@ user-scoped (no admin) and explicit - ``start_at_login`` is never enabled silent
 from __future__ import annotations
 
 import os
+import platform
 import plistlib
 import shlex
 import subprocess
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scribe.cli.shortcut import resolve_scribe_command
-from scribe.utils.platform import is_macos, is_windows
+from scribe.utils.platform import is_linux, is_macos, is_windows
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -137,12 +138,17 @@ def startup_path() -> Path:
         return _windows_startup_path()
     if is_macos():
         return _macos_agent_path()
-    return _linux_autostart_path()
+    if is_linux():
+        return _linux_autostart_path()
+    raise OSError(f"Run-at-login is not supported on {platform.system()}")
 
 
 def is_startup_enabled() -> bool:
     """Whether the tray is currently configured to run at login."""
-    return startup_path().exists()
+    try:
+        return startup_path().exists()
+    except OSError:
+        return False
 
 
 def install_startup() -> Path:  # pragma: no cover - per-OS I/O
@@ -151,12 +157,17 @@ def install_startup() -> Path:  # pragma: no cover - per-OS I/O
         return _install_windows()
     if is_macos():
         return _install_macos()
-    return _install_linux()
+    if is_linux():
+        return _install_linux()
+    raise OSError(f"Run-at-login is not supported on {platform.system()}")
 
 
 def remove_startup() -> Path | None:  # pragma: no cover - per-OS I/O
     """Disable run-at-login. Returns the removed path, or None if not enabled."""
-    path = startup_path()
+    try:
+        path = startup_path()
+    except OSError:
+        return None
     if is_macos():
         with suppress(Exception):
             subprocess.run(

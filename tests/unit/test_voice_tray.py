@@ -1241,6 +1241,18 @@ def test_run_tray_startup_install_linux_mentions_wayland_caveat(
     assert "Wayland" in text
 
 
+def test_startup_path_rejects_unsupported_os(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scribe.voice import startup
+
+    monkeypatch.setattr(startup, "is_windows", lambda: False)
+    monkeypatch.setattr(startup, "is_macos", lambda: False)
+    monkeypatch.setattr(startup, "is_linux", lambda: False)
+    monkeypatch.setattr(startup.platform, "system", lambda: "FreeBSD")
+    with pytest.raises(OSError, match="not supported"):
+        startup.startup_path()
+    assert startup.is_startup_enabled() is False
+
+
 def test_set_hotkey_changes_live_and_rejects_collisions(monkeypatch: pytest.MonkeyPatch) -> None:
     import scribe.config_file as cf
 
