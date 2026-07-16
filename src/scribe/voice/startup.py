@@ -209,5 +209,16 @@ def run_tray_startup(console: Console, action: str) -> int:  # pragma: no cover 
     )
     if is_windows():
         console.print("[dim]It launches minimized to the system tray.[/dim]")
+    elif is_macos():
+        console.print(
+            "[dim]macOS: a user LaunchAgent was written. Grant Input Monitoring and "
+            "Microphone to the same binary that starts at login, then log out/in once.[/dim]"
+        )
+    else:
+        console.print(
+            "[dim]Linux: XDG autostart entry written. Needs a graphical session; "
+            "Wayland global hotkeys remain unreliable - prefer desktop shortcuts "
+            "or `scribe tray --no-tray` if hooks fail.[/dim]"
+        )
     console.print("[dim]Disable anytime with `scribe tray --startup remove`.[/dim]")
     return 0

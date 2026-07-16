@@ -30,6 +30,10 @@
   - Separation-first approach
   - Hallucination filtering
   - Multi-language support
+- **VOICE_TRAY_UTILITY_PLAN.md** - Resident tray design, Windows validation status, and follow-ons
+- **VOICE_TRAY_MAC_LINUX_VALIDATION.md** - macOS/Linux hardware matrix plan and completion rule
+- **POLYGLOT_ARCHITECTURE_PLAN.md** - Go tray and Rust audio native boundaries
+- **SBOM_COMPLIANCE.md** - Local dependency inventory generation
 
 ---
 

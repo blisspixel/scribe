@@ -1185,6 +1185,42 @@ def test_tray_startup_install_remove_roundtrip(
     assert startup.is_startup_enabled() is False
 
 
+def test_run_tray_startup_install_macos_mentions_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import startup
+
+    created = tmp_path / "io.pueo.scribe.tray.plist"
+    created.write_text("plist", encoding="utf-8")
+    monkeypatch.setattr(startup, "install_startup", lambda: created)
+    monkeypatch.setattr(startup, "is_windows", lambda: False)
+    monkeypatch.setattr(startup, "is_macos", lambda: True)
+    console = Console(record=True)
+
+    assert startup.run_tray_startup(console, "install") == 0
+    text = console.export_text()
+    assert "LaunchAgent" in text
+    assert "Input Monitoring" in text
+
+
+def test_run_tray_startup_install_linux_mentions_wayland_caveat(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import startup
+
+    created = tmp_path / "scribe-voice-tray.desktop"
+    created.write_text("desktop", encoding="utf-8")
+    monkeypatch.setattr(startup, "install_startup", lambda: created)
+    monkeypatch.setattr(startup, "is_windows", lambda: False)
+    monkeypatch.setattr(startup, "is_macos", lambda: False)
+    console = Console(record=True)
+
+    assert startup.run_tray_startup(console, "install") == 0
+    text = console.export_text()
+    assert "XDG autostart" in text
+    assert "Wayland" in text
+
+
 def test_set_hotkey_changes_live_and_rejects_collisions(monkeypatch: pytest.MonkeyPatch) -> None:
     import scribe.config_file as cf
 
