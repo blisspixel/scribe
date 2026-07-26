@@ -677,8 +677,6 @@ class OpenAITranscriber:
             output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
 
         # Check duration to decide chunking strategy
-        from scribe.utils.audio import get_audio_duration
-
         duration = get_audio_duration(audio_path)
 
         # OpenAI has an undocumented ~1400 second (23 minute) limit per file

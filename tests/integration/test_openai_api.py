@@ -50,7 +50,7 @@ class TestOpenAITranscriber:
         assert result == custom_output
         assert result.exists()
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_transcribe_large_file_chunking(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -85,7 +85,7 @@ class TestOpenAITranscriber:
         # Thirty minutes requires four bounded chunks below the nine-minute cap.
         assert all(f"Chunk {index}" in content for index in range(1, 5))
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_transcribe_combines_chunks_correctly(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -193,7 +193,7 @@ class TestOpenAITranscriber:
 class TestChunkingBehavior:
     """Test chunking behavior for large files (server-side chunking)."""
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_small_file_uses_server_chunking(
         self, mock_duration, sample_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -210,7 +210,7 @@ class TestChunkingBehavior:
         # Server-side chunking makes single API call
         assert mock_openai.audio.transcriptions.create.call_count == 1
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_large_file_forces_bounded_client_chunking(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -226,7 +226,7 @@ class TestChunkingBehavior:
         assert result.exists()
         assert mock_openai.audio.transcriptions.create.call_count == 4
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_client_side_chunking_for_very_long_files(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -255,7 +255,7 @@ class TestChunkingBehavior:
         content = result.read_text(encoding="utf-8")
         assert all(f"Chunk {index}" in content for index in range(1, 5))
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_client_side_chunking_uses_initial_prompt(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig
     ):
@@ -373,7 +373,7 @@ class TestTranscriptFormatting:
 class TestRegressionBlankFileBug:
     """Regression tests for the blank file bug with large audio files."""
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_large_file_not_blank(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):
@@ -398,7 +398,7 @@ class TestRegressionBlankFileBug:
         assert len(content) > 100  # Should have substantial content
         assert "Transcript content" in content
 
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     def test_chunks_not_overwritten(
         self, mock_duration, long_audio: Path, temp_config: ScribeConfig, mock_openai
     ):

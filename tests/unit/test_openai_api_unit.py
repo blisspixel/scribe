@@ -25,8 +25,10 @@ class TestOpenAITranscriber:
     @patch("scribe.core.openai_api.OpenAI")
     @patch("scribe.core.openai_api.open", create=True)
     @patch("scribe.core.openai_api.verify_file_content")
-    @patch("scribe.utils.audio.get_audio_duration")
-    def test_transcribe_success(self, mock_duration, mock_verify, mock_open, mock_openai_class):
+    @patch("scribe.core.openai_api.get_audio_duration")
+    def test_transcribe_success(
+        self, mock_duration, mock_verify, mock_open, mock_openai_class, tmp_path: Path
+    ):
         """Test successful transcription."""
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -48,19 +50,17 @@ class TestOpenAITranscriber:
         mock_file = Mock()
         mock_open.return_value.__enter__.return_value = mock_file
 
-        audio_path = Path("test.wav")
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 100
-                result = transcriber.transcribe(audio_path)
+        audio_path = tmp_path / "test.wav"
+        audio_path.write_bytes(b"audio")
+        result = transcriber.transcribe(audio_path)
 
         assert result.name == "test_transcription.txt"
         assert mock_client.audio.transcriptions.create.called
 
     @patch("scribe.core.openai_api.OpenAI")
     @patch("scribe.core.openai_api.open", create=True)
-    @patch("scribe.utils.audio.get_audio_duration")
-    def test_transcribe_failure(self, mock_duration, mock_open, mock_openai_class):
+    @patch("scribe.core.openai_api.get_audio_duration")
+    def test_transcribe_failure(self, mock_duration, mock_open, mock_openai_class, tmp_path: Path):
         """Test transcription failure."""
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
@@ -73,12 +73,10 @@ class TestOpenAITranscriber:
 
         transcriber = OpenAITranscriber(api_key="sk-test")
 
-        audio_path = Path("test.wav")
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 100
-                with pytest.raises(TranscriptionError, match="OpenAI transcription failed"):
-                    transcriber.transcribe(audio_path)
+        audio_path = tmp_path / "test.wav"
+        audio_path.write_bytes(b"audio")
+        with pytest.raises(TranscriptionError, match="OpenAI transcription failed"):
+            transcriber.transcribe(audio_path)
 
     @patch("scribe.core.openai_api.OpenAI")
     def test_format_transcript_response_text(self, mock_openai):
@@ -113,7 +111,7 @@ class TestOpenAITranscriber:
 
     @patch("scribe.core.openai_api.OpenAI")
     @patch("scribe.core.openai_api.get_logger")
-    @patch("scribe.utils.audio.get_audio_duration")
+    @patch("scribe.core.openai_api.get_audio_duration")
     @patch("scribe.core.openai_api.OpenAITranscriber.standardize_audio")
     @patch("scribe.core.openai_api.OpenAITranscriber.split_audio_on_silence")
     @patch("scribe.core.openai_api.OpenAITranscriber.transcribe_chunk")
@@ -129,6 +127,7 @@ class TestOpenAITranscriber:
         mock_duration,
         mock_logger,
         mock_openai,
+        tmp_path: Path,
     ):
         """Test that large files trigger client-side chunking."""
         transcriber = OpenAITranscriber(api_key="sk-test")
@@ -140,12 +139,9 @@ class TestOpenAITranscriber:
         mock_split.return_value = [Path("chunk1.wav"), Path("chunk2.wav")]
         mock_transcribe_chunk.return_value = (True, "Chunk text")
 
-        audio_path = Path("large_audio.wav")
-        # Mock Path methods
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 100
-                result = transcriber.transcribe(audio_path)
+        audio_path = tmp_path / "large_audio.wav"
+        audio_path.write_bytes(b"audio")
+        result = transcriber.transcribe(audio_path)
 
         assert result.name == "large_audio_transcription.txt"
         assert transcriber.use_server_chunking is False

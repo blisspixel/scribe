@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Made tray help assertions ignore terminal styling so Linux CI validates user-facing text independently of Rich ANSI boundaries.
 - Kept native Go source and module files on LF in Windows checkouts so `go mod tidy -diff` remains stable across runner line-ending settings.
 - Delayed music transcriber initialization until a track reaches transcription, so invalid, non-music, and confirmed instrumental outcomes do not fail early when ffmpeg is unavailable.
+- Consolidated OpenAI duration lookup on one patchable dependency and replaced process-wide `Path.stat` mocks with real temporary inputs, preventing platform-specific path type failures in the Python matrix.
 - Native tray IPC auth rejects wrong-length capability lines without killing the accept loop (`hmac.compare_digest` length safety).
 - Linux tray readiness no longer treats `XDG_SESSION_TYPE` alone as proof of a graphical session, and macOS permission copy no longer claims silent mic failure when capture reports an error.
 - Made the Go tray honor configured F6-F12 keys, reject collisions and unsupported keys, fail closed when either global registration fails, use the canonical visible icon, surface socket failures, and clean up native registrations.
