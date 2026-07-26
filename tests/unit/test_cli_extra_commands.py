@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from scribe.cli.main import _persist_failed_session, _persist_music_session, app
@@ -680,7 +681,7 @@ def test_batch_help_explains_cost_and_incomplete_exit_status() -> None:
 
 def test_tray_help_explains_default_toggle_interaction() -> None:
     result = CliRunner().invoke(app, ["tray", "--help"])
-    normalized_output = " ".join(result.stdout.split())
+    normalized_output = " ".join(unstyle(result.stdout).split())
 
     assert result.exit_code == 0
     assert "Tap the dictation hotkey" in normalized_output
