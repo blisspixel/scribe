@@ -964,9 +964,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1570 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1673 passed, 11 skipped, 27 deselected, 83.54% line coverage
-- Current collection: 1711 assertion-based tests
+- Latest CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1677 passed, 11 skipped, 27 deselected, 83.54% line coverage
+- Current collection: 1715 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1243,4 +1243,4 @@ GitHub: [@blisspixel](https://github.com/blisspixel)
 **Workspace Version:** 2.8.1 in development (latest release tag: v2.8.0)
 **Build Status:** Refer to local CI/test runs
 **Focus:** Reliability and maintainability - see [ROADMAP](ROADMAP.md)
-**Last Updated:** 2026-07-15
+**Last Updated:** 2026-07-26

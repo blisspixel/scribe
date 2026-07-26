@@ -2,11 +2,11 @@
 
 ## Current Reality
 
-As of 2026-07-15:
+As of 2026-07-26:
 
-- Pytest collection: 1711 assertion-based tests across unit, integration, e2e, and manual coverage.
-- Latest local CI-safe unit matrix: 1570 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1673 passed, 11 skipped, 27 deselected, and 83.54 percent coverage.
+- Pytest collection: 1715 assertion-based tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1677 passed, 11 skipped, 27 deselected, and 83.54 percent coverage.
 - Enforced project coverage floor: 80 percent.
 - Standard quality gates: Ruff check, Ruff format check, mypy strict, 80 percent
   coverage, root-wheel artifact and isolated-install verification, the Windows

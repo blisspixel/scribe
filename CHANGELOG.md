@@ -83,6 +83,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Made default batches with every input missing reach one ASCII-safe aggregate summary with exact zero, partial, and failed counts. Stop-on-error mode remains immediate after the first literal missing-path warning.
 
 ### Security
+- Raised the `yt-dlp` dependency floor and lock to 2026.7.4, resolving `CVE-2026-55404` in generated URL and desktop shortcut handling.
 - Raised the setuptools build requirement and lock to 83.0.0, resolving `PYSEC-2026-3447` in the build toolchain.
 - Documented and enforced the narrowly scoped `PYSEC-2026-2286` Torch exception in ADR-004. Scribe does not call `torch.load` or accept user checkpoint paths; an attempted Torch 2.10 upgrade was rejected because the default lock resolution disabled the validated CUDA path. The exception remains reviewable security debt, not a claim that Torch 2.8 is vulnerability-free.
 
