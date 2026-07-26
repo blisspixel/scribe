@@ -1,0 +1,5 @@
+# Go module tooling compares generated files byte-for-byte. Keep the native tray
+# source on LF even when a Windows checkout enables core.autocrlf.
+cmd/scribe-tray/*.go text eol=lf
+cmd/scribe-tray/go.mod text eol=lf
+cmd/scribe-tray/go.sum text eol=lf
