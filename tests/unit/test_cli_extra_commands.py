@@ -1199,6 +1199,7 @@ def test_music_instrumental_persists_terminal_session(tmp_path: Path) -> None:
     with (
         patch("scribe.cli.main.ScribeConfig", return_value=config),
         patch("scribe.cli.main.setup_logging"),
+        patch("scribe.cli.main.Transcriber") as transcriber_class,
         patch("scribe.cli.main.get_current_log_file", return_value=log_path),
         patch("scribe.utils.audio.get_audio_duration", return_value=120.0),
         patch("scribe.utils.music_detection.MusicDetector", return_value=detector),
@@ -1208,6 +1209,7 @@ def test_music_instrumental_persists_terminal_session(tmp_path: Path) -> None:
         result = runner.invoke(app, ["music", str(audio_path)])
 
     assert result.exit_code == 0
+    transcriber_class.assert_not_called()
     summaries = list(tmp_path.glob("*_session_summary.json"))
     assert len(summaries) == 1
     data = json.loads(summaries[0].read_text(encoding="utf-8"))
@@ -1709,7 +1711,7 @@ def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
 
     for command in ("transcribe", "url", "record", "batch", "music"):
         result = runner.invoke(app, [command, "--help"])
-        linear_output = result.stdout.replace("│", " ").replace("|", " ")
+        linear_output = unstyle(result.stdout).replace("│", " ").replace("|", " ")
         normalized_output = " ".join(linear_output.split())
         assert result.exit_code == 0
         assert "auto/local" in normalized_output

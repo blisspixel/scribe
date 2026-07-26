@@ -2309,8 +2309,10 @@ def music_transcribe(
         console.print(f"[bold cyan]Processing {len(files_to_process)} audio file(s)[/bold cyan]")
         console.print()
 
-        # Create transcriber once for all files
-        transcriber = Transcriber(config)
+        # Create the shared transcriber only when a track reaches transcription.
+        # Early terminal outcomes such as invalid, non-music, or instrumental
+        # tracks should not require the ffmpeg-backed converter to initialize.
+        transcriber: Transcriber | None = None
 
         # Process each file
         for idx, audio_path in enumerate(files_to_process, 1):
@@ -2443,6 +2445,8 @@ def music_transcribe(
                         sliced_paths = None
 
                 # Step 5: Transcribe segments
+                if transcriber is None:
+                    transcriber = Transcriber(config)
                 console.print("  [dim]Transcribing...[/dim]", end="")
                 try:
                     all_lyrics: list[str] = []
