@@ -1,29 +1,28 @@
 # SBOM Compliance
 
-Scribe can generate a local Software Bill of Materials (SBOM) with `pip-audit`,
-which is part of the locked development environment.
+Scribe exports its locked runtime dependency graph as a CycloneDX Software Bill
+of Materials (SBOM). CI generates and retains this artifact on every run.
 
 ## Generate a CycloneDX SBOM
 
 From the project root:
 
 ```bash
-uv sync --locked --group dev
-uv run python -c "from pathlib import Path; Path('.agent/build').mkdir(parents=True, exist_ok=True)"
-uv run pip-audit --format cyclonedx-json --output .agent/build/scribe-sbom.cdx.json \
-  --ignore-vuln PYSEC-2025-203 \
-  --ignore-vuln PYSEC-2025-204 \
-  --ignore-vuln PYSEC-2025-206 \
-  --ignore-vuln PYSEC-2026-139 \
-  --ignore-vuln PYSEC-2026-2286 \
-  --ignore-vuln CVE-2025-2999 \
-  --ignore-vuln CVE-2025-3000 \
-  --ignore-vuln CVE-2025-3001
+mkdir -p .agent/build
+uv export --locked --package scribe --no-dev --no-default-groups \
+  --no-emit-workspace --format cyclonedx1.5 \
+  --output-file .agent/build/scribe-sbom.cdx.json
 ```
 
-The command writes the complete resolved environment inventory to an ignored
-build directory. Review the file before sharing it because dependency and local
-environment details can be operationally sensitive.
+PowerShell users can create the directory with
+`New-Item -ItemType Directory -Force .agent/build`. The export comes directly
+from `uv.lock`, so it does not depend on whichever packages happen to be
+installed in the active environment. Review the file before sharing it because
+dependency details can be operationally sensitive.
+
+The required `security` CI job uploads the same file as the `scribe-sbom`
+artifact. SBOM generation inventories dependencies; the separate blocking
+audit evaluates known vulnerabilities under the reviewed exception policy.
 
 ## Scan for Known Vulnerabilities
 

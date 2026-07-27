@@ -14,8 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Consistent environment variables for all jobs
-  UV_CACHE_DIR: /tmp/uv-cache
   # Test keys so providers don't fail during import/config
   OPENAI_API_KEY: sk-test-key
   XAI_API_KEY: test-key
@@ -37,9 +35,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -78,9 +76,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -99,6 +97,48 @@ jobs:
             --maxfail=1 -q
 
   # ---------------------------------------------------------------------------
+  # Native Python Platform Smoke
+  # Runs the real OS-specific path and launcher tests on Windows and macOS.
+  # The Windows job executes the generated Quick Record wrapper with cmd.exe.
+  # ---------------------------------------------------------------------------
+  platform-smoke:
+    name: Platform Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15-intel]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.32"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Run native platform contracts
+        run: >-
+          uv run pytest
+          tests/test_platform.py
+          tests/unit/test_shortcut.py
+          tests/unit/test_platform_utils.py
+          -m "not gpu and not slow"
+          --maxfail=1 -q
+
+  # ---------------------------------------------------------------------------
   # Coverage Gate
   # Enforce the 80%+ coverage gate (pyproject.toml [tool.coverage.report] + explicit flag).
   # Part of the Engineering Excellence foundation. Fails the build on regression.
@@ -113,9 +153,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -145,7 +185,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-xml
           path: coverage.xml
@@ -166,9 +206,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -192,6 +232,20 @@ jobs:
             --ignore-vuln CVE-2025-3000 \
             --ignore-vuln CVE-2025-3001
 
+      - name: Generate locked CycloneDX SBOM
+        run: |
+          mkdir -p .agent/build
+          uv export --locked --package scribe --no-dev --no-default-groups \
+            --no-emit-workspace --format cyclonedx1.5 \
+            --output-file .agent/build/scribe-sbom.cdx.json
+
+      - name: Upload locked SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scribe-sbom
+          path: .agent/build/scribe-sbom.cdx.json
+          if-no-files-found: error
+
   # ---------------------------------------------------------------------------
   # Toolchain Sanity Check
   # Exercises uv + pre-commit end-to-end. Now a hard gate (Step 2 Ruff enforcement complete).
@@ -207,9 +261,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
 
       - name: Setup Python 3.12
         run: uv python install 3.12
@@ -236,9 +290,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -309,9 +363,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "latest"
+          version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -340,7 +394,8 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint-and-types, toolchain-check, test, coverage, security, package, native-tray]
+    needs:
+      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, native-tray]
     if: always()
 
     steps:
@@ -351,6 +406,7 @@ jobs:
           echo "  lint-and-types: ${{ needs.lint-and-types.result }}"
           echo "  toolchain-check: ${{ needs.toolchain-check.result }}"
           echo "  test:           ${{ needs.test.result }}"
+          echo "  platform-smoke: ${{ needs.platform-smoke.result }}"
           echo "  coverage:       ${{ needs.coverage.result }}"
           echo "  security:       ${{ needs.security.result }}"
           echo "  package:        ${{ needs.package.result }}"
@@ -360,6 +416,7 @@ jobs:
           for result in "${{ needs.lint-and-types.result }}" \
                         "${{ needs.toolchain-check.result }}" \
                         "${{ needs.test.result }}" \
+                        "${{ needs.platform-smoke.result }}" \
                         "${{ needs.coverage.result }}" \
                         "${{ needs.security.result }}" \
                         "${{ needs.package.result }}" \

@@ -154,7 +154,7 @@ class TestProviderHealthMonitor:
 
     def test_check_openai_success_and_empty_response(self):
         monitor = ProviderHealthMonitor()
-        create = patch("scribe.providers.factory._get_default_model", return_value="gpt-test")
+        create = patch("scribe.providers.catalog.get_default_model", return_value="gpt-test")
 
         class FakeOpenAI:
             def __init__(self, *, api_key, timeout, base_url=None):
@@ -198,7 +198,7 @@ class TestProviderHealthMonitor:
                 )
 
         with (
-            patch("scribe.providers.factory._get_default_model", return_value="grok-test"),
+            patch("scribe.providers.catalog.get_default_model", return_value="grok-test"),
             patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}),
         ):
             monitor._check_xai("key")
@@ -219,7 +219,7 @@ class TestProviderHealthMonitor:
                 monitor._check_anthropic("key")
 
         with (
-            patch("scribe.providers.factory._get_default_model", return_value="claude-test"),
+            patch("scribe.providers.catalog.get_default_model", return_value="claude-test"),
             patch.dict(sys.modules, {"anthropic": SimpleNamespace(Anthropic=FakeAnthropicClient)}),
         ):
             monitor._check_anthropic("key")
@@ -251,7 +251,7 @@ class TestProviderHealthMonitor:
         google_module.genai = genai_module
 
         with (
-            patch("scribe.providers.factory._get_default_model", return_value="gemini-test"),
+            patch("scribe.providers.catalog.get_default_model", return_value="gemini-test"),
             patch.dict(
                 sys.modules,
                 {

@@ -15,6 +15,16 @@ The project is currently focused on two tracks that run in parallel:
 
 The remainder of this document addresses the second track.
 
+**Engineering review progress (2026-07-27):** the CLI now defers heavyweight
+runtime imports, the internal Python import graph has a required acyclic
+contract, coverage measures branches, Windows and Intel macOS run native Python
+smoke tests, GitHub Actions and uv are immutably pinned, CI publishes a locked
+CycloneDX SBOM, and the repository has a versioned WER/RTF evaluation format and
+security policy. Remaining high-value work is deliberate: split the oversized
+CLI and recorder orchestration modules, redesign heavy dependency extras only
+in a compatible major release, choose canonical license terms, and add signing
+and provenance when native artifacts are officially distributed.
+
 ---
 
 ## Scope and Focus
@@ -98,7 +108,8 @@ The product surface is already useful, so polish work should improve what exists
 - **Reliability debt:** truthful batch and music outcomes, portable wheel installation, bounded long-audio fallback, authenticated tray readiness, unique session archives, and terminal summaries for file, URL, batch-item, recording, and per-track music flows are shipped. Safe writes and verified WAV reconversion replace atomically without deleting prior evidence first. Persistent terminal and progress output failures now degrade to stable exits and local file logs without rewriting saved outcomes, and default all-missing batches reach one aggregate summary. Next, continue hardening local backend routing, OBS recovery, an approved evidence-retention policy, and voice tray state transitions.
 - **Security debt:** the native tray requires a process-scoped capability before accepting local control commands. Its source contract now blocks tracked executables and verifies module state, tests, vet, reachable vulnerabilities, reproducible hashes, and embedded commit identity. Official signing and attestation, same-user process isolation limits, cloud-transmission clarity, and all eight documented Torch dependency-audit exceptions remain tracked.
 - **Accessibility debt:** incomplete output provides a plain exact session-summary path, doctor no longer clips decisive message tails, and dynamic batch, doctor, support, and shared error text renders literally. Batch accounting uses an ASCII divider, and terminal-delivery fallback is ASCII-safe. Keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
-- **Test coverage debt:** keep the meaningful coverage gate above 80 percent with failure-path assertions. Root-wheel and native-tray source contracts are required aggregate CI; signed native platform artifact matrices remain open.
+- **Architecture debt:** import cycles and heavyweight trivial-command imports are now blocked by tests. Continue splitting the oversized CLI and recorder orchestration modules along command and lifecycle boundaries instead of attempting a high-risk rewrite.
+- **Test coverage debt:** keep meaningful branch coverage above 80 percent with failure-path assertions. Root-wheel, native Windows and macOS smoke, and native-tray source contracts are required aggregate CI; signed native platform artifact matrices remain open.
 - **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
 - **Deferred product debt:** publish and verify platform-specific Rust acceleration wheels and Go tray binaries before describing either native runtime as distributed. The portable Python wheel does not depend on those unpublished artifacts.
 
@@ -210,7 +221,7 @@ Make the public surface and core logic statically verifiable.
 ### 4. Error Handling, Security, and Operational Hygiene
 Tighten runtime behavior and add security scanning only after the static foundations are in place.
 
-**Status (as of this revision):** Step 2 complete (ruff + pre-commit hard in CI). Step 3 in progress (mypy strict clean, deal on costs/transcript/validation/recording_policy/vocabulary, Hypothesis property + HotkeyState + RecordingPhase state machine tests). Step 4 is operational but retains explicit security debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and audit results, and eight Torch advisories remain accepted under ADR-004 until compatible CPU and CUDA dependency sets can be locked and validated. Broad exception handlers are tightened to ADR-002 typed tuples across the codebase; ADR-012 records the decision against structured logging.
+**Status (as of this revision):** Step 2 is complete with Ruff and pre-commit hard in CI. Step 3 is in progress with mypy strict clean, meaningful branch coverage above 80 percent, import-boundary contracts, deal on pure critical modules, and Hypothesis property and lifecycle state-machine tests. Step 4 is operational but retains explicit security debt: pip-audit is blocking in CI, a locked CycloneDX SBOM is a required artifact, `scribe doctor` reports CUDA driver age and audit results, and eight Torch advisories remain accepted under ADR-004 until compatible CPU and CUDA dependency sets can be locked and validated. Broad exception handlers are tightened to ADR-002 typed tuples across the codebase; ADR-012 records the decision against structured logging.
 
 **Work in this step:**
 - Systematic audit and tightening of remaining broad `except Exception` handlers. Prefer specific catches, structured logging of context, and re-raise using the existing `ScribeError` hierarchy.

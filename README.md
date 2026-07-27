@@ -60,7 +60,13 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   or log contents. Review the generated JSON before sharing it.
 - **Reproducible quality gates**: CI uses the committed lockfile, includes the
   toolchain check in the aggregate result, enforces formatting, lint, strict
-  typing, dependency audit policy, and at least 80 percent meaningful coverage.
+  typing, dependency audit policy, and at least 80 percent branch coverage.
+  Native Python smoke tests run on Windows and Intel macOS, including execution
+  of the generated Windows Quick Record wrapper.
+- **Evidence and supply-chain hygiene**: trivial CLI startup defers heavyweight
+  dependencies, internal import cycles are rejected, third-party Actions and uv
+  are immutably pinned, CI publishes a locked CycloneDX SBOM, and reproducible
+  WER/RTF reports replace anecdotal performance claims.
 - **Portable release artifact**: the root wheel no longer requires an unpublished
   workspace-only Rust package. Required CI now builds and inspects the wheel,
   installs it without workspace packages, and smokes the installed command.
@@ -89,8 +95,8 @@ All historical changes and the full version history live in [CHANGELOG.md](CHANG
 The current workspace is executing the **Engineering Excellence Roadmap** (see [ROADMAP.md](ROADMAP.md)):
 - Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12/3.13, ruff, mypy --strict, 80%+ cov gate, pip-audit security, aggregator job).
 - Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
-- Step 3 in progress: mypy --strict clean; `deal` contracts on pure modules (`costs`, transcript model, validation helpers); Hypothesis property tests expanding.
-- Step 4 operational with tracked debt: pip-audit is blocking in CI, SBOM generation is documented, `scribe doctor` reports CUDA driver age and dependency-audit results, and accepted Torch advisories are explicit in ADR-004 while compatible CPU/CUDA upgrade validation remains open.
+- Step 3 in progress: mypy --strict clean; branch coverage above 80 percent; import-boundary contracts; `deal` contracts on pure modules; Hypothesis property and lifecycle state-machine tests expanding.
+- Step 4 operational with tracked debt: pip-audit is blocking in CI, a locked CycloneDX SBOM is retained as a CI artifact, `scribe doctor` reports CUDA driver age and dependency-audit results, and accepted Torch advisories are explicit in ADR-004 while compatible CPU/CUDA upgrade validation remains open.
 
 ---
 
@@ -954,7 +960,7 @@ uv run pytest tests/unit/
 # CI-safe unit matrix
 uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q
 
-# Meaningful coverage gate
+# Meaningful branch-coverage gate
 uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
 
 # Quick check
@@ -965,14 +971,14 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1677 passed, 11 skipped, 27 deselected, 83.54% line coverage
-- Current collection: 1715 assertion-based tests
+- Latest CI-safe unit matrix: 1597 passed, 1 skipped, 37 deselected
+- Latest broader CI-equivalent coverage gate: 1702 passed, 11 skipped, 27 deselected, 81.05% branch coverage
+- Current collection: 1740 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
 - End-to-end tests may require a valid `OPENAI_API_KEY`
-- Ruff, mypy --strict, and coverage gates enforced on safe subsets
+- Ruff, mypy --strict, and branch-coverage gates enforced on safe subsets
 
 See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the ordered plan to raise gates (uv foundation, ruff, strict types, property testing, coverage, and hygiene).
 
@@ -1159,6 +1165,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 - [Agentic Balance](docs/AGENTIC_BALANCE.md) - Where Scribe uses deterministic rules versus model judgment
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Development Guide](docs/DEVELOPMENT.md) - Development setup and workflows
+- [Reproducible Evaluation](docs/EVALUATION.md) - WER, real-time factor, and benchmark evidence format
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [Performance Tuning](docs/PERFORMANCE_TUNING.md) - Optimization and benchmarking
 - [Deployment Guide](docs/DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
@@ -1172,6 +1179,7 @@ See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more solutions.
 - [ROADMAP](ROADMAP.md) - Feature roadmap and version history
 - [Documentation Index](docs/README.md) - Complete documentation index
 - [Documentation Structure](docs/STRUCTURE.md) - How docs are organized
+- [Security Policy](SECURITY.md) - Supported versions, trust boundaries, and private reporting guidance
 
 ---
 

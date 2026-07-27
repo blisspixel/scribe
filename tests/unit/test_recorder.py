@@ -815,9 +815,23 @@ class TestCLIFallback:
     @patch("scribe.core.recorder.OBS_AVAILABLE", False)
     def test_cli_fallback_when_websocket_unavailable(self, recorder, tmp_path):
         """Test CLI fallback is used when WebSocket library not available."""
-        # This would normally call _record_with_cli
-        # We just verify the logic path exists
-        assert True  # Placeholder for integration test
+        expected = tmp_path / "fallback-recording.mp4"
+        stop_event = threading.Event()
+        restore_sigint = Mock()
+
+        with (
+            patch.object(
+                recorder,
+                "_start_stop_listener",
+                return_value=(stop_event, restore_sigint),
+            ),
+            patch.object(recorder, "_record_with_cli", return_value=expected) as cli_fallback,
+        ):
+            result = recorder.record("Fallback Meeting")
+
+        assert result == expected
+        cli_fallback.assert_called_once_with("Fallback Meeting", stop_event)
+        restore_sigint.assert_called_once_with()
 
     def test_cli_fallback_file_detection(self, recorder, tmp_path):
         """Test file detection in CLI fallback mode."""

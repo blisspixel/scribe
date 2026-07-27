@@ -6,13 +6,14 @@ environment variable loading, and self-healing for common configuration issues.
 """
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from scribe.exceptions import ValidationError
+from scribe.models.options import ModelSize, TranscriptionMethod
 
 
 class _ScribeUserConfigSource(PydanticBaseSettingsSource):
@@ -31,20 +32,6 @@ class _ScribeUserConfigSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         return dict(self._data)
-
-
-TranscriptionMethod = Literal["auto", "local", "openai"]
-ModelSize = Literal[
-    "tiny",
-    "base",
-    "small",
-    "medium",
-    "large",
-    "large-v2",
-    "large-v3",
-    "large-v3-turbo",
-    "turbo",
-]
 
 
 def _find_env_file() -> str | None:

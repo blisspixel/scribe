@@ -6,10 +6,10 @@ import logging
 import os
 
 from scribe.providers.base import AIProvider, ProviderConfig
+from scribe.providers.catalog import get_default_model as _get_default_model
 from scribe.providers.ollama_provider import OLLAMA_PLACEHOLDER_KEY, OllamaProvider
 from scribe.providers.openai_provider import OpenAIProvider
 from scribe.providers.xai_provider import XAIProvider
-from scribe.utils.ollama_models import DEFAULT_OLLAMA_MODEL
 
 try:
     from scribe.providers.anthropic_provider import AnthropicProvider
@@ -247,58 +247,6 @@ def get_provider(
         return OllamaProvider(config)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
-
-
-def _get_default_model(provider_name: str, feature: str) -> str:
-    """Get default model for a provider and feature."""
-
-    defaults: dict[str, dict[str, str | None]] = {
-        "openai": {
-            "joke": "gpt-5.5",
-            "meme": "gpt-5.5",
-            "meme_image": "gpt-image-1",
-            "notes": "gpt-5.5",
-            "transcribe": "whisper-1",
-        },
-        "xai": {
-            "joke": "grok-4.3",
-            "meme": "grok-4.3",
-            "meme_image": "grok-imagine-image",  # Note: XAI image gen can add watermarks, consider using OpenAI for images
-            "notes": "grok-4.3",
-            "transcribe": None,  # XAI doesn't support transcription yet
-        },
-        "anthropic": {
-            "joke": "claude-3-5-sonnet-20241022",
-            "meme": "claude-3-5-sonnet-20241022",
-            "meme_image": None,  # Anthropic doesn't support image generation
-            "notes": "claude-3-5-sonnet-20241022",
-            "transcribe": None,  # Anthropic doesn't support transcription yet
-        },
-        "gemini": {
-            "joke": "gemini-3-pro-preview",  # Gemini 3 for advanced reasoning
-            "meme": "gemini-3-pro-preview",  # Gemini 3 for complex multimodal tasks
-            "meme_image": "imagen-4.0-generate-001",
-            "notes": "gemini-3-pro-preview",  # Gemini 3 for structured analysis
-            "transcribe": None,  # Gemini doesn't support dedicated transcription yet
-        },
-        # Ollama models are machine-dependent; get_provider() picks the best
-        # installed model by VRAM. These are only last-resort fallbacks.
-        "ollama": {
-            "joke": DEFAULT_OLLAMA_MODEL,
-            "meme": DEFAULT_OLLAMA_MODEL,
-            "meme_image": None,  # Ollama does not generate images
-            "notes": DEFAULT_OLLAMA_MODEL,
-            "transcribe": None,  # Ollama does not transcribe audio
-        },
-    }
-
-    provider_defaults: dict[str, str | None] | None = defaults.get(provider_name)
-    model = provider_defaults.get(feature) if provider_defaults is not None else None
-
-    if model is None:
-        raise ValueError(f"Provider '{provider_name}' does not support feature '{feature}'")
-
-    return model
 
 
 def _get_fallback_provider(feature: str, failed_provider: str, original_api_key: str) -> str | None:

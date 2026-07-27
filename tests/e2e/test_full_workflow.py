@@ -153,21 +153,20 @@ class TestFallbackScenarios:
         # Should have used OpenAI (no GPU available)
         mock_openai.audio.transcriptions.create.assert_called()
 
-    def test_no_fallback_when_method_forced(
+    def test_forced_local_uses_local_path_without_gpu(
         self, sample_audio: Path, temp_config: ScribeConfig, mock_no_gpu, mock_openai
     ):
-        """Test error when forcing local method without GPU."""
+        """An explicit local choice must not be silently changed before execution."""
         transcriber = Transcriber(temp_config)
+        expected = temp_config.output_folder / "forced-local.txt"
+        expected.write_text("local transcript", encoding="utf-8")
 
-        # Forcing local method without GPU should fail
-        # (The transcriber will attempt fallback, but we're testing the behavior)
-        # Actually, with auto fallback, it will succeed by falling back to OpenAI
-        # So let's just verify that forcing local with no GPU attempts local first
-        result = transcriber.transcribe(sample_audio, method="auto")
+        with patch.object(transcriber, "_transcribe_local", return_value=expected) as local:
+            result = transcriber.transcribe(sample_audio, method="local")
 
-        # Should succeed via fallback
-        assert result is not None
-        assert result.exists()
+        assert result == expected
+        local.assert_called_once()
+        mock_openai.audio.transcriptions.create.assert_not_called()
 
 
 class TestCleanupBehavior:

@@ -79,6 +79,11 @@ Scribe is a local-first desktop CLI built around a modular transcription and ana
 - Output formatting with Rich
 - Error presentation
 
+**dependencies.py** - Lazy command construction boundary
+- Keeps trivial commands from importing recorder, provider SDK, DOCX, and transcription stacks
+- Preserves patchable command seams for tests without eager heavyweight imports
+- Uses type-only imports so strict typing does not add runtime coupling
+
 **mobile.py** - Mobile/simplified interface
 - Streamlined commands for quick access
 - Reduced verbosity
@@ -189,6 +194,10 @@ Scribe is a local-first desktop CLI built around a modular transcription and ana
 - Dynamic provider selection
 - Configuration injection
 - Caching and reuse
+
+**catalog.py** - Dependency-light provider capability catalog
+- Shared default models without coupling health probes to provider construction
+- Keeps the internal provider import graph acyclic
 
 ### Utilities Layer (`src/scribe/utils/`)
 
@@ -472,11 +481,13 @@ Report Error with Context
 
 ## Testing Strategy
 
-### Unit Tests (589 tests)
+### Assertion-Based Tests
 - Individual component testing
 - Mock external dependencies
 - Edge case coverage
 - Defensive programming validation
+- Branch coverage above the enforced 80 percent floor
+- Import-boundary and internal-cycle architecture contracts
 
 ### Integration Tests (Limited)
 - Provider integration
@@ -564,10 +575,13 @@ tests/
 The roadmap deliberately keeps Scribe a cohesive local desktop CLI. Architecture work should improve the existing product surface instead of turning it into a hosted platform.
 
 ### Near-Term Improvements
+- Split the remaining orchestration-heavy CLI and recorder modules by command and lifecycle boundary while preserving their public behavior.
+- Continue reducing broad exception boundaries where failures can be classified without hiding diagnostic context.
 - Keep local backend routing deterministic across faster-whisper, MLX, whisper.cpp, and CPU fallback.
 - Improve `doctor`, `info`, and tray diagnostics so hardware, optional dependencies, and provider boundaries are visible before a user starts a long run.
 - Continue extracting pure policy from hardware and OS glue so state transitions, fallback choices, and file handling stay testable.
 - Keep structured transcript output, query, notes, and local-only behavior consistent across `transcribe`, `url`, `batch`, and `record`.
+- Publish performance or accuracy claims only with the versioned evaluation report and a documented corpus protocol.
 
 ### Explicitly Out Of Scope
 - REST APIs or hosted transcription services.

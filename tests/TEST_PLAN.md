@@ -2,14 +2,15 @@
 
 ## Current Status
 
-Date: 2026-07-26
+Date: 2026-07-27
 
-- 1715 assertion-based tests collected.
-- Latest local CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1677 passed, 11 skipped, 27 deselected, no warnings, and 83.54 percent coverage.
-- Current enforced coverage floor: 80 percent.
+- 1740 assertion-based tests collected.
+- Latest local CI-safe unit matrix: 1597 passed, 1 skipped, 37 deselected.
+- Latest broader CI-equivalent gate: 1702 passed, 11 skipped, 27 deselected, and 81.05 percent branch coverage.
+- Current enforced branch-coverage floor: 80 percent.
 - CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit,
-  pip-audit, the root-wheel build and isolated-install contract, and the Windows
+  pip-audit, a locked CycloneDX SBOM, the root-wheel build and isolated-install
+  contract, native Windows and Intel macOS Python smoke tests, and the Windows
   native-tray source contract.
 
 ## Test Strategy
@@ -20,7 +21,7 @@ Scribe is a local-first CLI with heavy hardware and OS integration points. The t
 - CLI wiring should be tested with mocked dependencies.
 - Provider, OBS, GPU, microphone, tray, and filesystem edge paths should use mocks unless deliberately marked as live/manual.
 - Live hardware and provider checks are not required for the default CI-safe subset.
-- Coverage must stay above the 80 percent floor, but new tests should optimize for meaningful assertions.
+- Branch coverage must stay above the 80 percent floor, but new tests should optimize for meaningful assertions.
 
 ## Current Strengths
 
@@ -30,6 +31,8 @@ Scribe is a local-first CLI with heavy hardware and OS integration points. The t
 - Strict markers prevent accidental CI use of GPU, slow, provider, FFmpeg, WhisperX, and Pillow-dependent paths.
 - Release-artifact tests reject workspace-only mandatory wheel metadata, while
   required CI builds, inspects, installs, and smokes the portable root wheel.
+- Architecture tests reject internal import cycles and heavyweight imports on
+  trivial CLI startup.
 
 ## Priority Coverage Areas
 
@@ -106,7 +109,7 @@ uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
 For coverage-sensitive work:
 
 ```bash
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80 -q
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=scribe --cov-report=term-missing --cov-fail-under=80 -q
 ```
 
 For dependency/security work, mirror the CI `pip-audit` command including ADR-004 torch ignores.

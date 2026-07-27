@@ -156,9 +156,9 @@ class ProviderHealthMonitor:
         """Check OpenAI API health."""
         from openai import OpenAI
 
-        from scribe.providers.factory import _get_default_model
+        from scribe.providers.catalog import get_default_model
 
-        model = _get_default_model("openai", "joke")
+        model = get_default_model("openai", "joke")
         client = OpenAI(api_key=api_key, timeout=10)
 
         # Simple completion test
@@ -175,9 +175,9 @@ class ProviderHealthMonitor:
         """Check XAI API health."""
         from openai import OpenAI
 
-        from scribe.providers.factory import _get_default_model
+        from scribe.providers.catalog import get_default_model
 
-        model = _get_default_model("xai", "joke")
+        model = get_default_model("xai", "joke")
         client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1", timeout=10)
 
         # Simple completion test
@@ -197,9 +197,9 @@ class ProviderHealthMonitor:
         except ImportError:
             raise ImportError("anthropic package not installed")
 
-        from scribe.providers.factory import _get_default_model
+        from scribe.providers.catalog import get_default_model
 
-        model = _get_default_model("anthropic", "joke")
+        model = get_default_model("anthropic", "joke")
 
         client = anthropic.Anthropic(api_key=api_key, timeout=10)
 
@@ -221,10 +221,9 @@ class ProviderHealthMonitor:
         except ImportError:
             raise ImportError("google-genai package not installed")
 
-        # Get the default model from factory
-        from scribe.providers.factory import _get_default_model
+        from scribe.providers.catalog import get_default_model
 
-        model = _get_default_model("gemini", "joke")
+        model = get_default_model("gemini", "joke")
 
         client = genai.Client(api_key=api_key)
 

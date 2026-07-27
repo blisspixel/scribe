@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from scribe.models.config import ModelSize
+from scribe.models.options import ModelSize
 
 
 @dataclass

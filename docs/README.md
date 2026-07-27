@@ -19,11 +19,13 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 ### Development
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Development setup and workflows
 - [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
+- [EVALUATION.md](EVALUATION.md) - Reproducible WER and real-time-factor evaluation
 
 ### Operations
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
 - [PERFORMANCE_TUNING.md](PERFORMANCE_TUNING.md) - Optimization and benchmarking
 - [SBOM Compliance](features/SBOM_COMPLIANCE.md) - Generate a local CycloneDX software bill of materials
+- [Security Policy](../SECURITY.md) - Reporting guidance and documented trust boundaries
 
 ### Project Status
 - [ROADMAP](../ROADMAP.md) - Feature roadmap and version history

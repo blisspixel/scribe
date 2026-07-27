@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Added a versioned, backend-independent evaluation harness for micro-averaged word error rate, real-time factor, exact-match diagnostics, manifest hashes, revision metadata, and per-sample evidence.
+- Added a security policy covering supported versions, private vulnerability reporting, cloud and local trust boundaries, and the experimental native-tray boundary.
+- Added required Windows and Intel macOS Python smoke jobs. The Windows job executes the generated Quick Record batch wrapper through the real command interpreter.
+- Added a locked CycloneDX runtime SBOM as a required CI artifact.
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
 - Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
 - Protected the local native-tray IPC boundary with a process-scoped capability and authenticated READY handshake. Unauthenticated peers cannot receive state or issue dictation, read, or quit commands.
@@ -16,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Reduced trivial CLI startup from roughly 1.8 seconds to about 0.5 seconds on the development machine by moving recorder, transcriber, settings, DOCX, session, GPU, and humor construction behind lazy command boundaries.
+- Made branch coverage the enforced coverage measure and added regression contracts for heavyweight CLI imports and acyclic internal imports.
+- Removed the provider catalog and meme bake-off import cycles by extracting a dependency-light provider catalog and injecting meme concept analysis.
+- Pinned every third-party GitHub Action and the uv toolchain to reviewed immutable revisions instead of mutable major-version or latest tags.
 - Removed the redundant startup banner from the Windows Quick Record launcher so its console opens directly on Scribe's recording output.
 - Hardened `scribe tray --check` and resident-voice readiness advisories for macOS and Linux: platform validation tier and startup path are printed, headless Linux no longer claims X11 hotkey support, Wayland guidance references portal GlobalShortcuts and desktop-shortcut fallbacks, macOS notes LaunchAgent login plus Accessibility for `inject=type`, and setup docs state experimental status until live hardware records exist.
 - `scribe tray --startup install` now prints OS-specific follow-up notes for macOS permissions and Linux Wayland/autostart limits after creating the login entry.
@@ -50,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Replaced vacuous recorder and end-to-end assertions with behavioral checks that verify CLI fallback routing and forced-local transcription without cloud fallback.
 - Made Windows Quick Record shortcuts and taskbar pins call the stable per-user wrapper instead of retaining removed Python or temporary test executables. Wrapper fallback checks and CRLF output are now deterministic.
 - Made tray help assertions ignore terminal styling so Linux CI validates user-facing text independently of Rich ANSI boundaries.
 - Kept native Go source and module files on LF in Windows checkouts so `go mod tidy -diff` remains stable across runner line-ending settings.

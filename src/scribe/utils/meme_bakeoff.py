@@ -3,16 +3,25 @@ Meme concept bake-off: Get concepts from multiple providers and pick the best.
 """
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from scribe.providers import get_provider
-from scribe.utils.meme_generator import MemeConfig, _analyze_transcript_for_meme
 
 logger = logging.getLogger(__name__)
 
 
-def run_meme_bakeoff(
-    transcript: str, config: MemeConfig, providers: list[str] | None = None
+class MemeBakeoffConfig(Protocol):
+    """Minimum configuration surface required by the bake-off."""
+
+    spice_level: int
+
+
+def run_meme_bakeoff[ConfigT: MemeBakeoffConfig](
+    transcript: str,
+    config: ConfigT,
+    analyze_concept: Callable[[Any, str, ConfigT, bool], dict[str, Any] | None],
+    providers: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Run a meme concept bake-off across multiple providers.
@@ -20,6 +29,7 @@ def run_meme_bakeoff(
     Args:
         transcript: The meeting transcript text
         config: Meme generation config
+        analyze_concept: Provider-independent concept analysis function
         providers: List of provider names to test (default: all available)
 
     Returns:
@@ -60,9 +70,7 @@ def run_meme_bakeoff(
 
         try:
             provider = get_provider(feature="meme", provider_name=provider_name)
-            concept = _analyze_transcript_for_meme(
-                provider, transcript, config, show_reasoning=False
-            )
+            concept = analyze_concept(provider, transcript, config, False)
 
             if concept:
                 concepts.append(

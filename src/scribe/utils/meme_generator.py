@@ -1041,7 +1041,11 @@ def generate_meeting_meme(
         from scribe.utils.meme_bakeoff import run_meme_bakeoff
 
         try:
-            bakeoff_result = run_meme_bakeoff(transcript, config)
+            bakeoff_result = run_meme_bakeoff(
+                transcript,
+                config,
+                _analyze_transcript_for_meme,
+            )
             meme_concept = bakeoff_result["concept"]
             provider_name = bakeoff_result["winner"]
 

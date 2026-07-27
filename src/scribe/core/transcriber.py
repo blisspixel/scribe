@@ -144,8 +144,9 @@ from scribe.core.converter import Converter
 from scribe.core.local_whisper import LocalWhisperTranscriber
 from scribe.core.openai_api import OpenAITranscriber
 from scribe.exceptions import TranscriptionError, ValidationError
-from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
+from scribe.models.config import ScribeConfig
 from scribe.models.gpu import GPUConfig
+from scribe.models.options import ModelSize, TranscriptionMethod
 from scribe.models.session import TranscriptionSession
 from scribe.models.transcript import Transcript
 from scribe.utils.files import cleanup_files

@@ -5,6 +5,8 @@ This module provides the command-line interface with commands for
 transcription, recording, and system information.
 """
 
+from __future__ import annotations
+
 import os
 import shutil
 import sys
@@ -12,7 +14,7 @@ import time
 import warnings
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import typer
 from rich.markup import escape
@@ -20,25 +22,34 @@ from rich.panel import Panel
 from rich.table import Table
 
 from scribe import __version__
-from scribe.cli.errors import exit_on_cli_error
-from scribe.core.recorder import OBSRecorder
-from scribe.core.transcriber import Transcriber
-from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
-from scribe.models.config import ModelSize, ScribeConfig, TranscriptionMethod
-from scribe.models.gpu import GPUConfig
-from scribe.models.session import SessionOutcome, TranscriptionSession
-from scribe.models.transcript import Transcript
-from scribe.utils.branding import brand_header_markup
-from scribe.utils.docx_converter import txt_to_docx
-from scribe.utils.joke_generator import (
-    ARCHETYPE_DISPLAY_NAMES,
+from scribe.cli.dependencies import (
+    GPUConfig,
+    OBSRecorder,
+    ScribeConfig,
+    Transcriber,
+    TranscriptionSession,
     generate_transcript_joke,
+    txt_to_docx,
 )
+from scribe.cli.errors import exit_on_cli_error
+from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
+from scribe.models.options import ModelSize, TranscriptionMethod
+from scribe.utils.branding import brand_header_markup
 from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
 from scribe.utils.safe_write import atomic_write
 from scribe.utils.theme import ScribeTheme, file_uri
 from scribe.utils.transcript_loader import is_supported_transcript_file, load_transcript_text
 from scribe.utils.validation import sanitize_meeting_name, validate_file_path
+
+if TYPE_CHECKING:
+    from scribe.core.transcriber import Transcriber as TranscriberType
+    from scribe.models.config import ScribeConfig as ScribeConfigType
+    from scribe.models.session import (
+        SessionOutcome,
+    )
+    from scribe.models.session import (
+        TranscriptionSession as TranscriptionSessionType,
+    )
 
 # Suppress TorchAudio MP3 warnings
 warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
@@ -64,11 +75,11 @@ class MusicResult(TypedDict, total=False):
 
 
 def _write_structured_outputs(
-    transcriber: Transcriber,
+    transcriber: TranscriberType,
     transcript_path: Path,
-    config: ScribeConfig,
+    config: ScribeConfigType,
     format_override: str | None,
-    session: TranscriptionSession | None = None,
+    session: TranscriptionSessionType | None = None,
 ) -> None:
     """Write the requested structured artifacts (json/vtt/srt/md) next to the .txt.
 
@@ -76,6 +87,8 @@ def _write_structured_outputs(
     (some legacy API paths), or a writer error never fails the transcription.
     """
     try:
+        from scribe.models.transcript import Transcript
+
         transcript = transcriber.last_transcript
         if not isinstance(transcript, Transcript):
             return
@@ -146,7 +159,7 @@ def _failure_message(error: BaseException) -> str:
 
 
 def _persist_failed_session(
-    session: TranscriptionSession | None,
+    session: TranscriptionSessionType | None,
     output_dir: Path | None,
     error: BaseException,
 ) -> Path | None:
@@ -199,7 +212,7 @@ def _warn_saved_outcome_error(error: BaseException) -> None:
 
 
 def _persist_terminal_session_error(
-    session: TranscriptionSession | None,
+    session: TranscriptionSessionType | None,
     output_dir: Path | None,
     error: BaseException,
     *,
@@ -222,7 +235,7 @@ def _add_music_issue(result: MusicResult, message: str) -> None:
 
 
 def _persist_music_session(
-    session: TranscriptionSession,
+    session: TranscriptionSessionType,
     result: MusicResult,
     output_dir: Path,
 ) -> Path | None:
@@ -486,8 +499,8 @@ def transcribe_command(
       scribe transcribe technical.mp4 --vocabulary terms.txt
     """
     unified_progress = None
-    config: ScribeConfig | None = None
-    session: TranscriptionSession | None = None
+    config: ScribeConfigType | None = None
+    session: TranscriptionSessionType | None = None
     summary_saved = False
     try:
         from scribe.utils.vocabulary import CustomVocabulary
@@ -962,7 +975,7 @@ def url_command(
     unified_progress = None
     downloaded_file = None
     config = None
-    session: TranscriptionSession | None = None
+    session: TranscriptionSessionType | None = None
     summary_saved = False
     try:
         from scribe.core.downloader import URLDownloader
@@ -1476,7 +1489,7 @@ def record(
     if check:
         raise typer.Exit(_run_obs_preflight())
 
-    session: TranscriptionSession | None = None
+    session: TranscriptionSessionType | None = None
     session_output_dir: Path | None = None
     summary_saved = False
     incomplete_run = False
@@ -1718,6 +1731,8 @@ def record(
                                 transcript_path, config.openai_api_key
                             )
                         if result:
+                            from scribe.utils.joke_generator import ARCHETYPE_DISPLAY_NAMES
+
                             joke_text, comedy_style = result
 
                             # Get proper archetype display name
@@ -1998,7 +2013,7 @@ def batch_transcribe(
             # Bound before the try so the except handler never hits an unbound
             # logger if validation fails before per-file setup_logging runs.
             logger = get_logger(__name__)
-            session: TranscriptionSession | None = None
+            session: TranscriptionSessionType | None = None
             console.print(
                 f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {escape(audio_file.name)}"
             )
@@ -2312,7 +2327,7 @@ def music_transcribe(
         # Create the shared transcriber only when a track reaches transcription.
         # Early terminal outcomes such as invalid, non-music, or instrumental
         # tracks should not require the ffmpeg-backed converter to initialize.
-        transcriber: Transcriber | None = None
+        transcriber: TranscriberType | None = None
 
         # Process each file
         for idx, audio_path in enumerate(files_to_process, 1):
@@ -2323,7 +2338,7 @@ def music_transcribe(
             sliced_paths: list[Path] | None = None
             transient_outputs: list[Path] = []
             segment_failure_count = 0
-            session: TranscriptionSession | None = None
+            session: TranscriptionSessionType | None = None
             result_start = len(results)
 
             try:
