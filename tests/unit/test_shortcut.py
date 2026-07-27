@@ -155,6 +155,7 @@ def test_install_windows_targets_stable_wrapper_with_icon(monkeypatch, fake_home
     assert "pause" in wrapper_text.lower()
     assert "FALLBACK" in wrapper_text
     assert "if errorlevel 1" in wrapper_text
+    assert "Launching Scribe recording" not in wrapper_text
     assert "Try scribe rec --check." in wrapper_text
     assert "(use scribe rec --check)" not in wrapper_text
     assert str(icon).endswith("scribe.ico")

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Removed the redundant startup banner from the Windows Quick Record launcher so its console opens directly on Scribe's recording output.
 - Hardened `scribe tray --check` and resident-voice readiness advisories for macOS and Linux: platform validation tier and startup path are printed, headless Linux no longer claims X11 hotkey support, Wayland guidance references portal GlobalShortcuts and desktop-shortcut fallbacks, macOS notes LaunchAgent login plus Accessibility for `inject=type`, and setup docs state experimental status until live hardware records exist.
 - `scribe tray --startup install` now prints OS-specific follow-up notes for macOS permissions and Linux Wayland/autostart limits after creating the login entry.
 - Consolidated installation and contributor setup on `pyproject.toml` and one locked uv development group, removing two drifting legacy requirements files, a duplicate incomplete dev extra, and contradictory commands.

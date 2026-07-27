@@ -223,9 +223,6 @@ def _windows_record_wrapper(fallback_exe: str) -> Path:
         "    )\r\n"
         ")\r\n"
         "\r\n"
-        "echo Launching Scribe recording...\r\n"
-        "echo.\r\n"
-        "\r\n"
         "set SCRIBE_FROM_SHORTCUT=1\r\n"
         'if "%TO_USE%"=="scribe" (\r\n'
         "    scribe rec %*\r\n"
