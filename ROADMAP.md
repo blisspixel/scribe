@@ -17,13 +17,19 @@ The remainder of this document addresses the second track.
 
 **Engineering review progress (2026-07-27):** the CLI now defers heavyweight
 runtime imports, the internal Python import graph has a required acyclic
-contract, coverage measures branches, Windows and Intel macOS run native Python
+contract, coverage measures branches, Windows and Apple Silicon macOS run native Python
 smoke tests, GitHub Actions and uv are immutably pinned, CI publishes a locked
 CycloneDX SBOM, and the repository has a versioned WER/RTF evaluation format and
 security policy. Remaining high-value work is deliberate: split the oversized
 CLI and recorder orchestration modules, redesign heavy dependency extras only
 in a compatible major release, choose canonical license terms, and add signing
 and provenance when native artifacts are officially distributed.
+
+Current Intel macOS packaging remains explicit debt. The locked Torch 2.8
+release has no x86_64 macOS wheel, so the supported macOS CI runner is Apple
+Silicon. Restoring an Intel install requires separating PyTorch-backed features
+from the portable base dependency set and belongs in the planned dependency
+extras redesign, not an unvalidated pin downgrade.
 
 ---
 
@@ -109,7 +115,7 @@ The product surface is already useful, so polish work should improve what exists
 - **Security debt:** the native tray requires a process-scoped capability before accepting local control commands. Its source contract now blocks tracked executables and verifies module state, tests, vet, reachable vulnerabilities, reproducible hashes, and embedded commit identity. Official signing and attestation, same-user process isolation limits, cloud-transmission clarity, and all eight documented Torch dependency-audit exceptions remain tracked.
 - **Accessibility debt:** incomplete output provides a plain exact session-summary path, doctor no longer clips decisive message tails, and dynamic batch, doctor, support, and shared error text renders literally. Batch accounting uses an ASCII divider, and terminal-delivery fallback is ASCII-safe. Keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
 - **Architecture debt:** import cycles and heavyweight trivial-command imports are now blocked by tests. Continue splitting the oversized CLI and recorder orchestration modules along command and lifecycle boundaries instead of attempting a high-risk rewrite.
-- **Test coverage debt:** keep meaningful branch coverage above 80 percent with failure-path assertions. Root-wheel, native Windows and macOS smoke, and native-tray source contracts are required aggregate CI; signed native platform artifact matrices remain open.
+- **Test coverage debt:** keep meaningful branch coverage above 80 percent with failure-path assertions. Root-wheel, native Windows and Apple Silicon macOS smoke, and native-tray source contracts are required aggregate CI; Intel macOS dependency compatibility and signed native platform artifact matrices remain open.
 - **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
 - **Deferred product debt:** publish and verify platform-specific Rust acceleration wheels and Go tray binaries before describing either native runtime as distributed. The portable Python wheel does not depend on those unpublished artifacts.
 

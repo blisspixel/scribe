@@ -29,7 +29,7 @@ def _sample_from_record(record: dict[str, Any], line_number: int) -> EvaluationS
             raise ValueError(f"line {line_number}: {field_name} must be a string")
     for field_name in ("audio_seconds", "processing_seconds"):
         value = record[field_name]
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, int | float):
             raise ValueError(f"line {line_number}: {field_name} must be a number")
 
     metadata = record.get("metadata", {})

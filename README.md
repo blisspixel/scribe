@@ -61,7 +61,7 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
 - **Reproducible quality gates**: CI uses the committed lockfile, includes the
   toolchain check in the aggregate result, enforces formatting, lint, strict
   typing, dependency audit policy, and at least 80 percent branch coverage.
-  Native Python smoke tests run on Windows and Intel macOS, including execution
+  Native Python smoke tests run on Windows and Apple Silicon macOS, including execution
   of the generated Windows Quick Record wrapper.
 - **Evidence and supply-chain hygiene**: trivial CLI startup defers heavyweight
   dependencies, internal import cycles are rejected, third-party Actions and uv

@@ -10,7 +10,7 @@ Date: 2026-07-27
 - Current enforced branch-coverage floor: 80 percent.
 - CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit,
   pip-audit, a locked CycloneDX SBOM, the root-wheel build and isolated-install
-  contract, native Windows and Intel macOS Python smoke tests, and the Windows
+  contract, native Windows and Apple Silicon macOS Python smoke tests, and the Windows
   native-tray source contract.
 
 ## Test Strategy

@@ -13,7 +13,7 @@ repos:
       - id: ruff
         # Scope matches the hard lint-and-types CI job and DEVELOPMENT expectations.
         # Prevents hook from scanning unrelated python files or venvs.
-        args: [--fix, --exit-non-zero-on-fix, "src", "tests"]
+        args: [--fix, --exit-non-zero-on-fix, "src", "scripts", "tests"]
       - id: ruff-format
 
   # mypy --strict is enforced via the dedicated "lint-and-types" CI job using

@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - Added a versioned, backend-independent evaluation harness for micro-averaged word error rate, real-time factor, exact-match diagnostics, manifest hashes, revision metadata, and per-sample evidence.
 - Added a security policy covering supported versions, private vulnerability reporting, cloud and local trust boundaries, and the experimental native-tray boundary.
-- Added required Windows and Intel macOS Python smoke jobs. The Windows job executes the generated Quick Record batch wrapper through the real command interpreter.
+- Added required Windows and Apple Silicon macOS Python smoke jobs. The Windows job executes the generated Quick Record batch wrapper through the real command interpreter.
 - Added a locked CycloneDX runtime SBOM as a required CI artifact.
 - Polyglot Architecture Phase B: Added `scribe-audio-core`, a native Rust extension via PyO3 that streams audio analysis without loading the complete recording into a Pydub silence splitter. Release performance claims remain blocked on reproducible benchmarks.
 - Polyglot Architecture Phase C: Added a pure Go resident tray source prototype (`scribe-tray`). Reproducible platform packaging, menu parity, integrity verification, and performance evidence remain open before release claims.
