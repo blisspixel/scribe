@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Made Windows Quick Record shortcuts and taskbar pins call the stable per-user wrapper instead of retaining removed Python or temporary test executables. Wrapper fallback checks and CRLF output are now deterministic.
 - Made tray help assertions ignore terminal styling so Linux CI validates user-facing text independently of Rich ANSI boundaries.
 - Kept native Go source and module files on LF in Windows checkouts so `go mod tidy -diff` remains stable across runner line-ending settings.
 - Delayed music transcriber initialization until a track reaches transcription, so invalid, non-music, and confirmed instrumental outcomes do not fail early when ffmpeg is unavailable.

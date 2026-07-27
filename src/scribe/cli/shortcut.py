@@ -112,6 +112,20 @@ def _windows_desktop_dir() -> Path:
     return Path.home() / "Desktop"
 
 
+def _windows_pinned_taskbar_path() -> Path:
+    """Return the existing per-user taskbar pin location used by Explorer."""
+    appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+    return (
+        Path(appdata)
+        / "Microsoft"
+        / "Internet Explorer"
+        / "Quick Launch"
+        / "User Pinned"
+        / "TaskBar"
+        / f"{LAUNCHER_NAME}.lnk"
+    )
+
+
 def _windows_icon_path() -> Path:
     """Copy the .ico to a stable per-user location and return it.
 
@@ -167,8 +181,8 @@ def _create_windows_lnk(
 def _windows_record_wrapper(fallback_exe: str) -> Path:
     """Create (or overwrite) a small .cmd wrapper that is *bulletproof* and adaptive.
 
-    - Always prefers bare 'scribe' via PATH at runtime (so global uv tool installs etc just work).
-    - Only falls back to the creation-time full exe path (properly quoted).
+    - Prefers the creation-time executable when it still exists.
+    - Falls back to bare 'scribe' via PATH when the captured executable moved.
     - Never re-appends 'rec'; always runs "xxx rec".
     - Proper quoting for paths with spaces.
     - Multiple layers of pause and error messages so window NEVER closes without user seeing output.
@@ -188,8 +202,8 @@ def _windows_record_wrapper(fallback_exe: str) -> Path:
         "setlocal EnableExtensions\r\n"
         "\r\n"
         "rem === BULLETPROOF Scribe Quick Record launcher ===\r\n"
-        "rem Prefers bare 'scribe' from PATH at the moment you double-click.\r\n"
-        "rem This survives uv tool installs, updates, etc.\r\n"
+        "rem Uses the stable executable captured at install time when available.\r\n"
+        "rem Falls back to bare 'scribe' from PATH if that executable moved.\r\n"
         "\r\n"
         'set "FALLBACK=' + fb_escaped + '"\r\n'
         "\r\n"
@@ -199,13 +213,13 @@ def _windows_record_wrapper(fallback_exe: str) -> Path:
         '    set "TO_USE=%FALLBACK%"\r\n'
         ") else (\r\n"
         "    where scribe >nul 2>nul\r\n"
-        "    if %ERRORLEVEL% equ 0 (\r\n"
-        '        set "TO_USE=scribe"\r\n'
-        "    ) else (\r\n"
+        "    if errorlevel 1 (\r\n"
         "        echo [Scribe Quick Record] ERROR: No working scribe found.\r\n"
         "        echo Run 'uv tool install ...' then recreate the shortcut.\r\n"
         "        pause\r\n"
         "        exit /b 1\r\n"
+        "    ) else (\r\n"
+        '        set "TO_USE=scribe"\r\n'
         "    )\r\n"
         ")\r\n"
         "\r\n"
@@ -224,7 +238,7 @@ def _windows_record_wrapper(fallback_exe: str) -> Path:
         "echo.\r\n"
         "if %ERR% neq 0 (\r\n"
         "    echo [Exited with code %ERR%]\r\n"
-        "    echo Common issues: OBS not running or WebSocket not configured (use scribe rec --check).\r\n"
+        "    echo Common issues: OBS not running or WebSocket not configured. Try scribe rec --check.\r\n"
         ") else (\r\n"
         "    echo Finished.\r\n"
         ")\r\n"
@@ -234,7 +248,7 @@ def _windows_record_wrapper(fallback_exe: str) -> Path:
         "pause >nul\r\n"
         "exit /b %ERR%\r\n"
     )
-    wrapper.write_text(content, encoding="utf-8")
+    wrapper.write_text(content, encoding="utf-8", newline="")
     return wrapper
 
 
@@ -251,24 +265,22 @@ def _install_windows(fallback_exe: str, desktop: bool) -> list[Path]:
     icon = _windows_icon_path()
     home = Path.home()
 
-    # Always ensure the adaptive wrapper .cmd exists (for advanced use or editing)
-    _ = _windows_record_wrapper(fallback_exe)
+    # Keep the executable resolution in one stable per-user wrapper. Shortcuts and
+    # taskbar pins can keep pointing here while the underlying installation moves.
+    wrapper = _windows_record_wrapper(fallback_exe)
 
-    # Target cmd.exe with a command that sets the env var (so python does final pause)
-    # and runs the scribe exe with "rec". The .lnk has the custom icon set.
-    # This gives a proper taskbar icon (associated with the exe + icon on .lnk)
-    # while keeping the nice "keep window open" behavior.
+    # Target cmd.exe for a normal console window and custom taskbar icon, but run
+    # only the stable wrapper. Do not bake a temporary or obsolete scribe path into
+    # the .lnk itself.
     cmd_exe = os.environ.get("SYSTEMROOT", r"C:\Windows") + r"\System32\cmd.exe"
-    # Always use bare "scribe" from PATH in the .lnk for maximum adaptiveness
-    # (survives uv tool upgrades, PATH changes). The icon is set on the .lnk itself.
-    # ( ... || pause ) keeps the console visible even if launch fails.
-    lnk_arguments = (
-        '/c "title Scribe Quick Record && (set SCRIBE_FROM_SHORTCUT=1 && scribe rec || pause)"'
-    )
+    lnk_arguments = f'/d /c ""{wrapper}""'
 
     locations = [_windows_start_menu_dir() / f"{LAUNCHER_NAME}.lnk"]
     if desktop:
         locations.append(_windows_desktop_dir() / f"{LAUNCHER_NAME}.lnk")
+    pinned = _windows_pinned_taskbar_path()
+    if pinned.exists():
+        locations.append(pinned)
 
     created: list[Path] = []
     for lnk in locations:
@@ -518,14 +530,15 @@ def install_quick_record_launcher(desktop: bool) -> list[Path]:
 def _candidate_launcher_paths() -> list[Path]:
     """All paths the installer may have created on this OS (for removal).
 
-    Includes legacy artifacts (the old .cmd / .command) so an upgrade cleans them up.
+    Includes stable wrappers and legacy artifacts so removal cleans up every launcher.
     """
     home = Path.home()
     if is_windows():
         return [
-            home / ".scribe" / f"{LAUNCHER_NAME}.cmd",  # legacy
+            home / ".scribe" / f"{LAUNCHER_NAME}.cmd",  # stable wrapper
             _windows_start_menu_dir() / f"{LAUNCHER_NAME}.lnk",
             _windows_desktop_dir() / f"{LAUNCHER_NAME}.lnk",
+            _windows_pinned_taskbar_path(),
             home / "Desktop" / f"{LAUNCHER_NAME}.lnk",  # legacy (non-redirected)
         ]
     if is_macos():

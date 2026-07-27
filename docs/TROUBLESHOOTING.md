@@ -420,12 +420,13 @@ SCRIBE_OBS_PASSWORD=your_password
    scribe shortcut --remove
    scribe shortcut --desktop
    ```
-   Delete/rename any old desktop `.lnk` first, then drag the new one.
+   An existing `Scribe Quick Record` taskbar pin is refreshed too. If Explorer still
+   displays a cached old icon or target, unpin it and drag the fresh Desktop `.lnk` back.
 
 4. **The generated files (for debugging)**:
    - `~/.scribe/Scribe Quick Record.cmd` (adaptive wrapper with pauses + fallback)
    - Desktop / Start Menu `.lnk` files (icon is set on the `.lnk`)
-   - The `.lnk` targets `cmd.exe` with env + the real `scribe.EXE` for reliable console + icon behavior on taskbar.
+   - The `.lnk` targets `cmd.exe`, which invokes the stable wrapper instead of embedding a Python, temporary, or virtual-environment `scribe.EXE` path.
 
 5. **Console stays open**: The launcher sets `SCRIBE_FROM_SHORTCUT=1` and the code ensures pauses + "Press Enter" on Windows for dedicated launches.
 

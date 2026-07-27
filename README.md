@@ -759,10 +759,11 @@ It is defensive and adaptive: it prefers whatever `scribe` is on your PATH at ru
 (e.g. a stable `uv tool install`), falls back gracefully, keeps the console window open
 with pauses and clear messages, and stages a custom icon.
 
-- **Windows**: Start Menu + optional Desktop `.lnk`. The `.lnk` targets `cmd.exe` (with env
-  and title for reliable taskbar pinning and console behavior) + a companion adaptive
-  `.cmd` wrapper is created in `~/.scribe` for advanced use/editing. Custom icon is set
-  on the `.lnk`.
+- **Windows**: Start Menu + optional Desktop `.lnk`. The `.lnk` uses `cmd.exe` to run
+  the stable adaptive wrapper at `~/.scribe/Scribe Quick Record.cmd`, so it does not
+  retain a removed Python, temporary test, or virtual-environment executable. The custom
+  icon is set on the `.lnk`. Reinstalling the launcher also refreshes an existing named
+  taskbar pin.
 - **macOS**: `~/Applications/Scribe Quick Record.command` (and optional Desktop copy).
 - **Linux**: XDG `.desktop` (and optional Desktop copy), plus adaptive wrapper script.
 

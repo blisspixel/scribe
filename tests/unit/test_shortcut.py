@@ -6,6 +6,8 @@ Windows .lnk creation (which shells out to PowerShell) is mocked to stay
 OS-agnostic; the bundled icon is read from the real package data.
 """
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -90,7 +92,7 @@ def test_install_linux_desktop_with_icon(monkeypatch, fake_home):
     assert f"Icon={icon}" in text
 
 
-def test_install_windows_targets_exe_with_icon(monkeypatch, fake_home):
+def test_install_windows_targets_stable_wrapper_with_icon(monkeypatch, fake_home):
     _set_platform(monkeypatch, "windows")
     monkeypatch.setenv("APPDATA", str(fake_home / "AppData" / "Roaming"))
     monkeypatch.setattr(
@@ -105,6 +107,19 @@ def test_install_windows_targets_exe_with_icon(monkeypatch, fake_home):
         calls.append((lnk, target, arguments, icon))
 
     monkeypatch.setattr(sc, "_create_windows_lnk", fake_lnk)
+    pinned = (
+        fake_home
+        / "AppData"
+        / "Roaming"
+        / "Microsoft"
+        / "Internet Explorer"
+        / "Quick Launch"
+        / "User Pinned"
+        / "TaskBar"
+        / "Scribe Quick Record.lnk"
+    )
+    pinned.parent.mkdir(parents=True)
+    pinned.write_text("stale")
 
     created = sc.install_quick_record_launcher(desktop=False)
 
@@ -119,19 +134,29 @@ def test_install_windows_targets_exe_with_icon(monkeypatch, fake_home):
         / "Scribe Quick Record.lnk"
     )
     assert start_menu in created
+    assert pinned in created
     _lnk, target, arguments, icon = calls[0]
-    # .lnk targets cmd.exe (with env + exe call) for reliable taskbar icon while
-    # wrapper .cmd is still created for the adaptive logic.
+    # .lnk targets cmd.exe for the console and icon but calls only the stable
+    # wrapper, so no temporary or obsolete executable is baked into the pin.
     assert "cmd.exe" in target.lower()
-    assert "SCRIBE_FROM_SHORTCUT" in arguments
-    assert (fake_home / ".scribe" / "Scribe Quick Record.cmd").exists()
-    wrapper_text = (fake_home / ".scribe" / "Scribe Quick Record.cmd").read_text()
+    wrapper = fake_home / ".scribe" / "Scribe Quick Record.cmd"
+    assert str(wrapper) in arguments
+    assert r"C:\Program Files\scribe.exe" not in arguments
+    assert all(str(wrapper) in call[2] for call in calls)
+    assert wrapper.exists()
+    wrapper_bytes = wrapper.read_bytes()
+    assert b"\r\n" in wrapper_bytes
+    assert b"\r\r\n" not in wrapper_bytes
+    wrapper_text = wrapper.read_text()
     # Bulletproof adaptive design
     assert "scribe" in wrapper_text
     assert "where" in wrapper_text.lower() or "exist" in wrapper_text.lower()
     assert "rec" in wrapper_text
     assert "pause" in wrapper_text.lower()
     assert "FALLBACK" in wrapper_text
+    assert "if errorlevel 1" in wrapper_text
+    assert "Try scribe rec --check." in wrapper_text
+    assert "(use scribe rec --check)" not in wrapper_text
     assert str(icon).endswith("scribe.ico")
     assert (fake_home / ".scribe" / "scribe.ico").exists()  # icon staged for stability
 
@@ -142,6 +167,36 @@ def test_windows_desktop_dir_resolves():
     assert (
         sc._windows_desktop_dir().name.lower() in {"desktop"} or sc._windows_desktop_dir().exists()
     )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="executes the Windows batch wrapper")
+def test_windows_wrapper_batch_is_parseable(monkeypatch, fake_home):
+    empty_path = fake_home / "empty-path"
+    empty_path.mkdir()
+    monkeypatch.setenv("PATH", str(empty_path))
+    fallback = Path(os.environ["SYSTEMROOT"]) / "System32" / "where.exe"
+    wrapper = sc._windows_record_wrapper(str(fallback))
+    completed = subprocess.run(
+        [
+            os.environ.get("COMSPEC", "cmd.exe"),
+            "/d",
+            "/c",
+            "call",
+            str(wrapper),
+            "--check",
+        ],
+        check=False,
+        capture_output=True,
+        input="\n",
+        text=True,
+        timeout=30,
+    )
+
+    output = completed.stdout + completed.stderr
+    assert completed.returncode == 1
+    assert "unexpected at this time" not in output.lower()
+    assert "[Exited with code 1]" in output
+    assert "Try scribe rec --check." in output
 
 
 def test_remove_deletes_app_bundle(monkeypatch, fake_home):
