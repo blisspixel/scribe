@@ -60,7 +60,7 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   or log contents. Review the generated JSON before sharing it.
 - **Reproducible quality gates**: CI uses the committed lockfile, includes the
   toolchain check in the aggregate result, enforces formatting, lint, strict
-  typing, dependency audit policy, and at least 80 percent branch coverage.
+  typing, dependency audit policy, and at least 81 percent branch coverage.
   Native Python smoke tests run on Windows and Apple Silicon macOS, including execution
   of the generated Windows Quick Record wrapper.
 - **Evidence and supply-chain hygiene**: trivial CLI startup defers heavyweight
@@ -93,9 +93,9 @@ See [CHANGELOG.md](CHANGELOG.md) for the full list and [ROADMAP](ROADMAP.md) for
 All historical changes and the full version history live in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog format).
 
 The current workspace is executing the **Engineering Excellence Roadmap** (see [ROADMAP.md](ROADMAP.md)):
-- Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12 and 3.13, ruff, mypy --strict, 80%+ branch coverage, pip-audit security, aggregator job).
+- Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12 and 3.13, ruff, mypy --strict, 81%+ branch coverage, pip-audit security, aggregator job).
 - Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
-- Step 3 in progress: mypy --strict clean; branch coverage above 80 percent; import-boundary contracts; `deal` contracts on pure modules; Hypothesis property and lifecycle state-machine tests expanding.
+- Step 3 in progress: mypy --strict clean; branch coverage above 81 percent; import-boundary contracts; `deal` contracts on pure modules; Hypothesis property and lifecycle state-machine tests expanding.
 - Step 4 operational: pip-audit is a zero-exception blocking CI gate, a locked CycloneDX SBOM is retained as a CI artifact, `scribe doctor` reports CUDA driver age and dependency-audit results, and ADR-004 records the secure WhisperX/Torch compatibility boundary.
 
 ---
@@ -966,7 +966,7 @@ uv run pytest tests/unit/
 uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q
 
 # Meaningful branch-coverage gate
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
 
 # Quick check
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" --tb=no -q
@@ -976,9 +976,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1597 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent coverage gate: 1702 passed, 11 skipped, 27 deselected, 81.05% branch coverage
-- Current collection: 1740 assertion-based tests
+- Latest CI-safe unit matrix: 1609 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
+- Latest broader CI-equivalent coverage gate: 1711 passed, 11 skipped, 27 deselected, 81.33% branch coverage
+- Current collection: 1749 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly
@@ -1000,7 +1000,7 @@ See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) for the order
 - **ruff** - universal linter + formatter (replaced Black + isort)
 - **mypy --strict** on src/ (enforced in CI)
 - **pre-commit** - local gates before every commit (ruff + mypy + basic checks)
-- pytest + pytest-cov (80%+ gate enforced in CI)
+- pytest + pytest-cov (81%+ gate enforced in CI)
 
 See the Engineering Excellence section of [ROADMAP.md](ROADMAP.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml) for the ordered plan and current gates.
 

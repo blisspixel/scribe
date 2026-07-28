@@ -3361,219 +3361,15 @@ def compare(
 
 @app.command()
 def info() -> None:
-    """
-    Show system information and GPU capabilities.
-
-    Displays GPU detection results, recommended transcription method,
-    and system configuration.
-    """
-    from scribe.utils.terminal_ui import get_terminal_ui_config
-    from scribe.utils.theme import ScribeTheme
+    """Show system information, local backends, and effective configuration."""
+    from scribe.cli.system import show_info
 
     try:
-        config = ScribeConfig()
-        gpu_config = GPUConfig.detect()
-        ui_config = get_terminal_ui_config()
-
-        console.print()
-        console.print(
-            f"[bold {ScribeTheme.PRIMARY_BRIGHT}]scribe info[/bold {ScribeTheme.PRIMARY_BRIGHT}] [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-
-        # GPU section
-        console.print(f"[bold {ScribeTheme.SECONDARY}]gpu[/bold {ScribeTheme.SECONDARY}]")
-        if gpu_config.has_gpu:
-            cuda_status = (
-                f"CUDA {gpu_config.cuda_version}" if gpu_config.cuda_version else "CUDA detected"
-            )
-            console.print(
-                f"  [{ScribeTheme.TEXT_PRIMARY}]{gpu_config.gpu_name}[/{ScribeTheme.TEXT_PRIMARY}] [{ScribeTheme.TEXT_MUTED}]{gpu_config.gpu_memory_gb:.0f}GB VRAM[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            console.print(
-                f"  [{ScribeTheme.TEXT_MUTED}]{cuda_status} · {gpu_config.model_size} · beam={gpu_config.beam_size} · {gpu_config.get_expected_speed()}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        else:
-            console.print(
-                f"  [{ScribeTheme.WARNING}]not detected[/{ScribeTheme.WARNING}] [{ScribeTheme.TEXT_MUTED}]{gpu_config.reason}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        console.print()
-
-        # Local backend section: which engine the hardware-adaptive selector will
-        # use for `--method local`, plus which optional engines are installed.
-        from scribe.core.backends import (
-            backend_availability,
-            detect_hardware,
-            select_backend,
-        )
-
-        hardware = detect_hardware()
-        availability = backend_availability()
-        chosen_backend = select_backend(
-            hardware, override=config.local_backend, available=availability
-        )
-        installed = ", ".join(sorted(name for name, ok in availability.items() if ok)) or "none"
-
-        console.print(f"[bold {ScribeTheme.SECONDARY}]local backend[/bold {ScribeTheme.SECONDARY}]")
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]selected[/{ScribeTheme.TEXT_PRIMARY}]  "
-            f"[{ScribeTheme.SUCCESS}]{chosen_backend}[/{ScribeTheme.SUCCESS}] "
-            f"[{ScribeTheme.TEXT_MUTED}]· vendor {hardware.vendor}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]installed[/{ScribeTheme.TEXT_PRIMARY}] "
-            f"[{ScribeTheme.TEXT_MUTED}]{installed}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-
-        # Config section
-        console.print(f"[bold {ScribeTheme.SECONDARY}]config[/bold {ScribeTheme.SECONDARY}]")
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]output[/{ScribeTheme.TEXT_PRIMARY}]    [{ScribeTheme.TEXT_MUTED}]{config.output_folder}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]model[/{ScribeTheme.TEXT_PRIMARY}]     [{ScribeTheme.TEXT_MUTED}]{config.default_model}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  [{ScribeTheme.TEXT_MUTED}]{config.default_language or 'auto'}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        # Where the config lives and which AI features are on, so the effective
-        # state is visible in one place (env vars can override the wizard's choices).
-        from scribe.config_file import CONFIG_PATH
-
-        cfg_state = "present" if CONFIG_PATH.exists() else "defaults"
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]file[/{ScribeTheme.TEXT_PRIMARY}]      "
-            f"[{ScribeTheme.TEXT_MUTED}]{CONFIG_PATH} ({cfg_state})[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        features = (
-            f"notes:{'on' if config.enable_notes else 'off'} "
-            f"joke:{'on' if config.enable_joke else 'off'} "
-            f"meme:{'on' if config.enable_meme else 'off'}"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]features[/{ScribeTheme.TEXT_PRIMARY}]  "
-            f"[{ScribeTheme.TEXT_MUTED}]{features}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-
-        # UI section
-        console.print(f"[bold {ScribeTheme.SECONDARY}]ui[/bold {ScribeTheme.SECONDARY}]")
-        mode = ui_config.animation_mode
-        color_mode = ui_config.color_mode
-        fps = ui_config.fps
-        cap = ui_config.capabilities
-        color_state = "enabled" if ui_config.use_color else "disabled"
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]animations[/{ScribeTheme.TEXT_PRIMARY}] "
-            f"[{ScribeTheme.TEXT_MUTED}]{mode}[/{ScribeTheme.TEXT_MUTED}] "
-            f"[{ScribeTheme.TEXT_MUTED}]({fps} fps)[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]color[/{ScribeTheme.TEXT_PRIMARY}]      "
-            f"[{ScribeTheme.TEXT_MUTED}]{color_mode} ({color_state})[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]terminal[/{ScribeTheme.TEXT_PRIMARY}]   "
-            f"[{ScribeTheme.TEXT_MUTED}]tty={cap.is_tty} dumb={cap.is_dumb_terminal} "
-            f"ci={cap.is_ci} windows={cap.is_windows}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-
-        # API keys section
-        console.print(f"[bold {ScribeTheme.SECONDARY}]api keys[/bold {ScribeTheme.SECONDARY}]")
-        openai_status = (
-            f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]"
-            if config.openai_api_key
-            else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]openai[/{ScribeTheme.TEXT_PRIMARY}]    {openai_status}"
-        )
-
-        # Check for other API keys
-        import os
-
-        xai_key = os.getenv("XAI_API_KEY")
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-
-        xai_status = (
-            f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]"
-            if xai_key
-            else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        gemini_status = (
-            f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]"
-            if gemini_key
-            else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        anthropic_status = (
-            f"[{ScribeTheme.SUCCESS}]set[/{ScribeTheme.SUCCESS}]"
-            if anthropic_key
-            else f"[{ScribeTheme.TEXT_MUTED}]not set[/{ScribeTheme.TEXT_MUTED}]"
-        )
-
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]xai[/{ScribeTheme.TEXT_PRIMARY}]       {xai_status}"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]gemini[/{ScribeTheme.TEXT_PRIMARY}]    {gemini_status}"
-        )
-        console.print(
-            f"  [{ScribeTheme.TEXT_PRIMARY}]anthropic[/{ScribeTheme.TEXT_PRIMARY}] {anthropic_status}"
-        )
-        console.print()
-
-        # Local LLM (Ollama) section - free, offline notes. Surfaces the smart
-        # default model auto-selected for this machine's memory budget.
-        from scribe.utils.ollama_models import (
-            available_model_memory_gb,
-            list_installed_models,
-            select_default_ollama_model,
-        )
-
-        console.print(f"[bold {ScribeTheme.SECONDARY}]local llm[/bold {ScribeTheme.SECONDARY}]")
-        ollama_models = list_installed_models(os.getenv("SCRIBE_OLLAMA_BASE_URL"))
-        if ollama_models:
-            budget = available_model_memory_gb()
-            chosen = select_default_ollama_model(os.getenv("SCRIBE_OLLAMA_BASE_URL"))
-            budget_label = f"{budget:.0f}GB budget" if budget > 0 else "conservative (cpu)"
-            console.print(
-                f"  [{ScribeTheme.TEXT_PRIMARY}]ollama[/{ScribeTheme.TEXT_PRIMARY}]    "
-                f"[{ScribeTheme.SUCCESS}]{len(ollama_models)} models[/{ScribeTheme.SUCCESS}] "
-                f"[{ScribeTheme.TEXT_MUTED}]· {budget_label}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            console.print(
-                f"  [{ScribeTheme.TEXT_PRIMARY}]auto[/{ScribeTheme.TEXT_PRIMARY}]      "
-                f"[{ScribeTheme.TEXT_MUTED}]{chosen} (notes --provider ollama)[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        else:
-            console.print(
-                f"  [{ScribeTheme.TEXT_PRIMARY}]ollama[/{ScribeTheme.TEXT_PRIMARY}]    "
-                f"[{ScribeTheme.TEXT_MUTED}]not running (optional, for free local notes)[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        console.print()
-
-        # Recommendation - $0-first: local transcription runs on any machine, so
-        # it is always the free default. The paid API is an explicit opt-in.
-        tx_kind = "GPU" if gpu_config.recommendation == "local" else "CPU"
-        notes_bit = " + Ollama notes" if ollama_models else ""
-        console.print(
-            f"[{ScribeTheme.SUCCESS}]$0 local ready: {tx_kind} transcription{notes_bit}"
-            f"[/{ScribeTheme.SUCCESS}]"
-        )
-        if tx_kind == "CPU":
-            console.print(
-                f"  [{ScribeTheme.TEXT_MUTED}]CPU is slower; pass --method openai to use "
-                f"the paid OpenAI API instead.[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        console.print()
-
-    except ScribeError as e:
-        exit_on_cli_error(e, log_unexpected=False)
-    except Exception as e:
-        exit_on_cli_error(e)
+        show_info(console, __version__, ScribeConfig(), GPUConfig.detect())
+    except ScribeError as error:
+        exit_on_cli_error(error, log_unexpected=False)
+    except Exception as error:
+        exit_on_cli_error(error)
 
 
 @app.command()
@@ -3584,161 +3380,10 @@ def doctor(
         help="Opt in to live provider API checks for configured keys.",
     ),
 ) -> None:
-    """
-    Run system diagnostics and health checks.
+    """Run system diagnostics with actionable local-readiness guidance."""
+    from scribe.cli.system import run_doctor
 
-    Validates environment, dependencies, and configuration.
-    Provides actionable suggestions for fixing issues.
-    """
-    from rich.table import Table
-
-    from scribe.utils.diagnostics import SystemDiagnostics
-    from scribe.utils.theme import ScribeTheme
-
-    console.print()
-    doctor_header = (
-        f"{brand_header_markup('scribe doctor', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
-        f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-    )
-    console.print(doctor_header)
-    if live:
-        console.print("[dim]Live provider checks enabled for configured API keys.[/dim]")
-    else:
-        console.print(
-            "[dim]Live provider checks skipped. Use `scribe doctor --live` to validate API keys.[/dim]"
-        )
-    console.print()
-
-    # Run diagnostics with progress spinner
-    diagnostics = SystemDiagnostics()
-    with console.status(
-        f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",
-        spinner="dots",
-    ):
-        results = diagnostics.run_all_checks(live=live)
-
-    # Group results by status for cleaner display
-    passed = [r for r in results if r.status == "pass"]
-    warnings = [r for r in results if r.status == "warn"]
-    failures = [r for r in results if r.status == "fail"]
-
-    # Headline $0-local verdict, derived from the readiness checks already run
-    # (no extra probe). This is the "can I run this for free?" answer up front.
-    tx = next((r for r in results if r.name == "Local Transcription ($0)"), None)
-    notes = next((r for r in results if r.name == "Local Notes ($0)"), None)
-    if tx is not None:
-        can_notes = notes is not None and notes.status == "pass"
-        if tx.status == "pass":
-            what = "transcribe and take notes" if can_notes else "transcribe"
-            console.print(
-                f"[bold {ScribeTheme.SUCCESS}]$0 LOCAL[/bold {ScribeTheme.SUCCESS}]  "
-                f"[{ScribeTheme.SUCCESS}]You can {what} on this machine with no API key.[/{ScribeTheme.SUCCESS}]"
-            )
-            console.print(
-                f"  [{ScribeTheme.TEXT_MUTED}]transcription: {escape(tx.message)}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            if notes is not None:
-                console.print(
-                    f"  [{ScribeTheme.TEXT_MUTED}]notes: {escape(notes.message)}[/{ScribeTheme.TEXT_MUTED}]"
-                )
-        else:
-            console.print(
-                f"[bold {ScribeTheme.WARNING}]$0 LOCAL[/bold {ScribeTheme.WARNING}]  "
-                f"[{ScribeTheme.WARNING}]Local transcription needs setup: {escape(tx.message)}[/{ScribeTheme.WARNING}]"
-            )
-        console.print()
-
-    # Display failures first (if any)
-    if failures:
-        console.print(f"[bold {ScribeTheme.ERROR}]FAILED[/bold {ScribeTheme.ERROR}]")
-        for result in failures:
-            console.print(
-                f"  [{ScribeTheme.ERROR}]×[/{ScribeTheme.ERROR}] "
-                f"[{ScribeTheme.TEXT_PRIMARY}]{escape(result.name)}[/{ScribeTheme.TEXT_PRIMARY}]"
-            )
-            console.print(
-                f"    [{ScribeTheme.TEXT_MUTED}]{escape(result.message)}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            if result.fix_suggestion:
-                console.print(
-                    f"    [{ScribeTheme.PRIMARY}]-> {escape(result.fix_suggestion)}[/{ScribeTheme.PRIMARY}]"
-                )
-        console.print()
-
-    # Display warnings (if any)
-    if warnings:
-        console.print(f"[bold {ScribeTheme.WARNING}]WARNINGS[/bold {ScribeTheme.WARNING}]")
-        for result in warnings:
-            console.print(
-                f"  [{ScribeTheme.WARNING}]![/{ScribeTheme.WARNING}] "
-                f"[{ScribeTheme.TEXT_PRIMARY}]{escape(result.name)}[/{ScribeTheme.TEXT_PRIMARY}]"
-            )
-            console.print(
-                f"    [{ScribeTheme.TEXT_MUTED}]{escape(result.message)}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-            if result.fix_suggestion:
-                console.print(
-                    f"    [{ScribeTheme.PRIMARY}]-> {escape(result.fix_suggestion)}[/{ScribeTheme.PRIMARY}]"
-                )
-        console.print()
-
-    # Compact passed checks - just a summary table
-    if passed:
-        table = Table(
-            show_header=False,
-            box=None,
-            padding=(0, 1, 0, 0),
-            collapse_padding=True,
-        )
-        table.add_column(style=ScribeTheme.SUCCESS, width=2)
-        table.add_column(style=ScribeTheme.TEXT_PRIMARY, width=20)
-        table.add_column(style=ScribeTheme.TEXT_MUTED)
-
-        for result in passed:
-            first_line = result.message.splitlines()[0] if result.message else ""
-            table.add_row("+", escape(result.name), escape(first_line))
-
-        console.print(table)
-        console.print()
-
-    # Summary line - extremely polished QOL
-    pass_count, warn_count, fail_count = diagnostics.get_summary()
-
-    if fail_count == 0 and warn_count == 0:
-        check_label = "check" if pass_count == 1 else "checks"
-        console.print(f"[{ScribeTheme.SUCCESS}]+ All systems ready[/] ({pass_count} {check_label})")
-        console.print(
-            '[dim]Try: [cyan]scribe rec "Team sync"[/cyan] or create a launcher with [cyan]scribe shortcut[/cyan][/dim]'
-        )
-    elif fail_count == 0:
-        warning_label = "warning" if warn_count == 1 else "warnings"
-        console.print(
-            f"[{ScribeTheme.WARNING}]Ready with warnings[/] "
-            f"({pass_count} passed, {warn_count} {warning_label})"
-        )
-    else:
-        failed_label = "failure" if fail_count == 1 else "failures"
-        warning_label = "warning" if warn_count == 1 else "warnings"
-        console.print(
-            f"[{ScribeTheme.ERROR}]Needs attention[/] "
-            f"({fail_count} {failed_label}, {warn_count} {warning_label})"
-        )
-
-    console.print()
-
-    if fail_count > 0:
-        try:
-            from rich.prompt import Confirm
-
-            if Confirm.ask("Run the setup wizard to fix issues?", default=False, console=console):
-                from scribe.cli.init import run_wizard
-
-                run_wizard(console=console, force=True)
-        except Exception as e:
-            # The wizard offer is a best-effort self-heal; never let it mask the
-            # underlying doctor failure (we still exit non-zero below).
-            logger.debug("Setup-wizard self-heal prompt failed: %s", e)
-        raise typer.Exit(1)
+    run_doctor(console, __version__, live, logger)
 
 
 @app.command(name="health")
@@ -3750,129 +3395,10 @@ def health_check(
         False, "--force", "-f", help="Force fresh health check (ignore cache)"
     ),
 ) -> None:
-    """
-    Check health status of AI providers.
+    """Check connectivity and response status for configured AI providers."""
+    from scribe.cli.system import run_health_check
 
-    Validates API connectivity and response times for configured providers.
-    Useful for troubleshooting provider issues.
-    """
-    import os
-
-    from scribe.providers.health import get_health_monitor
-    from scribe.utils.theme import ScribeTheme
-
-    console.print()
-    console.print(brand_header_markup("scribe health", fallback_color=ScribeTheme.PRIMARY_BRIGHT))
-    console.print()
-
-    # Get health monitor
-    monitor = get_health_monitor()
-
-    # Collect API keys
-    api_keys: dict[str, str] = {}
-    openai_key = os.getenv("OPENAI_API_KEY")
-    xai_key = os.getenv("XAI_API_KEY")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if openai_key:
-        api_keys["openai"] = openai_key
-    if xai_key:
-        api_keys["xai"] = xai_key
-    if anthropic_key:
-        api_keys["anthropic"] = anthropic_key
-    if gemini_key:
-        api_keys["gemini"] = gemini_key
-
-    provider_key_names = {
-        "openai": "OPENAI_API_KEY",
-        "xai": "XAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "gemini": "GEMINI_API_KEY",
-    }
-    if provider is not None and provider not in provider_key_names:
-        console.print(
-            f"[{ScribeTheme.ERROR}]Unknown provider: {escape(provider)}[/{ScribeTheme.ERROR}]"
-        )
-        console.print(
-            f"[{ScribeTheme.TEXT_MUTED}]Choose one of: openai, xai, anthropic, gemini.[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-        raise typer.Exit(1)
-
-    if not api_keys:
-        console.print(f"[{ScribeTheme.WARNING}]no api keys configured[/{ScribeTheme.WARNING}]")
-        console.print(
-            f"[{ScribeTheme.TEXT_MUTED}]set OPENAI_API_KEY, XAI_API_KEY, etc.[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-        raise typer.Exit(1)
-
-    if provider is not None and provider not in api_keys:
-        key_name = provider_key_names[provider]
-        console.print(
-            f"[{ScribeTheme.WARNING}]{key_name} is not configured[/{ScribeTheme.WARNING}]"
-        )
-        console.print(
-            f"[{ScribeTheme.TEXT_MUTED}]Set {key_name}, then retry `scribe health --provider {provider}`.[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
-        raise typer.Exit(1)
-
-    # Check specific provider or all
-    providers_to_check = [provider] if provider else list(api_keys.keys())
-
-    all_healthy = True
-    results: list[tuple[str, bool, str]] = []
-
-    for provider_name in providers_to_check:
-        if provider_name not in api_keys:
-            continue
-
-        try:
-            status = monitor.check_provider_health(
-                provider_name, api_keys[provider_name], force=force
-            )
-
-            if status.is_healthy:
-                response_time = (
-                    f"{status.response_time_ms:.0f}ms" if status.response_time_ms else ""
-                )
-                results.append((provider_name, True, response_time))
-            else:
-                results.append((provider_name, False, status.error_message or "error"))
-                all_healthy = False
-
-        except ScribeError as e:
-            results.append((provider_name, False, str(e)[:30]))
-            all_healthy = False
-        except Exception as e:
-            logger.debug("Provider health check failed for %s: %s", provider_name, e)
-            results.append((provider_name, False, str(e)[:30]))
-            all_healthy = False
-
-    # Display results
-    for name, healthy, detail in results:
-        if healthy:
-            console.print(
-                f"  [{ScribeTheme.SUCCESS}]+[/{ScribeTheme.SUCCESS}] [{ScribeTheme.TEXT_PRIMARY}]{name:<12}[/{ScribeTheme.TEXT_PRIMARY}][{ScribeTheme.TEXT_MUTED}]{detail}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-        else:
-            console.print(
-                f"  [{ScribeTheme.ERROR}]x[/{ScribeTheme.ERROR}] [{ScribeTheme.TEXT_PRIMARY}]{name:<12}[/{ScribeTheme.TEXT_PRIMARY}][{ScribeTheme.TEXT_MUTED}]{detail}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-
-    console.print()
-
-    # Summary
-    if all_healthy:
-        console.print(f"[{ScribeTheme.SUCCESS}]all providers healthy[/{ScribeTheme.SUCCESS}]")
-    else:
-        console.print(f"[{ScribeTheme.WARNING}]some providers have issues[/{ScribeTheme.WARNING}]")
-
-    console.print()
-
-    if not all_healthy:
-        raise typer.Exit(1)
+    run_health_check(console, provider, force, logger)
 
 
 @app.command(name="support-bundle")
@@ -3884,61 +3410,16 @@ def support_bundle(
         help="Output directory for support bundle (default: current directory)",
     ),
 ) -> None:
-    """
-    Generate a support bundle for troubleshooting.
-
-    Creates a diagnostic package containing system information, recursively
-    redacted environment and diagnostic values, bounded durable session outcomes,
-    and opaque recent-log metadata. Log filenames and contents are excluded.
-
-    The bundle is saved as JSON for local debugging or support. Review it before
-    sharing because diagnostic text can still be sensitive.
-
-    Examples:
-
-      # Generate in current directory
-      scribe support-bundle
-
-      # Generate in specific directory
-      scribe support-bundle --output ~/Desktop
-    """
-    from scribe.utils.support_bundle import generate_support_bundle_cli
-
-    console.print()
-    console.print(Panel.fit(brand_header_markup("Generating Support Bundle"), border_style="cyan"))
-    console.print()
+    """Generate a redacted local support bundle for troubleshooting."""
+    from scribe.cli.system import create_support_bundle
 
     try:
-        output_dir = output if output else Path.cwd()
-
-        console.print("[cyan]Collecting system information...[/cyan]")
-        console.print("[cyan]Running diagnostics...[/cyan]")
-        console.print("[cyan]Gathering durable session and log metadata...[/cyan]")
-
-        bundle_path = generate_support_bundle_cli(output_dir)
-
-        console.print()
-        console.print("[bold green]Support bundle created successfully[/bold green]")
-        console.print()
-        console.print(f"[cyan]Location:[/cyan] {escape(str(bundle_path))}", soft_wrap=True)
-        console.print()
-        console.print("[dim]This bundle contains:[/dim]")
-        console.print("[dim]  - System information (OS, Python, GPU)[/dim]")
-        console.print("[dim]  - Redacted environment configuration[/dim]")
-        console.print("[dim]  - Diagnostic results[/dim]")
-        console.print("[dim]  - Redacted recent session summaries[/dim]")
-        console.print("[dim]  - Recent log metadata[/dim]")
-        console.print()
-        console.print("Log contents are not included.")
-        console.print("Automated redaction covers known home-identifier and credential patterns.")
-        console.print("[bold]Review the file before sharing it for troubleshooting.[/bold]")
-        console.print()
-
-    except ScribeError as e:
-        exit_on_cli_error(e, log_unexpected=False)
-    except Exception as e:
+        create_support_bundle(console, output)
+    except ScribeError as error:
+        exit_on_cli_error(error, log_unexpected=False)
+    except Exception as error:
         exit_on_cli_error(
-            e,
+            error,
             recovery_hint=(
                 "Check the error above and output-directory permissions. "
                 "If a log path is shown, inspect it, then retry."
@@ -3955,11 +3436,9 @@ def version() -> None:
 @app.command(name="help")
 def help_command() -> None:
     """Show help information."""
-    # Trigger the main help by invoking the app's format_help
     import click
 
     ctx = click.get_current_context()
-    # Go up to parent context (the main app)
     if ctx.parent:
         click.echo(ctx.parent.get_help())
     else:
@@ -3987,135 +3466,27 @@ def clean(
         help="Trim to specific time (e.g., '01:42:00' for 1h 42m, or '6120' for seconds)",
     ),
 ) -> None:
-    """
-    Remove silence from audio/video files or trim to specific duration.
+    """Remove silence from media, analyze it, or trim it to a duration."""
+    from scribe.cli.media import clean_media
 
-    Useful for cleaning up recordings left running overnight or with long pauses.
-    Uses FFmpeg to detect and remove silent sections while preserving audio quality.
-
-    Example: scribe clean long_recording.mp4
-    Example: scribe clean recording.mp4 --threshold -40dB --duration 3.0
-    Example: scribe clean recording.mp4 --analyze (just show how much silence)
-    Example: scribe clean recording.mp4 --trim 01:42:00 (trim to 1h 42m)
-    """
     try:
-        from scribe.utils.audio import get_audio_duration
-        from scribe.utils.silence_remover import analyze_silence, remove_silence, trim_file
-
-        # Display header
         _show_command_banner(console)
-        panel_lines = [f"[white]{input_file.name}[/white]"]
-
-        # Get original duration
-        original_duration = get_audio_duration(input_file)
-        if original_duration:
-            original_mins = int(original_duration / 60)
-            panel_lines.append(
-                f"[dim]Original duration: {original_mins} minutes ({original_duration:.1f}s)[/dim]"
-            )
-
-        if trim_to:
-            panel_lines.append(f"[dim]Mode: Trim to {trim_to}[/dim]")
-        elif analyze_only:
-            panel_lines.append("[dim]Mode: Analyze only[/dim]")
-        else:
-            panel_lines.append("[dim]Mode: Remove silence[/dim]")
-            panel_lines.append(f"[dim]Threshold: {threshold}, Min duration: {duration}s[/dim]")
-
-        console.print(Panel.fit("\n".join(panel_lines), border_style="cyan", padding=(0, 1)))
-        console.print()
-
-        # Handle trim mode
-        if trim_to:
-            console.print(f"[cyan]Trimming to {trim_to}...[/cyan]")
-            console.print("[dim]This is fast - just copying, no re-encoding...[/dim]")
-            console.print()
-
-            output_path = trim_file(input_file, output, trim_to)
-
-            # Get new duration
-            new_duration = get_audio_duration(output_path)
-            if new_duration:
-                new_mins = int(new_duration / 60)
-                new_hours = new_mins / 60
-
-                console.print()
-                console.print("[bold green]Success![/bold green]")
-                console.print(
-                    f"  Original: {original_mins} minutes ({original_mins / 60:.1f} hours)"
-                )
-                console.print(f"  Trimmed:  {new_mins} minutes ({new_hours:.1f} hours)")
-                console.print()
-                console.print(f"[bold]Output:[/bold] {output_path}")
-            else:
-                console.print()
-                console.print("[bold green]Success![/bold green]")
-                console.print(f"[bold]Output:[/bold] {output_path}")
-
-            return
-
-        if analyze_only:
-            # Just analyze
-            console.print("[cyan]Analyzing silence...[/cyan]")
-            analysis = analyze_silence(input_file, threshold, duration)
-
-            console.print()
-            console.print("[bold]Silence Analysis:[/bold]")
-            console.print(
-                f"  Total silence: {analysis['total_silence_minutes']:.1f} minutes ({analysis['total_silence_seconds']:.1f}s)"
-            )
-            console.print(f"  Silent periods: {analysis['silence_periods']}")
-
-            if analysis["silence_periods"] > 0:
-                console.print()
-                console.print("[dim]First few silent periods:[/dim]")
-                for i, period in enumerate(analysis["periods"][:5], 1):
-                    start_min = int(period["start"] / 60)
-                    duration_sec = period["duration"]
-                    console.print(f"  {i}. At {start_min}m: {duration_sec:.1f}s of silence")
-
-                if analysis["silence_periods"] > 5:
-                    console.print(f"  ... and {analysis['silence_periods'] - 5} more")
-
-            console.print()
-            console.print("[green]To remove silence, run without --analyze flag[/green]")
-
-        else:
-            # Remove silence
-            console.print("[cyan]Removing silence...[/cyan]")
-            console.print("[dim]This may take a few minutes for large files...[/dim]")
-            console.print()
-
-            output_path = remove_silence(input_file, output, threshold, duration)
-
-            # Get file sizes for comparison
-            original_size = input_file.stat().st_size / (1024 * 1024)  # MB
-            new_size = output_path.stat().st_size / (1024 * 1024)  # MB
-            size_reduction = ((original_size - new_size) / original_size) * 100
-
-            console.print()
-            console.print("[bold green]Success![/bold green]")
-            console.print(f"  Original size: {original_size:.1f} MB")
-            console.print(f"  Cleaned size:  {new_size:.1f} MB")
-            console.print(f"  Reduction:     {size_reduction:.1f}%")
-            console.print()
-            console.print("[dim]Note: Silent sections are reduced to near-silence.[/dim]")
-            console.print(
-                "[dim]This makes transcription much faster as Whisper skips silent parts.[/dim]"
-            )
-            console.print()
-            console.print(f"[bold]Output:[/bold] {output_path}")
-
-    except ScribeError as e:
-        exit_on_cli_error(e, log_unexpected=False)
-    except FileNotFoundError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
-    except RuntimeError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
-    except Exception as e:
-        exit_on_cli_error(e)
+        clean_media(
+            console,
+            input_file,
+            output,
+            threshold,
+            duration,
+            analyze_only,
+            trim_to,
+        )
+    except ScribeError as error:
+        exit_on_cli_error(error, log_unexpected=False)
+    except (FileNotFoundError, RuntimeError) as error:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(error))}")
+        raise typer.Exit(1) from error
+    except Exception as error:
+        exit_on_cli_error(error)
 
 
 @app.command(name="init")

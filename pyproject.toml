@@ -293,7 +293,7 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     # NOTE: Coverage flags are deliberately omitted here.
-    # The dedicated "Coverage (Python 3.12)" CI job passes --cov + --cov-fail-under=80 explicitly.
+    # The dedicated "Coverage (Python 3.12)" CI job passes --cov + --cov-fail-under=81 explicitly.
     # Keeping them out of global addopts ensures the lightweight matrix "Tests (Python X)" jobs
     # (which run only tests/unit with limited markers) stay fast and do not incorrectly enforce
     # the full-suite coverage gate on a partial run. Local developers can still pass --cov manually.
@@ -321,7 +321,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 80  # Current enforced floor; target 90%+ as more pure logic gets property tests
+fail_under = 81  # Current enforced floor; target 90%+ as more pure logic gets property tests
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

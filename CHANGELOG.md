@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Split system diagnostics and media-cleaning implementations out of the central CLI entrypoint, with an architecture contract that keeps those command wrappers thin. Raised the enforced branch-coverage floor from 80 to 81 percent after a 1,711-test CI-equivalent run measured 81.33 percent.
 - Replaced the eight Torch audit exceptions with a secure universal ML resolution: the WhisperX extra now selects 3.7.2, while Torch 2.13, TorchAudio 2.11, Transformers 5.14, and Hugging Face Hub 1.25 satisfy a zero-exception dependency audit.
 - Refreshed the universal Python lock, pre-commit hooks, immutable GitHub Actions, Go modules, and Rust dependencies to current compatible releases. The Rust extension now targets edition 2024, PyO3 0.29, and Symphonia 0.6.
 - Aligned package metadata with the validated Python 3.12 and 3.13 matrix after a Python 3.14 install probe exposed unavailable native wheels in the universal ML dependency graph.
@@ -64,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Made media trimming succeed when the original-duration probe is unavailable, prevented empty inputs from causing division by zero in cleanup summaries, normalized provider names in health checks, and rendered provider errors and media paths as literal terminal text.
 - Bound each Python matrix test command to its declared interpreter and added a runtime assertion, preventing uv from silently recreating a Python 3.13 environment with the repository's 3.12 default.
 - Migrated native audio probing, decoder construction, packet iteration, and sample conversion to Symphonia 0.6 without retaining deprecated APIs.
 - Prevented a mismatched Torch and TorchAudio CUDA pair from being reported as healthy by the package diagnostic, and added verified same-backend GPU repair guidance.

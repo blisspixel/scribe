@@ -2,13 +2,13 @@
 
 ## Current Reality
 
-As of 2026-07-26:
+As of 2026-07-28:
 
-- Pytest collection: 1715 assertion-based tests across unit, integration, e2e, and manual coverage.
-- Latest local CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1677 passed, 11 skipped, 27 deselected, and 83.54 percent coverage.
-- Enforced project coverage floor: 80 percent.
-- Standard quality gates: Ruff check, Ruff format check, mypy strict, 80 percent
+- Pytest collection: 1749 assertion-based tests across unit, integration, e2e, and manual coverage.
+- Latest local CI-safe unit matrix: 1609 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13.
+- Latest broader CI-equivalent gate: 1711 passed, 11 skipped, 27 deselected, and 81.33 percent branch coverage.
+- Enforced project coverage floor: 81 percent.
+- Standard quality gates: Ruff check, Ruff format check, mypy strict, 81 percent
   coverage, root-wheel artifact and isolated-install verification, the Windows
   native-tray source contract, build, and pip-audit with the documented CI ignores.
 
@@ -20,7 +20,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q
 uv build --clear --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
@@ -65,4 +65,4 @@ uv run pytest tests/manual
 - New behavior should include focused unit coverage before broader integration tests.
 - Bug fixes should add or update a regression test when practical.
 - External APIs must stay mocked in default local and CI-safe tests.
-- Coverage must stay at or above 80 percent with meaningful assertions, not import-only tests.
+- Coverage must stay at or above 81 percent with meaningful assertions, not import-only tests.

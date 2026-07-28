@@ -71,6 +71,16 @@ def test_security_compatibility_bounds_and_zero_exception_audit_are_explicit() -
     assert "uv run --python ${{ matrix.python-version }} pytest" in workflow
 
 
+def test_branch_coverage_floor_is_synchronized() -> None:
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as pyproject:
+        configuration = tomllib.load(pyproject)
+
+    assert configuration["tool"]["coverage"]["report"]["fail_under"] == 81
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "--cov-fail-under=81" in workflow
+    assert "--cov-fail-under=80" not in workflow
+
+
 def test_native_executables_are_generated_and_ignored() -> None:
     ignore_rules = {
         line.strip()

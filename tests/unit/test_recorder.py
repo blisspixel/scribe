@@ -1071,7 +1071,7 @@ class TestDefensiveProgramming:
 
 
 # ---------------------------------------------------------------------------
-# NEW TESTS - appended to raise coverage to 80%+
+# Focused regression tests for recorder failure paths
 # ---------------------------------------------------------------------------
 
 

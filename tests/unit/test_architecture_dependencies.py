@@ -74,3 +74,28 @@ def test_internal_source_dependencies_are_acyclic() -> None:
     source_root = Path(__file__).resolve().parents[2] / "src"
     cycle = _find_cycle(_internal_dependency_graph(source_root))
     assert cycle is None, "Internal import cycle: " + " -> ".join(cycle or ())
+
+
+def test_maintenance_cli_commands_remain_thin_delegators() -> None:
+    """Keep system and media orchestration out of the central Typer entrypoint."""
+    main_path = Path(__file__).resolve().parents[2] / "src" / "scribe" / "cli" / "main.py"
+    tree = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    expected_modules = {
+        "info": "scribe.cli.system",
+        "doctor": "scribe.cli.system",
+        "health_check": "scribe.cli.system",
+        "support_bundle": "scribe.cli.system",
+        "clean": "scribe.cli.media",
+    }
+
+    for function_name, delegated_module in expected_modules.items():
+        function = functions[function_name]
+        imported_modules = {
+            node.module
+            for node in ast.walk(function)
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        }
+        assert delegated_module in imported_modules
+        assert function.end_lineno is not None
+        assert function.end_lineno - function.lineno < 70

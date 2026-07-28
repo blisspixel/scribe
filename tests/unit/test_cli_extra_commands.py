@@ -1769,6 +1769,43 @@ def test_health_check_rejects_unknown_provider() -> None:
     monitor.check_provider_health.assert_not_called()
 
 
+def test_health_check_normalizes_provider_name() -> None:
+    monitor = Mock()
+    monitor.check_provider_health.return_value = SimpleNamespace(
+        is_healthy=True,
+        response_time_ms=0.0,
+        error_message=None,
+    )
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch("scribe.providers.health.get_health_monitor", return_value=monitor),
+    ):
+        result = CliRunner().invoke(app, ["health", "--provider", " OpenAI "])
+
+    assert result.exit_code == 0
+    assert "0ms" in result.stdout
+    monitor.check_provider_health.assert_called_once_with("openai", "sk-test", force=False)
+
+
+def test_health_check_renders_provider_error_as_literal_text() -> None:
+    monitor = Mock()
+    monitor.check_provider_health.return_value = SimpleNamespace(
+        is_healthy=False,
+        response_time_ms=None,
+        error_message="failure [bold red]literal[/bold red]",
+    )
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch("scribe.providers.health.get_health_monitor", return_value=monitor),
+    ):
+        result = CliRunner().invoke(app, ["health", "--provider", "openai"])
+
+    assert result.exit_code == 1
+    assert "failure [bold red]literal[/bold red]" in result.stdout
+
+
 def test_support_bundle_command_success(tmp_path: Path) -> None:
     runner = CliRunner()
     bundle_path = tmp_path / "bundle.json"
@@ -1856,3 +1893,37 @@ def test_clean_command_trim_mode(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Success!" in result.stdout
+
+
+def test_clean_trim_survives_missing_original_duration(tmp_path: Path) -> None:
+    input_file = tmp_path / "meeting.mp4"
+    input_file.write_text("video")
+    trimmed = tmp_path / "meeting_trimmed.mp4"
+    trimmed.write_text("trimmed")
+
+    with (
+        patch("scribe.utils.audio.get_audio_duration", side_effect=[None, 60.0]),
+        patch("scribe.utils.silence_remover.trim_file", return_value=trimmed),
+    ):
+        result = CliRunner().invoke(app, ["clean", str(input_file), "--trim", "00:01:00"])
+
+    assert result.exit_code == 0
+    assert "Trimmed:  1 minutes" in result.stdout
+    assert "Original:" not in result.stdout
+
+
+def test_clean_empty_input_does_not_divide_by_zero(tmp_path: Path) -> None:
+    input_file = tmp_path / "empty_[red]literal.wav"
+    input_file.write_bytes(b"")
+    cleaned = tmp_path / "cleaned.wav"
+    cleaned.write_bytes(b"")
+
+    with (
+        patch("scribe.utils.audio.get_audio_duration", return_value=None),
+        patch("scribe.utils.silence_remover.remove_silence", return_value=cleaned),
+    ):
+        result = CliRunner().invoke(app, ["clean", str(input_file)])
+
+    assert result.exit_code == 0
+    assert "empty_[red]literal.wav" in result.stdout
+    assert "n/a (empty input)" in result.stdout

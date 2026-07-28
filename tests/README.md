@@ -3,9 +3,9 @@
 ## Current Status
 
 - 1715 assertion-based tests collected across unit, integration, e2e, and manual paths.
-- Latest local CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1677 passed, 11 skipped, 27 deselected, no warnings, and 83.54 percent coverage.
-- Enforced coverage floor: 80 percent.
+- Latest local CI-safe unit matrix: 1609 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13.
+- Latest broader CI-equivalent gate: 1711 passed, 11 skipped, 27 deselected, and 81.33 percent branch coverage.
+- Enforced coverage floor: 81 percent.
 - Quality gates: Ruff check, Ruff format, mypy strict, pytest, pytest-cov, pre-commit, and pip-audit in CI.
 
 ## Standard Commands
@@ -16,7 +16,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy --strict src/scribe
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80 -q
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=81 -q
 ```
 
 The full suite includes integration, e2e, GPU, FFmpeg, provider, Pillow, and manual paths. Use markers to keep local runs scoped to the risk of the change.
@@ -59,7 +59,7 @@ When adding or changing behavior:
 - Prefer pure unit tests for routing, parsing, policy, and state machines.
 - Use mocks for provider, GPU, OBS, microphone, and OS integration boundaries.
 - Mark live hardware or external-service tests so CI can exclude them.
-- Keep the 80 percent gate green.
+- Keep the 81 percent gate green.
 
 Known residual risk:
 - Live GPU model execution.

@@ -486,7 +486,7 @@ Report Error with Context
 - Mock external dependencies
 - Edge case coverage
 - Defensive programming validation
-- Branch coverage above the enforced 80 percent floor
+- Branch coverage above the enforced 81 percent floor
 - Import-boundary and internal-cycle architecture contracts
 
 ### Integration Tests (Limited)

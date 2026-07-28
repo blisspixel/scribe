@@ -142,7 +142,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Coverage Gate
-  # Enforce the 80%+ coverage gate (pyproject.toml [tool.coverage.report] + explicit flag).
+  # Enforce the 81%+ coverage gate (pyproject.toml [tool.coverage.report] + explicit flag).
   # Part of the Engineering Excellence foundation. Fails the build on regression.
   # ---------------------------------------------------------------------------
   coverage:
@@ -175,13 +175,13 @@ jobs:
       - name: Sync environment (dev group)
         run: uv sync --locked --python 3.12 --group dev
 
-      - name: Run tests with coverage (fail under 80%)
+      - name: Run tests with coverage (fail under 81%)
         run: |
           uv run pytest \
             --cov=scribe \
             --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=80 \
+            --cov-fail-under=81 \
             -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" \
             --maxfail=1 -q
 

@@ -421,7 +421,7 @@ Automated:
   preload before fallback.
 - Mocked integration tests for tray menu callbacks.
 - Mocked STT/TTS adapters so CI does not need a microphone, speaker, or GPU.
-- Coverage stays above the existing 80 percent CI gate.
+- Coverage stays above the existing 81 percent CI gate.
 
 Manual matrix:
 

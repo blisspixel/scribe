@@ -69,7 +69,7 @@ uv run pytest
 ### With Coverage
 ```bash
 # Recommended
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=81
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=html
 ```
 
@@ -87,11 +87,11 @@ uv run pytest -m "not gpu and not slow and not e2e"
 
 ### Test Status
 - CI-safe unit matrix: `uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q`
-- Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
-- Latest CI-safe unit matrix: 1574 passed, 1 skipped, 37 deselected
-- Latest broader CI-equivalent validation: 1677 passed, 11 skipped, 27 deselected, 83.54% line coverage
-- Current collection: 1715 assertion-based tests
-- Coverage gate: 80% minimum enforced (`fail_under = 80` in pyproject.toml)
+- Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
+- Latest CI-safe unit matrix: 1609 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
+- Latest broader CI-equivalent validation: 1711 passed, 11 skipped, 27 deselected, 81.33% branch coverage
+- Current collection: 1749 assertion-based tests
+- Coverage gate: 81% minimum enforced (`fail_under = 81` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
 - Use markers to keep runs fast during development: `-m "not gpu and not slow and not e2e"`
 - Full ruff + mypy --strict gates must pass before commit (see ROADMAP Step 2)
@@ -153,7 +153,7 @@ pwsh -File scripts/check_native_tray.ps1
 
 ### 4. Full Local Verification
 ```bash
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=80
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=src/scribe --cov-report=term-missing --cov-fail-under=81
 ```
 
 Optional live provider validation:
@@ -394,7 +394,7 @@ Add a new section at the top of the root `CHANGELOG.md` following the existing f
 ```bash
 uv lock --check
 uv run pre-commit run --all-files
-uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow"
+uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow"
 uv run pip-audit --local --progress-spinner off --desc on
 uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build

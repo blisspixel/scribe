@@ -48,7 +48,7 @@ alignment, voice endpointing, output writers). It is `continue-on-error` and out
 the CI gate aggregator: a surviving mutant is a prompt to add a test, not a build
 failure. mutmut is Linux-only, so it runs in CI (or WSL locally), not on every dev
 machine. As surviving mutants are killed and pure logic gains property tests, the
-coverage floor ratchets toward 90% from its current 80%.
+coverage floor ratchets toward 90% from its current 81%.
 
 ## Consequences
 

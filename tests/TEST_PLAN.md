@@ -5,9 +5,9 @@
 Date: 2026-07-27
 
 - 1740 assertion-based tests collected.
-- Latest local CI-safe unit matrix: 1597 passed, 1 skipped, 37 deselected.
-- Latest broader CI-equivalent gate: 1702 passed, 11 skipped, 27 deselected, and 81.05 percent branch coverage.
-- Current enforced branch-coverage floor: 80 percent.
+- Latest local CI-safe unit matrix: 1609 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13.
+- Latest broader CI-equivalent gate: 1711 passed, 11 skipped, 27 deselected, and 81.33 percent branch coverage.
+- Current enforced branch-coverage floor: 81 percent.
 - CI enforces Ruff, Ruff format, mypy strict, pytest, coverage, pre-commit,
   pip-audit, a locked CycloneDX SBOM, the root-wheel build and isolated-install
   contract, native Windows and Apple Silicon macOS Python smoke tests, and the Windows
@@ -21,7 +21,7 @@ Scribe is a local-first CLI with heavy hardware and OS integration points. The t
 - CLI wiring should be tested with mocked dependencies.
 - Provider, OBS, GPU, microphone, tray, and filesystem edge paths should use mocks unless deliberately marked as live/manual.
 - Live hardware and provider checks are not required for the default CI-safe subset.
-- Branch coverage must stay above the 80 percent floor, but new tests should optimize for meaningful assertions.
+- Branch coverage must stay above the 81 percent floor, but new tests should optimize for meaningful assertions.
 
 ## Current Strengths
 
@@ -109,7 +109,7 @@ uv run pytest tests/unit -m "not gpu and not slow and not e2e" -q
 For coverage-sensitive work:
 
 ```bash
-uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=scribe --cov-report=term-missing --cov-fail-under=80 -q
+uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=scribe --cov-report=term-missing --cov-fail-under=81 -q
 ```
 
 For dependency/security work, mirror the zero-exception CI `pip-audit` command.
