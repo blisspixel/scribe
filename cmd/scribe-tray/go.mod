@@ -8,6 +8,7 @@ require (
 )
 
 require (
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	golang.design/x/mainthread v0.3.1 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )

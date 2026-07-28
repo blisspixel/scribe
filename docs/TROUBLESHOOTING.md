@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-**Last Updated:** 2026-07-15 (truthful diagnostics, unique support bundles, and literal recovery output)
+**Last Updated:** 2026-07-28 (hardware-aware PyTorch repair and recording launcher recovery)
 
 ## Quick Diagnostics
 
@@ -31,11 +31,16 @@ python -c "import torch; print(torch.cuda.get_device_name(0))"
 
 **Solutions:**
 
-1. **Install CUDA-capable PyTorch:**
+1. **Install the hardware-compatible PyTorch build:**
 ```bash
-pip uninstall torch torchvision torchaudio
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+uv pip install torch torchaudio --torch-backend cu130 --reinstall-package torch --reinstall-package torchaudio
+python -c "import torch, torchaudio; print(torch.cuda.is_available(), torch.version.cuda, torchaudio.__version__)"
 ```
+
+For a global Scribe tool installed from a clone, rebuild its isolated environment
+with `uv tool install --force --editable . --python 3.12 --torch-backend cu130`.
+For pip-only environments, use the current command from the official PyTorch
+installation selector rather than a hard-coded CUDA wheel index.
 
 2. **Check CUDA installation:**
 ```bash
@@ -49,7 +54,7 @@ nvidia-smi
 - Restart after installation.
 
 4. **Verify CUDA version compatibility:**
-- PyTorch requires CUDA 12.4+
+- Let uv select a build compatible with the installed driver.
 - Check PyTorch CUDA version: `python -c "import torch; print(torch.version.cuda)"`
 
 
@@ -542,7 +547,7 @@ uv run pytest tests/unit/test_file.py::test_name -vv
 
 4. **Check Python version:**
 ```bash
-uv run python --version  # Must be 3.12 through 3.14
+uv run python --version  # Must be 3.12 or 3.13
 ```
 
 ## Error Codes

@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Enabled GitHub dependency alerts and automated security updates, with weekly grouped Dependabot notices for uv, pre-commit, GitHub Actions, Go, and Rust.
+- Added the Rust audio extension to the required CI aggregate with formatting, Clippy warnings-as-errors, and unit-test gates.
 - Added a versioned, backend-independent evaluation harness for micro-averaged word error rate, real-time factor, exact-match diagnostics, manifest hashes, revision metadata, and per-sample evidence.
 - Added a security policy covering supported versions, private vulnerability reporting, cloud and local trust boundaries, and the experimental native-tray boundary.
 - Added required Windows and Apple Silicon macOS Python smoke jobs. The Windows job executes the generated Quick Record batch wrapper through the real command interpreter.
@@ -20,6 +22,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Refreshed the universal Python lock, pre-commit hooks, immutable GitHub Actions, Go modules, and Rust dependencies to current compatible releases. The Rust extension now targets edition 2024, PyO3 0.29, and Symphonia 0.6.
+- Aligned package metadata with the validated Python 3.12 and 3.13 matrix after a Python 3.14 install probe exposed unavailable native wheels in the universal ML dependency graph.
+- Documented explicit matching Torch and TorchAudio backends for GPU installs and made diagnostics import both native packages, catching CUDA ABI mismatches before recording or transcription.
 - Reduced trivial CLI startup from roughly 1.8 seconds to about 0.5 seconds on the development machine by moving recorder, transcriber, settings, DOCX, session, GPU, and humor construction behind lazy command boundaries.
 - Made branch coverage the enforced coverage measure and added regression contracts for heavyweight CLI imports and acyclic internal imports.
 - Removed the provider catalog and meme bake-off import cycles by extracting a dependency-light provider catalog and injecting meme concept analysis.
@@ -58,6 +63,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Migrated native audio probing, decoder construction, packet iteration, and sample conversion to Symphonia 0.6 without retaining deprecated APIs.
+- Prevented a mismatched Torch and TorchAudio CUDA pair from being reported as healthy by the package diagnostic, and added verified same-backend GPU repair guidance.
 - Replaced vacuous recorder and end-to-end assertions with behavioral checks that verify CLI fallback routing and forced-local transcription without cloud fallback.
 - Made Windows Quick Record shortcuts and taskbar pins call the stable per-user wrapper instead of retaining removed Python or temporary test executables. Wrapper fallback checks and CRLF output are now deterministic.
 - Made tray help assertions ignore terminal styling so Linux CI validates user-facing text independently of Rich ANSI boundaries.

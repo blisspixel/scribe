@@ -32,12 +32,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -60,7 +60,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Test Matrix (fast CI-safe subset)
-  # Runs the non-GPU, non-slow unit tests across supported Python versions (3.12/3.13).
+  # Runs the non-GPU, non-slow unit tests across every declared Python version.
   # Full suite (including integration) runs locally and is too heavy/sensitive for GitHub runners.
   # ---------------------------------------------------------------------------
   test:
@@ -73,12 +73,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -112,12 +112,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -150,12 +150,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -203,12 +203,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -258,12 +258,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
 
       - name: Setup Python 3.12
         run: uv python install 3.12
@@ -287,12 +287,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -330,10 +330,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go from module
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: cmd/scribe-tray/go.mod
           cache-dependency-path: cmd/scribe-tray/go.sum
@@ -341,6 +341,34 @@ jobs:
       - name: Verify native tray source and reproducible build
         shell: pwsh
         run: ./scripts/check_native_tray.ps1 -OutputDirectory "$env:RUNNER_TEMP/native-tray"
+
+  # ---------------------------------------------------------------------------
+  # Native Audio Source Contract
+  # Keeps the optional Rust acceleration crate formatted, warning-free, and tested.
+  # ---------------------------------------------------------------------------
+  native-audio:
+    name: Native Audio Source Contract (Rust stable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crates/scribe-audio-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install stable Rust with quality components
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+
+      - name: Rust format
+        run: cargo +stable fmt --check
+
+      - name: Rust lint
+        run: cargo +stable clippy --locked --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo +stable test --locked
 
   # ---------------------------------------------------------------------------
   # Mutation Testing (advisory, non-blocking)
@@ -360,12 +388,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
@@ -395,7 +423,7 @@ jobs:
     name: CI
     runs-on: ubuntu-latest
     needs:
-      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, native-tray]
+      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, native-tray, native-audio]
     if: always()
 
     steps:
@@ -411,6 +439,7 @@ jobs:
           echo "  security:       ${{ needs.security.result }}"
           echo "  package:        ${{ needs.package.result }}"
           echo "  native-tray:    ${{ needs.native-tray.result }}"
+          echo "  native-audio:   ${{ needs.native-audio.result }}"
 
           failed=0
           for result in "${{ needs.lint-and-types.result }}" \
@@ -420,7 +449,8 @@ jobs:
                         "${{ needs.coverage.result }}" \
                         "${{ needs.security.result }}" \
                         "${{ needs.package.result }}" \
-                        "${{ needs.native-tray.result }}"; do
+                        "${{ needs.native-tray.result }}" \
+                        "${{ needs.native-audio.result }}"; do
             if [[ "$result" != "success" ]]; then
               failed=1
             fi

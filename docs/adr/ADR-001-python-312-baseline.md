@@ -1,7 +1,7 @@
 # ADR-001: Python 3.12 Baseline (with 3.14 Future Gate)
 
 ## Status
-Accepted - 2026
+Accepted in 2026; amended 2026-07-28
 
 ## Context
 The original Python Project Standards Brief (and early roadmap thinking) called for targeting Python 3.14 (or exact pin) with free-threaded builds for maximum performance and modernity.
@@ -11,12 +11,18 @@ Scribe is a **local-first desktop CLI** with heavy native dependencies:
 - faster-whisper + CTranslate2
 - ffmpeg, OBS WebSocket, yt-dlp, etc.
 
-In 2026 the PyTorch/CUDA and faster-whisper ecosystems on Windows still ship reliable wheels primarily for 3.12/3.13. 3.14 support (especially free-threaded) is incomplete or experimental for the GPU stack that defines Scribe's value proposition.
+Python 3.12 remains the most conservative Windows GPU baseline, and Python 3.13
+has a validated wheel set. A Windows Python 3.14 install probe on 2026-07-28
+failed because the universal optional-ML graph selected NumPy and CTranslate2
+releases without compatible CPython 3.14 wheels. Standard and free-threaded 3.14
+support therefore remain unproven for the stack that defines Scribe's value.
 
 ## Decision
-- Set minimum `requires-python = ">=3.12"` in pyproject.toml.
-- CI matrix tests on 3.12 and 3.13 (latest stable patch).
-- Explicit **Step 5 decision gate** in ROADMAP.md: when the full GPU stack has mature 3.14 + free-threaded wheels on Windows, re-evaluate and raise the floor (or pin exactly).
+- Set `requires-python = ">=3.12,<3.14"` in pyproject.toml.
+- Run the CI-safe unit suite on every declared standard CPython version: 3.12
+  and 3.13.
+- Keep the **Step 5 decision gate** in ROADMAP.md for promoting 3.14 to the
+  primary development baseline or claiming free-threaded and full GPU-extra support.
 - `.python-version` file pins `3.12` for local development consistency (uv + pyenv compatible).
 - No chasing of bleeding-edge runtime versions that would break the primary Windows + NVIDIA user base.
 
@@ -28,7 +34,7 @@ In 2026 the PyTorch/CUDA and faster-whisper ecosystems on Windows still ship rel
 - Preserves the excellent existing graceful degradation for "no GPU / wrong Python / missing deps."
 
 ### Negative / Trade-offs
-- Cannot yet use 3.14-only language features or free-threaded performance wins in hot paths.
+- Cannot yet use 3.14-only language features or claim free-threaded performance wins in hot paths.
 - Slight delay on some newer stdlib improvements (but most are backported or available via backports).
 
 ### Mitigations

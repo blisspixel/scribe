@@ -35,6 +35,17 @@ def _declared_project_version() -> str:
     return version
 
 
+def _declared_requires_python() -> str:
+    requires_python = _project_metadata().get("requires-python")
+    if not isinstance(requires_python, str) or not requires_python.strip():
+        raise ValueError("pyproject.toml has no valid requires-python value")
+    return requires_python
+
+
+def _normalized_specifiers(value: str) -> frozenset[str]:
+    return frozenset(part.strip() for part in value.split(",") if part.strip())
+
+
 def _declared_project_license() -> str | None:
     license_value = _project_metadata().get("license")
     if license_value is None:
@@ -113,6 +124,16 @@ def check_wheel(wheel_path: Path) -> None:
             raise ValueError(
                 "Wheel version does not match pyproject.toml: "
                 f"expected {declared_version}, found {metadata.get('Version', '<missing>')}"
+            )
+        declared_requires_python = _declared_requires_python()
+        packaged_requires_python = metadata.get("Requires-Python", "")
+        if _normalized_specifiers(packaged_requires_python) != _normalized_specifiers(
+            declared_requires_python
+        ):
+            raise ValueError(
+                "Wheel Python support does not match pyproject.toml: "
+                f"expected {declared_requires_python}, "
+                f"found {packaged_requires_python or '<missing>'}"
             )
         try:
             packaged_version = _literal_project_version(

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Updated:** 2026-07-15
+**Last Updated:** 2026-07-28
 
 ## Scope
 
@@ -49,7 +49,7 @@ uv run scribe doctor
 ## Workstation Requirements
 
 Required:
-- Python 3.12 or newer.
+- Python 3.12 or 3.13. Python 3.12 remains the recommended GPU baseline.
 - uv.
 - FFmpeg.
 - Disk space for local media, converted audio, transcripts, logs, and model caches.

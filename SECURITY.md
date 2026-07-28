@@ -35,6 +35,20 @@ The blocking dependency audit and its reviewed Torch exceptions are documented
 in [ADR-004](docs/adr/ADR-004-dependency-vulnerability-audit-policy.md). A passing
 audit does not make untrusted model checkpoints or executables safe.
 
+## Dependency maintenance
+
+GitHub dependency-graph alerts and automated security updates are enabled.
+`.github/dependabot.yml` checks the uv, pre-commit, GitHub Actions, Go, and Rust
+ecosystems each week. Dependabot pull requests are treated as reviewable notices,
+not as an automatic merge path. Maintainers reproduce applicable updates directly
+on `main`, refresh the authoritative lockfiles, run every required CI gate, and
+close the corresponding bot pull requests after the direct update is present.
+
+Security updates take priority over the weekly cadence. A compatibility pin must
+name its reason, validation gap, and review trigger in an ADR or adjacent source
+comment. Silently disabling an alert, audit, or required gate is not an accepted
+remediation.
+
 ## Disclosure expectations
 
 Please allow reasonable time to reproduce, patch, and release a fix before public

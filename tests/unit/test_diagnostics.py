@@ -44,7 +44,7 @@ class TestPythonVersionCheck:
     """Test Python version checking."""
 
     def test_python_312_or_higher(self):
-        """Test Python 3.12+ passes."""
+        """Test a supported Python release passes."""
         diagnostics = SystemDiagnostics()
 
         # Create a mock version_info with named tuple attributes
@@ -55,6 +55,18 @@ class TestPythonVersionCheck:
 
             assert result.status == "pass"
             assert "3.12.11" in result.message
+
+    def test_python_314_fails_with_supported_range(self):
+        """Test an interpreter above the native-wheel range fails clearly."""
+        diagnostics = SystemDiagnostics()
+        mock_version = type("version_info", (), {"major": 3, "minor": 14, "micro": 4})()
+
+        with patch("sys.version_info", mock_version):
+            result = diagnostics.check_python_version()
+
+        assert result.status == "fail"
+        assert "not supported" in result.message
+        assert result.fix_suggestion == "Install Scribe with Python 3.12 or 3.13"
 
     def test_python_310_or_311(self):
         """Test Python 3.10-3.11 warns (below the 3.12 floor)."""
@@ -145,6 +157,24 @@ class TestPythonPackagesCheck:
         assert result.fix_suggestion is not None
         assert "uv sync --locked" in result.fix_suggestion
         assert "requirements" not in result.fix_suggestion
+
+    def test_binary_import_failure_is_reported_as_broken(self):
+        """A native ABI mismatch must not be misreported as a healthy install."""
+
+        def import_for_check(name, *_args, **_kwargs):
+            if name == "torchaudio":
+                raise RuntimeError("Torch and TorchAudio use different CUDA versions")
+            return Mock()
+
+        diagnostics = SystemDiagnostics()
+        with patch("builtins.__import__", side_effect=import_for_check):
+            result = diagnostics.check_python_packages()
+
+        assert result.status == "fail"
+        assert result.message == "1 critical package(s) unavailable"
+        assert result.details is not None
+        assert "Broken: torchaudio" in result.details
+        assert "same PyTorch backend" in (result.fix_suggestion or "")
 
 
 class TestCUDACheck:

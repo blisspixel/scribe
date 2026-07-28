@@ -5,7 +5,7 @@
 ## Getting Started
 
 ### Prerequisites
-- Python 3.12 or newer (3.12+ strongly recommended)
+- Python 3.12 or 3.13 (3.12 is the reproducible development baseline)
 - Git
 - FFmpeg
 - (Optional) NVIDIA GPU with CUDA 12.4+
@@ -371,8 +371,8 @@ nvcc --version
 # Check PyTorch CUDA
 uv run python -c "import torch; print(torch.version.cuda)"
 
-# Reinstall PyTorch with CUDA
-uv pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# Reinstall both packages from the same validated NVIDIA backend
+uv pip install torch torchaudio --torch-backend cu130 --reinstall-package torch --reinstall-package torchaudio
 ```
 
 ## Release Process

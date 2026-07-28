@@ -99,7 +99,7 @@ Acceptance criteria for the next task:
 - `scribe tray --check` gives accurate, actionable macOS and Linux readiness output without requiring paid services. *(non-live: done with unit evidence; live re-check still required on real desktops)*
 - macOS and Linux setup docs match the live tray, hotkey, startup, permission, and audio behavior. *(docs aligned to current implementation and experimental status)*
 - Non-live tests cover platform advisory logic and failure messages for unsupported or partially supported environments. *(done)*
-- Manual validation notes identify the tested macOS and Linux versions, desktop sessions, hotkey behavior, tray behavior, startup behavior, and audio devices. *(open — blocks full completion)*
+- Manual validation notes identify the tested macOS and Linux versions, desktop sessions, hotkey behavior, tray behavior, startup behavior, and audio devices. *(open: blocks full completion)*
 
 Roadmap watch item, not current scope: the May 21, 2026 MCP `2026-07-28` release candidate adds a stateless protocol core, first-class extensions, MCP Apps, Tasks, authorization hardening, JSON Schema 2020-12 tool schemas, and deprecations for roots, sampling, and protocol logging. Track this only for a future agent-facing local tool surface, such as exposing transcript search, diagnostics, or support-bundle generation to an agent host. It should not displace the current resident-tray hardening work, and any future MCP work must preserve Scribe's local-first, explicit-consent, no-surprise-cloud boundary.
 
@@ -177,7 +177,7 @@ Establish a single source of truth for Python version, dependencies, and develop
 - Adopt uv as the canonical package and project manager. Generate and commit `uv.lock`. Update development setup to use `uv sync --locked --group dev` and all project commands to use `uv run`.
 - Consolidate configuration into pyproject.toml: remove duplicate settings from pytest.ini, retire the Black configuration, and expand the Ruff configuration with preview rules, security rules, and appropriate complexity limits.
 - Add `.pre-commit-config.yaml` with ruff (lint + format), mypy, and basic test hooks. Make `pre-commit install` part of the documented onboarding.
-- Overhaul CI to use uv for all jobs, expand the Python matrix to 3.12 and 3.13, add a dedicated lint + types job, a coverage gate job, and a dependency vulnerability scan step.
+- Overhaul CI to use uv for all jobs, test every declared CPython version (3.12 and 3.13), add a dedicated lint + types job, a coverage gate job, and a dependency vulnerability scan step.
 - Update README, DEVELOPMENT.md, and related docs to present the locked uv workflow first while retaining direct pyproject-based pip installation for accessibility.
 - Retire hand-maintained requirements shims so pip, uv, CI, and release artifacts all resolve dependencies from `pyproject.toml`.
 

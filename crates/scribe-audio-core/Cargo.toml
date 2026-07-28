@@ -1,13 +1,13 @@
 [package]
 name = "scribe-audio-core"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "scribe_audio_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.21.2", features = ["extension-module", "abi3-py312"] }
-symphonia = { version = "0.5.4", features = ["all"] }
+pyo3 = { version = "0.29.0", features = ["extension-module", "abi3-py312"] }
+symphonia = { version = "0.6.0", features = ["all"] }
 hound = "3.5.1"

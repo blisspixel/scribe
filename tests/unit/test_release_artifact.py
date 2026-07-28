@@ -15,6 +15,7 @@ def _write_wheel(
     *,
     requirements: tuple[str, ...] = ("deal>=4.1",),
     version: str = "2.8.1",
+    requires_python: str = "<3.14,>=3.12",
     packaged_version: str | None = None,
     license_expression: str | None = None,
     license_file: str | None = None,
@@ -22,7 +23,12 @@ def _write_wheel(
     include_license_member: bool = False,
     extra_members: tuple[str, ...] = (),
 ) -> None:
-    metadata = ["Metadata-Version: 2.4", "Name: scribe", f"Version: {version}"]
+    metadata = [
+        "Metadata-Version: 2.4",
+        "Name: scribe",
+        f"Version: {version}",
+        f"Requires-Python: {requires_python}",
+    ]
     if license_expression is not None:
         metadata.append(f"License-Expression: {license_expression}")
     if license_file is not None:
@@ -123,6 +129,17 @@ def test_release_artifact_check_rejects_version_mismatch(tmp_path):
     assert "Wheel version does not match pyproject.toml" in result.stderr
 
 
+def test_release_artifact_check_rejects_python_support_mismatch(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
+    _write_wheel(wheel, requires_python=">=3.12")
+
+    result = _run_check(repo_root, wheel)
+
+    assert result.returncode == 1
+    assert "Wheel Python support does not match pyproject.toml" in result.stderr
+
+
 def test_release_artifact_check_rejects_unsupported_license_claim(tmp_path):
     repo_root = Path(__file__).resolve().parents[2]
     wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
@@ -169,7 +186,8 @@ def _write_licensed_repository(path: Path, *, expression: str = "MIT") -> None:
     (path / "src" / "scribe").mkdir(parents=True)
     (path / "LICENSE").write_text("terms\n", encoding="utf-8")
     (path / "pyproject.toml").write_text(
-        f'[project]\nname = "scribe"\nversion = "2.8.1"\nlicense = "{expression}"\n',
+        f'[project]\nname = "scribe"\nversion = "2.8.1"\n'
+        f'requires-python = ">=3.12,<3.14"\nlicense = "{expression}"\n',
         encoding="utf-8",
     )
     (path / "src" / "scribe" / "__init__.py").write_text(

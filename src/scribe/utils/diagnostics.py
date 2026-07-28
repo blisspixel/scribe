@@ -261,12 +261,23 @@ class SystemDiagnostics:
         version = sys.version_info
         version_str = f"{version.major}.{version.minor}.{version.micro}"
 
-        if version.major == 3 and version.minor >= 12:
+        if version.major == 3 and 12 <= version.minor < 14:
             result = DiagnosticResult(
                 name="Python Version",
                 status="pass",
                 message=f"Python {version_str}",
-                details="Python 3.12+ detected",
+                details="Supported Python detected",
+            )
+        elif version.major == 3 and version.minor >= 14:
+            result = DiagnosticResult(
+                name="Python Version",
+                status="fail",
+                message=f"Python {version_str} is not supported",
+                details=(
+                    "The native transcription dependency graph is validated only on "
+                    "Python 3.12 and 3.13."
+                ),
+                fix_suggestion="Install Scribe with Python 3.12 or 3.13",
             )
         elif version.major == 3 and version.minor >= 10:
             result = DiagnosticResult(
@@ -509,7 +520,10 @@ class SystemDiagnostics:
                 status="warn",
                 message="Not available",
                 details=gpu_config.reason,
-                fix_suggestion="Install CUDA-enabled PyTorch for PyTorch-backed features: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124",
+                fix_suggestion=(
+                    "Install matching Torch and TorchAudio builds using the current command from "
+                    "https://pytorch.org/get-started/locally/"
+                ),
             )
 
         self.results.append(result)
@@ -787,31 +801,45 @@ class SystemDiagnostics:
 
     def check_python_packages(self) -> DiagnosticResult:
         """Check critical Python packages."""
-        missing = []
+        missing: list[str] = []
+        broken: dict[str, str] = {}
 
-        critical_packages = {
-            "torch": "2.0.0",
-            "faster_whisper": "0.10.0",
-            "openai": "1.0.0",
-            "typer": "0.9.0",
-            "rich": "13.0.0",
-        }
+        critical_packages = (
+            "torch",
+            "torchaudio",
+            "faster_whisper",
+            "openai",
+            "typer",
+            "rich",
+        )
 
-        for package, _min_version in critical_packages.items():
+        for package in critical_packages:
             try:
                 __import__(package)
             except ImportError:
                 missing.append(package)
+            except (OSError, RuntimeError) as exc:
+                broken[package] = str(exc)
 
-        if missing:
+        if missing or broken:
+            problem_count = len(missing) + len(broken)
+            detail_parts = []
+            if missing:
+                detail_parts.append(f"Missing: {', '.join(missing)}")
+            if broken:
+                broken_details = "; ".join(
+                    f"{package}: {message}" for package, message in broken.items()
+                )
+                detail_parts.append(f"Broken: {broken_details}")
             result = DiagnosticResult(
                 name="Python Packages",
                 status="fail",
-                message=f"{len(missing)} critical package(s) missing",
-                details=f"Missing: {', '.join(missing)}",
+                message=f"{problem_count} critical package(s) unavailable",
+                details="\n".join(detail_parts),
                 fix_suggestion=(
                     "Reinstall Scribe from its original package source; "
-                    "checkout users can run: uv sync --locked"
+                    "checkout users can run: uv sync --locked. Install Torch and "
+                    "TorchAudio from the same PyTorch backend."
                 ),
             )
         else:
@@ -819,7 +847,7 @@ class SystemDiagnostics:
                 name="Python Packages",
                 status="pass",
                 message="All critical packages installed",
-                details=f"Checked: {', '.join(critical_packages.keys())}",
+                details=f"Checked: {', '.join(critical_packages)}",
             )
 
         self.results.append(result)
