@@ -19,8 +19,9 @@ import uuid
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 from scribe.core.recording_policy import (
     OBSActiveRecordingError,
@@ -48,6 +49,15 @@ logger = get_logger(__name__)
 # ADR-002: typed exception groups for intentional graceful-degradation sites.
 _SUBPROCESS_PROBE_ERRORS = (OSError, subprocess.SubprocessError)
 _OBS_SOCKET_ERRORS = (ConnectionError, OSError, TimeoutError)
+
+
+class _WindowsConsoleInput(Protocol):
+    """Typed boundary for the Windows-only console input API."""
+
+    def kbhit(self) -> bool: ...
+
+    def getwch(self) -> str: ...
+
 
 # NOTE ON ERROR HANDLING IN THIS MODULE
 # --------------------------------------
@@ -1583,7 +1593,7 @@ class OBSRecorder:
     @staticmethod
     def _listen_windows(ev: threading.Event) -> None:
         """Stop on Enter without echoing typed characters over the timer."""
-        import msvcrt
+        msvcrt = cast(_WindowsConsoleInput, import_module("msvcrt"))
 
         while not ev.is_set():
             if msvcrt.kbhit():
