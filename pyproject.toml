@@ -26,7 +26,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=2.0.0",
+    "torch>=2.13.0",
     "torchaudio>=2.0.0",
     "faster-whisper>=0.10.0",
     "openai>=1.0.0",
