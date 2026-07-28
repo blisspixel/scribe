@@ -29,18 +29,6 @@ from scribe.models.gpu import GPUConfig
 from scribe.utils.obs_config import read_obs_websocket_config
 from scribe.utils.platform import get_platform, is_windows
 
-# Accepted torch advisories per ADR-004 (mirrors .github/workflows/ci.yml).
-_ACCEPTED_TORCH_VULN_IGNORES: tuple[str, ...] = (
-    "PYSEC-2025-203",
-    "PYSEC-2025-204",
-    "PYSEC-2025-206",
-    "PYSEC-2026-139",
-    "PYSEC-2026-2286",
-    "CVE-2025-2999",
-    "CVE-2025-3000",
-    "CVE-2025-3001",
-)
-
 
 @dataclass
 class DiagnosticResult:
@@ -880,8 +868,6 @@ class SystemDiagnostics:
             "--desc",
             "on",
         ]
-        for vuln_id in _ACCEPTED_TORCH_VULN_IGNORES:
-            cmd.extend(["--ignore-vuln", vuln_id])
 
         try:
             completed = subprocess.run(
@@ -908,11 +894,8 @@ class SystemDiagnostics:
             result = DiagnosticResult(
                 name="Dependency Security",
                 status="pass",
-                message="No unignored vulnerabilities found",
-                details=(
-                    "Scanned local packages with pip-audit "
-                    f"(ADR-004 torch exceptions applied). {summary}"
-                ),
+                message="No known vulnerabilities found",
+                details=f"Scanned local packages with pip-audit (zero exceptions). {summary}",
             )
         else:
             output = (completed.stdout or completed.stderr or "").strip()

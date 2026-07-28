@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Replaced the eight Torch audit exceptions with a secure universal ML resolution: the WhisperX extra now selects 3.7.2, while Torch 2.13, TorchAudio 2.11, Transformers 5.14, and Hugging Face Hub 1.25 satisfy a zero-exception dependency audit.
 - Refreshed the universal Python lock, pre-commit hooks, immutable GitHub Actions, Go modules, and Rust dependencies to current compatible releases. The Rust extension now targets edition 2024, PyO3 0.29, and Symphonia 0.6.
 - Aligned package metadata with the validated Python 3.12 and 3.13 matrix after a Python 3.14 install probe exposed unavailable native wheels in the universal ML dependency graph.
 - Documented explicit matching Torch and TorchAudio backends for GPU installs and made diagnostics import both native packages, catching CUDA ABI mismatches before recording or transcription.
@@ -63,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Bound each Python matrix test command to its declared interpreter and added a runtime assertion, preventing uv from silently recreating a Python 3.13 environment with the repository's 3.12 default.
 - Migrated native audio probing, decoder construction, packet iteration, and sample conversion to Symphonia 0.6 without retaining deprecated APIs.
 - Prevented a mismatched Torch and TorchAudio CUDA pair from being reported as healthy by the package diagnostic, and added verified same-backend GPU repair guidance.
 - Replaced vacuous recorder and end-to-end assertions with behavioral checks that verify CLI fallback routing and forced-local transcription without cloud fallback.
@@ -107,7 +109,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 - Raised the `yt-dlp` dependency floor and lock to 2026.7.4, resolving `CVE-2026-55404` in generated URL and desktop shortcut handling.
 - Raised the setuptools build requirement and lock to 83.0.0, resolving `PYSEC-2026-3447` in the build toolchain.
-- Documented and enforced the narrowly scoped `PYSEC-2026-2286` Torch exception in ADR-004. Scribe does not call `torch.load` or accept user checkpoint paths; an attempted Torch 2.10 upgrade was rejected because the default lock resolution disabled the validated CUDA path. The exception remains reviewable security debt, not a claim that Torch 2.8 is vulnerability-free.
+- Eliminated the previously documented Torch exceptions by constraining the incompatible WhisperX 3.8 dependency line and validating patched CPU and CUDA dependency sets. ADR-004 retains the model-checkpoint trust boundary and records the compatibility pin's removal trigger.
 
 ## [2.8.0] - 2026-07-01
 

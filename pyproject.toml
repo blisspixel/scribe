@@ -25,8 +25,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=2.0.0",
-    "torchaudio>=2.0.0",
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
     "faster-whisper>=0.10.0",
     "openai>=1.0.0",
     "pydub>=0.25.1",
@@ -49,7 +49,9 @@ dependencies = [
 
 [project.optional-dependencies]
 whisperx = [
-    "whisperx>=3.1.0",
+    # WhisperX 3.8.x pins Torch 2.8 and huggingface-hub below 1.0, which keeps
+    # known Torch and Transformers advisories in the Python 3.12 lock.
+    "whisperx>=3.7.2,<3.8",
     "pyannote.audio>=3.0.0",
 ]
 

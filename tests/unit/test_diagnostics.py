@@ -596,21 +596,20 @@ class TestDependencySecurityCheck:
     @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")
     def test_passes_when_scan_clean(self, mock_run, _find_spec):
-        """A clean pip-audit run passes with ADR-004 torch ignores applied."""
+        """A clean zero-exception pip-audit run passes."""
         mock_run.return_value = SimpleNamespace(
             returncode=0,
-            stdout="No known vulnerabilities found, 8 ignored\n",
+            stdout="No known vulnerabilities found\n",
             stderr="",
         )
         diagnostics = SystemDiagnostics()
         result = diagnostics.check_dependency_security()
 
         assert result.status == "pass"
-        assert "No unignored vulnerabilities" in result.message
+        assert "No known vulnerabilities" in result.message
+        assert "zero exceptions" in (result.details or "")
         cmd = mock_run.call_args[0][0]
-        assert "--ignore-vuln" in cmd
-        assert "PYSEC-2025-203" in cmd
-        assert "PYSEC-2026-2286" in cmd
+        assert "--ignore-vuln" not in cmd
 
     @patch("importlib.util.find_spec", return_value=True)
     @patch("scribe.utils.diagnostics.subprocess.run")

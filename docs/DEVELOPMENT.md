@@ -395,22 +395,15 @@ Add a new section at the top of the root `CHANGELOG.md` following the existing f
 uv lock --check
 uv run pre-commit run --all-files
 uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=80 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow"
-uv run pip-audit --local --progress-spinner off --desc on \
-  --ignore-vuln PYSEC-2025-203 \
-  --ignore-vuln PYSEC-2025-204 \
-  --ignore-vuln PYSEC-2025-206 \
-  --ignore-vuln PYSEC-2026-139 \
-  --ignore-vuln PYSEC-2026-2286 \
-  --ignore-vuln CVE-2025-2999 \
-  --ignore-vuln CVE-2025-3000 \
-  --ignore-vuln CVE-2025-3001
+uv run pip-audit --local --progress-spinner off --desc on
 uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
 
-The eight explicit Torch exceptions are accepted security debt under
-[ADR-004](adr/ADR-004-dependency-vulnerability-audit-policy.md). Do not add or
-remove an exception without updating the ADR and CI in the same change.
+The audit has no ignored advisories. Do not add an exception without documenting
+the exposure, mitigation, owner, and removal trigger in
+[ADR-004](adr/ADR-004-dependency-vulnerability-audit-policy.md) and updating CI
+in the same change.
 
 The root wheel is the portable product artifact. `scribe-audio-core` is an
 optional workspace acceleration and must not appear as a mandatory root-wheel

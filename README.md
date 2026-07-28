@@ -96,7 +96,7 @@ The current workspace is executing the **Engineering Excellence Roadmap** (see [
 - Step 1 complete: reproducible uv foundation, `.python-version` pin, consolidated `pyproject.toml`, pre-commit, and production-grade GitHub Actions CI (uv-native, matrix 3.12 and 3.13, ruff, mypy --strict, 80%+ branch coverage, pip-audit security, aggregator job).
 - Step 2 complete: full-tree ruff format + check enforced locally via pre-commit and as a hard CI gate.
 - Step 3 in progress: mypy --strict clean; branch coverage above 80 percent; import-boundary contracts; `deal` contracts on pure modules; Hypothesis property and lifecycle state-machine tests expanding.
-- Step 4 operational with tracked debt: pip-audit is blocking in CI, a locked CycloneDX SBOM is retained as a CI artifact, `scribe doctor` reports CUDA driver age and dependency-audit results, and accepted Torch advisories are explicit in ADR-004 while compatible CPU/CUDA upgrade validation remains open.
+- Step 4 operational: pip-audit is a zero-exception blocking CI gate, a locked CycloneDX SBOM is retained as a CI artifact, `scribe doctor` reports CUDA driver age and dependency-audit results, and ADR-004 records the secure WhisperX/Torch compatibility boundary.
 
 ---
 

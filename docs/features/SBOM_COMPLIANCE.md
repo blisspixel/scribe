@@ -22,7 +22,7 @@ dependency details can be operationally sensitive.
 
 The required `security` CI job uploads the same file as the `scribe-sbom`
 artifact. SBOM generation inventories dependencies; the separate blocking
-audit evaluates known vulnerabilities under the reviewed exception policy.
+audit evaluates known vulnerabilities with no ignored advisories.
 
 ## Scan for Known Vulnerabilities
 
@@ -32,6 +32,6 @@ Run the local diagnostic surface, which applies the documented ADR-004 policy:
 uv run scribe doctor
 ```
 
-The exact blocking release command, including every reviewed Torch exception,
-is documented in `docs/DEVELOPMENT.md` and enforced by
-`.github/workflows/ci.yml`. CI remains the release gate.
+The exact zero-exception blocking release command is documented in
+`docs/DEVELOPMENT.md` and enforced by `.github/workflows/ci.yml`. CI remains the
+release gate.

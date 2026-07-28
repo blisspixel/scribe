@@ -56,6 +56,21 @@ def test_development_dependencies_have_one_canonical_group() -> None:
     assert "dev" in configuration["dependency-groups"]
 
 
+def test_security_compatibility_bounds_and_zero_exception_audit_are_explicit() -> None:
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as pyproject:
+        configuration = tomllib.load(pyproject)
+
+    runtime_dependencies = set(configuration["project"]["dependencies"])
+    whisperx_dependencies = set(configuration["project"]["optional-dependencies"]["whisperx"])
+    assert "torch>=2.13.0" in runtime_dependencies
+    assert "torchaudio>=2.11.0" in runtime_dependencies
+    assert "whisperx>=3.7.2,<3.8" in whisperx_dependencies
+
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "--ignore-vuln" not in workflow
+    assert "uv run --python ${{ matrix.python-version }} pytest" in workflow
+
+
 def test_native_executables_are_generated_and_ignored() -> None:
     ignore_rules = {
         line.strip()

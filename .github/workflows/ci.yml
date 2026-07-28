@@ -92,7 +92,9 @@ jobs:
 
       - name: Run CI-safe test subset (fast feedback across Python matrix)
         run: |
-          uv run pytest tests/unit \
+          uv run --python ${{ matrix.python-version }} python -c \
+            "import sys; expected = tuple(map(int, '${{ matrix.python-version }}'.split('.'))); assert sys.version_info[:2] == expected, (sys.version_info[:2], expected)"
+          uv run --python ${{ matrix.python-version }} pytest tests/unit \
             -m "not gpu and not slow and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" \
             --maxfail=1 -q
 
@@ -193,8 +195,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Dependency Security Audit
-  # Blocking scan for known vulnerabilities. Torch advisories are tracked explicitly below
-  # because the local GPU stack may lag upstream fixes while CUDA wheels settle.
+  # Blocking scan for known vulnerabilities with no ignored advisories.
   # Part of the Engineering Excellence security posture (Step 4).
   # ---------------------------------------------------------------------------
   security:
@@ -220,17 +221,8 @@ jobs:
       - name: Sync environment (dev group)
         run: uv sync --locked --python 3.12 --group dev
 
-      - name: Run pip-audit (blocking with torch ignore policy)
-        run: |
-          uv run pip-audit --local --progress-spinner off --desc on \
-            --ignore-vuln PYSEC-2025-203 \
-            --ignore-vuln PYSEC-2025-204 \
-            --ignore-vuln PYSEC-2025-206 \
-            --ignore-vuln PYSEC-2026-139 \
-            --ignore-vuln PYSEC-2026-2286 \
-            --ignore-vuln CVE-2025-2999 \
-            --ignore-vuln CVE-2025-3000 \
-            --ignore-vuln CVE-2025-3001
+      - name: Run pip-audit (blocking, zero exceptions)
+        run: uv run pip-audit --local --progress-spinner off --desc on
 
       - name: Generate locked CycloneDX SBOM
         run: |

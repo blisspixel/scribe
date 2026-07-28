@@ -112,7 +112,7 @@ For coverage-sensitive work:
 uv run pytest tests/unit -m "not gpu and not slow and not e2e" --cov=scribe --cov-report=term-missing --cov-fail-under=80 -q
 ```
 
-For dependency/security work, mirror the CI `pip-audit` command including ADR-004 torch ignores.
+For dependency/security work, mirror the zero-exception CI `pip-audit` command.
 
 ## Manual Validation
 

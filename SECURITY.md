@@ -31,8 +31,9 @@ Scribe is local-first, not isolation software. Its important boundaries are:
 - The native tray prototype is an explicit developer override until signed and
   attested release artifacts exist.
 
-The blocking dependency audit and its reviewed Torch exceptions are documented
-in [ADR-004](docs/adr/ADR-004-dependency-vulnerability-audit-policy.md). A passing
+The zero-exception blocking dependency audit and its secure ML compatibility
+constraint are documented in
+[ADR-004](docs/adr/ADR-004-dependency-vulnerability-audit-policy.md). A passing
 audit does not make untrusted model checkpoints or executables safe.
 
 ## Dependency maintenance
