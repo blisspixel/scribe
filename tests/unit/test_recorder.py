@@ -29,6 +29,7 @@ Coverage Areas:
 import os
 import socket
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -2125,34 +2126,61 @@ class TestListenReadline:
     """Test _listen_readline fallback."""
 
     def test_stop_command(self, recorder):
-        """'stop' command sets event."""
+        """Legacy 'stop' input still sets the event."""
         ev = threading.Event()
-        mock_console = MagicMock()
 
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.readline.side_effect = ["stop\n"]
-            recorder._listen_readline(ev, mock_console)
+            recorder._listen_readline(ev)
+        assert ev.is_set()
+
+    def test_empty_line_stops(self, recorder):
+        """A single Enter press sets the stop event."""
+        ev = threading.Event()
+
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.readline.return_value = "\n"
+            recorder._listen_readline(ev)
         assert ev.is_set()
 
     def test_eof_breaks(self, recorder):
         """EOF (empty readline) breaks loop."""
         ev = threading.Event()
-        mock_console = MagicMock()
 
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.readline.return_value = ""
-            recorder._listen_readline(ev, mock_console)
+            recorder._listen_readline(ev)
         assert not ev.is_set()
 
     def test_readline_exception(self, recorder):
         """Exception during readline breaks loop."""
         ev = threading.Event()
-        mock_console = MagicMock()
 
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.readline.side_effect = OSError("broken pipe")
-            recorder._listen_readline(ev, mock_console)
+            recorder._listen_readline(ev)
         assert not ev.is_set()
+
+
+class TestListenWindows:
+    """Test the non-echoing Windows key listener."""
+
+    @pytest.mark.parametrize("characters", [["\r"], ["s", "t", "o", "p", "\r"]])
+    def test_enter_stops_without_echo(self, recorder, characters):
+        """Enter stops immediately and legacy text does not corrupt the timer."""
+        ev = threading.Event()
+        fake_msvcrt = MagicMock()
+        fake_msvcrt.kbhit.return_value = True
+        fake_msvcrt.getwch.side_effect = characters
+
+        with (
+            patch.dict(sys.modules, {"msvcrt": fake_msvcrt}),
+            patch("sys.stdout") as mock_stdout,
+        ):
+            recorder._listen_windows(ev)
+
+        assert ev.is_set()
+        mock_stdout.write.assert_not_called()
 
 
 class TestRecordWithCliMore:
@@ -2280,9 +2308,20 @@ class TestWaitForStopWithInputTTY:
             Mock(output_active=False),
         ]
         stop_event = threading.Event()
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=True))):
-            with patch("sys.stdout"):
-                recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=True))),
+            patch("sys.stdout"),
+            patch("scribe.utils.logging.console") as mock_console,
+        ):
+            recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+
+        panel_text = "\n".join(
+            str(call.args[0].renderable)
+            for call in mock_console.print.call_args_list
+            if call.args and hasattr(call.args[0], "renderable")
+        )
+        assert "Press Enter to stop" in panel_text
+        assert "Type 'stop'" not in panel_text
 
     @patch("scribe.core.recorder.time.sleep")
     def test_timer_display_updates(self, mock_sleep, recorder, mock_obs_client):

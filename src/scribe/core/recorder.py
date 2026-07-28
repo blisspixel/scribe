@@ -391,8 +391,8 @@ class OBSRecorder:
         # Now start the stop listener thread (after file is detected)
         threading.Thread(target=self._wait_for_stop_cli, args=(stop_event,), daemon=True).start()
 
-        # Wait for user to type 'stop' (with periodic timeout so we don't
-        # block forever if the listener thread dies)
+        # Wait for the user to press Enter or Ctrl-C (with a periodic timeout
+        # so we do not block forever if the listener thread dies).
         while not stop_event.wait(timeout=1.0):
             pass
 
@@ -1287,8 +1287,8 @@ class OBSRecorder:
             console.print(
                 Panel.fit(
                     "[bold green]RECORDING IN PROGRESS[/bold green]\n\n"
-                    "[white]Type 'stop' and press Enter to stop[/white]\n"
-                    "[dim]Commands: stop, s, q, quit, exit[/dim]",
+                    "[white]Press Enter to stop[/white]\n"
+                    "[dim]Ctrl+C also stops safely[/dim]",
                     border_style="green",
                     padding=(1, 2),
                 )
@@ -1445,8 +1445,8 @@ class OBSRecorder:
             console.print(
                 Panel.fit(
                     "[bold white on red]  RECORDING  [/bold white on red]\n\n"
-                    "[yellow]Type 'stop' and press Enter to stop[/yellow]\n"
-                    "[dim]Commands: stop, s, q, quit, exit[/dim]",
+                    "[yellow]Press Enter to stop[/yellow]\n"
+                    "[dim]Ctrl+C also stops safely[/dim]",
                     border_style="red",
                     padding=(1, 2),
                 )
@@ -1567,58 +1567,46 @@ class OBSRecorder:
             # Windows-specific: use msvcrt for non-blocking input
             if sys.platform == "win32":
                 try:
-                    import msvcrt
-
-                    buffer: list[str] = []
-                    while not ev.is_set():
-                        # Check if a key is available
-                        if msvcrt.kbhit():
-                            char = msvcrt.getwch()
-                            if char == "\r" or char == "\n":
-                                # Enter pressed - check command
-                                cmd = "".join(buffer).strip().lower()
-                                if cmd in {"stop", "s", "q", "quit", "exit"}:
-                                    console.print(
-                                        f"\n[yellow]Stop command received: '{cmd}'[/yellow]"
-                                    )
-                                    ev.set()
-                                    break
-                                buffer = []
-                            elif char == "\x03":  # Ctrl+C
-                                ev.set()
-                                break
-                            else:
-                                buffer.append(char)
-                                # Echo the character
-                                sys.stdout.write(char)
-                                sys.stdout.flush()
-                        else:
-                            time.sleep(0.1)
+                    self._listen_windows(ev)
                 except OSError as e:
                     logger.debug(f"Windows input error: {e}")
                     # Fall back to readline
-                    self._listen_readline(ev, console)
+                    self._listen_readline(ev)
             else:
-                # Unix: use select for non-blocking
-                self._listen_readline(ev, console)
+                # The daemon listener thread may block safely on readline.
+                self._listen_readline(ev)
 
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
         return ev, _restore
 
-    def _listen_readline(self, ev: threading.Event, console: Any) -> None:
-        """Fallback readline-based input listener."""
+    @staticmethod
+    def _listen_windows(ev: threading.Event) -> None:
+        """Stop on Enter without echoing typed characters over the timer."""
+        import msvcrt
+
+        while not ev.is_set():
+            if msvcrt.kbhit():
+                char = msvcrt.getwch()
+                if char in {"\r", "\n", "\x03"}:
+                    ev.set()
+                    break
+                # Deliberately discard other input. Legacy commands such as
+                # "stop" still work because their terminating Enter stops the
+                # recording, but their characters no longer corrupt the timer.
+            else:
+                time.sleep(0.1)
+
+    def _listen_readline(self, ev: threading.Event) -> None:
+        """Stop when the user submits a line, including an empty line."""
         try:
             while not ev.is_set():
                 try:
                     line = sys.stdin.readline()
                     if not line:
                         break
-                    cmd = line.strip().lower()
-                    if cmd in {"stop", "s", "q", "quit", "exit"}:
-                        console.print(f"\n[yellow]Stop command received: '{cmd}'[/yellow]")
-                        ev.set()
-                        break
+                    ev.set()
+                    break
                 except (OSError, EOFError) as e:
                     logger.debug(f"Error reading input: {e}")
                     break

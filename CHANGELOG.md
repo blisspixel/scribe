@@ -22,7 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
-- Split system diagnostics and media-cleaning implementations out of the central CLI entrypoint, with an architecture contract that keeps those command wrappers thin. Raised the enforced branch-coverage floor from 80 to 81 percent after a 1,711-test CI-equivalent run measured 81.33 percent.
+- Replaced typed recording stop commands with a single Enter press while retaining graceful Ctrl+C handling and legacy command-plus-Enter compatibility. Windows input no longer echoes over the live recording timer.
+- Split system diagnostics and media-cleaning implementations out of the central CLI entrypoint, with an architecture contract that keeps those command wrappers thin. Raised the enforced branch-coverage floor from 80 to 81 percent; the latest 1,715-test CI-equivalent run measured 81.46 percent.
 - Replaced the eight Torch audit exceptions with a secure universal ML resolution: the WhisperX extra now selects 3.7.2, while Torch 2.13, TorchAudio 2.11, Transformers 5.14, and Hugging Face Hub 1.25 satisfy a zero-exception dependency audit.
 - Refreshed the universal Python lock, pre-commit hooks, immutable GitHub Actions, Go modules, and Rust dependencies to current compatible releases. The Rust extension now targets edition 2024, PyO3 0.29, and Symphonia 0.6.
 - Aligned package metadata with the validated Python 3.12 and 3.13 matrix after a Python 3.14 install probe exposed unavailable native wheels in the universal ML dependency graph.

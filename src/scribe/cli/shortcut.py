@@ -643,7 +643,7 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
         cprint()
 
     cprint(f"[cyan]{_pin_hint()}[/cyan]")
-    cprint("[dim]It runs `scribe rec`. Type 'stop' (or Ctrl+C) when done.[/dim]")
+    cprint("[dim]It runs `scribe rec`. Press Enter (or Ctrl+C) when done.[/dim]")
 
     if is_windows():
         cprint()
