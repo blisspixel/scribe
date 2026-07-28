@@ -89,7 +89,7 @@ uv run pytest -m "not gpu and not slow and not e2e"
 - CI-safe unit matrix: `uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q`
 - Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
 - Latest CI-safe unit matrix: 1612 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
-- Latest broader CI-equivalent validation: 1715 passed, 11 skipped, 27 deselected, 81.46% branch coverage
+- Latest broader CI-equivalent validation: 1715 passed, 11 skipped, 27 deselected, 81.45% branch coverage
 - Current collection: 1753 assertion-based tests
 - Coverage gate: 81% minimum enforced (`fail_under = 81` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)

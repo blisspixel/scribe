@@ -49,6 +49,8 @@ logger = get_logger(__name__)
 # ADR-002: typed exception groups for intentional graceful-degradation sites.
 _SUBPROCESS_PROBE_ERRORS = (OSError, subprocess.SubprocessError)
 _OBS_SOCKET_ERRORS = (ConnectionError, OSError, TimeoutError)
+_STOP_COMMANDS = frozenset({"stop", "s", "q", "quit", "exit"})
+_RECORDING_STATUS_CLEAR_WIDTH = 80
 
 
 class _WindowsConsoleInput(Protocol):
@@ -141,6 +143,8 @@ class OBSRecorder:
         self.max_recording_hours = config.max_recording_hours
         self.recording_warning_fraction = config.recording_warning_fraction
         self._session = RecordingSessionTracker()
+        self._terminal_input_lock = threading.Lock()
+        self._stop_input_buffer: list[str] = []
 
     def record(self, meeting_name: str) -> Path:
         """
@@ -401,7 +405,7 @@ class OBSRecorder:
         # Now start the stop listener thread (after file is detected)
         threading.Thread(target=self._wait_for_stop_cli, args=(stop_event,), daemon=True).start()
 
-        # Wait for the user to press Enter or Ctrl-C (with a periodic timeout
+        # Wait for an explicit stop command or Ctrl-C (with a periodic timeout
         # so we do not block forever if the listener thread dies).
         while not stop_event.wait(timeout=1.0):
             pass
@@ -1278,6 +1282,39 @@ class OBSRecorder:
 
         return step.warning_issued, step.auto_stop_announced
 
+    @staticmethod
+    def _format_recording_status(
+        elapsed_seconds: float,
+        command: str = "",
+        *,
+        include_prompt: bool,
+    ) -> str:
+        """Build one complete status line so timer redraws preserve typed input."""
+        minutes = int(max(0.0, elapsed_seconds) // 60)
+        seconds = int(max(0.0, elapsed_seconds) % 60)
+        status = f"Recording: {minutes:02d}:{seconds:02d}"
+        if include_prompt:
+            return f"{status}  |  Stop [s/stop, Enter]: {command}"
+        return status
+
+    def _write_recording_status(self, elapsed_seconds: float, *, include_prompt: bool) -> None:
+        """Redraw the complete recording status without splitting timer and input."""
+        with self._terminal_input_lock:
+            command = "".join(self._stop_input_buffer)
+            line = self._format_recording_status(
+                elapsed_seconds,
+                command,
+                include_prompt=include_prompt,
+            )
+            sys.stdout.write(f"\r{line}")
+            sys.stdout.flush()
+
+    def _clear_recording_status(self) -> None:
+        """Clear the complete timer and command line before normal output."""
+        with self._terminal_input_lock:
+            sys.stdout.write("\r" + " " * _RECORDING_STATUS_CLEAR_WIDTH + "\r")
+            sys.stdout.flush()
+
     def _wait_for_stop_with_input(self, client: Any, stop_event: threading.Event) -> None:
         """Wait for user to stop recording, with automatic reconnect.
 
@@ -1291,13 +1328,15 @@ class OBSRecorder:
         from scribe.utils.logging import console
 
         has_tty = sys.stdin and sys.stdin.isatty()
+        inline_command = bool(has_tty and sys.platform == "win32")
+        live_status = bool(not has_tty or inline_command)
 
         if has_tty:
             console.print()
             console.print(
                 Panel.fit(
                     "[bold green]RECORDING IN PROGRESS[/bold green]\n\n"
-                    "[white]Press Enter to stop[/white]\n"
+                    "[white]Type s or stop, then press Enter[/white]\n"
                     "[dim]Ctrl+C also stops safely[/dim]",
                     border_style="green",
                     padding=(1, 2),
@@ -1319,9 +1358,10 @@ class OBSRecorder:
         warning_issued = False
         auto_stop_announced = False
 
-        # Print initial status line using raw stdout for proper \r handling
-        sys.stdout.write("Recording: 00:00")
-        sys.stdout.flush()
+        self._write_recording_status(0.0, include_prompt=inline_command)
+        if has_tty and not inline_command:
+            sys.stdout.write("\nStop [s/stop, Enter]: ")
+            sys.stdout.flush()
 
         stop_requested = False
 
@@ -1334,8 +1374,7 @@ class OBSRecorder:
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
                     # WebSocket likely dropped - try to reconnect
-                    sys.stdout.write("\r" + " " * 50 + "\r")
-                    sys.stdout.flush()
+                    self._clear_recording_status()
                     console.print("[yellow]Connection lost - reconnecting...[/yellow]")
                     new_client = self._reconnect_client()
                     if new_client:
@@ -1358,8 +1397,7 @@ class OBSRecorder:
 
             if stop_event.is_set() and active and not stop_requested:
                 # Clear the timer line and print stop message (only once)
-                sys.stdout.write("\r" + " " * 50 + "\r")
-                sys.stdout.flush()
+                self._clear_recording_status()
                 console.print("[cyan]Stopping recording...[/cyan]")
                 logger.info("Stopping recording...")
                 stop_requested = True
@@ -1383,8 +1421,7 @@ class OBSRecorder:
             # bail out after 30s - the file is almost certainly written.
             if stop_requested and stop_requested_at:
                 if time.time() - stop_requested_at > deadman_seconds:
-                    sys.stdout.write("\r" + " " * 50 + "\r")
-                    sys.stdout.flush()
+                    self._clear_recording_status()
                     console.print(
                         "[yellow]OBS did not confirm stop within "
                         f"{deadman_seconds}s - proceeding anyway[/yellow]"
@@ -1394,8 +1431,7 @@ class OBSRecorder:
 
             if not active and last_active:
                 # Clear the timer line and print stopped message
-                sys.stdout.write("\r" + " " * 50 + "\r")
-                sys.stdout.flush()
+                self._clear_recording_status()
                 console.print("[green]Recording stopped[/green]")
                 logger.info("Recording stopped")
                 return
@@ -1410,8 +1446,7 @@ class OBSRecorder:
 
             # Auto-stop can set stop_event after the earlier branch; honor it immediately.
             if stop_event.is_set() and active and not stop_requested:
-                sys.stdout.write("\r" + " " * 50 + "\r")
-                sys.stdout.flush()
+                self._clear_recording_status()
                 console.print("[cyan]Stopping recording...[/cyan]")
                 logger.info("Stopping recording...")
                 stop_requested = True
@@ -1431,15 +1466,14 @@ class OBSRecorder:
                             logger.warning("Stop failed after reconnect too")
 
             # Update recording time every second
-            if active:
+            if active and live_status:
                 # Only update display every second to reduce flicker
                 if int(elapsed_seconds) > last_update:
                     last_update = int(elapsed_seconds)
-                    mins = int(elapsed_seconds // 60)
-                    secs = int(elapsed_seconds % 60)
-                    # Use raw stdout with \r for proper overwriting
-                    sys.stdout.write(f"\rRecording: {mins:02d}:{secs:02d}")
-                    sys.stdout.flush()
+                    self._write_recording_status(
+                        elapsed_seconds,
+                        include_prompt=inline_command,
+                    )
 
             last_active = active
             time.sleep(0.5)
@@ -1450,12 +1484,16 @@ class OBSRecorder:
 
         from scribe.utils.logging import console
 
-        if sys.stdin and sys.stdin.isatty():
+        has_tty = bool(sys.stdin and sys.stdin.isatty())
+        inline_command = bool(has_tty and sys.platform == "win32")
+        live_status = bool(not has_tty or inline_command)
+
+        if has_tty:
             console.print()
             console.print(
                 Panel.fit(
                     "[bold white on red]  RECORDING  [/bold white on red]\n\n"
-                    "[yellow]Press Enter to stop[/yellow]\n"
+                    "[yellow]Type s or stop, then press Enter[/yellow]\n"
                     "[dim]Ctrl+C also stops safely[/dim]",
                     border_style="red",
                     padding=(1, 2),
@@ -1469,9 +1507,10 @@ class OBSRecorder:
         warning_issued = False
         auto_stop_announced = False
 
-        # Print initial timer using raw stdout for proper \r handling
-        sys.stdout.write("Recording: 00:00")
-        sys.stdout.flush()
+        self._write_recording_status(0.0, include_prompt=inline_command)
+        if has_tty and not inline_command:
+            sys.stdout.write("\nStop [s/stop, Enter]: ")
+            sys.stdout.flush()
 
         while not stop_event.is_set():
             elapsed = max(0.0, time.time() - start_time)
@@ -1482,18 +1521,13 @@ class OBSRecorder:
                 auto_stop_announced,
             )
             # Update display every second
-            if int(elapsed) > last_update:
+            if live_status and int(elapsed) > last_update:
                 last_update = int(elapsed)
-                mins = int(elapsed // 60)
-                secs = int(elapsed % 60)
-                # Use raw stdout with \r for proper overwriting
-                sys.stdout.write(f"\rRecording: {mins:02d}:{secs:02d}")
-                sys.stdout.flush()
+                self._write_recording_status(elapsed, include_prompt=inline_command)
             time.sleep(0.2)
 
         # Clear the timer line
-        sys.stdout.write("\r" + " " * 50 + "\r")
-        sys.stdout.flush()
+        self._clear_recording_status()
 
         console.print("[cyan]Sending stop signal...[/cyan]")
         logger.info("Sending stop signal...")
@@ -1544,6 +1578,8 @@ class OBSRecorder:
         from scribe.utils.logging import console
 
         ev = threading.Event()
+        with self._terminal_input_lock:
+            self._stop_input_buffer.clear()
 
         # Always wire up Ctrl-C as a stop mechanism
         _original_sigint = signal.getsignal(signal.SIGINT)
@@ -1590,33 +1626,52 @@ class OBSRecorder:
         t.start()
         return ev, _restore
 
-    @staticmethod
-    def _listen_windows(ev: threading.Event) -> None:
-        """Stop on Enter without echoing typed characters over the timer."""
+    def _listen_windows(self, ev: threading.Event) -> None:
+        """Echo stop input through the coordinated status-line renderer."""
         msvcrt = cast(_WindowsConsoleInput, import_module("msvcrt"))
 
         while not ev.is_set():
             if msvcrt.kbhit():
                 char = msvcrt.getwch()
-                if char in {"\r", "\n", "\x03"}:
+                if char == "\x03":
                     ev.set()
                     break
-                # Deliberately discard other input. Legacy commands such as
-                # "stop" still work because their terminating Enter stops the
-                # recording, but their characters no longer corrupt the timer.
+                should_stop = False
+                with self._terminal_input_lock:
+                    if char in {"\r", "\n"}:
+                        command = "".join(self._stop_input_buffer).strip().lower()
+                        if command in _STOP_COMMANDS:
+                            sys.stdout.write("\n")
+                            should_stop = True
+                        else:
+                            visible_length = len(self._stop_input_buffer)
+                            self._stop_input_buffer.clear()
+                            sys.stdout.write("\b \b" * visible_length)
+                    elif char in {"\b", "\x7f"}:
+                        if self._stop_input_buffer:
+                            self._stop_input_buffer.pop()
+                            sys.stdout.write("\b \b")
+                    elif char.isprintable() and len(self._stop_input_buffer) < 8:
+                        self._stop_input_buffer.append(char)
+                        sys.stdout.write(char)
+                    sys.stdout.flush()
+                if should_stop:
+                    ev.set()
+                    break
             else:
                 time.sleep(0.1)
 
     def _listen_readline(self, ev: threading.Event) -> None:
-        """Stop when the user submits a line, including an empty line."""
+        """Fallback listener for explicit typed stop commands."""
         try:
             while not ev.is_set():
                 try:
                     line = sys.stdin.readline()
                     if not line:
                         break
-                    ev.set()
-                    break
+                    if line.strip().lower() in _STOP_COMMANDS:
+                        ev.set()
+                        break
                 except (OSError, EOFError) as e:
                     logger.debug(f"Error reading input: {e}")
                     break

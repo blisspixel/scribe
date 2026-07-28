@@ -2134,14 +2134,14 @@ class TestListenReadline:
             recorder._listen_readline(ev)
         assert ev.is_set()
 
-    def test_empty_line_stops(self, recorder):
-        """A single Enter press sets the stop event."""
+    def test_empty_line_does_not_stop(self, recorder):
+        """A stray Enter press does not stop an active recording."""
         ev = threading.Event()
 
         with patch("sys.stdin") as mock_stdin:
-            mock_stdin.readline.return_value = "\n"
+            mock_stdin.readline.side_effect = ["\n", ""]
             recorder._listen_readline(ev)
-        assert ev.is_set()
+        assert not ev.is_set()
 
     def test_eof_breaks(self, recorder):
         """EOF (empty readline) breaks loop."""
@@ -2163,11 +2163,16 @@ class TestListenReadline:
 
 
 class TestListenWindows:
-    """Test the non-echoing Windows key listener."""
+    """Test the coordinated Windows key listener."""
 
-    @pytest.mark.parametrize("characters", [["\r"], ["s", "t", "o", "p", "\r"]])
-    def test_enter_stops_without_echo(self, recorder, characters):
-        """Enter stops immediately and legacy text does not corrupt the timer."""
+    @pytest.mark.parametrize(
+        ("characters", "expected_reads", "expected_output"),
+        [(["\r", "s", "t", "o", "p", "\r"], 6, "stop\n"), (["\x03"], 1, "")],
+    )
+    def test_stop_input_uses_clean_status_line(
+        self, recorder, characters, expected_reads, expected_output
+    ):
+        """Stop text is echoed cleanly while a stray Enter remains harmless."""
         ev = threading.Event()
         fake_msvcrt = MagicMock()
         fake_msvcrt.kbhit.return_value = True
@@ -2180,7 +2185,16 @@ class TestListenWindows:
             recorder._listen_windows(ev)
 
         assert ev.is_set()
-        mock_stdout.write.assert_not_called()
+        assert fake_msvcrt.getwch.call_count == expected_reads
+        output = "".join(call.args[0] for call in mock_stdout.write.call_args_list)
+        assert output == expected_output
+        rendered_status = recorder._format_recording_status(
+            4.0,
+            "stop",
+            include_prompt=True,
+        )
+        assert rendered_status == "Recording: 00:04  |  Stop [s/stop, Enter]: stop"
+        assert "00:04stop" not in rendered_status
 
 
 class TestRecordWithCliMore:
@@ -2320,8 +2334,8 @@ class TestWaitForStopWithInputTTY:
             for call in mock_console.print.call_args_list
             if call.args and hasattr(call.args[0], "renderable")
         )
-        assert "Press Enter to stop" in panel_text
-        assert "Type 'stop'" not in panel_text
+        assert "Type s or stop, then press Enter" in panel_text
+        assert "Press Enter to stop" not in panel_text
 
     @patch("scribe.core.recorder.time.sleep")
     def test_timer_display_updates(self, mock_sleep, recorder, mock_obs_client):
@@ -2338,8 +2352,11 @@ class TestWaitForStopWithInputTTY:
         mock_obs_client.get_record_status.side_effect = get_status
         stop_event = threading.Event()
         with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
+            with patch("sys.stdout") as mock_stdout:
                 recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+
+        rendered = "".join(call.args[0] for call in mock_stdout.write.call_args_list)
+        assert "Recording:" in rendered
 
     @patch("scribe.core.recorder.time.sleep")
     def test_reconnect_fails_after_stop(self, mock_sleep, recorder, mock_obs_client):

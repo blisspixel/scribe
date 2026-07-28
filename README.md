@@ -977,7 +977,7 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 
 **Test Status:**
 - Latest CI-safe unit matrix: 1612 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
-- Latest broader CI-equivalent coverage gate: 1715 passed, 11 skipped, 27 deselected, 81.46% branch coverage
+- Latest broader CI-equivalent coverage gate: 1715 passed, 11 skipped, 27 deselected, 81.45% branch coverage
 - Current collection: 1753 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
