@@ -149,7 +149,7 @@ def _ensure_lock_byte(handle: BinaryIO) -> None:
 def _try_lock(handle: BinaryIO) -> bool:
     """Acquire one non-blocking exclusive lock using the native OS primitive."""
     if os.name == "nt":
-        import msvcrt
+        msvcrt: Any = __import__("msvcrt")
 
         try:
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
@@ -173,7 +173,7 @@ def _try_lock(handle: BinaryIO) -> bool:
 def _unlock(handle: BinaryIO) -> None:
     handle.seek(0)
     if os.name == "nt":
-        import msvcrt
+        msvcrt: Any = __import__("msvcrt")
 
         with suppress(OSError):
             msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
