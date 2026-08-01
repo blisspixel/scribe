@@ -88,8 +88,8 @@ uv run pytest -m "not gpu and not slow and not e2e"
 ### Test Status
 - CI-safe unit matrix: `uv run pytest tests/unit -m "not gpu and not slow and not e2e and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" -q`
 - Meaningful coverage gate: `uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" -q`
-- Latest CI-safe unit matrix: 1612 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
-- Latest broader CI-equivalent validation: 1715 passed, 11 skipped, 27 deselected, 81.45% branch coverage
+- Latest CI-safe unit matrix: 1709 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
+- Latest broader CI-equivalent validation: 1812 passed, 11 skipped, 27 deselected, 81.57% branch coverage
 - Current collection: 1753 assertion-based tests
 - Coverage gate: 81% minimum enforced (`fail_under = 81` in pyproject.toml)
 - Very high pass rate on CI-safe subsets; comprehensive error-path coverage (especially recorder)
@@ -168,7 +168,7 @@ git add .
 git commit -m "feat: add your feature"
 ```
 
-**Local gates:** `pre-commit install --install-hooks` (enforces ruff + mypy + yaml/toml checks on every commit). The same gates run in CI via [.github/workflows/ci.yml](https://github.com/blisspixel/scribe/blob/main/.github/workflows/ci.yml).
+**Local hooks:** `pre-commit install --install-hooks` enforces Ruff plus YAML, TOML, large-file, debug-statement, and whitespace checks on every commit. Run strict mypy and tests with the commands above; they remain hard jobs in [.github/workflows/ci.yml](https://github.com/blisspixel/scribe/blob/main/.github/workflows/ci.yml).
 
 See [ROADMAP.md](../ROADMAP.md) Step 1 for the reproducible environment foundation that is now in place.
 

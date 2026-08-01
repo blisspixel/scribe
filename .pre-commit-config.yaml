@@ -1,10 +1,10 @@
 # Pre-commit configuration for Scribe
 # Run `pre-commit install` after cloning to enable hooks.
 #
-# This enforces the Engineering Excellence standards from the start:
-# - Consistent formatting and linting via Ruff
-# - Type checking via mypy (strict mode)
-# - Basic test smoke checks
+# This keeps fast local checks consistent:
+# - Formatting and linting via Ruff
+# - YAML, TOML, large-file, debug-statement, and whitespace hygiene
+# Strict mypy and the test suites remain explicit local commands and hard CI gates.
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

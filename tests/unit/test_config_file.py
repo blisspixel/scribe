@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tomllib
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 
 import pytest
@@ -104,7 +105,9 @@ def test_save_config_file_writes_sections_and_escaped_values(monkeypatch, tmp_pa
     assert 'password = "secret"' in contents
 
 
-def test_save_config_file_ignores_malformed_sections(monkeypatch, tmp_path):
+def test_save_config_file_serializes_scalar_root_values_without_table_headers(
+    monkeypatch, tmp_path
+):
     config_path = _use_temp_config(monkeypatch, tmp_path)
 
     config_file.save_config_file(
@@ -117,6 +120,7 @@ def test_save_config_file_ignores_malformed_sections(monkeypatch, tmp_path):
     contents = config_path.read_text(encoding="utf-8")
     assert "[output]" in contents
     assert "[obs]" not in contents
+    assert tomllib.loads(contents)["obs"] == "not-a-table"
 
 
 def test_save_config_file_preserves_original_when_atomic_replace_fails(monkeypatch, tmp_path):
@@ -146,3 +150,32 @@ def test_save_config_file_preserves_valid_quoted_keys(monkeypatch, tmp_path):
         "custom provider": "local",
         "line\nbreak": "escaped",
     }
+
+
+def test_save_config_file_round_trips_unknown_nested_user_tables(monkeypatch, tmp_path):
+    config_path = _use_temp_config(monkeypatch, tmp_path)
+    expected = {
+        "root_note": "keep me",
+        "custom plugin": {
+            "enabled": True,
+            "schedule": {
+                "day": date(2026, 8, 1),
+                "at": time(9, 30, 15),
+                "updated": datetime(2026, 8, 1, 16, 30, tzinfo=UTC),
+            },
+            "thresholds": [1, 2.5, "three"],
+            "targets": [
+                {"name": "primary", "active": True},
+                {"name": "backup", "active": False},
+            ],
+        },
+        "voice": {
+            "tray": {"dictate_hotkey": "f9"},
+            "future backend": {"enabled": True},
+        },
+        "empty table": {},
+    }
+
+    config_file.save_config_file(expected)
+
+    assert tomllib.loads(config_path.read_text(encoding="utf-8")) == expected

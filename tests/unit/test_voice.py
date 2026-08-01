@@ -437,6 +437,34 @@ def test_legacy_dictation_model_unload_failure_is_visible():
     assert "Could not explicitly unload the voice model" in console.export_text()
 
 
+def test_legacy_dictation_model_unload_timeout_is_bounded(monkeypatch):
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from scribe.cli import voice
+
+    class StuckCleanupThread:
+        def __init__(self, **_kwargs):
+            return None
+
+        def start(self):
+            return None
+
+        def join(self, timeout=None):
+            assert timeout == 0
+
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(voice.threading, "Thread", StuckCleanupThread)
+    model = SimpleNamespace(model=SimpleNamespace(unload_model=lambda: None))
+    console = Console(record=True)
+
+    assert voice._unload_dictation_model(model, console, timeout=0) is False
+    assert "did not finish within 0 seconds" in console.export_text()
+
+
 def test_legacy_worker_shutdown_is_bounded_when_inference_is_stuck():
     import queue
 
@@ -481,6 +509,70 @@ def test_legacy_worker_shutdown_discards_full_pending_queue_for_sentinel():
     assert _stop_listen_worker(work_queue, StuckWorker(), console, timeout=0) is False
     assert work_queue.get_nowait() is None
     assert "Discarded 2 queued dictation utterance" in console.export_text()
+
+
+def test_legacy_worker_shutdown_surfaces_join_failure():
+    import queue
+
+    from rich.console import Console
+
+    from scribe.cli.voice import _stop_listen_worker
+
+    class BrokenWorker:
+        def join(self, timeout=None):
+            assert timeout == 0
+            raise RuntimeError("thread state unavailable")
+
+        def is_alive(self):
+            raise AssertionError("status should not be inspected after join fails")
+
+    work_queue = queue.Queue(maxsize=2)
+    console = Console(record=True)
+
+    assert _stop_listen_worker(work_queue, BrokenWorker(), console, timeout=0) is False
+    assert "Could not confirm transcription worker shutdown" in console.export_text()
+
+
+def test_legacy_listener_shutdown_rejects_a_hook_thread_that_remains_alive():
+    from rich.console import Console
+
+    from scribe.cli.voice import _stop_listen_listener
+
+    class StuckListener:
+        def stop(self):
+            return None
+
+        def join(self, timeout=None):
+            assert timeout == 0
+
+        def is_alive(self):
+            return True
+
+    console = Console(record=True)
+
+    assert _stop_listen_listener(StuckListener(), console, timeout=0) is False
+    assert "listener thread is still alive" in console.export_text()
+
+
+def test_legacy_listener_shutdown_confirms_a_joined_hook_thread():
+    from rich.console import Console
+
+    from scribe.cli.voice import _stop_listen_listener
+
+    class Listener:
+        alive = True
+
+        def stop(self):
+            return None
+
+        def join(self, timeout=None):
+            assert timeout == 0.25
+            self.alive = False
+
+        def is_alive(self):
+            return self.alive
+
+    assert _stop_listen_listener(Listener(), Console(record=True), timeout=0.25) is True
 
 
 def test_write_wav_roundtrip(tmp_path):

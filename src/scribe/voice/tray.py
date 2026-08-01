@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 logger = logging.getLogger(__name__)
+MODEL_READY_WAIT_SECONDS = 120.0
 
 
 @dataclass(frozen=True)
@@ -94,20 +95,32 @@ def packaged_native_icon_path() -> Path:
     return Path(str(files("scribe") / "assets" / "icons" / icon_name))
 
 
-def _await_model_ready(console: Console, service: VoiceTrayService) -> bool:  # pragma: no cover
+def _await_model_ready(
+    console: Console,
+    service: VoiceTrayService,
+    *,
+    timeout: float = MODEL_READY_WAIT_SECONDS,
+) -> bool:  # pragma: no cover
     """Block with a live spinner until a preloaded model is ready.
 
-    Returns True when the model is ready, False if loading failed. A true percent
-    is not available for a weight load into VRAM (it is a few-second load once the
-    model is cached, not a long download), so we show an elapsed-time spinner; the
-    first-ever download still prints real percentages via Hugging Face.
+    Returns True when the model is ready. Returns False when loading fails, the
+    service stops, or the bounded wait expires. A true percent is not available
+    while weights load into VRAM, so the UI reports elapsed time instead.
     """
     import time
 
     start = time.monotonic()
+    deadline = start + max(0.0, timeout)
     if service.is_model_loading():
         with console.status("[cyan]Loading voice model...[/cyan]", spinner="dots") as status:
             while service.running and service.is_model_loading():
+                if time.monotonic() >= deadline:
+                    console.print(
+                        "[yellow]Voice model warmup is still running after "
+                        f"{timeout:g} seconds.[/yellow] The tray remains available and will "
+                        "report the eventual result."
+                    )
+                    return False
                 status.update(
                     f"[cyan]Loading voice model... {time.monotonic() - start:.0f}s[/cyan] "
                     "[dim](first run downloads it; later runs just warm it)[/dim]"
@@ -137,6 +150,12 @@ def _show_and_warm_python_tray(
     dictate_hint, read_hint = hotkey_hints(settings)
     if ready:
         service._emit("Scribe Voice ready", f"{dictate_hint} {read_hint}")
+    elif service.is_model_loading():
+        service._emit(
+            "Scribe Voice warning",
+            f"Model warmup is taking longer than expected. {dictate_hint} {read_hint} "
+            "The tray will report the eventual result.",
+        )
     else:
         service._emit(
             "Scribe Voice error",
@@ -422,6 +441,24 @@ def _wait_for_native_ready(service: VoiceTrayService, process: Any, *, timeout: 
     return False
 
 
+def _wait_for_native_exit_or_disconnect(
+    service: VoiceTrayService, process: Any
+) -> tuple[int | None, bool]:
+    """Wait until the daemon exits or its ready authenticated IPC channel is lost."""
+    wait_for_disconnect = getattr(service, "wait_for_ipc_disconnect", None)
+    if not callable(wait_for_disconnect):
+        return int(process.wait()), False
+    while True:
+        exit_code = process.poll()
+        if exit_code is not None:
+            return int(exit_code), False
+        if wait_for_disconnect(timeout=0.2):
+            exit_code = process.poll()
+            if exit_code is not None:
+                return int(exit_code), False
+            return None, True
+
+
 def _stop_native_process(process: Any) -> bool:
     """Stop a failed daemon and confirm it exited before starting a fallback."""
     import subprocess
@@ -538,10 +575,35 @@ def _run_native_tray(
         dictate_hint, read_hint = hotkey_hints(settings)
         if _await_model_ready(console, service):
             console.print(f"[green]Ready.[/green] [dim]{dictate_hint} {read_hint}[/dim]")
+        elif service.is_model_loading():
+            console.print(
+                f"[dim]{dictate_hint} {read_hint} (model warmup continues in background)[/dim]"
+            )
         else:
-            console.print(f"[dim]{dictate_hint} {read_hint} (model will load on first use)[/dim]")
+            console.print(
+                f"[dim]{dictate_hint} {read_hint} "
+                "(model is not ready; first use will attempt another load)[/dim]"
+            )
 
-        exit_code = process.wait()
+        exit_code, ipc_disconnected = _wait_for_native_exit_or_disconnect(service, process)
+        if ipc_disconnected:
+            if not _stop_native_process(process):
+                logger.error("Native tray could not be stopped after IPC loss")
+                console.print(
+                    "[red]Native tray lost its control connection and could not be stopped.[/red] "
+                    "Python fallback was not started to avoid duplicate hotkeys."
+                )
+                return 1
+            logger.warning("Native tray lost its authenticated control connection")
+            if not _prepare_native_fallback(service, console):
+                return 1
+            console.print(
+                "[yellow]Native tray lost its authenticated control connection.[/yellow] "
+                "Starting the Python tray fallback."
+            )
+            return None
+        if exit_code is None:
+            raise RuntimeError("native tray wait ended without an exit status")
         if exit_code == 0:
             if _native_quit_confirmed(service):
                 return 0
@@ -613,6 +675,7 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
 
     service = VoiceTrayService(settings, console)
     requested_stop = threading.Event()
+    cleanup_incomplete = threading.Event()
     setup_errors: list[str] = []
     try:
         icon = pystray.Icon("scribe-voice", image, "Scribe Voice")
@@ -646,8 +709,15 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
 
         def quit_icon(icon_obj: Any, _item: object) -> None:
             requested_stop.set()
-            service.stop()
-            icon_obj.stop()
+            try:
+                if not service.stop():
+                    cleanup_incomplete.set()
+            except Exception as error:
+                cleanup_incomplete.set()
+                logger.exception("Resident voice cleanup failed")
+                _notify("Scribe Voice error", f"Resident voice cleanup failed: {error}")
+            finally:
+                icon_obj.stop()
 
         def toggle_startup(_icon: object, _item: object) -> None:
             _toggle_startup(service)
@@ -732,6 +802,13 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
             logger.error("Tray backend exited without a quit request")
             console.print("[red]Tray backend exited without a quit request.[/red]")
             return 1
+        if cleanup_incomplete.is_set():
+            logger.error("Tray exited before resident voice cleanup was confirmed")
+            console.print(
+                "[red]Resident voice cleanup was incomplete.[/red] "
+                "Process exit remains the final resource boundary."
+            )
+            return 1
         return 0
     except Exception as e:
         logger.exception("Could not initialize the tray backend")
@@ -748,9 +825,11 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
 def _run_no_tray(console: Console, settings: TraySettings) -> int:  # pragma: no cover
     service = VoiceTrayService(settings, console)
     if not service.start_hotkeys(preload_model=settings.preload_model):
+        service.stop()
         return 1
 
     interrupted = False
+    cleanup_complete = True
     try:
         console.print(brand_header_markup("scribe voice"))
         console.print()
@@ -774,9 +853,16 @@ def _run_no_tray(console: Console, settings: TraySettings) -> int:  # pragma: no
         console.print(f"[red]Resident voice stopped unexpectedly:[/red] {error}")
         return 1
     finally:
-        service.stop()
+        cleanup_complete = service.stop()
     if not interrupted:
         logger.error("Resident voice stopped without a quit request")
         console.print("[red]Resident voice stopped without a quit request.[/red]")
+        return 1
+    if not cleanup_complete:
+        logger.error("Terminal resident voice cleanup was not confirmed")
+        console.print(
+            "[red]Resident voice cleanup was incomplete.[/red] "
+            "Process exit remains the final resource boundary."
+        )
         return 1
     return 0

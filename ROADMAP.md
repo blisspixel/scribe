@@ -15,15 +15,17 @@ The project is currently focused on two tracks that run in parallel:
 
 The remainder of this document addresses the second track.
 
-**Engineering review progress (2026-07-27):** the CLI now defers heavyweight
+**Engineering review progress (2026-08-01):** the CLI now defers heavyweight
 runtime imports, the internal Python import graph has a required acyclic
 contract, coverage measures branches, Windows and Apple Silicon macOS run native Python
 smoke tests, GitHub Actions and uv are immutably pinned, CI publishes a locked
 CycloneDX SBOM, and the repository has a versioned WER/RTF evaluation format and
-security policy. Remaining high-value work is deliberate: split the oversized
-CLI and recorder orchestration modules, redesign heavy dependency extras only
-in a compatible major release, choose canonical license terms, and add signing
-and provenance when native artifacts are officially distributed.
+security policy. Resident voice now enforces cross-install single ownership,
+authenticated daemon liveness, and verified resource teardown before fallback.
+Remaining high-value work is deliberate: complete live macOS/Linux tray records,
+split the oversized CLI and recorder orchestration modules, redesign heavy
+dependency extras only in a compatible major release, choose canonical license
+terms, and add signing and provenance when native artifacts are distributed.
 
 Current Intel macOS packaging remains explicit debt. The locked Torch 2.13
 release has no x86_64 macOS wheel, so the supported macOS CI runner is Apple
@@ -45,7 +47,7 @@ Scribe is a **local-first desktop CLI** for high-quality speech transcription, m
 - Chasing the absolute newest Python runtime or heavy observability stacks that would complicate local GPU usage or CLI UX.
 - Broad expansion into adjacent domains that would dilute the focused value of accurate, private, offline-capable transcription and analysis.
 
-These boundaries exist so Scribe stays excellent at what it does rather than becoming a general-purpose media or AI platform.
+These boundaries keep Scribe focused instead of turning it into a general-purpose media or AI platform.
 
 ---
 
@@ -87,13 +89,13 @@ As of 2026-06-01, a review of the 2026 local meeting-intelligence field (ownscri
 
    The pure pieces (mode/injection/speed resolution, say-source resolution) are unit-tested; the live microphone, keyboard, and TTS paths remain behind the manual marker since CI has no audio device.
 
-6. **Resident voice tray utility (shipped Python surface, Windows-validated).** `scribe tray` is a resident tray/menu-bar utility for local dictation and read-aloud. It includes dependency, backend, and permission diagnostics (`--check`), a one-shot model/voice setup (`--setup`), a terminal fallback (`--no-tray`), local STT voice profiles (`fast|balanced|accurate`, latency-first defaults), model preload-by-default with a loading indicator, a listener watchdog that survives a silently-removed OS hook, and run-at-login support (`--startup install|remove|status`). The complete Python tray shows and remaps hotkeys (F6-F12), sets read-aloud speed, pauses hotkeys, and toggles start-at-login, all live. The smaller Go source prototype is never selected implicitly; an explicit daemon must authenticate, honor its toggle/F6-F12 contract, register both hotkeys, signal readiness, and fall back visibly on daemon failure. It remains without full menu and desktop-notification parity, so packaged auto-selection is blocked. High-quality read-aloud uses Kokoro (`scribe[kokoro]`) with a cached/warmed, pipelined synthesizer and a system-voice fallback. The Python tray's dictation, read-aloud, hotkeys, and startup are validated on Windows; the macOS/Linux hardware matrix is still being proven. It remains separate from the batch pipeline. See [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
+6. **Resident voice tray utility (shipped Python surface, Windows-validated).** `scribe tray` provides local dictation and read-aloud, readiness diagnostics, one-shot model setup, terminal fallback, hotkey recovery, model preload, and user-scoped run-at-login. One stable per-user lock spans tray, no-tray, legacy listen, install paths, and upgrades. Authenticated native-control loss, incomplete hook or microphone cleanup, active model work, and failed or slow model release all block overlapping fallback. The Go source prototype remains explicit-only until it has menu parity and signed platform distribution. Windows is live-validated; macOS/Linux hardware validation remains open. See the [Resident Voice Guide](docs/VOICE.md) and [Resident Voice Tray Utility Plan](docs/features/VOICE_TRAY_UTILITY_PLAN.md).
 
 Current product priority: prove the macOS/Linux hardware matrix for the resident tray (global hotkeys, permissions, tray backend, audio), and continue hardening backend routing, diagnostics, and the setup experience.
 
 Next roadmap task: validate and harden the resident tray on macOS and Linux. This is next because Windows is already validated, while the remaining tray paths are platform-dependent and can block the daily voice workflow before a user reaches transcription quality. Global hotkeys, microphone permissions, tray backend behavior, startup registration, and audio device availability are also the highest-risk existing surfaces for confusing failures. Finish this before adding new voice features.
 
-**Progress (2026-07-15):** non-live criteria advanced in-tree. `scribe tray --check` prints platform tier and startup path; advisories cover macOS permissions/LaunchAgent/Accessibility, Linux headless/X11/AppIndicator/Wayland/autostart; graphical Linux requires `DISPLAY`/`WAYLAND_DISPLAY` (not `XDG_SESSION_TYPE` alone); native IPC auth rejects wrong-length tokens without killing the accept loop; run-at-login rejects unsupported OSes. Unit tests and setup docs match that behavior. **Live hardware records remain open** (see `docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md`); do not describe macOS/Linux as validated until those records exist.
+**Progress (2026-08-01):** non-live criteria are covered in-tree. `scribe tray --check` prints platform tier, ownership, log, and startup state; advisories cover macOS permissions and Linux desktop limitations. Native IPC is authenticated and monitored after readiness. Watchdog replacement cannot race past shutdown, the operating system retains ownership until actual process exit, warmup waits are bounded, configuration mutations preserve unknown tables, and fallback requires confirmed listener, microphone, managed-thread, read-aloud, and model cleanup. Python resident modes return failure when shutdown remains uncertain. **Live hardware records remain open** (see `docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md`); do not describe macOS/Linux as validated until those records exist.
 
 Acceptance criteria for the next task:
 - `scribe tray --check` gives accurate, actionable macOS and Linux readiness output without requiring paid services. *(non-live: done with unit evidence; live re-check still required on real desktops)*
@@ -111,12 +113,12 @@ The product surface is already useful, so polish work should improve what exists
 - **Copy and comprehension debt:** method-bearing commands now share one explicit `$0` local GPU/CPU versus paid-cloud contract. Keep cost, provider, and recovery language explicit at every future decision point rather than relying on later documentation.
 - **Visual polish debt:** keep terminal output restrained, scannable, and useful in plain terminals as well as Rich-capable terminals.
 - **Observability debt:** keep diagnostics, logs, support bundles, and CI status truthful without adding telemetry that phones home. Doctor now preserves complete literal results and runs its declared resource monitor; support bundles discover bounded durable outcomes, expose only opaque log metadata, and reserve unique no-clobber destinations. Tray preflight distinguishes the Python default from an unverified developer override. Official native artifact provenance remains open.
-- **Reliability debt:** truthful batch and music outcomes, portable wheel installation, bounded long-audio fallback, authenticated tray readiness, stable single-instance resident voice ownership for updated installs, unique session archives, and terminal summaries for file, URL, batch-item, recording, and per-track music flows are shipped. Safe writes, atomic configuration replacement, and verified WAV reconversion preserve prior evidence on failure. Persistent terminal and progress output failures now degrade to stable exits and local file logs without rewriting saved outcomes, and default all-missing batches reach one aggregate summary. Tray and legacy listen modes share one process-lifetime ownership lock; native fallback refuses to overlap unfinished model work; resident shutdown explicitly unloads its CTranslate2 and cached neural voice models; and five-minute capture limits bound missed-stop memory growth. Legacy transcription runs off the keyboard-hook callback. Hotkey recovery uses bounded retry, and model warmup, clipboard restore, read-aloud fallback, configuration persistence, startup-toggle, and detached tray failures are surfaced through notifications, terminal output, or a bounded resident log. Next, continue hardening local backend routing, OBS recovery, an approved evidence-retention policy, and live macOS/Linux voice validation.
+- **Reliability debt:** truthful batch and music outcomes, portable wheel installation, bounded long-audio fallback, unique session archives, and terminal summaries are shipped. Safe writes and verified reconversion preserve prior evidence. Resident modes share one process-lifetime lock; authenticated daemon liveness is monitored; fallback requires confirmed teardown; explicit GPU-model release is bounded and retryable; five-minute capture limits bound missed-stop growth; and the action dispatcher has a fixed backlog with visible overflow recovery. Hotkey recovery cannot publish a new listener across shutdown, and model warmup, clipboard, read-aloud, configuration, startup, and detached failures are surfaced. Next, continue hardening local backend routing, OBS recovery, evidence retention, and live macOS/Linux voice validation.
 - **Security debt:** the native tray requires a process-scoped capability before accepting local control commands. Its source contract now blocks tracked executables and verifies module state, tests, vet, reachable vulnerabilities, reproducible hashes, and embedded commit identity. Python dependency scanning has no ignored advisories. Official signing and attestation, same-user process isolation limits, and cloud-transmission clarity remain tracked.
 - **Accessibility debt:** incomplete output provides a plain exact session-summary path, doctor no longer clips decisive message tails, and dynamic batch, doctor, support, and shared error text renders literally. Batch accounting uses an ASCII divider, and terminal-delivery fallback is ASCII-safe. Keep CLI copy readable without color, avoid hidden status-only indicators, and keep voice/tray permission guidance explicit per OS.
 - **Architecture debt:** import cycles and heavyweight trivial-command imports are blocked by tests, and system-diagnostic plus media-cleaning implementations have moved out of the central CLI. Continue splitting the remaining transcription, recording, and music orchestration along command and lifecycle boundaries.
 - **Test coverage debt:** keep meaningful branch coverage above the enforced 81 percent floor with failure-path assertions, then ratchet toward 85 percent. Root-wheel, native Windows and Apple Silicon macOS smoke, and native-tray source contracts are required aggregate CI; Intel macOS dependency compatibility and signed native platform artifact matrices remain open.
-- **Documentation debt:** keep README, ROADMAP, CHANGELOG, deployment guidance, architecture docs, and test docs synchronized with actual behavior and gates.
+- **Documentation debt:** the root README is now a concise landing page linked to dedicated CLI and resident-voice guides. Keep those guides, ROADMAP, CHANGELOG, deployment, architecture, and test docs synchronized with actual behavior and gates.
 - **Deferred product debt:** publish and verify platform-specific Rust acceleration wheels and Go tray binaries before describing either native runtime as distributed. The portable Python wheel does not depend on those unpublished artifacts.
 
 ---
@@ -176,7 +178,7 @@ Establish a single source of truth for Python version, dependencies, and develop
 - Add `.python-version` pinned to 3.12 and set `requires-python = ">=3.12"` in pyproject.toml. Update classifiers and all documentation.
 - Adopt uv as the canonical package and project manager. Generate and commit `uv.lock`. Update development setup to use `uv sync --locked --group dev` and all project commands to use `uv run`.
 - Consolidate configuration into pyproject.toml: remove duplicate settings from pytest.ini, retire the Black configuration, and expand the Ruff configuration with preview rules, security rules, and appropriate complexity limits.
-- Add `.pre-commit-config.yaml` with ruff (lint + format), mypy, and basic test hooks. Make `pre-commit install` part of the documented onboarding.
+- Add `.pre-commit-config.yaml` with fast Ruff and file-hygiene hooks. Keep strict mypy and the test suites as explicit local commands and hard CI jobs so isolated hook environments do not duplicate the locked ML dependency graph. Make `pre-commit install` part of the documented onboarding.
 - Overhaul CI to use uv for all jobs, test every declared CPython version (3.12 and 3.13), add a dedicated lint + types job, a coverage gate job, and a dependency vulnerability scan step.
 - Update README, DEVELOPMENT.md, and related docs to present the locked uv workflow first while retaining direct pyproject-based pip installation for accessibility.
 - Retire hand-maintained requirements shims so pip, uv, CI, and release artifacts all resolve dependencies from `pyproject.toml`.
@@ -234,7 +236,7 @@ Tighten runtime behavior and add security scanning only after the static foundat
 - Add blocking dependency vulnerability scanning to CI (fail on high or critical findings).
 - Document and optionally implement SBOM generation for users who require compliance artifacts.
 - Add a security / environment surface check to `scribe doctor` (Python version, known vulnerable packages, CUDA driver age where detectable).
-- Evaluate minimal structured logging additions only behind an opt-in flag that does not change the default excellent Rich console + detailed file log experience.
+- Evaluate minimal structured logging additions only behind an opt-in flag that does not change the current Rich console and detailed file-log experience.
 - Establish a lightweight `docs/adr/` practice for any future major tooling, dependency, or architectural decisions.
 
 **Definition of Done:**
@@ -278,4 +280,4 @@ Elevation work exists only to make the existing focused value more reliable, rep
 
 ---
 
-**Last Updated:** 2026-07-15 (v2.8.1 native tray selection, authentication, readiness, and fallback verified locally)
+**Last Updated:** 2026-08-01 (v2.8.1 resident ownership, liveness, cleanup, and documentation hardening verified locally)

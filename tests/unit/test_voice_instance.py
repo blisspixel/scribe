@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -117,3 +120,45 @@ def test_retained_instance_lock_blocks_relaunch_until_process_cleanup(tmp_path: 
     assert owner.acquired is False
     assert contender.acquire() is True
     contender.release()
+
+
+def test_retained_instance_lock_stays_held_during_atexit(tmp_path: Path) -> None:
+    path = tray_instance_lock_path(tmp_path)
+    atexit_started = tmp_path / "atexit-started"
+    script = """
+import atexit
+import sys
+import time
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+signal_path = Path(sys.argv[2])
+
+def linger_during_atexit():
+    signal_path.write_text("running", encoding="utf-8")
+    time.sleep(1.0)
+
+atexit.register(linger_during_atexit)
+from scribe.voice.instance import TrayInstanceLock
+
+lock = TrayInstanceLock(lock_path)
+assert lock.acquire()
+lock.retain_until_process_exit()
+"""
+    process = subprocess.Popen([sys.executable, "-c", script, str(path), str(atexit_started)])
+    try:
+        deadline = time.monotonic() + 5.0
+        while not atexit_started.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert atexit_started.exists(), "child process did not enter its atexit handler"
+
+        contender = TrayInstanceLock(path)
+        assert contender.acquire() is False
+
+        assert process.wait(timeout=5.0) == 0
+        assert contender.acquire() is True
+        contender.release()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5.0)

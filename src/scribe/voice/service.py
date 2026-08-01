@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 VoiceTrayState = Literal["idle", "recording", "transcribing", "speaking", "error", "stopped"]
 MAX_DICTATION_SECONDS = 300
+MAX_PENDING_ACTIONS = 32
 
 
 @dataclass(frozen=True)
@@ -414,7 +415,10 @@ class VoiceTrayService:
         # breaks subsequent key capture on Windows, so the callback only enqueues.
         # ``_dictating`` is the synchronous toggle intent (set in the callback) so
         # rapid taps toggle correctly even though the action runs asynchronously.
-        self._actions: queue.Queue[Callable[[], object] | None] = queue.Queue()
+        self._actions: queue.Queue[Callable[[], object] | None] = queue.Queue(
+            maxsize=MAX_PENDING_ACTIONS
+        )
+        self._action_overflow = threading.Event()
         self._dispatcher: threading.Thread | None = None
         self._dictating = False
         # Serializes model loads so a preload thread and a first dictation cannot
@@ -422,6 +426,10 @@ class VoiceTrayService:
         self._model_lock = threading.Lock()
         self._model_use_lock = threading.Lock()
         self._model_users = 0
+        self._model_unload_thread: threading.Thread | None = None
+        self._model_unload_result: list[Exception | None] | None = None
+        self._model_unload_target: Any = None
+        self._model_unload_timeout_reported = False
         self._preload_thread: threading.Thread | None = None
         self._watchdog: threading.Thread | None = None
         self._watchdog_stop = threading.Event()
@@ -436,6 +444,7 @@ class VoiceTrayService:
         self._ipc_token: str | None = None
         self._ipc_ready = threading.Event()
         self._ipc_quit_requested = threading.Event()
+        self._ipc_disconnected = threading.Event()
 
     @property
     def status_text(self) -> str:
@@ -584,13 +593,18 @@ class VoiceTrayService:
                 self._dictating = False
                 discard = self.state == "recording"
         if discard:
-            self._stop_stream()
+            stream_stopped = self._stop_stream()
             with self._state_lock:
                 self._audio_buffer = []
                 self._audio_bytes = 0
                 self._capture_limit_queued = False
                 self._audio_status_warning_queued = False
-            self._set_state_if_running("idle")
+            if stream_stopped:
+                self._set_state_if_running("idle")
+            else:
+                message = "microphone stream could not be closed safely while pausing"
+                if self._set_state_if_running("error", message):
+                    self._emit("Scribe Voice error", message)
         self._notify()
 
     def toggle_pause(self) -> bool:
@@ -611,13 +625,15 @@ class VoiceTrayService:
         port = sock.getsockname()[1]
 
         self._ipc_socket = sock
-        self._actions = queue.Queue()
+        self._actions = queue.Queue(maxsize=MAX_PENDING_ACTIONS)
+        self._action_overflow.clear()
         self.running = True
         self._shutdown_warning_emitted = False
         self._watchdog_error_message = None
         self._ipc_token = secrets.token_urlsafe(32)
         self._ipc_ready.clear()
         self._ipc_quit_requested.clear()
+        self._ipc_disconnected.clear()
         try:
             self._start_runtime_threads(watch_hotkeys=False)
             self._ipc_thread = threading.Thread(
@@ -669,6 +685,10 @@ class VoiceTrayService:
         """Wait for an authenticated native daemon to request a clean shutdown."""
         return self._ipc_quit_requested.wait(timeout)
 
+    def wait_for_ipc_disconnect(self, *, timeout: float) -> bool:
+        """Wait for a ready native daemon to lose its authenticated connection."""
+        return self._ipc_disconnected.wait(timeout)
+
     def start_model_preload(self) -> None:
         """Warm resident models after the owning tray surface is ready."""
         with self._state_lock:
@@ -707,6 +727,7 @@ class VoiceTrayService:
                     logger.warning("Native tray IPC listener stopped: %s", error)
                 break
 
+            peer_ready = False
             try:
                 with conn, conn.makefile("r", encoding="utf-8") as stream:
                     conn.settimeout(2.0)
@@ -719,7 +740,6 @@ class VoiceTrayService:
                     conn.sendall(b"AUTH OK\n")
                     with self._ipc_send_lock:
                         self._ipc_conn = conn
-                    peer_ready = False
 
                     while self.running:
                         line = stream.readline(128)
@@ -736,17 +756,17 @@ class VoiceTrayService:
                         elif not peer_ready:
                             logger.warning("Ignored native tray command before READY")
                         elif cmd == "DICTATE":
-                            self._dictating = not self._dictating
-                            self._actions.put(
-                                self._finish_recording
-                                if not self._dictating
-                                else self._begin_recording
+                            was_dictating = self._dictating
+                            action = (
+                                self._finish_recording if was_dictating else self._begin_recording
                             )
+                            if self._queue_action(action):
+                                self._dictating = not was_dictating
                         elif cmd == "READ":
                             if self.state == "speaking":
                                 self.stop_speaking()
                             elif not self._dictating:
-                                self._actions.put(self.read_selection_now)
+                                self._queue_action(self.read_selection_now)
                         elif cmd == "QUIT":
                             self._ipc_quit_requested.set()
                             self.stop()
@@ -760,6 +780,10 @@ class VoiceTrayService:
                 with self._ipc_send_lock:
                     if self._ipc_conn is conn:
                         self._ipc_conn = None
+                if peer_ready:
+                    self._ipc_ready.clear()
+                    if self.running and not self._ipc_quit_requested.is_set():
+                        self._ipc_disconnected.set()
 
     def _ipc_auth_matches(self, auth_line: str) -> bool:
         """Return True only for an exact capability line, without crashing on length.
@@ -792,7 +816,8 @@ class VoiceTrayService:
             return False
 
         try:
-            self._actions = queue.Queue()
+            self._actions = queue.Queue(maxsize=MAX_PENDING_ACTIONS)
+            self._action_overflow.clear()
             self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
             self._listener.start()
             is_alive = getattr(self._listener, "is_alive", None)
@@ -800,18 +825,23 @@ class VoiceTrayService:
                 raise RuntimeError("hotkey listener exited during startup")
         except Exception as e:
             logger.exception("Could not start the global hotkey listener")
+            cleanup_complete = True
             if self._listener is not None:
-                try:
-                    self._listener.stop()
-                except Exception as cleanup_error:
-                    logger.warning("Could not clean up failed hotkey listener: %s", cleanup_error)
+                cleanup_complete = self._stop_hotkey_listener(self._listener)
             self.running = False
-            self._listener = None
-            self._set_state("error", f"hotkey listener unavailable: {e}")
+            message = f"hotkey listener unavailable: {e}"
+            if not cleanup_complete:
+                message += "; failed listener cleanup remains unconfirmed"
+            self._set_state("error", message)
             self.console.print(
                 "[red]Could not start global hotkeys.[/red] "
                 "Check OS keyboard-monitoring permissions or change the hotkeys."
             )
+            if not cleanup_complete:
+                self.console.print(
+                    "[red]Global hotkey cleanup is incomplete.[/red] "
+                    "Process exit remains the final resource boundary."
+                )
             return False
 
         self.running = True
@@ -840,13 +870,17 @@ class VoiceTrayService:
 
     def _stop_locked(self) -> bool:  # pragma: no cover
         """Perform one serialized shutdown and report resource quiescence."""
+        cleanup_failures: list[str] = []
         with self._state_lock:
             self.running = False
             self.paused = False
             self._dictating = False
             self.hotkeys.reset()
         self._watchdog_stop.set()
-        self._actions.put(None)  # unblock the dispatcher so it can exit
+        with suppress(queue.Full):
+            self._actions.put_nowait(None)  # wake the dispatcher when capacity remains
+        # If the queue is full, ``running`` is already false and the dispatcher's
+        # bounded get timeout still lets it exit.
         with self._ipc_send_lock:
             ipc_conn = self._ipc_conn
             self._ipc_conn = None
@@ -867,16 +901,12 @@ class VoiceTrayService:
             except OSError as error:
                 logger.warning("Could not close native tray listener: %s", error)
         listener = self._listener
-        self._listener = None
-        if listener is not None:
-            try:
-                listener.stop()
-            except Exception as error:
-                logger.warning("Could not stop hotkey listener: %s", error)
-                self._emit("Scribe Voice warning", f"Could not stop global hotkeys: {error}")
+        if listener is not None and not self._stop_hotkey_listener(listener):
+            cleanup_failures.append("global hotkey listener")
         self.stop_speaking()
-        if self._stream is not None:
-            self._stop_stream()
+        microphone_checked_before_join = self._stream is not None
+        if microphone_checked_before_join and not self._stop_stream():
+            cleanup_failures.append("microphone stream")
         with self._state_lock:
             self._audio_buffer = []
             self._audio_bytes = 0
@@ -891,13 +921,13 @@ class VoiceTrayService:
             ("_watchdog", self._watchdog),
             ("_ipc_thread", self._ipc_thread),
         )
-        active_resource_threads: list[str] = []
+        active_threads: list[str] = []
         for attribute, thread in managed_threads:
             if thread is None:
                 continue
             if thread is current_thread:
-                if attribute in {"_worker", "_preload_thread"}:
-                    active_resource_threads.append(getattr(thread, "name", attribute))
+                if attribute != "_ipc_thread":
+                    active_threads.append(getattr(thread, "name", attribute))
                 continue
             try:
                 if thread.is_alive():
@@ -914,16 +944,22 @@ class VoiceTrayService:
             if alive:
                 thread_name = getattr(thread, "name", attribute)
                 logger.warning("Voice thread did not stop within 2 seconds: %s", thread_name)
-                if attribute in {"_worker", "_preload_thread"}:
-                    active_resource_threads.append(thread_name)
+                active_threads.append(thread_name)
             elif getattr(self, attribute) is thread:
                 setattr(self, attribute, None)
-        self._unload_model_if_unused()
+        if (
+            not microphone_checked_before_join
+            and self._stream is not None
+            and not self._stop_stream()
+        ):
+            cleanup_failures.append("microphone stream")
+        model_released = self._unload_model_if_unused()
         try:
             from scribe.voice.tts import unload_kokoro
 
             unload_kokoro()
         except Exception as error:
+            cleanup_failures.append("neural voice cache")
             logger.warning("Could not release the neural voice cache: %s", error)
             self._emit(
                 "Scribe Voice warning",
@@ -931,14 +967,19 @@ class VoiceTrayService:
             )
         with self._model_use_lock:
             active_model_users = self._model_users
-        cleanup_complete = not active_resource_threads and active_model_users == 0
+        if not model_released and active_model_users == 0:
+            cleanup_failures.append("resident dictation model")
+        with self._state_lock:
+            if self._tts_engine is not None:
+                cleanup_failures.append("read-aloud engine")
+        cleanup_complete = not active_threads and active_model_users == 0 and not cleanup_failures
         if not cleanup_complete and not self._shutdown_warning_emitted:
             self._shutdown_warning_emitted = True
-            details = [*active_resource_threads]
+            details = [*active_threads, *cleanup_failures]
             if active_model_users:
                 details.append(f"{active_model_users} active model operation(s)")
             message = (
-                "Resident model work is still stopping "
+                "Resident voice cleanup is incomplete "
                 f"({', '.join(details)}); another backend will not be started in this process."
             )
             logger.error("%s", message)
@@ -954,9 +995,55 @@ class VoiceTrayService:
         self._notify()
         return cleanup_complete
 
+    def _stop_hotkey_listener(self, listener: Any) -> bool:
+        """Stop and confirm one global hook before allowing another backend."""
+        failures: list[str] = []
+        try:
+            listener.stop()
+        except Exception as error:
+            failures.append(f"stop failed: {error}")
+            logger.warning("Could not stop hotkey listener: %s", error)
+
+        join = getattr(listener, "join", None)
+        if callable(join) and listener is not threading.current_thread():
+            try:
+                join(timeout=2.0)
+            except Exception as error:
+                failures.append(f"join failed: {error}")
+                logger.warning("Could not join hotkey listener: %s", error)
+
+        is_alive = getattr(listener, "is_alive", None)
+        if callable(is_alive):
+            try:
+                alive: bool | None = bool(is_alive())
+            except Exception as error:
+                alive = None
+                failures.append(f"status check failed: {error}")
+                logger.warning("Could not inspect hotkey listener shutdown: %s", error)
+        else:
+            alive = None
+
+        cleanup_complete = alive is False or (alive is None and not failures)
+        if alive:
+            failures.append("listener thread is still alive")
+            logger.warning("Hotkey listener did not stop within 2 seconds")
+        if cleanup_complete:
+            with self._state_lock:
+                if self._listener is listener:
+                    self._listener = None
+        if failures:
+            self._emit(
+                "Scribe Voice warning",
+                f"Global hotkey shutdown reported problems ({'; '.join(failures)}).",
+            )
+        return cleanup_complete
+
     def _dispatch_loop(self) -> None:  # pragma: no cover
         """Run hotkey actions off the listener thread, one at a time, in order."""
         while self.running:
+            if self._action_overflow.is_set():
+                self._recover_action_overflow()
+                continue
             try:
                 action = self._actions.get(timeout=0.2)
             except queue.Empty:
@@ -967,6 +1054,38 @@ class VoiceTrayService:
                 action()
             except Exception as e:
                 self._report_action_error(e)
+
+    def _queue_action(self, action: Callable[[], object]) -> bool:
+        """Queue bounded resident work without blocking an OS callback thread."""
+        try:
+            self._actions.put_nowait(action)
+        except queue.Full:
+            self._dictating = False
+            self._action_overflow.set()
+            return False
+        return True
+
+    def _recover_action_overflow(self) -> None:
+        """Discard stale action intent and leave capture in a known visible state."""
+        self._action_overflow.clear()
+        while True:
+            try:
+                self._actions.get_nowait()
+            except queue.Empty:
+                break
+        self._dictating = False
+        stream_stopped = self._stop_stream()
+        with self._state_lock:
+            self._audio_buffer = []
+            self._audio_bytes = 0
+            self._capture_limit_queued = False
+            self._audio_status_warning_queued = False
+        message = "Too many voice actions arrived; pending actions were discarded. Try again."
+        if not stream_stopped:
+            message += " Microphone cleanup is still incomplete."
+        logger.error("%s", message)
+        if self._set_state_if_running("error", message):
+            self._emit("Scribe Voice error", message)
 
     def _report_action_error(self, error: Exception) -> None:
         """Report dispatcher failures without overwriting a completed shutdown."""
@@ -1023,44 +1142,52 @@ class VoiceTrayService:
 
     def _reconnect_hotkeys(self) -> bool:  # pragma: no cover
         """Replace a dead listener and make any recovery failure visible."""
-        fresh: Any | None = None
+        # Serialize listener creation with stop(). Without this boundary, shutdown
+        # can inspect the old dead listener and return just before the watchdog
+        # publishes a new live hook, leaving an unowned global listener behind.
+        if not self._stop_lock.acquire(timeout=0.2):
+            return False
         try:
-            from pynput import keyboard
-
-            fresh = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
-            fresh.start()
-            is_alive = getattr(fresh, "is_alive", None)
-            if callable(is_alive) and not is_alive():
-                raise RuntimeError("hotkey listener exited during reconnect")
-        except Exception as error:
-            if fresh is not None:
-                try:
-                    fresh.stop()
-                except Exception as cleanup_error:
-                    logger.warning("Could not clean up failed hotkey reconnect: %s", cleanup_error)
-            message = f"hotkey reconnect failed: {error}"
-            if self._watchdog_error_message != message:
-                self._watchdog_error_message = message
-                logger.warning("%s", message)
-                if self._set_state_if_running("error", message):
-                    self._emit("Scribe Voice error", message)
-            return False
-
-        with self._state_lock:
-            publish_listener = self.running
-            if publish_listener:
-                self._listener = fresh
-                self.hotkeys.reset()
-                self._dictating = False
-
-        if not publish_listener:
+            if not self.running or self._watchdog_stop.is_set():
+                return False
+            fresh: Any | None = None
             try:
-                fresh.stop()
+                from pynput import keyboard
+
+                fresh = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+                fresh.start()
+                is_alive = getattr(fresh, "is_alive", None)
+                if callable(is_alive) and not is_alive():
+                    raise RuntimeError("hotkey listener exited during reconnect")
             except Exception as error:
-                logger.warning(
-                    "Could not stop a hotkey listener created during shutdown: %s", error
-                )
-            return False
+                if fresh is not None:
+                    cleanup_complete = self._stop_hotkey_listener(fresh)
+                    if not cleanup_complete:
+                        with self._state_lock:
+                            self._listener = fresh
+                message = f"hotkey reconnect failed: {error}"
+                if self._watchdog_error_message != message:
+                    self._watchdog_error_message = message
+                    logger.warning("%s", message)
+                    if self._set_state_if_running("error", message):
+                        self._emit("Scribe Voice error", message)
+                return False
+
+            with self._state_lock:
+                publish_listener = self.running and not self._watchdog_stop.is_set()
+                if publish_listener:
+                    self._listener = fresh
+                    self.hotkeys.reset()
+                    self._dictating = False
+
+            if not publish_listener:
+                cleanup_complete = self._stop_hotkey_listener(fresh)
+                if not cleanup_complete:
+                    with self._state_lock:
+                        self._listener = fresh
+                return False
+        finally:
+            self._stop_lock.release()
 
         previous_watchdog_error = self._watchdog_error_message
         self._watchdog_error_message = None
@@ -1073,7 +1200,7 @@ class VoiceTrayService:
                 )
             if recover:
                 self._set_state_if_running("idle")
-        if self.running:
+        if self._is_running():
             self._emit("Scribe Voice", "Hotkeys reconnected")
             return True
         return False
@@ -1097,6 +1224,25 @@ class VoiceTrayService:
                     logger.warning("Could not send native tray state: %s", error)
                     if self._ipc_conn is ipc_conn:
                         self._ipc_conn = None
+                    try:
+                        ipc_conn.shutdown(socket.SHUT_RDWR)
+                    except OSError as shutdown_error:
+                        logger.debug(
+                            "Native tray connection was already shut down: %s", shutdown_error
+                        )
+                    try:
+                        ipc_conn.close()
+                    except OSError as close_error:
+                        logger.warning(
+                            "Could not close failed native tray connection: %s", close_error
+                        )
+                    if (
+                        self.running
+                        and self._ipc_ready.is_set()
+                        and not self._ipc_quit_requested.is_set()
+                    ):
+                        self._ipc_ready.clear()
+                        self._ipc_disconnected.set()
         for callback in list(self._callbacks):  # snapshot: callbacks may run cross-thread
             try:
                 callback(self.state)
@@ -1138,15 +1284,15 @@ class VoiceTrayService:
             if self.settings.activation == "toggle":
                 # tap toggles: stop+transcribe if dictating, else start.
                 if self._dictating:
-                    self._dictating = False
-                    self._actions.put(self._finish_recording)
+                    if self._queue_action(self._finish_recording):
+                        self._dictating = False
                 else:
-                    self._dictating = True
-                    self._actions.put(self._begin_recording)
+                    if self._queue_action(self._begin_recording):
+                        self._dictating = True
             elif not self._dictating:
                 # hold: press starts; release stops (handled below).
-                self._dictating = True
-                self._actions.put(self._begin_recording)
+                if self._queue_action(self._begin_recording):
+                    self._dictating = True
             return
         if read_started:
             # Same key reads the selection and stops playback mid-sentence,
@@ -1155,7 +1301,7 @@ class VoiceTrayService:
             if self.state == "speaking":
                 self.stop_speaking()
             elif not self._dictating:
-                self._actions.put(self.read_selection_now)
+                self._queue_action(self.read_selection_now)
 
     def _on_release(self, key: object) -> None:  # pragma: no cover
         key_name = key_name_from_object(key)
@@ -1168,8 +1314,8 @@ class VoiceTrayService:
         if self.settings.activation != "hold":
             return
         if dictate_stopped and self._dictating:
-            self._dictating = False
-            self._actions.put(self._finish_recording)
+            if self._queue_action(self._finish_recording):
+                self._dictating = False
 
     def stop_speaking(self) -> None:  # pragma: no cover
         """Interrupt read-aloud playback (the same hotkey that started it)."""
@@ -1184,6 +1330,7 @@ class VoiceTrayService:
 
     def _begin_recording(self) -> None:  # pragma: no cover
         with self._state_lock:
+            cleanup_blocked = False
             if not self.running:
                 return
             if self.paused:
@@ -1191,13 +1338,21 @@ class VoiceTrayService:
                 unavailable = "Hotkeys are paused"
             elif self.state == "recording":
                 return
+            elif self._stream is not None:
+                self._dictating = False
+                unavailable = "Microphone cleanup is incomplete; restart Scribe Voice"
+                cleanup_blocked = True
             elif self.state in {"transcribing", "speaking"}:
                 self._dictating = False
                 unavailable = "Busy - finish the current action first"
             else:
                 unavailable = None
         if unavailable is not None:
-            self._emit("Scribe Voice", unavailable)
+            if cleanup_blocked:
+                self._set_state_if_running("error", unavailable)
+                self._emit("Scribe Voice error", unavailable)
+            else:
+                self._emit("Scribe Voice", unavailable)
             return
         try:
             import sounddevice as sd
@@ -1232,15 +1387,22 @@ class VoiceTrayService:
             started = True
         except Exception as e:
             logger.exception("Could not start microphone capture")
+            close_error: Exception | None = None
             if stream is not None:
                 try:
                     stream.close()
-                except Exception as close_error:
-                    logger.warning("Could not close failed microphone stream: %s", close_error)
+                except Exception as error:
+                    close_error = error
+                    logger.warning("Could not close failed microphone stream: %s", error)
+                    with self._state_lock:
+                        if self._stream is None:
+                            self._stream = stream
             self._dictating = False
-            message = f"microphone unavailable: {e}"
+            message = f"Microphone unavailable: {e}"
+            if close_error is not None:
+                message += f"; failed stream cleanup: {close_error}"
             if self._set_state_if_running("error", message):
-                self._emit("Scribe Voice error", f"Microphone unavailable: {e}")
+                self._emit("Scribe Voice error", message)
             return
 
         with self._state_lock:
@@ -1257,6 +1419,7 @@ class VoiceTrayService:
             else:
                 self._dictating = False
         if not accepted:
+            cancelled_close_error: Exception | None = None
             if started:
                 try:
                     stream.stop()
@@ -1264,9 +1427,17 @@ class VoiceTrayService:
                     logger.warning("Could not stop cancelled microphone stream: %s", stop_error)
             try:
                 stream.close()
-            except Exception as close_error:
-                logger.warning("Could not close cancelled microphone stream: %s", close_error)
-            if self.running:
+            except Exception as error:
+                cancelled_close_error = error
+                logger.warning("Could not close cancelled microphone stream: %s", error)
+                with self._state_lock:
+                    if self._stream is None:
+                        self._stream = stream
+            if cancelled_close_error is not None:
+                message = f"cancelled microphone cleanup failed: {cancelled_close_error}"
+                if self._set_state_if_running("error", message):
+                    self._emit("Scribe Voice error", message)
+            elif self.running:
                 self._emit("Scribe Voice", "Recording was cancelled because voice state changed")
             return
 
@@ -1297,11 +1468,11 @@ class VoiceTrayService:
         if status and not self._audio_status_warning_queued:
             self._audio_status_warning_queued = True
             status_text = str(status)
-            self._actions.put(lambda: self._report_audio_status(status_text))
+            self._queue_action(lambda: self._report_audio_status(status_text))
         if self._audio_bytes >= max_bytes and not self._capture_limit_queued:
             self._capture_limit_queued = True
             self._dictating = False
-            self._actions.put(self._finish_recording_at_limit)
+            self._queue_action(self._finish_recording_at_limit)
 
     def _report_audio_status(self, status: str) -> None:
         if self.running:
@@ -1319,7 +1490,7 @@ class VoiceTrayService:
         self._finish_recording()
 
     def _finish_recording(self) -> None:  # pragma: no cover
-        self._stop_stream()
+        stream_stopped = self._stop_stream()
         with self._state_lock:
             # Finishing when we are not actually recording (a stale/duplicate
             # action after a mic error or stop) must not clobber that state.
@@ -1334,6 +1505,11 @@ class VoiceTrayService:
             self._audio_bytes = 0
             self._capture_limit_queued = False
             self._audio_status_warning_queued = False
+        if not stream_stopped:
+            message = "dictation was discarded because the microphone could not close safely"
+            if self._set_state_if_running("error", message):
+                self._emit("Scribe Voice error", message)
+            return
         min_bytes = int(self.settings.sample_rate * 2 * self.settings.min_audio_seconds)
         if len(pcm) < min_bytes:
             self._return_to_idle()
@@ -1350,12 +1526,12 @@ class VoiceTrayService:
                 "Dictation was not transcribed because Scribe Voice is still busy.",
             )
 
-    def _stop_stream(self) -> None:  # pragma: no cover
+    def _stop_stream(self) -> bool:  # pragma: no cover
+        """Stop and close the microphone stream, retaining it when close is uncertain."""
         with self._state_lock:
             stream = self._stream
-            self._stream = None
         if stream is None:
-            return
+            return True
         failures: list[str] = []
         try:
             stream.stop()
@@ -1367,11 +1543,16 @@ class VoiceTrayService:
         except Exception as error:
             logger.warning("Could not close microphone stream: %s", error)
             failures.append(f"close failed: {error}")
+        else:
+            with self._state_lock:
+                if self._stream is stream:
+                    self._stream = None
         if failures:
             self._emit(
                 "Scribe Voice warning",
                 f"Microphone cleanup was incomplete ({'; '.join(failures)}).",
             )
+        return not failures
 
     def _start_worker(self, target: Callable[..., None], *args: object) -> bool:  # pragma: no cover
         with self._state_lock:
@@ -1523,40 +1704,119 @@ class VoiceTrayService:
             if should_unload:
                 self._unload_model()
 
-    def _unload_model_if_unused(self) -> None:  # pragma: no cover
+    def _unload_model_if_unused(self) -> bool:  # pragma: no cover
         """Unload now only when no preload or transcription operation owns the model."""
         with self._model_use_lock:
             if self._model_users != 0:
-                return
-        self._unload_model()
+                return False
+        return self._unload_model()
 
-    def _unload_model(self) -> None:  # pragma: no cover
-        """Release the resident CTranslate2 model and its CUDA allocation."""
+    def _unload_model(self) -> bool:  # pragma: no cover
+        """Release the CTranslate2 model without allowing backend cleanup to hang."""
         import gc
 
-        unload_error: Exception | None = None
+        unload_thread: threading.Thread | None = None
+        unload_result: list[Exception | None] | None = None
+        unload_target: Any = None
         with self._model_lock:
             model = self._model
-            self._model = None
-            self._model_name = None
             if model is None:
-                return
-            backend = getattr(model, "model", None)
-            unload_model = getattr(backend, "unload_model", None)
-            if callable(unload_model):
+                return True
+            unload_thread = self._model_unload_thread
+            unload_result = self._model_unload_result
+            unload_target = self._model_unload_target
+            if unload_thread is None:
+                backend = getattr(model, "model", None)
+                unload_model = getattr(backend, "unload_model", None)
+                if not callable(unload_model):
+                    self._model = None
+                    self._model_name = None
+                    del model
+                    del backend
+                    gc.collect()
+                    return True
+
+                result_holder: list[Exception | None] = []
+                unload_result = result_holder
+
+                def run_unload() -> None:
+                    try:
+                        unload_model()
+                    except Exception as error:
+                        result_holder.append(error)
+                    else:
+                        result_holder.append(None)
+
+                unload_thread = threading.Thread(
+                    target=run_unload,
+                    daemon=True,
+                    name="scribe-voice-model-unload",
+                )
+                unload_target = model
+                self._model_unload_thread = unload_thread
+                self._model_unload_result = unload_result
+                self._model_unload_target = model
+                self._model_unload_timeout_reported = False
                 try:
-                    unload_model()
+                    unload_thread.start()
                 except Exception as error:
-                    unload_error = error
-                    logger.warning("Could not explicitly unload the voice model: %s", error)
-            del model
-            del backend
+                    self._model_unload_thread = None
+                    self._model_unload_result = None
+                    self._model_unload_target = None
+                    logger.warning("Could not start voice model cleanup: %s", error)
+                    self._emit(
+                        "Scribe Voice warning",
+                        f"Could not start voice model cleanup: {error}",
+                    )
+                    return False
+
+        if unload_thread is None or unload_result is None:
+            logger.error("Voice model cleanup state was incomplete")
+            return False
+        try:
+            unload_thread.join(timeout=2.0)
+            unload_alive = unload_thread.is_alive()
+        except Exception as error:
+            logger.warning("Could not inspect voice model cleanup: %s", error)
+            self._emit(
+                "Scribe Voice warning",
+                f"Could not confirm voice model cleanup: {error}",
+            )
+            return False
+        if unload_alive:
+            if not self._model_unload_timeout_reported:
+                self._model_unload_timeout_reported = True
+                logger.error("Voice model cleanup did not finish within 2 seconds")
+                self._emit(
+                    "Scribe Voice warning",
+                    "Voice model cleanup did not finish within 2 seconds; "
+                    "another resident backend will not be started.",
+                )
+            return False
+
+        if len(unload_result) == 1:
+            unload_error = unload_result[0]
+        else:
+            unload_error = RuntimeError("model cleanup thread ended without reporting a result")
+
+        with self._model_lock:
+            if self._model_unload_thread is unload_thread:
+                self._model_unload_thread = None
+                self._model_unload_result = None
+                self._model_unload_target = None
+                self._model_unload_timeout_reported = False
+            if unload_error is None and self._model is unload_target:
+                self._model = None
+                self._model_name = None
         gc.collect()
         if unload_error is not None:
+            logger.warning("Could not explicitly unload the voice model: %s", unload_error)
             self._emit(
                 "Scribe Voice warning",
                 f"Could not explicitly release the voice model: {unload_error}",
             )
+            return False
+        return True
 
     def _inject_text(self, text: str) -> None:  # pragma: no cover
         try:

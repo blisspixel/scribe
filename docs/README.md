@@ -5,7 +5,9 @@ Complete documentation for Scribe - GPU-accelerated speech intelligence.
 ## Core Documentation
 
 ### Getting Started
-- [Main README](../README.md) - Overview, installation, quickstart, polished init + shortcut launchers with taskbar support
+- [Main README](../README.md) - Concise overview and quick start
+- [CLI Guide](CLI.md) - User workflows, flags, exit behavior, and failure evidence
+- [Resident Voice Guide](VOICE.md) - Tray setup, ownership, platforms, diagnostics, and recovery
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
 - [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) - Recording consent, sensitive data, cloud sharing, accuracy, and legal limits
 

@@ -13,6 +13,7 @@ import json
 import os
 import re
 import tomllib
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +93,7 @@ def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def save_config_file(data: dict[str, Any]) -> Path:
-    """Write the TOML config, creating the parent dir if needed."""
+    """Write the complete TOML config without dropping unknown user tables."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     # Keep ~/.scribe owner-only so it is locked down before any sensitive value
     # could ever be written there (no-op on platforms without POSIX modes).
@@ -100,26 +101,19 @@ def save_config_file(data: dict[str, Any]) -> Path:
         os.chmod(CONFIG_DIR, 0o700)
     lines: list[str] = []
 
-    def section(name: str, body: Any) -> None:
-        if not isinstance(body, dict) or not body:
-            return
-        lines.append(f"[{name}]")
-        for k, v in body.items():
-            lines.append(f"{_toml_key(k)} = {_toml_value(v)}")
-        lines.append("")
+    def append_table(path: tuple[str, ...], body: dict[str, Any]) -> None:
+        values = [(key, value) for key, value in body.items() if not isinstance(value, dict)]
+        subtables = [(key, value) for key, value in body.items() if isinstance(value, dict)]
+        if path and (values or not body):
+            lines.append(f"[{'.'.join(_toml_key(part) for part in path)}]")
+        for key, value in values:
+            lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
+        if values or (path and not body):
+            lines.append("")
+        for key, value in subtables:
+            append_table((*path, str(key)), value)
 
-    section("output", data.get("output", {}))
-    section("transcription", data.get("transcription", {}))
-    section("features", data.get("features", {}))
-    section("providers", data.get("providers", {}))
-    section("obs", data.get("obs", {}))
-
-    # Resident voice settings live under a nested [voice.tray] table (read by
-    # scribe.voice.settings); persist it so `scribe init` / `scribe tray --setup`
-    # choices (model, TTS backend, voice) survive across runs.
-    voice = data.get("voice", {})
-    if isinstance(voice, dict):
-        section("voice.tray", voice.get("tray", {}))
+    append_table((), data)
 
     from scribe.utils.safe_write import atomic_write
 
@@ -134,8 +128,15 @@ def _toml_value(v: Any) -> str:
         return "true" if v else "false"
     if isinstance(v, int | float):
         return str(v)
+    if isinstance(v, datetime | date | time):
+        return v.isoformat()
     if isinstance(v, Path):
         v = str(v)
+    if isinstance(v, list | tuple):
+        return "[" + ", ".join(_toml_value(item) for item in v) + "]"
+    if isinstance(v, dict):
+        entries = ", ".join(f"{_toml_key(key)} = {_toml_value(value)}" for key, value in v.items())
+        return "{ " + entries + " }"
     return json.dumps(str(v), ensure_ascii=False)
 
 

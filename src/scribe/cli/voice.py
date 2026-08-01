@@ -761,13 +761,18 @@ def _run_owned_listen(  # pragma: no cover - live microphone and keyboard I/O
         _unload_dictation_model(model_obj, console)
         return 1
 
+    listener: Any | None = None
     try:
         listener = keyboard.Listener(on_press=on_press, on_release=on_release)
         listener.start()
+        is_alive = getattr(listener, "is_alive", None)
+        if callable(is_alive) and not is_alive():
+            raise RuntimeError("dictation hotkey listener exited during startup")
     except Exception as error:
         console.print(f"[red]Could not start the dictation hotkey:[/red] {error}")
+        listener_stopped = listener is None or _stop_listen_listener(listener, console)
         worker_stopped = _stop_listen_worker(transcription_queue, worker, console)
-        if worker_stopped:
+        if worker_stopped and listener_stopped:
             _unload_dictation_model(model_obj, console)
         return 1
 
@@ -845,10 +850,7 @@ def _run_owned_listen(  # pragma: no cover - live microphone and keyboard I/O
         console.print(f"[red]Microphone capture failed:[/red] {error}")
         exit_code = 1
     finally:
-        try:
-            listener.stop()
-        except Exception as error:
-            console.print(f"[yellow]Could not stop the dictation hotkey:[/yellow] {error}")
+        if not _stop_listen_listener(listener, console):
             exit_code = 1
         worker_stopped = _stop_listen_worker(transcription_queue, worker, console)
         if not worker_stopped or not _unload_dictation_model(model_obj, console):
@@ -856,6 +858,45 @@ def _run_owned_listen(  # pragma: no cover - live microphone and keyboard I/O
 
     console.print("[green]Dictation stopped.[/green]")
     return 1 if transcription_failures else exit_code
+
+
+def _stop_listen_listener(
+    listener: Any,
+    console: Console,
+    *,
+    timeout: float = 2.0,
+) -> bool:
+    """Stop and confirm the legacy global hook before releasing other resources."""
+    failures: list[str] = []
+    try:
+        listener.stop()
+    except Exception as error:
+        failures.append(f"stop failed: {error}")
+
+    join = getattr(listener, "join", None)
+    if callable(join) and listener is not threading.current_thread():
+        try:
+            join(timeout=max(0.0, timeout))
+        except Exception as error:
+            failures.append(f"join failed: {error}")
+
+    is_alive = getattr(listener, "is_alive", None)
+    if callable(is_alive):
+        try:
+            alive: bool | None = bool(is_alive())
+        except Exception as error:
+            alive = None
+            failures.append(f"status check failed: {error}")
+    else:
+        alive = None
+    if alive:
+        failures.append("listener thread is still alive")
+    cleanup_complete = alive is False or (alive is None and not failures)
+    if failures:
+        console.print(
+            "[yellow]Could not confirm dictation hotkey shutdown:[/yellow] " + "; ".join(failures)
+        )
+    return cleanup_complete
 
 
 def _stop_listen_worker(
@@ -883,8 +924,13 @@ def _stop_listen_worker(
             f"[yellow]Discarded {dropped} queued dictation utterance(s) during shutdown.[/yellow]"
         )
 
-    worker.join(timeout=max(0.0, timeout))
-    if worker.is_alive():
+    try:
+        worker.join(timeout=max(0.0, timeout))
+        alive = worker.is_alive()
+    except Exception as error:
+        console.print(f"[red]Could not confirm transcription worker shutdown:[/red] {error}")
+        return False
+    if alive:
         console.print(
             "[red]The transcription worker did not stop in time.[/red] "
             "Scribe will exit without unloading a model that is still in use."
@@ -919,20 +965,51 @@ def _load_dictation_model(  # pragma: no cover - loads a real model, hardware de
         return None
 
 
-def _unload_dictation_model(model_obj: Any, console: Console) -> bool:
-    """Explicitly release a legacy listen model before surrendering ownership."""
+def _unload_dictation_model(
+    model_obj: Any,
+    console: Console,
+    *,
+    timeout: float = 2.0,
+) -> bool:
+    """Release a legacy model without letting a backend hang process shutdown."""
     import gc
 
     backend = getattr(model_obj, "model", None)
     unload_model = getattr(backend, "unload_model", None)
-    unloaded = True
-    try:
-        if callable(unload_model):
-            unload_model()
-    except Exception as error:
-        unloaded = False
-        console.print(f"[yellow]Could not explicitly unload the voice model:[/yellow] {error}")
-    finally:
+    if not callable(unload_model):
         del backend
         gc.collect()
-    return unloaded
+        return True
+
+    errors: list[Exception] = []
+
+    def unload() -> None:
+        try:
+            unload_model()
+        except Exception as error:
+            errors.append(error)
+
+    cleanup = threading.Thread(
+        target=unload,
+        daemon=True,
+        name="scribe-listen-model-unload",
+    )
+    try:
+        cleanup.start()
+        cleanup.join(timeout=max(0.0, timeout))
+        alive = cleanup.is_alive()
+    except Exception as error:
+        console.print(f"[yellow]Could not run voice model cleanup:[/yellow] {error}")
+        return False
+    if alive:
+        console.print(
+            f"[yellow]Voice model cleanup did not finish within {max(0.0, timeout):g} "
+            "seconds; Scribe will exit without starting another resident backend.[/yellow]"
+        )
+        return False
+    del backend
+    gc.collect()
+    if errors:
+        console.print(f"[yellow]Could not explicitly unload the voice model:[/yellow] {errors[0]}")
+        return False
+    return True

@@ -8,7 +8,6 @@ launch.
 
 from __future__ import annotations
 
-import atexit
 import errno
 import json
 import os
@@ -238,7 +237,7 @@ _RETAINED_LOCKS_GUARD = threading.Lock()
 
 
 def _release_retained_locks() -> None:
-    """Best-effort explicit cleanup; the OS also releases locks on process exit."""
+    """Release retained locks explicitly in tests or controlled non-resident use."""
     while True:
         with _RETAINED_LOCKS_GUARD:
             if not _RETAINED_LOCKS:
@@ -248,4 +247,7 @@ def _release_retained_locks() -> None:
             instance_lock.release()
 
 
-atexit.register(_release_retained_locks)
+# Do not register an atexit release. Python runs atexit handlers before final
+# interpreter and daemon-thread teardown, which would reopen the duplicate-launch
+# window while the old process could still own CUDA or hotkey resources. Retained
+# locks deliberately stay open for the operating system to release at process exit.
