@@ -44,6 +44,12 @@ That's it. `scribe` is on your PATH and runs from any terminal, Start Menu or ta
   provider is unknown or has no configured key instead of reporting an empty
   check as healthy. `scribe tray --check` turns missing optional parent packages
   into actionable dependency output instead of a traceback.
+- **Single-instance resident voice**: `scribe tray`, `scribe tray --no-tray`, and
+  `scribe listen` now share one per-user lock across install paths and future
+  upgrades. Repeated launches exit before registering duplicate hotkeys or loading
+  another CUDA Whisper model. Ownership remains held through process teardown,
+  native fallback is blocked while prior model work is active, and shutdown
+  explicitly unloads the resident CTranslate2 model.
 - **Durable terminal evidence**: started file, URL, batch-item, recording, and
   music-track runs save a unique session summary. Exact outcomes distinguish
   success, partial completion, failure, and confirmed instrumentals; incomplete
@@ -250,6 +256,21 @@ file's publisher or source. Its current protocol supports toggle activation and
 simple F6-F12 keys. It must authenticate, register both keys, and signal readiness
 before Scribe reports it as active; daemon startup failure or a nonzero daemon exit
 visibly returns to the Python tray.
+Only one updated resident voice process can run for an OS user. The tray,
+`--no-tray`, and legacy `scribe listen` paths share an ownership lock across editable
+and tool installs, and the path remains stable across future upgrades. A second
+launch reports the owning PID/version and exits before registering hotkeys or
+warming another model. Voice lifecycle failures, including dead-hook recovery,
+model warmup, hotkey persistence, clipboard restoration, and read-aloud fallback,
+are reported through the tray notification or terminal instead of being ignored.
+Legacy listen mode moves Whisper work off the Windows keyboard-hook callback, and
+the Python tray becomes visible before it warms the model. `scribe tray --check`
+reports whether resident voice is active, who owns it, and the diagnostic log path.
+Each capture has a five-minute hard limit so a missed stop cannot grow memory
+without bound. Detached failures are recorded in the rotating, user-private
+`~/.scribe/logs/resident-voice.log` (one 1 MB active file plus three backups).
+Malformed or unreadable voice configuration fails visibly instead of silently
+falling back or overwriting the existing file.
 This is a deliberate real-time mode that sits outside the batch pipeline (see ADR-008).
 The complete Python tray is live-validated on **Windows**. macOS and Linux share
 the same implementation but remain **experimental** until live hardware records
@@ -976,9 +997,9 @@ uv run pytest -q -m "not e2e and not gpu and not slow"
 ```
 
 **Test Status:**
-- Latest CI-safe unit matrix: 1612 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
-- Latest broader CI-equivalent coverage gate: 1715 passed, 11 skipped, 27 deselected, 81.45% branch coverage
-- Current collection: 1753 assertion-based tests
+- Latest CI-safe unit matrix: 1686 passed, 1 skipped, 37 deselected on Python 3.12 and 3.13
+- Latest broader CI-equivalent coverage gate: 1789 passed, 11 skipped, 27 deselected, 81.51% branch coverage
+- Current collection: 1827 assertion-based tests
 - Full suite includes unit, integration, e2e, optional-provider, hardware, and live-I/O tests guarded by markers
 - Excellent coverage of error paths (especially OBS recorder)
 - Platform-specific skips and markers are used responsibly

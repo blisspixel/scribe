@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
+
+import pytest
 
 from scribe import config_file
 
@@ -27,6 +30,9 @@ def test_load_config_file_returns_empty_for_invalid_toml(monkeypatch, tmp_path):
 
     assert config_file.config_exists() is True
     assert config_file.load_config_file() == {}
+
+    with pytest.raises(tomllib.TOMLDecodeError):
+        config_file.load_config_file_strict()
 
 
 def test_flatten_for_settings_maps_known_sections_only():
@@ -79,7 +85,7 @@ def test_save_config_file_writes_sections_and_escaped_values(monkeypatch, tmp_pa
             "output": {"folder": output_folder},
             "transcription": {"method": "auto", "model": "large-v3"},
             "features": {"generate_notes": False, "generate_joke": True},
-            "providers": {"joke_provider": 'open"ai'},
+            "providers": {"joke_provider": 'open"ai\nsecond-line'},
             "obs": {"host": "localhost", "port": 4455, "password": "secret"},
         }
     )
@@ -90,7 +96,8 @@ def test_save_config_file_writes_sections_and_escaped_values(monkeypatch, tmp_pa
     assert 'folder = "C:\\\\scribe\\\\output"' in contents
     assert "generate_notes = false" in contents
     assert "generate_joke = true" in contents
-    assert 'joke_provider = "open\\"ai"' in contents
+    assert 'joke_provider = "open\\"ai\\nsecond-line"' in contents
+    assert config_file.load_config_file()["providers"]["joke_provider"] == 'open"ai\nsecond-line'
     assert "[obs]" in contents
     assert 'host = "localhost"' in contents
     assert "port = 4455" in contents
@@ -110,3 +117,32 @@ def test_save_config_file_ignores_malformed_sections(monkeypatch, tmp_path):
     contents = config_path.read_text(encoding="utf-8")
     assert "[output]" in contents
     assert "[obs]" not in contents
+
+
+def test_save_config_file_preserves_original_when_atomic_replace_fails(monkeypatch, tmp_path):
+    config_path = _use_temp_config(monkeypatch, tmp_path)
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("original config", encoding="utf-8")
+    monkeypatch.setattr(
+        "scribe.utils.safe_write.os.replace",
+        lambda *_args: (_ for _ in ()).throw(PermissionError("replace denied")),
+    )
+
+    with pytest.raises(OSError, match="replace denied"):
+        config_file.save_config_file({"output": {"folder": "new"}})
+
+    assert config_path.read_text(encoding="utf-8") == "original config"
+
+
+def test_save_config_file_preserves_valid_quoted_keys(monkeypatch, tmp_path):
+    config_path = _use_temp_config(monkeypatch, tmp_path)
+
+    config_file.save_config_file(
+        {"providers": {"custom provider": "local", "line\nbreak": "escaped"}}
+    )
+
+    loaded = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert loaded["providers"] == {
+        "custom provider": "local",
+        "line\nbreak": "escaped",
+    }

@@ -3764,7 +3764,7 @@ def tray_command(
     surface behind the tray optional extra.
     """
     from scribe.voice.settings import resolve_tray_settings
-    from scribe.voice.tray import run_tray, run_tray_check
+    from scribe.voice.tray import _configure_resident_logging, run_tray, run_tray_check
 
     if startup is not None:
         from scribe.voice.startup import run_tray_startup
@@ -3789,6 +3789,15 @@ def tray_command(
             speed=speed,
         )
     except ValueError as e:
+        if not check:
+            import logging
+
+            log_path = _configure_resident_logging(console)
+            logging.getLogger("scribe.voice.tray").error(
+                "Resident voice settings rejected before startup: %s", e
+            )
+            if log_path is not None:
+                console.print(f"[dim]Resident voice log: {log_path}[/dim]")
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from e
 

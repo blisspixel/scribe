@@ -15,10 +15,12 @@ dependency is absent.
 
 from __future__ import annotations
 
+import queue
 import re
+import threading
+import tomllib
 import uuid
 import wave
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,6 +33,7 @@ VOICE_INSTALL_HINT = (
     '  pip install "scribe[voice]"\n'
     "(provides sounddevice, pynput, pyperclip, and pyttsx3)."
 )
+MAX_DICTATION_SECONDS = 300
 
 
 # --- Pure logic --------------------------------------------------------------
@@ -303,7 +306,11 @@ def run_say(
             console.print(f"[red]File not found: {path}[/red]")
             return 1
         title = path.name
-        text = extract_speakable_text(path)
+        try:
+            text = extract_speakable_text(path)
+        except (OSError, UnicodeError) as error:
+            console.print(f"[red]Could not read {path}:[/red] {error}")
+            return 1
     elif source == "clipboard":
         title = "clipboard"
         text = _read_clipboard(console)
@@ -326,7 +333,8 @@ def _read_clipboard(console: Console) -> str:  # pragma: no cover - clipboard I/
         return ""
     try:
         return clean_spoken_text(pyperclip.paste() or "")
-    except Exception:
+    except Exception as error:
+        console.print(f"[red]Could not read the clipboard:[/red] {error}")
         return ""
 
 
@@ -346,13 +354,15 @@ def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/cli
     try:
         prior = pyperclip.paste()
         should_restore = True
-    except Exception:
+    except Exception as error:
+        console.print(f"[red]Could not read the clipboard before copying:[/red] {error}")
         return ""
 
     sentinel = f"__SCRIBE_SELECTION_SENTINEL_{uuid.uuid4()}__"
     try:
         pyperclip.copy(sentinel)
-    except Exception:
+    except Exception as error:
+        console.print(f"[red]Could not prepare the clipboard for selection capture:[/red] {error}")
         return ""
 
     raw = ""
@@ -364,15 +374,22 @@ def _read_selection(console: Console) -> str:  # pragma: no cover - keyboard/cli
         time.sleep(0.15)  # give the OS a moment to populate the clipboard
         raw = pyperclip.paste() or ""
         return "" if raw == sentinel else clean_spoken_text(raw)
-    except Exception:
+    except Exception as error:
+        console.print(f"[red]Could not copy the current selection:[/red] {error}")
         return ""
     finally:
         if should_restore and prior is not None:
-            with suppress(Exception):
+            try:
                 pyperclip.copy(prior)
+            except Exception as error:
+                console.print(f"[yellow]Could not restore the clipboard:[/yellow] {error}")
         elif raw == sentinel:
-            with suppress(Exception):
+            try:
                 pyperclip.copy("")
+            except Exception as error:
+                console.print(
+                    f"[yellow]Could not clear selection clipboard state:[/yellow] {error}"
+                )
 
 
 def _speak(  # pragma: no cover - drives the local TTS engine; no audio device in CI
@@ -390,7 +407,7 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
     files are present, otherwise the OS voice. Isolated so the engine I/O stays
     out of CI.
     """
-    from scribe.config_file import load_config_file
+    from scribe.config_file import load_config_file_strict
     from scribe.voice.tts import (
         kokoro_assets_ready,
         kokoro_installed,
@@ -401,7 +418,11 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
 
     # Read the resident-voice config so `scribe say` honors the same TTS backend,
     # voice, and speed the tray uses (CLI flags still override).
-    tray_table = load_config_file().get("voice", {})
+    try:
+        tray_table = load_config_file_strict().get("voice", {})
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        console.print(f"[red]Could not read resident voice settings safely:[/red] {error}")
+        return 1
     tray_cfg = tray_table.get("tray", {}) if isinstance(tray_table, dict) else {}
     configured_backend = tray_cfg.get("tts_backend") if isinstance(tray_cfg, dict) else None
     configured_voice = tray_cfg.get("tts_voice") if isinstance(tray_cfg, dict) else None
@@ -424,22 +445,36 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
     except ImportError:
         console.print(VOICE_INSTALL_HINT, markup=False)
         return 1
+    except Exception as error:
+        console.print(f"[red]Could not initialize read-aloud:[/red] {error}")
+        return 1
 
     # Esc stops playback mid-sentence. The pynput listener runs on its own thread,
     # so speaker.stop() interrupts the blocking speak() below.
     listener = None
+    playback_failures: list[str] = []
     try:
         from pynput import keyboard
 
         def _on_press(key: object) -> None:
             if key == keyboard.Key.esc:
-                speaker.stop()
+                try:
+                    speaker.stop()
+                except Exception as error:
+                    playback_failures.append(str(error))
+                    console.print(f"[red]Could not stop read-aloud:[/red] {error}")
 
         listener = keyboard.Listener(on_press=_on_press)
         listener.start()
         console.print("[dim](Esc to stop)[/dim]")
     except ImportError:
         pass
+    except Exception as error:
+        console.print(
+            f"[yellow]Could not register Esc to stop playback:[/yellow] {error}. "
+            "Read-aloud will continue without that shortcut."
+        )
+        listener = None
 
     console.print(f"[cyan]Reading {title} aloud...[/cyan]")
     exit_code = 0
@@ -450,9 +485,18 @@ def _speak(  # pragma: no cover - drives the local TTS engine; no audio device i
         exit_code = 1
     finally:
         if listener is not None:
-            listener.stop()
-        with suppress(Exception):
+            try:
+                listener.stop()
+            except Exception as error:
+                console.print(f"[yellow]Could not stop the playback hotkey:[/yellow] {error}")
+                exit_code = 1
+        try:
             speaker.close()
+        except Exception as error:
+            console.print(f"[yellow]Could not close read-aloud cleanly:[/yellow] {error}")
+            exit_code = 1
+    if playback_failures:
+        exit_code = 1
     if exit_code == 0:
         console.print("[green]Done.[/green]")
     return exit_code
@@ -472,19 +516,78 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     sample_rate: int = 16000,
     frame_ms: int = 30,
 ) -> int:
+    """Run legacy resident dictation while enforcing one voice process per user."""
+    from scribe.voice.instance import TrayInstanceLock
+
+    try:
+        mode = resolve_listen_mode(mode)
+        inject = resolve_inject_method(inject)
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        return 1
+
+    instance_lock = TrayInstanceLock()
+    try:
+        acquired = instance_lock.acquire()
+    except OSError as error:
+        console.print(f"[red]Could not establish resident voice ownership:[/red] {error}")
+        return 1
+    if not acquired:
+        owner = instance_lock.owner
+        description = owner.description if owner is not None else "another process"
+        console.print(
+            f"[yellow]Scribe resident voice is already running ({description}).[/yellow] "
+            "This launch will exit without registering another hotkey listener or "
+            "loading another model."
+        )
+        return 0
+
+    try:
+        return _run_owned_listen(
+            console,
+            model=model,
+            language=language,
+            mode=mode,
+            inject=inject,
+            threshold=threshold,
+            sample_rate=sample_rate,
+            frame_ms=frame_ms,
+        )
+    finally:
+        instance_lock.retain_until_process_exit()
+
+
+def _run_owned_listen(  # pragma: no cover - live microphone and keyboard I/O
+    console: Console,
+    *,
+    model: str | None = None,
+    language: str | None = None,
+    mode: str = "hold",
+    inject: str = "paste",
+    threshold: float = 0.012,
+    sample_rate: int = 16000,
+    frame_ms: int = 30,
+) -> int:
     """Dictate: capture the microphone, transcribe, and inject the text at the cursor.
 
     Two modes: ``hold`` (push-to-talk; hold F9, speak, release to transcribe) and
     ``continuous`` (always listening with silence endpointing; F9 pauses). Injection
-    is ``paste`` (via the clipboard, restored on exit) or ``type`` (keystrokes at the
-    cursor). A persistent faster-whisper model keeps latency low. This path needs a
-    microphone and the voice extra, so it is exercised manually rather than in CI.
+    is ``paste`` (via the clipboard, restored after each insertion) or ``type``
+    (keystrokes at the cursor). A persistent faster-whisper model keeps latency low.
+    This path needs a microphone and the voice extra, so it is exercised manually
+    rather than in CI.
     """
     try:
         mode = resolve_listen_mode(mode)
         inject = resolve_inject_method(inject)
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
+        return 1
+    if sample_rate <= 0 or frame_ms <= 0 or threshold < 0:
+        console.print(
+            "[red]Invalid dictation capture settings:[/red] sample rate and frame length "
+            "must be positive, and threshold cannot be negative."
+        )
         return 1
 
     try:
@@ -512,8 +615,14 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
 
     from scribe.utils.theme import ScribeTheme
 
-    controller = keyboard.Controller()
-    frame_samples = int(sample_rate * frame_ms / 1000)
+    try:
+        controller = keyboard.Controller()
+    except Exception as error:
+        console.print(f"[red]Could not initialize text injection:[/red] {error}")
+        _unload_dictation_model(model_obj, console)
+        return 1
+    frame_samples = max(1, int(sample_rate * frame_ms / 1000))
+    max_capture_frames = max(1, int(MAX_DICTATION_SECONDS * 1000 / frame_ms))
     buffer: list[bytes] = []
     frame_index = 0
     # hold captures only while F9 is held; toggle captures between taps; continuous
@@ -523,6 +632,8 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         min_speech_frames=max(1, 90 // frame_ms),  # ~90 ms of speech to open
         min_silence_frames=max(1, 600 // frame_ms),  # ~600 ms of silence to close
     )
+    transcription_queue: queue.Queue[bytes | None] = queue.Queue(maxsize=2)
+    transcription_failures: list[str] = []
 
     def reset_capture() -> None:
         nonlocal frame_index
@@ -531,35 +642,83 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         segmenter.reset()
 
     def inject_text(text: str) -> None:
+        output = text + " "
         if inject == "type":
-            controller.type(text + " ")
+            controller.type(output)
             return
-        if pyperclip is not None:
-            pyperclip.copy(text + " ")
+        prior = clipboard_paste()
+        if prior is None:
+            console.print(
+                "[yellow]Could not preserve the current clipboard; "
+                "falling back to typed insertion.[/yellow]"
+            )
+            controller.type(output)
+            return
+        if not clipboard_copy(output):
+            console.print(
+                "[yellow]Clipboard paste was unavailable; falling back to typed insertion.[/yellow]"
+            )
+            controller.type(output)
+            return
+        try:
             # macOS pastes with Cmd+V, not Ctrl+V; resolve per-OS so dictation's
             # default paste mode actually inserts text on a Mac, matching the tray.
             with controller.pressed(_modifier_key(keyboard)):
                 controller.press("v")
                 controller.release("v")
+        finally:
+            import time
+
+            time.sleep(0.15)
+            if not clipboard_copy(prior):
+                console.print(
+                    "[yellow]Could not restore the clipboard after dictation; "
+                    "your previous clipboard contents may have changed.[/yellow]"
+                )
 
     def transcribe(pcm: bytes) -> None:
         if not pcm:
             console.print("[yellow](no audio captured - speak after starting dictation)[/yellow]")
             return
         console.print("[dim]transcribing...[/dim]")
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
+        tmp_path: Path | None = None
         try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
             write_wav(tmp_path, pcm, sample_rate)
             segments, _ = model_obj.transcribe(str(tmp_path), language=language, beam_size=5)
             text = " ".join(seg.text.strip() for seg in segments).strip()
+            if not text:
+                console.print("[yellow](no speech detected)[/yellow]")
+                return
+            console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{text}[/{ScribeTheme.TEXT_PRIMARY}]")
+            inject_text(text)
+        except Exception as error:
+            transcription_failures.append(str(error))
+            console.print(f"[red]Dictation failed:[/red] {error}")
         finally:
-            tmp_path.unlink(missing_ok=True)
-        if not text:
-            console.print("[yellow](no speech detected)[/yellow]")
-            return
-        console.print(f"  [{ScribeTheme.TEXT_PRIMARY}]{text}[/{ScribeTheme.TEXT_PRIMARY}]")
-        inject_text(text)
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError as error:
+                    message = f"could not remove temporary dictation audio: {error}"
+                    transcription_failures.append(message)
+                    console.print(f"[yellow]Dictation cleanup warning:[/yellow] {message}")
+
+    def submit_transcription(pcm: bytes) -> None:
+        try:
+            transcription_queue.put_nowait(pcm)
+        except queue.Full:
+            message = "transcription queue is full; this utterance was not processed"
+            transcription_failures.append(message)
+            console.print(f"[red]Dictation failed:[/red] {message}")
+
+    def transcription_worker() -> None:
+        while True:
+            pcm = transcription_queue.get()
+            if pcm is None:
+                return
+            transcribe(pcm)
 
     def on_press(key: object) -> None:
         if key == keyboard.Key.esc:
@@ -572,7 +731,7 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
                 console.print("[cyan]* recording... tap F9 again to insert[/cyan]")
             else:
                 state["recording"] = False
-                transcribe(b"".join(buffer))
+                submit_transcription(b"".join(buffer))
                 reset_capture()
         elif mode == "hold" and key == keyboard.Key.f9 and not state["recording"]:
             state["recording"] = True
@@ -587,20 +746,30 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
     def on_release(key: object) -> None:
         if mode == "hold" and key == keyboard.Key.f9 and state["recording"]:
             state["recording"] = False
-            transcribe(b"".join(buffer))
+            submit_transcription(b"".join(buffer))
             reset_capture()
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
+    try:
+        worker = threading.Thread(
+            target=transcription_worker,
+            daemon=True,
+            name="scribe-listen-transcription",
+        )
+        worker.start()
+    except Exception as error:
+        console.print(f"[red]Could not start the transcription worker:[/red] {error}")
+        _unload_dictation_model(model_obj, console)
+        return 1
 
-    # When pasting, dictation owns the clipboard; remember the user's contents so we
-    # can restore them on exit instead of silently clobbering them.
-    prior_clipboard: str | None = None
-    if inject == "paste" and pyperclip is not None:
-        try:
-            prior_clipboard = pyperclip.paste()
-        except Exception:
-            prior_clipboard = None
+    try:
+        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
+    except Exception as error:
+        console.print(f"[red]Could not start the dictation hotkey:[/red] {error}")
+        worker_stopped = _stop_listen_worker(transcription_queue, worker, console)
+        if worker_stopped:
+            _unload_dictation_model(model_obj, console)
+        return 1
 
     if mode == "toggle":
         console.print(
@@ -621,6 +790,7 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
         "[yellow]Keep focus on a text field; do not dictate near a terminal or "
         "password field.[/yellow]"
     )
+    exit_code = 0
     try:
         with sd.RawInputStream(
             samplerate=sample_rate, blocksize=frame_samples, dtype="int16", channels=1
@@ -635,6 +805,14 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
                     # toggle transcribes on the second tap (in on_press), hold on
                     # release - neither needs silence endpointing.
                     buffer.append(pcm)
+                    if len(buffer) >= max_capture_frames:
+                        state["recording"] = False
+                        console.print(
+                            f"[yellow]Dictation reached the {MAX_DICTATION_SECONDS}-second "
+                            "safety limit and was stopped.[/yellow]"
+                        )
+                        submit_transcription(b"".join(buffer))
+                        reset_capture()
                     continue
                 samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
                 rms = float(np.sqrt(np.mean(samples**2))) if samples.size else 0.0
@@ -643,26 +821,76 @@ def run_listen(  # pragma: no cover - live microphone and keyboard I/O, exercise
                 frame_index += 1
                 if span is not None:
                     start, end = span  # end is exclusive (one past last speech frame)
-                    transcribe(b"".join(buffer[start:end]))
+                    submit_transcription(b"".join(buffer[start:end]))
+                    reset_capture()
+                elif len(buffer) >= max_capture_frames:
+                    tail = segmenter.flush()
+                    if tail is not None:
+                        start, end = tail
+                        submit_transcription(b"".join(buffer[start:end]))
+                    console.print(
+                        f"[yellow]Continuous dictation reached the {MAX_DICTATION_SECONDS}-second "
+                        "segment limit and started a new segment.[/yellow]"
+                    )
                     reset_capture()
             # Continuous mode: flush a final in-progress utterance on quit.
             if mode == "continuous":
                 tail = segmenter.flush()
                 if tail is not None:
                     start, end = tail
-                    transcribe(b"".join(buffer[start:end]))
+                    submit_transcription(b"".join(buffer[start:end]))
     except KeyboardInterrupt:
         pass
+    except Exception as error:
+        console.print(f"[red]Microphone capture failed:[/red] {error}")
+        exit_code = 1
     finally:
-        listener.stop()
-        if inject == "paste" and pyperclip is not None and prior_clipboard is not None:
-            import contextlib
-
-            with contextlib.suppress(Exception):
-                pyperclip.copy(prior_clipboard)
+        try:
+            listener.stop()
+        except Exception as error:
+            console.print(f"[yellow]Could not stop the dictation hotkey:[/yellow] {error}")
+            exit_code = 1
+        worker_stopped = _stop_listen_worker(transcription_queue, worker, console)
+        if not worker_stopped or not _unload_dictation_model(model_obj, console):
+            exit_code = 1
 
     console.print("[green]Dictation stopped.[/green]")
-    return 0
+    return 1 if transcription_failures else exit_code
+
+
+def _stop_listen_worker(
+    work_queue: queue.Queue[bytes | None],
+    worker: threading.Thread,
+    console: Console,
+    *,
+    timeout: float = 30.0,
+) -> bool:
+    """Stop the legacy transcription worker without allowing shutdown to hang."""
+    enqueue_timeout = min(1.0, max(0.0, timeout))
+    try:
+        work_queue.put(None, timeout=enqueue_timeout)
+    except queue.Full:
+        dropped = 0
+        while True:
+            try:
+                pending = work_queue.get_nowait()
+            except queue.Empty:
+                break
+            if pending is not None:
+                dropped += 1
+        work_queue.put_nowait(None)
+        console.print(
+            f"[yellow]Discarded {dropped} queued dictation utterance(s) during shutdown.[/yellow]"
+        )
+
+    worker.join(timeout=max(0.0, timeout))
+    if worker.is_alive():
+        console.print(
+            "[red]The transcription worker did not stop in time.[/red] "
+            "Scribe will exit without unloading a model that is still in use."
+        )
+        return False
+    return True
 
 
 def _load_dictation_model(  # pragma: no cover - loads a real model, hardware dependent
@@ -689,3 +917,22 @@ def _load_dictation_model(  # pragma: no cover - loads a real model, hardware de
     except Exception as e:
         console.print(f"[red]Could not load dictation model: {e}[/red]")
         return None
+
+
+def _unload_dictation_model(model_obj: Any, console: Console) -> bool:
+    """Explicitly release a legacy listen model before surrendering ownership."""
+    import gc
+
+    backend = getattr(model_obj, "model", None)
+    unload_model = getattr(backend, "unload_model", None)
+    unloaded = True
+    try:
+        if callable(unload_model):
+            unload_model()
+    except Exception as error:
+        unloaded = False
+        console.print(f"[yellow]Could not explicitly unload the voice model:[/yellow] {error}")
+    finally:
+        del backend
+        gc.collect()
+    return unloaded

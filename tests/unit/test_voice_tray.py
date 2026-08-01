@@ -120,7 +120,7 @@ def test_parse_hotkey_rejects_empty_and_unknown_keys() -> None:
 def test_resolve_tray_settings_reads_voice_tray_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         settings_mod,
-        "load_config_file",
+        "load_config_file_strict",
         lambda: {
             "voice": {
                 "tray": {
@@ -152,7 +152,7 @@ def test_resolve_tray_settings_reads_voice_tray_config(monkeypatch: pytest.Monke
 def test_resolve_tray_settings_cli_overrides_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         settings_mod,
-        "load_config_file",
+        "load_config_file_strict",
         lambda: {"voice": {"tray": {"profile": "accurate", "inject": "type"}}},
     )
 
@@ -163,10 +163,47 @@ def test_resolve_tray_settings_cli_overrides_config(monkeypatch: pytest.MonkeyPa
     assert settings.stt_model == "base"
 
 
+def test_resolve_tray_settings_rejects_nonfinite_audio_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings_mod,
+        "load_config_file_strict",
+        lambda: {
+            "voice": {
+                "tray": {
+                    "min_audio_seconds": float("inf"),
+                    "tts_speed": float("nan"),
+                }
+            }
+        },
+    )
+
+    settings = resolve_tray_settings()
+
+    assert settings.min_audio_seconds == 0.25
+    assert settings.tts_speed == 1.0
+
+
 def test_resolve_tray_settings_rejects_same_hotkey(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings_mod, "load_config_file", lambda: {})
+    monkeypatch.setattr(settings_mod, "load_config_file_strict", lambda: {})
     with pytest.raises(ValueError, match="must be different"):
         resolve_tray_settings(dictate_hotkey="f9", read_hotkey="F9")
+
+
+def test_resolve_tray_settings_surfaces_unreadable_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tomllib
+
+    monkeypatch.setattr(
+        settings_mod,
+        "load_config_file_strict",
+        lambda: (_ for _ in ()).throw(tomllib.TOMLDecodeError("bad table", "[bad", 0)),
+    )
+
+    with pytest.raises(ValueError, match="read resident voice settings safely"):
+        resolve_tray_settings()
 
 
 def test_model_for_profile_uses_gpu_capacity() -> None:
@@ -342,6 +379,179 @@ def test_service_start_hotkeys_handles_listener_start_failure(
     assert "hotkey listener unavailable" in str(service.error_message)
 
 
+def test_service_start_hotkeys_rejects_listener_that_exits_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped: list[bool] = []
+    keyboard = types.ModuleType("keyboard")
+
+    class ExitedListener:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+        def stop(self) -> None:
+            stopped.append(True)
+
+    keyboard.Listener = ExitedListener  # type: ignore[attr-defined]
+    pynput = types.ModuleType("pynput")
+    pynput.keyboard = keyboard  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pynput", pynput)
+    monkeypatch.setattr("scribe.voice.service.missing_dependency_packages", lambda **_kwargs: [])
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+
+    assert service.start_hotkeys() is False
+    assert stopped == [True]
+    assert service.running is False
+    assert service.state == "error"
+    assert "exited during startup" in str(service.error_message)
+
+
+def test_service_start_hotkeys_cleans_up_when_runtime_thread_cannot_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped: list[bool] = []
+    keyboard = types.ModuleType("keyboard")
+
+    class WorkingListener:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            stopped.append(True)
+
+    class FailingThread:
+        name = "failing-runtime-thread"
+
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            raise RuntimeError("thread quota exhausted")
+
+        def is_alive(self) -> bool:
+            return False
+
+    keyboard.Listener = WorkingListener  # type: ignore[attr-defined]
+    pynput = types.ModuleType("pynput")
+    pynput.keyboard = keyboard  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pynput", pynput)
+    monkeypatch.setattr("scribe.voice.service.missing_dependency_packages", lambda **_kwargs: [])
+    monkeypatch.setattr("scribe.voice.service.threading.Thread", FailingThread)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+
+    assert service.start_hotkeys() is False
+    assert service.running is False
+    assert service.state == "error"
+    assert stopped == [True]
+    assert "resident voice threads unavailable" in console.export_text()
+
+
+def test_watchdog_surfaces_reconnect_failure_once_and_recovers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyboard = types.ModuleType("keyboard")
+
+    class FailingListener:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            raise RuntimeError("keyboard hook denied")
+
+        def stop(self) -> None:
+            return None
+
+    keyboard.Listener = FailingListener  # type: ignore[attr-defined]
+    pynput = types.ModuleType("pynput")
+    pynput.keyboard = keyboard  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pynput", pynput)
+
+    messages: list[tuple[str, str]] = []
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service.set_notifier(lambda title, message: messages.append((title, message)))
+
+    assert service._reconnect_hotkeys() is False
+    assert service._reconnect_hotkeys() is False
+    assert service.state == "error"
+    assert service.error_message == "hotkey reconnect failed: keyboard hook denied"
+    assert messages == [("Scribe Voice error", "hotkey reconnect failed: keyboard hook denied")]
+
+    class WorkingListener:
+        def __init__(self, **_kwargs: object) -> None:
+            self.started = False
+
+        def start(self) -> None:
+            self.started = True
+
+    keyboard.Listener = WorkingListener  # type: ignore[attr-defined]
+
+    assert service._reconnect_hotkeys() is True
+    assert service.state == "idle"
+    assert service.error_message is None
+    assert messages[-1] == ("Scribe Voice", "Hotkeys reconnected")
+
+
+def test_watchdog_does_not_resurrect_listener_during_shutdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyboard = types.ModuleType("keyboard")
+    stopped: list[bool] = []
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+
+    class RacingListener:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            service.stop()
+
+        def stop(self) -> None:
+            stopped.append(True)
+
+    keyboard.Listener = RacingListener  # type: ignore[attr-defined]
+    pynput = types.ModuleType("pynput")
+    pynput.keyboard = keyboard  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pynput", pynput)
+
+    assert service._reconnect_hotkeys() is False
+    assert service._listener is None
+    assert service.state == "stopped"
+    assert stopped == [True]
+
+
+def test_watchdog_backs_off_after_reconnect_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._listener = types.SimpleNamespace(is_alive=lambda: False)
+    service._watchdog_stop = types.SimpleNamespace(wait=lambda _seconds: False)  # type: ignore[assignment]
+    monotonic_values = iter((10.0, 11.0))
+    monkeypatch.setattr("scribe.voice.service.time.monotonic", lambda: next(monotonic_values))
+
+    def fail_reconnect() -> bool:
+        service.running = False
+        return False
+
+    monkeypatch.setattr(service, "_reconnect_hotkeys", fail_reconnect)
+
+    service._watchdog_loop()
+
+    assert service._watchdog_failures == 1
+    assert service._watchdog_next_retry == 13.0
+
+
 def test_service_read_selection_does_not_read_stale_clipboard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -418,6 +628,53 @@ def test_service_inject_falls_back_to_typing_when_clipboard_wedged(
     assert typed == ["hello "]  # typed with the appended space, not silently dropped
 
 
+def test_service_inject_types_without_touching_clipboard_when_it_cannot_be_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.cli import voice
+
+    typed: list[str] = []
+    _install_fake_selection_modules(monkeypatch)
+    keyboard = sys.modules["pynput"].keyboard  # type: ignore[attr-defined]
+    keyboard.Controller.type = lambda _self, value: typed.append(value)
+    copy_calls: list[str] = []
+    monkeypatch.setattr(voice, "clipboard_paste", lambda: None)
+    monkeypatch.setattr(
+        voice,
+        "clipboard_copy",
+        lambda value: copy_calls.append(value) or True,
+    )
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(inject="paste"), console)
+
+    service._inject_text("hello")
+
+    assert typed == ["hello "]
+    assert copy_calls == []
+    assert "Could not preserve the clipboard" in console.export_text()
+
+
+def test_service_selection_capture_refuses_to_clobber_unreadable_clipboard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.cli import voice
+
+    _install_fake_selection_modules(monkeypatch)
+    copy_calls: list[str] = []
+    monkeypatch.setattr(voice, "clipboard_paste", lambda: None)
+    monkeypatch.setattr(
+        voice,
+        "clipboard_copy",
+        lambda value: copy_calls.append(value) or True,
+    )
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+
+    with pytest.raises(RuntimeError, match="clipboard unavailable"):
+        service._read_selection_text()
+
+    assert copy_calls == []
+
+
 def test_service_inject_restores_clipboard_when_paste_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -428,6 +685,52 @@ def test_service_inject_restores_clipboard_when_paste_fails(
         service._inject_text("dictated text")
 
     assert state.value == "old clipboard"
+
+
+def test_service_warns_when_clipboard_restore_fails_after_injection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.cli import voice
+
+    _install_fake_selection_modules(monkeypatch)
+    copy_calls: list[str] = []
+
+    def copy_once(value: str) -> bool:
+        copy_calls.append(value)
+        return len(copy_calls) == 1
+
+    monkeypatch.setattr(voice, "clipboard_paste", lambda: "old clipboard")
+    monkeypatch.setattr(voice, "clipboard_copy", copy_once)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+
+    service._inject_text("dictated text")
+
+    assert copy_calls == ["dictated text ", "old clipboard"]
+    assert "Could not restore the clipboard after text insertion" in console.export_text()
+
+
+def test_service_warns_when_clipboard_restore_fails_after_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.cli import voice
+
+    _install_fake_selection_modules(monkeypatch)
+    pasted = iter(["old clipboard", "selected text"])
+    copy_calls: list[str] = []
+
+    def copy_once(value: str) -> bool:
+        copy_calls.append(value)
+        return len(copy_calls) == 1
+
+    monkeypatch.setattr(voice, "clipboard_paste", lambda: next(pasted))
+    monkeypatch.setattr(voice, "clipboard_copy", copy_once)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+
+    assert service._read_selection_text() == "selected text"
+    assert copy_calls[-1] == "old clipboard"
+    assert "Could not restore the clipboard after selection capture" in console.export_text()
 
 
 def test_cli_read_selection_does_not_read_stale_clipboard(
@@ -455,6 +758,7 @@ def test_cli_read_selection_restores_clipboard_when_keyboard_fails(
 def test_tray_check_reports_missing_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     from scribe.voice import tray
 
+    monkeypatch.setattr(tray, "_resident_instance_status", lambda: ("inactive", True))
     dep = Dependency("pystray", "pystray", "tray icon", required_for_tray=True)
 
     def fake_report(*, include_tray: bool) -> list[DependencyStatus]:
@@ -541,6 +845,7 @@ def test_native_tray_compatibility_requires_toggle_function_keys() -> None:
 def test_tray_check_reports_backend_and_selection_state(monkeypatch: pytest.MonkeyPatch) -> None:
     from scribe.voice import tray
 
+    monkeypatch.setattr(tray, "_resident_instance_status", lambda: ("inactive", True))
     monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
     monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
     monkeypatch.setattr(
@@ -558,14 +863,46 @@ def test_tray_check_reports_backend_and_selection_state(monkeypatch: pytest.Monk
     output = console.export_text()
     assert "platform" in output
     assert "backend" in output
+    assert "resident" in output
+    assert "inactive" in output
     assert "startup" in output
     assert "Python tray" in output
     assert "opt-in via SCRIBE_TRAY_NATIVE_BIN" in output
 
 
+def test_resident_instance_status_reports_owner_and_lock_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tray
+
+    class OwnedLock:
+        owner = types.SimpleNamespace(description="PID 42, Scribe 2.8.1")
+
+        def acquire(self) -> bool:
+            return False
+
+    monkeypatch.setattr(tray, "TrayInstanceLock", OwnedLock)
+    assert tray._resident_instance_status() == (
+        "running (PID 42, Scribe 2.8.1)",
+        True,
+    )
+
+    class BrokenLock:
+        owner = None
+
+        def acquire(self) -> bool:
+            raise PermissionError("lock directory denied")
+
+    monkeypatch.setattr(tray, "TrayInstanceLock", BrokenLock)
+    status, ok = tray._resident_instance_status()
+    assert ok is False
+    assert status == "unavailable (lock directory denied)"
+
+
 def test_tray_check_darwin_emits_permission_advisories(monkeypatch: pytest.MonkeyPatch) -> None:
     from scribe.voice import tray
 
+    monkeypatch.setattr(tray, "_resident_instance_status", lambda: ("inactive", True))
     monkeypatch.setattr(tray.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
     monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
@@ -592,6 +929,7 @@ def test_tray_check_linux_headless_warns_without_x11_claim(
 ) -> None:
     from scribe.voice import tray
 
+    monkeypatch.setattr(tray, "_resident_instance_status", lambda: ("inactive", True))
     monkeypatch.setattr(tray.platform, "system", lambda: "Linux")
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
@@ -620,6 +958,7 @@ def test_tray_check_labels_explicit_native_override_unverified(
 ) -> None:
     from scribe.voice import tray
 
+    monkeypatch.setattr(tray, "_resident_instance_status", lambda: ("inactive", True))
     monkeypatch.setattr(tray, "dependency_report", lambda **_kwargs: [])
     monkeypatch.setattr(tray, "missing_dependency_packages", lambda **_kwargs: [])
     monkeypatch.setattr(
@@ -648,6 +987,19 @@ def test_run_tray_falls_back_to_python_after_native_startup_failure(
     native.touch()
     selection = tray.NativeTraySelection(native, "explicit", f"explicit path {native}")
     calls: list[str] = []
+
+    class FakeInstanceLock:
+        owner = None
+
+        def acquire(self) -> bool:
+            calls.append("lock")
+            return True
+
+        def retain_until_process_exit(self) -> None:
+            calls.append("retain")
+
+    monkeypatch.setattr(tray, "TrayInstanceLock", FakeInstanceLock)
+    monkeypatch.setattr(tray, "_configure_resident_logging", lambda _console: None)
     monkeypatch.setattr(tray, "_resolve_native_tray", lambda: selection)
     monkeypatch.setattr(
         tray,
@@ -661,7 +1013,93 @@ def test_run_tray_falls_back_to_python_after_native_startup_failure(
     )
 
     assert tray.run_tray(Console(record=True), TraySettings(), no_tray=False) == 0
-    assert calls == ["native", "python"]
+    assert calls == ["lock", "native", "python", "retain"]
+
+
+def test_run_tray_duplicate_exits_before_starting_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tray
+    from scribe.voice.instance import TrayInstanceOwner
+
+    calls: list[str] = []
+
+    class BusyInstanceLock:
+        owner = TrayInstanceOwner(1234, "2.8.0", None)
+
+        def acquire(self) -> bool:
+            return False
+
+        def release(self) -> None:
+            raise AssertionError("an unowned lock must not be released")
+
+    monkeypatch.setattr(tray, "TrayInstanceLock", BusyInstanceLock)
+    monkeypatch.setattr(
+        tray,
+        "_run_owned_tray",
+        lambda *_args, **_kwargs: calls.append("started") or 0,
+    )
+    console = Console(record=True)
+
+    assert tray.run_tray(console, TraySettings(), no_tray=False) == 0
+    assert calls == []
+    output = console.export_text()
+    assert "already running (PID 1234, Scribe 2.8.0)" in output
+    assert "without loading another model" in output
+
+
+def test_run_tray_lock_failure_does_not_run_unprotected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tray
+
+    class BrokenInstanceLock:
+        owner = None
+
+        def acquire(self) -> bool:
+            raise OSError("lock unavailable")
+
+        def release(self) -> None:
+            raise AssertionError("an unowned lock must not be released")
+
+    monkeypatch.setattr(tray, "TrayInstanceLock", BrokenInstanceLock)
+    console = Console(record=True)
+
+    assert tray.run_tray(console, TraySettings(), no_tray=False) == 1
+    assert "Could not protect the resident tray from duplicates" in console.export_text()
+
+
+def test_resident_logging_is_bounded_and_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import logging
+
+    from scribe.voice import tray
+
+    monkeypatch.setattr(tray.Path, "home", lambda: tmp_path)
+    voice_logger = logging.getLogger("scribe.voice")
+    original_handlers = list(voice_logger.handlers)
+    original_level = voice_logger.level
+    try:
+        first = tray._configure_resident_logging(Console(record=True))
+        second = tray._configure_resident_logging(Console(record=True))
+
+        assert first == tmp_path / ".scribe" / "logs" / "resident-voice.log"
+        assert second == first
+        matching = [
+            handler
+            for handler in voice_logger.handlers
+            if Path(str(getattr(handler, "baseFilename", ""))) == first
+        ]
+        assert len(matching) == 1
+        assert matching[0].maxBytes == 1_000_000  # type: ignore[attr-defined]
+        assert matching[0].backupCount == 3  # type: ignore[attr-defined]
+    finally:
+        for handler in list(voice_logger.handlers):
+            if handler not in original_handlers:
+                voice_logger.removeHandler(handler)
+                handler.close()
+        voice_logger.setLevel(original_level)
 
 
 def test_native_runner_keeps_capability_out_of_arguments_and_preloads_after_ready(
@@ -687,6 +1125,10 @@ def test_native_runner_keeps_capability_out_of_arguments_and_preloads_after_read
             return 32123
 
         def wait_for_ipc_ready(self, *, timeout: float) -> bool:
+            assert timeout > 0
+            return True
+
+        def wait_for_ipc_quit(self, *, timeout: float) -> bool:
             assert timeout > 0
             return True
 
@@ -779,6 +1221,190 @@ def test_native_runner_does_not_preload_before_failed_readiness(
 
     assert result is None
     assert service.preload_calls == 0
+
+
+def test_native_runner_honors_clean_quit_during_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    class FakeService:
+        ipc_token = "capability"  # noqa: S105 - synthetic test capability
+        preload_calls = 0
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def wait_for_ipc_quit(self, *, timeout: float) -> bool:
+            assert timeout > 0
+            return True
+
+        def stop(self) -> None:
+            return None
+
+    class ClosedProcess:
+        def poll(self) -> int:
+            return 0
+
+    service = FakeService()
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    monkeypatch.setattr(tray, "VoiceTrayService", lambda *_args: service)
+    monkeypatch.setattr("subprocess.Popen", lambda *_args, **_kwargs: ClosedProcess())
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+    console = Console(record=True)
+
+    result = tray._run_native_tray(
+        console,
+        TraySettings(),
+        tray.NativeTraySelection(native, "explicit", f"explicit path {native}"),
+    )
+
+    assert result == 0
+    assert service.preload_calls == 0
+    assert "closed during startup" in console.export_text()
+
+
+def test_native_runner_recovers_from_unexplained_zero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    class FakeService:
+        ipc_token = "capability"  # noqa: S105 - synthetic test capability
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def start_model_preload(self) -> None:
+            return None
+
+        def wait_for_ipc_quit(self, *, timeout: float) -> bool:
+            assert timeout > 0
+            return False
+
+        def stop(self) -> bool:
+            return True
+
+    class ClosedProcess:
+        def poll(self) -> None:
+            return None
+
+        def wait(self) -> int:
+            return 0
+
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    monkeypatch.setattr(tray, "VoiceTrayService", lambda *_args: FakeService())
+    monkeypatch.setattr("subprocess.Popen", lambda *_args, **_kwargs: ClosedProcess())
+    monkeypatch.setattr(tray, "_wait_for_native_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tray, "_await_model_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+    console = Console(record=True)
+
+    result = tray._run_native_tray(
+        console,
+        TraySettings(),
+        tray.NativeTraySelection(native, "explicit", f"explicit path {native}"),
+    )
+
+    assert result is None
+    assert "without an authenticated quit request" in console.export_text()
+
+
+def test_native_runner_refuses_fallback_while_model_work_is_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scribe.voice import tray
+
+    class FakeService:
+        ipc_token = "capability"  # noqa: S105 - synthetic test capability
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def start_model_preload(self) -> None:
+            return None
+
+        def stop(self) -> bool:
+            return False
+
+    class FailedProcess:
+        def poll(self) -> None:
+            return None
+
+        def wait(self) -> int:
+            return 7
+
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    monkeypatch.setattr(tray, "VoiceTrayService", lambda *_args: FakeService())
+    monkeypatch.setattr("subprocess.Popen", lambda *_args, **_kwargs: FailedProcess())
+    monkeypatch.setattr(tray, "_wait_for_native_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tray, "_await_model_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+    console = Console(record=True)
+
+    result = tray._run_native_tray(
+        console,
+        TraySettings(),
+        tray.NativeTraySelection(native, "explicit", f"explicit path {native}"),
+    )
+
+    assert result == 1
+    assert "avoid a second model allocation" in console.export_text()
+
+
+def test_native_runner_refuses_fallback_when_failed_daemon_cannot_be_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    from scribe.voice import tray
+
+    class FakeService:
+        ipc_token = "capability"  # noqa: S105 - synthetic test capability
+
+        def start_ipc_server(self, *, preload_model: bool) -> int:
+            assert preload_model is False
+            return 32123
+
+        def stop(self) -> None:
+            return None
+
+    class StuckProcess:
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            raise OSError("access denied")
+
+        def wait(self, *, timeout: float) -> int:
+            raise subprocess.TimeoutExpired("scribe-tray", timeout)
+
+        def kill(self) -> None:
+            raise OSError("access denied")
+
+    native = tmp_path / "scribe-tray.exe"
+    native.touch()
+    monkeypatch.setattr(tray, "VoiceTrayService", lambda *_args: FakeService())
+    monkeypatch.setattr("subprocess.Popen", lambda *_args, **_kwargs: StuckProcess())
+    monkeypatch.setattr(tray, "_wait_for_native_ready", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(tray, "packaged_native_icon_path", lambda: tmp_path / "scribe.ico")
+    console = Console(record=True)
+
+    result = tray._run_native_tray(
+        console,
+        TraySettings(),
+        tray.NativeTraySelection(native, "explicit", f"explicit path {native}"),
+    )
+
+    assert result == 1
+    output = " ".join(console.export_text().split())
+    assert "fallback was not started to avoid duplicate hotkeys" in output
 
 
 def test_tray_command_check_uses_no_tray_dependency_scope(
@@ -901,6 +1527,84 @@ def test_hotkey_hints_word_for_activation_mode() -> None:
     assert "Hold F9" in hold_dictate
 
 
+def test_python_tray_becomes_visible_before_model_preload() -> None:
+    from scribe.voice import tray
+
+    events: list[tuple[str, object]] = []
+
+    class FakeIcon:
+        def __init__(self) -> None:
+            self._visible = False
+
+        @property
+        def visible(self) -> bool:
+            return self._visible
+
+        @visible.setter
+        def visible(self, value: bool) -> None:
+            self._visible = value
+            events.append(("visible", value))
+
+    icon = FakeIcon()
+
+    class FakeService:
+        running = True
+        state = "idle"
+        error_message = None
+
+        def start_model_preload(self) -> None:
+            events.append(("preload", icon.visible))
+
+        def is_model_loading(self) -> bool:
+            return False
+
+        def _emit(self, title: str, message: str) -> None:
+            events.append((title, message))
+
+    tray._show_and_warm_python_tray(
+        icon,
+        FakeService(),  # type: ignore[arg-type]
+        TraySettings(preload_model=True),
+        Console(record=True),
+    )
+
+    assert events[0] == ("visible", True)
+    assert events[1] == ("preload", True)
+    assert events[2][0] == "Scribe Voice ready"
+
+
+def test_python_tray_surfaces_model_failure_after_becoming_visible() -> None:
+    from scribe.voice import tray
+
+    events: list[tuple[str, str]] = []
+    icon = types.SimpleNamespace(visible=False)
+
+    class FailedService:
+        running = True
+        state = "error"
+        error_message = "model file is corrupt"
+
+        def start_model_preload(self) -> None:
+            return None
+
+        def is_model_loading(self) -> bool:
+            return False
+
+        def _emit(self, title: str, message: str) -> None:
+            events.append((title, message))
+
+    tray._show_and_warm_python_tray(
+        icon,
+        FailedService(),  # type: ignore[arg-type]
+        TraySettings(preload_model=True),
+        Console(record=True),
+    )
+
+    assert icon.visible is True
+    assert events[0][0] == "Scribe Voice error"
+    assert "model file is corrupt" in events[0][1]
+
+
 def _drain_actions(service: VoiceTrayService) -> None:
     """Run queued hotkey actions, as the dispatcher thread does in the live app."""
     import queue
@@ -921,6 +1625,7 @@ def test_native_ipc_requires_capability_and_readiness(monkeypatch: pytest.Monkey
     monkeypatch.setattr(service, "read_selection_now", lambda: calls.append("read") or True)
     monkeypatch.setattr(service, "stop_speaking", lambda: calls.append("stop"))
     port = service.start_ipc_server()
+    assert service._watchdog is None
 
     try:
         # Wrong-length AUTH must reject without killing the accept loop.
@@ -980,6 +1685,11 @@ def test_native_ipc_requires_capability_and_readiness(monkeypatch: pytest.Monkey
 
                 time.sleep(0.01)
             assert calls == ["dictate", "read", "stop"]
+
+            assert not service.wait_for_ipc_quit(timeout=0.01)
+            stream.write(b"QUIT\n")
+            stream.flush()
+            assert service.wait_for_ipc_quit(timeout=1.0)
     finally:
         service.stop()
 
@@ -991,6 +1701,7 @@ def test_on_press_enqueues_action_off_the_hook_thread(monkeypatch: pytest.Monkey
     # The fix: the keyboard-hook callback must NOT run device work inline (opening
     # the mic on the hook thread breaks key capture on Windows). It enqueues.
     service = VoiceTrayService(TraySettings(activation="toggle"), Console(record=True))
+    service.running = True
     calls: list[str] = []
     monkeypatch.setattr(service, "_begin_recording", lambda: calls.append("begin"))
 
@@ -1005,6 +1716,7 @@ def test_service_toggle_dictation_starts_then_stops_on_taps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = VoiceTrayService(TraySettings(activation="toggle"), Console(record=True))
+    service.running = True
     calls: list[str] = []
     monkeypatch.setattr(service, "_begin_recording", lambda: calls.append("begin"))
     monkeypatch.setattr(service, "_finish_recording", lambda: calls.append("finish"))
@@ -1023,6 +1735,7 @@ def test_service_hold_dictation_starts_on_press_stops_on_release(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = VoiceTrayService(TraySettings(activation="hold"), Console(record=True))
+    service.running = True
     calls: list[str] = []
     monkeypatch.setattr(service, "_begin_recording", lambda: calls.append("begin"))
     monkeypatch.setattr(service, "_finish_recording", lambda: calls.append("finish"))
@@ -1037,6 +1750,7 @@ def test_service_hold_dictation_starts_on_press_stops_on_release(
 
 def test_service_read_hotkey_toggles_start_and_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     service = VoiceTrayService(TraySettings(activation="toggle"), Console(record=True))
+    service.running = True
     calls: list[str] = []
     monkeypatch.setattr(service, "read_selection_now", lambda: calls.append("read") or True)
     monkeypatch.setattr(service, "stop_speaking", lambda: calls.append("stop"))
@@ -1052,12 +1766,27 @@ def test_service_read_hotkey_toggles_start_and_stop(monkeypatch: pytest.MonkeyPa
     assert calls == ["read", "stop"]
 
 
+def test_stop_speaking_surfaces_playback_stop_failure() -> None:
+    class FailingEngine:
+        def stop(self) -> None:
+            raise RuntimeError("audio device is stuck")
+
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service._tts_engine = FailingEngine()
+
+    service.stop_speaking()
+
+    assert "Could not stop read-aloud" in console.export_text()
+
+
 def test_finish_recording_resets_state_when_worker_is_busy() -> None:
     # Regression: with --preload, a dictation finishing while the model is still
     # loading must not get stuck in "recording" - it resets to idle instead.
     import threading
 
-    service = VoiceTrayService(TraySettings(), Console(record=True))
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
     service.running = True  # a real running service finishing a recording
     service._set_state("recording")
     service._audio_buffer = [b"\x00" * 9000]  # above the min-audio floor
@@ -1069,9 +1798,149 @@ def test_finish_recording_resets_state_when_worker_is_busy() -> None:
     try:
         service._finish_recording()
         assert service.state == "idle"
+        assert "was not transcribed" in console.export_text()
     finally:
         busy.set()
         worker.join(timeout=1)
+
+
+def test_begin_recording_closes_stream_when_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    closed: list[bool] = []
+    sounddevice = types.ModuleType("sounddevice")
+
+    class FailingStream:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            raise RuntimeError("microphone permission denied")
+
+        def close(self) -> None:
+            closed.append(True)
+
+    sounddevice.RawInputStream = FailingStream  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sounddevice", sounddevice)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+
+    service._begin_recording()
+
+    assert closed == [True]
+    assert service._stream is None
+    assert service.state == "error"
+    assert "Microphone unavailable" in console.export_text()
+
+
+def test_begin_recording_closes_stream_if_shutdown_wins_startup_race(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    sounddevice = types.ModuleType("sounddevice")
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+
+    class RacingStream:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            events.append("start")
+            service.stop()
+
+        def stop(self) -> None:
+            events.append("stop")
+
+        def close(self) -> None:
+            events.append("close")
+
+    sounddevice.RawInputStream = RacingStream  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sounddevice", sounddevice)
+
+    service._begin_recording()
+
+    assert events == ["start", "stop", "close"]
+    assert service._stream is None
+    assert service.state == "stopped"
+
+
+def test_queued_recording_start_is_rejected_visibly_after_pause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sounddevice = types.ModuleType("sounddevice")
+    sounddevice.RawInputStream = lambda **_kwargs: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+        AssertionError("paused service opened the microphone")
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", sounddevice)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+    service.paused = True
+    service._dictating = True
+
+    service._begin_recording()
+
+    assert service._dictating is False
+    assert "Hotkeys are paused" in console.export_text()
+
+
+def test_finish_recording_reports_too_little_audio() -> None:
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+    service._set_state("recording")
+    service._audio_buffer = [b"\x00\x00"]
+
+    service._finish_recording()
+
+    assert service.state == "idle"
+    assert "No usable audio captured" in console.export_text()
+
+
+def test_audio_callback_caps_runaway_recording_and_queues_one_visible_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import service as service_module
+
+    monkeypatch.setattr(service_module, "MAX_DICTATION_SECONDS", 1)
+    service = VoiceTrayService(TraySettings(sample_rate=2), Console(record=True))
+    service.running = True
+    service.state = "recording"
+    service._dictating = True
+    finished: list[bool] = []
+    monkeypatch.setattr(service, "_finish_recording", lambda: finished.append(True))
+
+    service._audio_callback(b"1234567890", 5, object(), None)
+    service._audio_callback(b"overflow", 4, object(), None)
+
+    assert b"".join(service._audio_buffer) == b"1234"
+    assert service._audio_bytes == 4
+    assert service._dictating is False
+    action = service._actions.get_nowait()
+    assert action is not None
+    action()
+    assert finished == [True]
+    assert service._actions.empty()
+
+
+def test_audio_callback_surfaces_device_overflow_once() -> None:
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+    service.state = "recording"
+
+    service._audio_callback(b"\x00\x00", 1, object(), "input overflow")
+    service._audio_callback(b"\x00\x00", 1, object(), "input overflow again")
+
+    action = service._actions.get_nowait()
+    assert action is not None
+    action()
+    assert service._actions.empty()
+    output = console.export_text()
+    assert "overflowed audio" in output
+    assert "input overflow" in output
 
 
 def test_finish_recording_does_not_clobber_error_state() -> None:
@@ -1098,6 +1967,82 @@ def test_return_to_idle_after_stop_does_not_revive_service() -> None:
     assert service.state == "stopped"
 
 
+def test_transcription_finishing_after_stop_does_not_inject_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    injected: list[str] = []
+
+    class Model:
+        def transcribe(self, *_args: object, **_kwargs: object) -> tuple[list[object], None]:
+            service.running = False
+            service.state = "stopped"
+            return [types.SimpleNamespace(text="should not be inserted")], None
+
+    service.running = True
+    service._model = Model()
+    monkeypatch.setattr(service, "_inject_text", lambda text: injected.append(text))
+
+    service._transcribe_and_inject(b"\x00\x00")
+
+    assert injected == []
+    assert service.state == "stopped"
+
+
+def test_service_stop_interrupts_active_read_aloud() -> None:
+    stopped: list[bool] = []
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._dictating = True
+    service._audio_buffer = [b"captured audio"]
+    service.hotkeys.press("f9")
+    service._tts_engine = types.SimpleNamespace(stop=lambda: stopped.append(True))
+
+    service.stop()
+
+    assert stopped == [True]
+    assert service.state == "stopped"
+    assert service._dictating is False
+    assert service._audio_buffer == []
+    assert service.hotkeys.pressed == frozenset()
+
+
+def test_stopped_service_ignores_late_hotkey_and_read_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.state = "stopped"
+    monkeypatch.setattr(
+        service,
+        "_read_selection_text",
+        lambda: (_ for _ in ()).throw(AssertionError("selection read after stop")),
+    )
+
+    service._on_press(_NamedKey("f9"))
+    service._on_release(_NamedKey("f9"))
+    service._read_selection_and_speak()
+
+    assert service._dictating is False
+    assert service.hotkeys.pressed == frozenset()
+    assert service.state == "stopped"
+
+
+def test_model_use_refuses_to_load_after_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.state = "stopped"
+    monkeypatch.setattr(
+        service,
+        "_load_model",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("model loaded after stop")),
+    )
+
+    with pytest.raises(RuntimeError, match="stopped before model use"):
+        with service._use_model():
+            pass
+
+    assert service._model_users == 0
+
+
 def test_set_paused_discards_recording_and_resets_intent() -> None:
     # Pause mid-recording discards the capture and clears the toggle intent
     # (without holding the state lock across stream teardown).
@@ -1113,6 +2058,21 @@ def test_set_paused_discards_recording_and_resets_intent() -> None:
     assert service._dictating is False
     assert service.state == "idle"
     assert service._audio_buffer == []
+
+
+def test_pause_cleanup_cannot_revive_a_service_stopped_during_stream_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service.state = "recording"
+    service._audio_buffer = [b"captured"]
+    monkeypatch.setattr(service, "_stop_stream", service.stop)
+
+    service.set_paused(True)
+
+    assert service.running is False
+    assert service.state == "stopped"
 
 
 def test_speak_text_falls_back_to_system_voice_on_kokoro_failure(
@@ -1147,9 +2107,99 @@ def test_speak_text_falls_back_to_system_voice_on_kokoro_failure(
     monkeypatch.setattr(tts, "make_speaker", fake_make_speaker)
 
     service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
     service._speak_text("hello world")
 
     assert spoken == ["hello world"]  # fell back to the system voice, did not crash
+
+
+def test_speak_text_propagates_system_fallback_failure_and_closes_speakers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tts
+
+    closed: list[str] = []
+
+    class FailingSpeaker:
+        def __init__(self, name: str, failure: str) -> None:
+            self.name = name
+            self.failure = failure
+
+        def speak(self, _text: str) -> None:
+            raise RuntimeError(self.failure)
+
+        def close(self) -> None:
+            closed.append(self.name)
+
+    def fake_make_speaker(backend: str, **_kwargs: object) -> object:
+        if backend == "kokoro":
+            return FailingSpeaker("kokoro", "neural playback failed")
+        return FailingSpeaker("system", "system playback failed")
+
+    monkeypatch.setattr(tts, "resolve_tts_backend", lambda *_a, **_k: "kokoro")
+    monkeypatch.setattr(tts, "kokoro_installed", lambda: True)
+    monkeypatch.setattr(tts, "kokoro_assets_ready", lambda: True)
+    monkeypatch.setattr(tts, "make_speaker", fake_make_speaker)
+
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    with pytest.raises(RuntimeError, match="system playback failed"):
+        service._speak_text("hello world")
+
+    assert closed == ["kokoro", "system"]
+    assert service._tts_engine is None
+
+
+def test_speak_text_closes_new_engine_when_shutdown_wins_publish_race(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import tts
+
+    events: list[str] = []
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+
+    class Speaker:
+        def speak(self, _text: str) -> None:
+            events.append("speak")
+
+        def close(self) -> None:
+            events.append("close")
+
+    def make_speaker(*_args: object, **_kwargs: object) -> Speaker:
+        service.stop()
+        return Speaker()
+
+    monkeypatch.setattr(tts, "resolve_tts_backend", lambda *_a, **_k: "pyttsx3")
+    monkeypatch.setattr(tts, "kokoro_installed", lambda: False)
+    monkeypatch.setattr(tts, "kokoro_assets_ready", lambda: False)
+    monkeypatch.setattr(tts, "make_speaker", make_speaker)
+
+    service._speak_text("hello")
+
+    assert events == ["close"]
+    assert service._tts_engine is None
+    assert service.state == "stopped"
+
+
+def test_warm_tts_surfaces_neural_voice_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scribe.voice import tts
+
+    monkeypatch.setattr(tts, "resolve_tts_backend", lambda *_a, **_k: "kokoro")
+    monkeypatch.setattr(tts, "kokoro_installed", lambda: True)
+    monkeypatch.setattr(tts, "kokoro_assets_ready", lambda: True)
+    monkeypatch.setattr(
+        tts,
+        "load_kokoro",
+        lambda: (_ for _ in ()).throw(RuntimeError("model assets corrupt")),
+    )
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+
+    service._warm_tts()
+
+    assert "Neural voice warmup failed" in console.export_text()
 
 
 def test_load_model_returns_cached_without_reloading() -> None:
@@ -1159,6 +2209,137 @@ def test_load_model_returns_cached_without_reloading() -> None:
     sentinel = object()
     service._model = sentinel
     assert service._load_model() is sentinel
+
+
+def test_service_stop_unloads_resident_ctranslate_model() -> None:
+    unloaded: list[bool] = []
+
+    class Backend:
+        def unload_model(self) -> None:
+            unloaded.append(True)
+
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._model = types.SimpleNamespace(model=Backend())
+    service._model_name = "small"
+
+    service.stop()
+
+    assert unloaded == [True]
+    assert service._model is None
+    assert service._model_name is None
+    assert service.state == "stopped"
+
+
+def test_service_logs_explicit_model_unload_failure(caplog: pytest.LogCaptureFixture) -> None:
+    class Backend:
+        def unload_model(self) -> None:
+            raise RuntimeError("CUDA unload failed")
+
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._model = types.SimpleNamespace(model=Backend())
+
+    service.stop()
+
+    assert service._model is None
+    assert "Could not explicitly unload the voice model" in caplog.text
+
+
+def test_service_still_unloads_model_when_thread_join_fails() -> None:
+    unloaded: list[bool] = []
+
+    class BrokenThread:
+        name = "broken-worker"
+
+        def is_alive(self) -> bool:
+            return True
+
+        def join(self, *, timeout: float) -> None:
+            assert timeout == 2.0
+            raise RuntimeError("thread state corrupt")
+
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._worker = BrokenThread()  # type: ignore[assignment]
+    service._model = types.SimpleNamespace(
+        model=types.SimpleNamespace(unload_model=lambda: unloaded.append(True))
+    )
+
+    service.stop()
+
+    assert unloaded == [True]
+    assert service._model is None
+    assert service.state == "stopped"
+
+
+def test_service_stop_reports_incomplete_active_model_cleanup() -> None:
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+    service._model_users = 1
+
+    assert service.stop() is False
+    assert "another backend will not be started" in console.export_text()
+
+    service._model_users = 0
+    assert service.stop() is True
+
+
+def test_service_defers_model_unload_until_active_use_finishes() -> None:
+    unloaded: list[bool] = []
+
+    class Backend:
+        def unload_model(self) -> None:
+            unloaded.append(True)
+
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.running = True
+    service._model = types.SimpleNamespace(model=Backend())
+
+    with service._use_model():
+        service.stop()
+        assert unloaded == []
+
+    assert unloaded == [True]
+    assert service._model is None
+
+
+def test_model_preload_does_not_start_after_service_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    called: list[bool] = []
+    monkeypatch.setattr(service, "_preload_model_worker", lambda: called.append(True))
+
+    service.start_model_preload()
+
+    assert called == []
+    assert service.model_loading is False
+    assert service._preload_thread is None
+
+
+def test_model_preload_thread_start_failure_clears_loading_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingThread:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        def start(self) -> None:
+            raise RuntimeError("thread quota exhausted")
+
+    monkeypatch.setattr("scribe.voice.service.threading.Thread", FailingThread)
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(), console)
+    service.running = True
+
+    service.start_model_preload()
+
+    assert service.model_loading is False
+    assert service._preload_thread is None
+    assert service.state == "error"
+    assert "thread quota exhausted" in console.export_text()
 
 
 def test_status_text_shows_loading_while_model_warms() -> None:
@@ -1205,6 +2386,61 @@ def test_tray_startup_install_remove_roundtrip(
     assert startup.is_startup_enabled() is False
 
 
+def test_linux_startup_exec_uses_desktop_entry_quoting() -> None:
+    from scribe.voice.startup import _desktop_exec_arg
+
+    assert _desktop_exec_arg("/opt/Scribe App/scribe") == '"/opt/Scribe App/scribe"'
+    assert _desktop_exec_arg("100%$HOME") == '"100%%\\$HOME"'
+    assert _desktop_exec_arg("line\nbreak") == '"line\\nbreak"'
+
+
+def test_macos_startup_install_restores_prior_entry_when_launchctl_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    from scribe.voice import startup
+
+    path = tmp_path / "io.pueo.scribe.tray.plist"
+    prior = b"prior launch agent"
+    path.write_bytes(prior)
+    monkeypatch.setattr(startup, "_macos_agent_path", lambda: path)
+    monkeypatch.setattr(startup, "_tray_command", lambda: ("/usr/local/bin/scribe", ["tray"]))
+    monkeypatch.setattr(
+        startup.subprocess,
+        "run",
+        lambda *_args, **_kwargs: types.SimpleNamespace(returncode=5),
+    )
+
+    with pytest.raises(OSError, match="status 5"):
+        startup._install_macos()
+
+    assert path.read_bytes() == prior
+
+
+def test_macos_startup_remove_reports_loaded_job_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    from scribe.voice import startup
+
+    path = tmp_path / "io.pueo.scribe.tray.plist"
+    path.write_text("launch agent", encoding="utf-8")
+    monkeypatch.setattr(startup, "startup_path", lambda: path)
+    monkeypatch.setattr(startup, "is_macos", lambda: True)
+    monkeypatch.setattr(
+        startup.subprocess,
+        "run",
+        lambda *_args, **_kwargs: types.SimpleNamespace(returncode=9),
+    )
+
+    with pytest.raises(OSError, match="current login-session job"):
+        startup.remove_startup()
+
+    assert not path.exists()
+
+
 def test_run_tray_startup_install_macos_mentions_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1241,6 +2477,44 @@ def test_run_tray_startup_install_linux_mentions_wayland_caveat(
     assert "Wayland" in text
 
 
+def test_run_tray_startup_remove_reports_filesystem_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import startup
+
+    monkeypatch.setattr(
+        startup,
+        "remove_startup",
+        lambda: (_ for _ in ()).throw(PermissionError("entry is locked")),
+    )
+    console = Console(record=True)
+
+    assert startup.run_tray_startup(console, "remove") == 1
+    assert "Could not disable run at login" in console.export_text()
+
+
+def test_tray_startup_toggle_surfaces_install_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scribe.voice import startup, tray
+
+    monkeypatch.setattr(startup, "startup_path", lambda: tmp_path / "not-installed")
+    monkeypatch.setattr(
+        startup,
+        "install_startup",
+        lambda: (_ for _ in ()).throw(PermissionError("startup folder denied")),
+    )
+    messages: list[tuple[str, str]] = []
+    service = VoiceTrayService(TraySettings(), Console(record=True))
+    service.set_notifier(lambda title, message: messages.append((title, message)))
+
+    assert tray._toggle_startup(service) is False
+    assert messages == [
+        ("Scribe Voice error", "Could not change run at login: startup folder denied")
+    ]
+
+
 def test_startup_path_rejects_unsupported_os(monkeypatch: pytest.MonkeyPatch) -> None:
     from scribe.voice import startup
 
@@ -1252,12 +2526,16 @@ def test_startup_path_rejects_unsupported_os(monkeypatch: pytest.MonkeyPatch) ->
         startup.startup_path()
     assert startup.is_startup_enabled() is False
 
+    console = Console(record=True)
+    assert startup.run_tray_startup(console, "status") == 1
+    assert "Could not inspect run at login" in console.export_text()
+
 
 def test_set_hotkey_changes_live_and_rejects_collisions(monkeypatch: pytest.MonkeyPatch) -> None:
     import scribe.config_file as cf
 
     # Don't touch the real config file when persisting.
-    monkeypatch.setattr(cf, "load_config_file", lambda: {})
+    monkeypatch.setattr(cf, "load_config_file_strict", lambda: {})
     monkeypatch.setattr(cf, "save_config_file", lambda _data: cf.CONFIG_PATH)
 
     service = VoiceTrayService(TraySettings(dictate_hotkey="f9", read_hotkey="f8"), Console())
@@ -1270,3 +2548,24 @@ def test_set_hotkey_changes_live_and_rejects_collisions(monkeypatch: pytest.Monk
     # Collisions are rejected (read can't become the dictate key).
     assert service.set_hotkey("read", "f9") is False
     assert service.read_hotkey == "f7"  # unchanged
+
+
+def test_set_hotkey_rolls_back_when_config_cannot_be_saved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scribe.config_file as cf
+
+    monkeypatch.setattr(cf, "load_config_file_strict", lambda: {})
+    monkeypatch.setattr(
+        cf,
+        "save_config_file",
+        lambda _data: (_ for _ in ()).throw(PermissionError("config is read-only")),
+    )
+    console = Console(record=True)
+    service = VoiceTrayService(TraySettings(dictate_hotkey="f9", read_hotkey="f8"), console)
+    original_hotkeys = service.hotkeys
+
+    assert service.set_hotkey("read", "f7") is False
+    assert service.read_hotkey == "f8"
+    assert service.hotkeys is original_hotkeys
+    assert "the change was not applied" in console.export_text()

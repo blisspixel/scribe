@@ -11,20 +11,22 @@ user-scoped (no admin) and explicit - ``start_at_login`` is never enabled silent
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import plistlib
-import shlex
 import subprocess
-from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scribe.cli.shortcut import resolve_scribe_command
 from scribe.utils.platform import is_linux, is_macos, is_windows
+from scribe.utils.safe_write import atomic_write
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 STARTUP_NAME = "Scribe Voice Tray"
 MACOS_LABEL = "io.pueo.scribe.tray"
@@ -82,24 +84,40 @@ def _install_macos() -> Path:  # pragma: no cover - launchctl I/O
     target, args = _tray_command()
     path = _macos_agent_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as f:
-        plistlib.dump(
-            {
-                "Label": MACOS_LABEL,
-                "ProgramArguments": [target, *args],
-                "RunAtLoad": True,
-                "ProcessType": "Interactive",
-            },
-            f,
-        )
-    with suppress(Exception):
-        subprocess.run(
+    payload = plistlib.dumps(
+        {
+            "Label": MACOS_LABEL,
+            "ProgramArguments": [target, *args],
+            "RunAtLoad": True,
+            "ProcessType": "Interactive",
+        }
+    )
+    previous = path.read_bytes() if path.exists() else None
+    atomic_write(path, payload, mode="wb")
+    try:
+        result = subprocess.run(
             ["launchctl", "load", str(path)],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=15,
         )
+        if getattr(result, "returncode", 0) != 0:
+            raise OSError(
+                f"launchctl could not load run-at-login entry: status {result.returncode}"
+            )
+    except Exception as error:
+        logger.warning("launchctl could not load run-at-login entry: %s", error)
+        try:
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                atomic_write(path, previous, mode="wb")
+        except OSError as rollback_error:
+            raise OSError(
+                f"{error}; restoring the prior LaunchAgent also failed: {rollback_error}"
+            ) from error
+        raise OSError(str(error)) from error
     return path
 
 
@@ -111,12 +129,30 @@ def _linux_autostart_path() -> Path:
     return Path(config_home) / "autostart" / LINUX_AUTOSTART_ID
 
 
+def _desktop_exec_arg(value: str) -> str:
+    """Quote one freedesktop Exec argument without relying on shell syntax."""
+    if "\0" in value:
+        raise ValueError("desktop startup arguments cannot contain NUL bytes")
+    escaped = (
+        value.replace("%", "%%")
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("`", "\\`")
+        .replace("$", "\\$")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
 def _install_linux() -> Path:  # pragma: no cover - file I/O
     target, args = _tray_command()
     path = _linux_autostart_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    exec_line = " ".join(shlex.quote(t) for t in [target, *args])
-    path.write_text(
+    exec_line = " ".join(_desktop_exec_arg(token) for token in [target, *args])
+    atomic_write(
+        path,
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={STARTUP_NAME}\n"
@@ -164,25 +200,34 @@ def install_startup() -> Path:  # pragma: no cover - per-OS I/O
 
 def remove_startup() -> Path | None:  # pragma: no cover - per-OS I/O
     """Disable run-at-login. Returns the removed path, or None if not enabled."""
-    try:
-        path = startup_path()
-    except OSError:
+    path = startup_path()
+    if not path.exists():
         return None
+    unload_error: Exception | None = None
     if is_macos():
-        with suppress(Exception):
-            subprocess.run(
+        try:
+            result = subprocess.run(
                 ["launchctl", "unload", str(path)],
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=15,
             )
-    if not path.exists():
-        return None
-    with suppress(OSError):
-        path.unlink()
-        return path
-    return None
+            if getattr(result, "returncode", 0) != 0:
+                unload_error = OSError(
+                    f"launchctl could not unload run-at-login entry: status {result.returncode}"
+                )
+        except Exception as error:
+            unload_error = error
+        if unload_error is not None:
+            logger.warning("launchctl could not unload run-at-login entry: %s", unload_error)
+    path.unlink()
+    if unload_error is not None:
+        raise OSError(
+            "The LaunchAgent file was removed, but launchctl could not unload the current "
+            f"login-session job: {unload_error}"
+        ) from unload_error
+    return path
 
 
 def run_tray_startup(console: Console, action: str) -> int:
@@ -193,8 +238,14 @@ def run_tray_startup(console: Console, action: str) -> int:
         return 2
 
     if choice == "status":
-        if is_startup_enabled():
-            console.print(f"[green]Run at login: enabled[/green]\n  [dim]{startup_path()}[/dim]")
+        try:
+            path = startup_path()
+            enabled = path.exists()
+        except OSError as e:
+            console.print(f"[red]Could not inspect run at login:[/red] {e}")
+            return 1
+        if enabled:
+            console.print(f"[green]Run at login: enabled[/green]\n  [dim]{path}[/dim]")
         else:
             console.print(
                 "[yellow]Run at login: disabled[/yellow]\n"
@@ -203,7 +254,11 @@ def run_tray_startup(console: Console, action: str) -> int:
         return 0
 
     if choice == "remove":
-        removed = remove_startup()
+        try:
+            removed = remove_startup()
+        except Exception as e:
+            console.print(f"[red]Could not disable run at login:[/red] {e}")
+            return 1
         if removed is not None:
             console.print(f"[green]Removed run-at-login entry:[/green] [dim]{removed}[/dim]")
         else:

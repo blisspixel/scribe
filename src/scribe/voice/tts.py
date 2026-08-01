@@ -21,15 +21,18 @@ should never hard-error just because an optional upgrade is missing.
 
 from __future__ import annotations
 
+import logging
+import math
 import re
 import threading
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 TTS_BACKENDS = ("auto", "kokoro", "pyttsx3")
 
@@ -102,6 +105,8 @@ def resolve_tts_speed(value: float | str | None) -> float:
         speed = float(value)
     except (TypeError, ValueError):
         return DEFAULT_TTS_SPEED
+    if not math.isfinite(speed):
+        return DEFAULT_TTS_SPEED
     return max(MIN_TTS_SPEED, min(MAX_TTS_SPEED, speed))
 
 
@@ -173,6 +178,8 @@ def split_for_speech(text: str, max_chars: int = 400) -> list[str]:
     punctuation, e.g. pasted data) past ``max_chars * 3`` is hard-wrapped so it
     cannot overflow the model. Pure so it is unit-tested without audio.
     """
+    if max_chars <= 0:
+        raise ValueError("speech chunk size must be positive")
     collapsed = " ".join(text.split())
     if not collapsed:
         return []
@@ -229,13 +236,16 @@ class Pyttsx3Speaker:  # pragma: no cover - drives the OS TTS engine; no audio i
         import pyttsx3
 
         self._engine = pyttsx3.init()
+        self._stop_event = threading.Event()
         if rate is not None:
             self._engine.setProperty("rate", rate)
         elif speed != 1.0:
             # Scale the engine's own default words/min by the speed multiplier.
-            with suppress(Exception):
+            try:
                 base = int(self._engine.getProperty("rate"))
                 self._engine.setProperty("rate", int(base * resolve_tts_speed(speed)))
+            except Exception as error:
+                logger.warning("Could not apply system voice speed: %s", error)
         if voice:
             needle = voice.lower()
             for candidate in self._engine.getProperty("voices"):
@@ -247,16 +257,20 @@ class Pyttsx3Speaker:  # pragma: no cover - drives the OS TTS engine; no audio i
                     break
 
     def speak(self, text: str) -> None:
+        if self._stop_event.is_set():
+            return
         self._engine.say(text)
+        if self._stop_event.is_set():
+            self._engine.stop()
+            return
         self._engine.runAndWait()
 
     def stop(self) -> None:
-        with suppress(Exception):
-            self._engine.stop()
+        self._stop_event.set()
+        self._engine.stop()
 
     def close(self) -> None:
-        with suppress(Exception):
-            self._engine.stop()
+        self.stop()
 
 
 _kokoro_models: dict[str, Any] = {}
@@ -282,6 +296,25 @@ def load_kokoro(home: Path | None = None) -> Any:  # pragma: no cover - loads ON
         return model
 
 
+def unload_kokoro(*, timeout: float = 2.0) -> int:
+    """Drop cached neural voice models without hanging behind a stuck load."""
+    import gc
+
+    if timeout < 0:
+        raise ValueError("Kokoro unload timeout cannot be negative")
+    if not _kokoro_lock.acquire(timeout=timeout):
+        raise TimeoutError("neural voice model is still loading")
+    try:
+        models = list(_kokoro_models.values())
+        _kokoro_models.clear()
+    finally:
+        _kokoro_lock.release()
+    count = len(models)
+    models.clear()
+    gc.collect()
+    return count
+
+
 class KokoroSpeaker:  # pragma: no cover - loads ONNX model, plays audio; manual test
     """High-quality neural read-aloud via kokoro-onnx, played through sounddevice."""
 
@@ -298,7 +331,7 @@ class KokoroSpeaker:  # pragma: no cover - loads ONNX model, plays audio; manual
         # Validate the voice id up front: an unknown/typo'd id (or a pyttsx3-style
         # system voice name passed via --voice) would otherwise raise at synth
         # time and crash playback. Fall back to a known-good voice instead.
-        with suppress(Exception):
+        try:
             available = set(self._kokoro.get_voices())
             if self._voice not in available:
                 self._voice = (
@@ -306,6 +339,8 @@ class KokoroSpeaker:  # pragma: no cover - loads ONNX model, plays audio; manual
                     if DEFAULT_KOKORO_VOICE in available
                     else next(iter(sorted(available)), DEFAULT_KOKORO_VOICE)
                 )
+        except Exception as error:
+            logger.warning("Could not validate Kokoro voice selection: %s", error)
         self._lang = kokoro_lang_for_voice(self._voice)
         # Kokoro takes a speed multiplier natively. Prefer an explicit speed; fall
         # back to deriving one from a pyttsx3-style words/min rate for callers that
@@ -348,16 +383,17 @@ class KokoroSpeaker:  # pragma: no cover - loads ONNX model, plays audio; manual
             # Prefetch the next chunk during this chunk's playback.
             pending = None
             if index + 1 < len(chunks) and not self._stop_event.is_set():
-                with suppress(Exception):
+                try:
                     pending = self._synth(chunks[index + 1])
+                except Exception as error:
+                    logger.warning("Kokoro prefetch failed; retrying synchronously: %s", error)
             sd.wait()
 
     def stop(self) -> None:
         self._stop_event.set()
-        with suppress(Exception):
-            import sounddevice as sd
+        import sounddevice as sd
 
-            sd.stop()
+        sd.stop()
 
     def close(self) -> None:
         self.stop()

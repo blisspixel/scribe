@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
+import tomllib
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from scribe.cli.voice import resolve_inject_method
-from scribe.config_file import load_config_file
+from scribe.config_file import load_config_file_strict
 from scribe.models.gpu import GPUConfig
 from scribe.voice.tts import resolve_tts_speed
 
@@ -158,7 +160,10 @@ def resolve_tray_settings(
     speed: float | None = None,
 ) -> TraySettings:
     """Resolve tray settings from config plus explicit CLI overrides."""
-    table = _tray_table(load_config_file())
+    try:
+        table = _tray_table(load_config_file_strict())
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ValueError(f"Could not read resident voice settings safely: {error}") from error
 
     resolved_profile = resolve_tray_profile(_pick(profile, table.get("profile"), "balanced"))
     resolved_activation = resolve_tray_activation(
@@ -251,7 +256,7 @@ def _positive_float(value: Any, default: float) -> float:
         parsed = float(value)
     except (TypeError, ValueError):
         return default
-    return parsed if parsed > 0 else default
+    return parsed if math.isfinite(parsed) and parsed > 0 else default
 
 
 def _optional_bool(value: Any, default: bool) -> bool:

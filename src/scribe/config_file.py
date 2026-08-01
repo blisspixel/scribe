@@ -9,13 +9,16 @@ keep working unchanged.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
 
 CONFIG_DIR = Path.home() / ".scribe"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
+_BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def config_exists() -> bool:
@@ -24,12 +27,18 @@ def config_exists() -> bool:
 
 def load_config_file() -> dict[str, Any]:
     """Return the TOML config as a flat dict, or {} if missing/invalid."""
-    if not config_exists():
+    try:
+        return load_config_file_strict()
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
+
+
+def load_config_file_strict() -> dict[str, Any]:
+    """Read config for mutation, preserving parse and filesystem failures."""
     try:
         with CONFIG_PATH.open("rb") as f:
             return tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
+    except FileNotFoundError:
         return {}
 
 
@@ -96,7 +105,7 @@ def save_config_file(data: dict[str, Any]) -> Path:
             return
         lines.append(f"[{name}]")
         for k, v in body.items():
-            lines.append(f"{k} = {_toml_value(v)}")
+            lines.append(f"{_toml_key(k)} = {_toml_value(v)}")
         lines.append("")
 
     section("output", data.get("output", {}))
@@ -112,7 +121,9 @@ def save_config_file(data: dict[str, Any]) -> Path:
     if isinstance(voice, dict):
         section("voice.tray", voice.get("tray", {}))
 
-    CONFIG_PATH.write_text("\n".join(lines), encoding="utf-8")
+    from scribe.utils.safe_write import atomic_write
+
+    atomic_write(CONFIG_PATH, "\n".join(lines), encoding="utf-8")
     with contextlib.suppress(OSError):
         os.chmod(CONFIG_PATH, 0o600)
     return CONFIG_PATH
@@ -125,4 +136,10 @@ def _toml_value(v: Any) -> str:
         return str(v)
     if isinstance(v, Path):
         v = str(v)
-    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return json.dumps(str(v), ensure_ascii=False)
+
+
+def _toml_key(value: Any) -> str:
+    """Serialize one TOML key without corrupting valid quoted-key configs."""
+    text = str(value)
+    return text if _BARE_TOML_KEY.fullmatch(text) else json.dumps(text, ensure_ascii=False)

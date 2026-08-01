@@ -8,6 +8,9 @@ already-cached assets are all handled without raising into the CLI.
 
 from __future__ import annotations
 
+import gc
+import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -62,7 +65,19 @@ def download_stt_model(
         ):
             # Construct on CPU/int8 for the verification load even if the user will
             # run on CUDA: it only needs to prove the weights download and open.
-            WhisperModel(model_name, device="cpu", compute_type="int8")
+            loaded_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+            backend = getattr(loaded_model, "model", None)
+            unload_model = getattr(backend, "unload_model", None)
+            if callable(unload_model):
+                try:
+                    unload_model()
+                except Exception as error:
+                    console.print(
+                        f"[yellow]Could not explicitly release the setup model:[/yellow] {error}"
+                    )
+            del loaded_model
+            del backend
+            gc.collect()
     except (ImportError, OSError, RuntimeError, ValueError) as e:
         # Defensive: network/model failures must not abort the wizard.
         return SetupStepResult(
@@ -96,7 +111,13 @@ def _download_file(
     )
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    with tempfile.NamedTemporaryFile(
+        dir=dest.parent,
+        prefix=f".{dest.name}.",
+        suffix=".part",
+        delete=False,
+    ) as temporary:
+        tmp = Path(temporary.name)
     written = 0
     total: int | None = None
     completed = False
@@ -130,7 +151,12 @@ def _download_file(
         raise OSError(f"download failed for {label}: {e}") from e
     finally:
         if not completed:
-            tmp.unlink(missing_ok=True)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError as error:
+                console.print(
+                    f"[yellow]Could not remove partial download {tmp.name}:[/yellow] {error}"
+                )
 
 
 def download_kokoro_assets(
@@ -225,7 +251,7 @@ def run_voice_setup(
     the ``[voice.tray]`` config table. Returns 0 when dictation is ready (TTS
     failures degrade rather than fail the whole step).
     """
-    from scribe.config_file import load_config_file, save_config_file
+    from scribe.config_file import load_config_file_strict, save_config_file
     from scribe.models.gpu import GPUConfig
     from scribe.utils.branding import brand_header_markup
     from scribe.voice.service import missing_dependency_packages
@@ -243,7 +269,11 @@ def run_voice_setup(
             markup=True,
         )
 
-    config = load_config_file()
+    try:
+        config = load_config_file_strict()
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        console.print(f"[red]Could not read existing config safely:[/red] {e}")
+        return 1
     voice_cfg = config.get("voice")
     tray_cfg = voice_cfg.get("tray", {}) if isinstance(voice_cfg, dict) else {}
     if not isinstance(tray_cfg, dict):
@@ -301,10 +331,12 @@ def run_voice_setup(
     if not isinstance(config.get("voice"), dict):
         config["voice"] = {}
     config["voice"]["tray"] = new_tray
+    settings_saved = True
     try:
         save_config_file(config)
     except OSError as e:
-        console.print(f"[yellow]Could not save voice settings: {e}[/yellow]")
+        settings_saved = False
+        console.print(f"[red]Could not save voice settings:[/red] {e}")
 
     console.print()
     for result in results:
@@ -313,8 +345,14 @@ def run_voice_setup(
     console.print()
 
     stt_ok = results[0].ok if results else False
-    if stt_ok:
+    if stt_ok and settings_saved:
         console.print("[green]Voice setup complete.[/green] Try `scribe tray --preload`.")
         return 0
+    if stt_ok:
+        console.print(
+            "[yellow]Voice models are ready, but setup is incomplete because settings "
+            "could not be saved.[/yellow]"
+        )
+        return 1
     console.print("[yellow]Dictation model not ready - see messages above.[/yellow]")
     return 1

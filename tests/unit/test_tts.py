@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scribe.voice.tts import (
     DEFAULT_KOKORO_VOICE,
     KOKORO_MODEL_FILE,
@@ -23,6 +25,7 @@ from scribe.voice.tts import (
     resolve_tts_speed,
     resolve_tts_voice,
     split_for_speech,
+    unload_kokoro,
 )
 
 
@@ -34,6 +37,64 @@ def test_resolve_tts_speed_clamps_and_defaults() -> None:
     assert resolve_tts_speed("1.5") == 1.5
     assert resolve_tts_speed(5.0) == 2.0  # clamped to max
     assert resolve_tts_speed(0.1) == 0.5  # clamped to min
+    assert resolve_tts_speed(float("nan")) == 1.0
+    assert resolve_tts_speed(float("inf")) == 1.0
+
+
+def test_unload_kokoro_clears_all_cached_models() -> None:
+    from scribe.voice import tts
+
+    tts._kokoro_models.clear()
+    tts._kokoro_models["first"] = object()
+    tts._kokoro_models["second"] = object()
+
+    assert unload_kokoro() == 2
+    assert tts._kokoro_models == {}
+
+
+def test_unload_kokoro_is_bounded_behind_an_active_load() -> None:
+    from scribe.voice import tts
+
+    assert tts._kokoro_lock.acquire(blocking=False)
+    try:
+        with pytest.raises(TimeoutError, match="still loading"):
+            unload_kokoro(timeout=0)
+    finally:
+        tts._kokoro_lock.release()
+
+
+def test_split_for_speech_rejects_nonpositive_chunk_size() -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        split_for_speech("hello", max_chars=0)
+
+
+def test_system_speaker_stop_before_speak_prevents_late_playback(monkeypatch) -> None:
+    import sys
+    import types
+
+    from scribe.voice.tts import Pyttsx3Speaker
+
+    events: list[str] = []
+
+    class Engine:
+        def say(self, _text: str) -> None:
+            events.append("say")
+
+        def runAndWait(self) -> None:
+            events.append("run")
+
+        def stop(self) -> None:
+            events.append("stop")
+
+    module = types.ModuleType("pyttsx3")
+    module.init = lambda: Engine()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pyttsx3", module)
+    speaker = Pyttsx3Speaker()
+
+    speaker.stop()
+    speaker.speak("must remain silent")
+
+    assert events == ["stop"]
 
 
 def test_resolve_tts_backend_auto_prefers_kokoro_only_when_ready() -> None:

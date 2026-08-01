@@ -258,6 +258,231 @@ def test_run_say_empty_text_returns_before_tts(tmp_path):
     assert run_say(Console(), f) == 1
 
 
+def test_speak_reports_backend_initialization_failure(monkeypatch):
+    from rich.console import Console
+
+    from scribe.cli import voice
+    from scribe.voice import tts
+
+    monkeypatch.setattr(tts, "resolve_tts_backend", lambda *_args, **_kwargs: "pyttsx3")
+    monkeypatch.setattr(tts, "kokoro_installed", lambda: False)
+    monkeypatch.setattr(tts, "kokoro_assets_ready", lambda: False)
+    monkeypatch.setattr(
+        tts,
+        "make_speaker",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("audio service down")),
+    )
+    console = Console(record=True)
+
+    result = voice._speak(console, "test", "hello", rate=None, voice=None)
+
+    assert result == 1
+    assert "Could not initialize read-aloud" in console.export_text()
+
+
+def test_speak_surfaces_invalid_voice_config(monkeypatch):
+    import tomllib
+
+    from rich.console import Console
+
+    from scribe import config_file
+    from scribe.cli import voice
+
+    monkeypatch.setattr(
+        config_file,
+        "load_config_file_strict",
+        lambda: (_ for _ in ()).throw(tomllib.TOMLDecodeError("bad table", "[bad", 0)),
+    )
+    console = Console(record=True)
+
+    result = voice._speak(console, "test", "hello", rate=None, voice=None)
+
+    assert result == 1
+    assert "Could not read resident voice settings safely" in console.export_text()
+
+
+def test_speak_returns_failure_when_speaker_cleanup_fails(monkeypatch):
+    import sys
+    import types
+
+    from rich.console import Console
+
+    from scribe.cli import voice
+    from scribe.voice import tts
+
+    class Speaker:
+        def speak(self, _text):
+            return None
+
+        def close(self):
+            raise RuntimeError("engine would not close")
+
+    class Listener:
+        def __init__(self, **_kwargs):
+            return None
+
+        def start(self):
+            return None
+
+        def stop(self):
+            return None
+
+    keyboard = types.ModuleType("keyboard")
+    keyboard.Key = types.SimpleNamespace(esc=object())
+    keyboard.Listener = Listener
+    pynput = types.ModuleType("pynput")
+    pynput.keyboard = keyboard
+    monkeypatch.setitem(sys.modules, "pynput", pynput)
+    monkeypatch.setattr(tts, "resolve_tts_backend", lambda *_args, **_kwargs: "pyttsx3")
+    monkeypatch.setattr(tts, "kokoro_installed", lambda: False)
+    monkeypatch.setattr(tts, "kokoro_assets_ready", lambda: False)
+    monkeypatch.setattr(tts, "make_speaker", lambda *_args, **_kwargs: Speaker())
+    console = Console(record=True)
+
+    result = voice._speak(console, "test", "hello", rate=None, voice=None)
+
+    assert result == 1
+    assert "Could not close read-aloud cleanly" in console.export_text()
+    assert "Done" not in console.export_text()
+
+
+def test_run_listen_exits_before_model_load_when_resident_voice_is_owned(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from scribe.cli import voice
+    from scribe.voice import instance
+
+    class DuplicateLock:
+        owner = SimpleNamespace(description="PID 42, Scribe 2.8.1")
+
+        def acquire(self):
+            return False
+
+        def release(self):
+            raise AssertionError("a lock that was not acquired must not be released")
+
+    monkeypatch.setattr(instance, "TrayInstanceLock", DuplicateLock)
+    monkeypatch.setattr(
+        voice,
+        "_run_owned_listen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("duplicate launch reached model setup")
+        ),
+    )
+    console = Console(record=True)
+
+    assert voice.run_listen(console) == 0
+    output = console.export_text()
+    assert "already running" in output
+    assert "without registering another hotkey listener" in output
+
+
+def test_run_listen_retains_resident_voice_lock_until_process_exit(monkeypatch):
+    from rich.console import Console
+
+    from scribe.cli import voice
+    from scribe.voice import instance
+
+    retained: list[bool] = []
+
+    class AcquiredLock:
+        owner = None
+
+        def acquire(self):
+            return True
+
+        def retain_until_process_exit(self):
+            retained.append(True)
+
+    monkeypatch.setattr(instance, "TrayInstanceLock", AcquiredLock)
+    monkeypatch.setattr(voice, "_run_owned_listen", lambda *_args, **_kwargs: 7)
+
+    assert voice.run_listen(Console(record=True)) == 7
+    assert retained == [True]
+
+
+def test_legacy_dictation_model_is_explicitly_unloaded():
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from scribe.cli.voice import _unload_dictation_model
+
+    unloaded: list[bool] = []
+    model = SimpleNamespace(model=SimpleNamespace(unload_model=lambda: unloaded.append(True)))
+
+    assert _unload_dictation_model(model, Console(record=True)) is True
+    assert unloaded == [True]
+
+
+def test_legacy_dictation_model_unload_failure_is_visible():
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from scribe.cli.voice import _unload_dictation_model
+
+    model = SimpleNamespace(
+        model=SimpleNamespace(
+            unload_model=lambda: (_ for _ in ()).throw(RuntimeError("CUDA still busy"))
+        )
+    )
+    console = Console(record=True)
+
+    assert _unload_dictation_model(model, console) is False
+    assert "Could not explicitly unload the voice model" in console.export_text()
+
+
+def test_legacy_worker_shutdown_is_bounded_when_inference_is_stuck():
+    import queue
+
+    from rich.console import Console
+
+    from scribe.cli.voice import _stop_listen_worker
+
+    class StuckWorker:
+        def join(self, timeout=None):
+            assert timeout == 0
+
+        def is_alive(self):
+            return True
+
+    work_queue = queue.Queue(maxsize=2)
+    console = Console(record=True)
+
+    assert _stop_listen_worker(work_queue, StuckWorker(), console, timeout=0) is False
+    assert work_queue.get_nowait() is None
+    assert "did not stop in time" in console.export_text()
+
+
+def test_legacy_worker_shutdown_discards_full_pending_queue_for_sentinel():
+    import queue
+
+    from rich.console import Console
+
+    from scribe.cli.voice import _stop_listen_worker
+
+    class StuckWorker:
+        def join(self, timeout=None):
+            assert timeout == 0
+
+        def is_alive(self):
+            return True
+
+    work_queue = queue.Queue(maxsize=2)
+    work_queue.put_nowait(b"first")
+    work_queue.put_nowait(b"second")
+    console = Console(record=True)
+
+    assert _stop_listen_worker(work_queue, StuckWorker(), console, timeout=0) is False
+    assert work_queue.get_nowait() is None
+    assert "Discarded 2 queued dictation utterance" in console.export_text()
+
+
 def test_write_wav_roundtrip(tmp_path):
     pcm = (1234).to_bytes(2, "little", signed=True) * 100  # 100 samples
     out = tmp_path / "a.wav"

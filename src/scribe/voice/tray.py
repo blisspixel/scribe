@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
+import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass
 from importlib.resources import files
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from scribe.utils.branding import brand_header_markup
+from scribe.voice.instance import TrayInstanceLock
 from scribe.voice.service import (
     VoiceTrayService,
     dependency_report,
@@ -23,6 +27,8 @@ from scribe.voice.settings import TraySettings
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -101,7 +107,7 @@ def _await_model_ready(console: Console, service: VoiceTrayService) -> bool:  # 
     start = time.monotonic()
     if service.is_model_loading():
         with console.status("[cyan]Loading voice model...[/cyan]", spinner="dots") as status:
-            while service.is_model_loading():
+            while service.running and service.is_model_loading():
                 status.update(
                     f"[cyan]Loading voice model... {time.monotonic() - start:.0f}s[/cyan] "
                     "[dim](first run downloads it; later runs just warm it)[/dim]"
@@ -111,6 +117,32 @@ def _await_model_ready(console: Console, service: VoiceTrayService) -> bool:  # 
         console.print(f"[red]Model load failed:[/red] {service.error_message}")
         return False
     return True
+
+
+def _show_and_warm_python_tray(
+    icon: Any,
+    service: VoiceTrayService,
+    settings: TraySettings,
+    console: Console,
+) -> None:
+    """Show the tray first, then preload models from pystray's setup thread."""
+    icon.visible = True
+    if settings.preload_model:
+        service.start_model_preload()
+        ready = _await_model_ready(console, service)
+    else:
+        ready = True
+    if not service.running:
+        return
+    dictate_hint, read_hint = hotkey_hints(settings)
+    if ready:
+        service._emit("Scribe Voice ready", f"{dictate_hint} {read_hint}")
+    else:
+        service._emit(
+            "Scribe Voice error",
+            f"Model load failed: {service.error_message}. "
+            f"{dictate_hint} {read_hint} The model will retry on first use.",
+        )
 
 
 def hotkey_hints(settings: TraySettings) -> tuple[str, str]:
@@ -123,6 +155,56 @@ def hotkey_hints(settings: TraySettings) -> tuple[str, str]:
         dictate = f"Hold {dictate_key} to dictate, release to insert."
     read = f"Tap {read_key} to read the selection, tap again to stop."
     return dictate, read
+
+
+def _startup_enabled_for_menu() -> bool:
+    """Read startup state for the tray menu without crashing its UI thread."""
+    from scribe.voice.startup import startup_path
+
+    try:
+        return startup_path().exists()
+    except Exception:
+        logger.warning("Could not read run-at-login state", exc_info=True)
+        return False
+
+
+def _toggle_startup(service: VoiceTrayService) -> bool:
+    """Toggle run-at-login and report success or failure through the tray service."""
+    from scribe.voice.startup import install_startup, remove_startup, startup_path
+
+    try:
+        if startup_path().exists():
+            remove_startup()
+            message = "Run at login disabled"
+        else:
+            install_startup()
+            message = "Run at login enabled"
+    except Exception as error:
+        logger.warning("Could not change run-at-login state: %s", error)
+        service._emit("Scribe Voice error", f"Could not change run at login: {error}")
+        return False
+    service._emit("Scribe Voice", message)
+    return True
+
+
+def _resident_instance_status() -> tuple[str, bool]:
+    """Return a diagnostic snapshot without retaining the resident voice lock."""
+    instance_lock = TrayInstanceLock()
+    try:
+        acquired = instance_lock.acquire()
+    except OSError as error:
+        logger.warning("Could not inspect resident voice ownership: %s", error)
+        return f"unavailable ({error})", False
+    if acquired:
+        try:
+            instance_lock.release()
+        except OSError as error:
+            logger.warning("Could not release resident voice diagnostic lock: %s", error)
+            return f"unavailable ({error})", False
+        return "inactive", True
+    owner = instance_lock.owner
+    description = owner.description if owner is not None else "another process"
+    return f"running ({description})", True
 
 
 def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bool) -> int:
@@ -167,6 +249,9 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
     console.print(f"[cyan]read[/cyan] {settings.read_hotkey}")
     console.print(f"[cyan]inject[/cyan] {settings.inject}")
     console.print(f"[cyan]read-aloud[/cyan] {tts_desc}")
+    console.print(f"[cyan]log[/cyan] {resident_log_path()}")
+    resident_status, resident_ok = _resident_instance_status()
+    console.print(f"[cyan]resident[/cyan] {resident_status}")
     if include_tray:
         selection = _resolve_native_tray()
         if selection.path is None:
@@ -182,13 +267,16 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
         backend = "terminal hotkeys (--no-tray)"
     console.print(f"[cyan]backend[/cyan] {backend}")
 
+    startup_ok = True
     try:
-        from scribe.voice.startup import is_startup_enabled, startup_path
+        from scribe.voice.startup import startup_path
 
-        startup_state = "enabled" if is_startup_enabled() else "disabled"
-        console.print(f"[cyan]startup[/cyan] {startup_state} ({startup_path()})")
-    except OSError:
-        console.print("[cyan]startup[/cyan] unavailable (could not resolve autostart path)")
+        autostart_path = startup_path()
+        startup_state = "enabled" if autostart_path.exists() else "disabled"
+        console.print(f"[cyan]startup[/cyan] {startup_state} ({autostart_path})")
+    except OSError as error:
+        startup_ok = False
+        console.print(f"[red]startup[/red] unavailable ({error})")
 
     advisories = resident_voice_advisories(
         system_name,
@@ -213,7 +301,7 @@ def run_tray_check(console: Console, settings: TraySettings, *, include_tray: bo
             markup=False,
         )
         return 1
-    return 0
+    return 0 if resident_ok and startup_ok else 1
 
 
 def _brand_windows_process() -> None:  # pragma: no cover - Windows shell branding
@@ -221,7 +309,7 @@ def _brand_windows_process() -> None:  # pragma: no cover - Windows shell brandi
     and the taskbar, by setting an explicit AppUserModelID."""
     if platform.system() != "Windows":
         return
-    with suppress(Exception):
+    try:
         import ctypes
 
         # getattr keeps the type checker happy on non-Windows runners, where
@@ -229,10 +317,80 @@ def _brand_windows_process() -> None:  # pragma: no cover - Windows shell brandi
         windll = getattr(ctypes, "windll", None)
         if windll is not None:
             windll.shell32.SetCurrentProcessExplicitAppUserModelID("Scribe.Voice")
+    except Exception as error:
+        logger.warning("Could not set the Windows resident voice application identity: %s", error)
+
+
+def resident_log_path(home: Path | None = None) -> Path:
+    """Return the stable, user-private diagnostic log for resident voice."""
+    base = Path.home() if home is None else home
+    return base / ".scribe" / "logs" / "resident-voice.log"
+
+
+def _configure_resident_logging(console: Console) -> Path | None:
+    """Keep a bounded resident log so detached tray failures remain diagnosable."""
+    log_path = resident_log_path()
+    voice_logger = logging.getLogger("scribe.voice")
+    try:
+        resolved = log_path.resolve()
+        for handler in voice_logger.handlers:
+            filename = getattr(handler, "baseFilename", None)
+            if filename is not None and Path(str(filename)).resolve() == resolved:
+                return log_path
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            log_path,
+            maxBytes=1_000_000,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(name)s %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        voice_logger.setLevel(logging.DEBUG)
+        voice_logger.addHandler(handler)
+        with suppress(OSError):
+            os.chmod(log_path, 0o600)
+        voice_logger.info("Resident voice logging started")
+    except OSError as error:
+        console.print(f"[yellow]Could not create the resident voice log:[/yellow] {error}")
+        return None
+    return log_path
 
 
 def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:  # pragma: no cover
     """Run the resident voice utility as a tray icon or terminal fallback."""
+    instance_lock = TrayInstanceLock()
+    try:
+        acquired = instance_lock.acquire()
+    except OSError as error:
+        console.print(f"[red]Could not protect the resident tray from duplicates:[/red] {error}")
+        return 1
+
+    if not acquired:
+        owner = instance_lock.owner
+        owner_description = owner.description if owner is not None else "another process"
+        console.print(
+            f"[yellow]Scribe Voice is already running ({owner_description}).[/yellow] "
+            "This launch will exit without loading another model."
+        )
+        return 0
+
+    try:
+        return _run_owned_tray(console, settings, no_tray=no_tray)
+    finally:
+        instance_lock.retain_until_process_exit()
+
+
+def _run_owned_tray(
+    console: Console, settings: TraySettings, *, no_tray: bool
+) -> int:  # pragma: no cover
+    """Run a tray after the caller has acquired cross-process ownership."""
+    _configure_resident_logging(console)
     if no_tray:
         return _run_no_tray(console, settings)
 
@@ -260,25 +418,60 @@ def _wait_for_native_ready(service: VoiceTrayService, process: Any, *, timeout: 
         if remaining <= 0:
             return False
         if service.wait_for_ipc_ready(timeout=min(0.1, remaining)):
-            return True
+            return process.poll() is None
     return False
 
 
-def _stop_native_process(process: Any) -> None:
-    """Stop a daemon that failed before it could own the tray workflow."""
+def _stop_native_process(process: Any) -> bool:
+    """Stop a failed daemon and confirm it exited before starting a fallback."""
     import subprocess
 
     if process.poll() is not None:
-        return
-    with suppress(OSError):
+        return True
+    try:
         process.terminate()
+    except OSError as error:
+        logger.warning("Could not terminate native tray process: %s", error)
     try:
         process.wait(timeout=2.0)
+        return True
     except (OSError, subprocess.TimeoutExpired):
-        with suppress(OSError):
+        try:
             process.kill()
-        with suppress(OSError, subprocess.TimeoutExpired):
+        except OSError as error:
+            logger.warning("Could not kill native tray process: %s", error)
+            return False
+        try:
             process.wait(timeout=2.0)
+            return True
+        except (OSError, subprocess.TimeoutExpired) as error:
+            logger.warning("Could not confirm native tray process exit: %s", error)
+            return False
+
+
+def _native_quit_confirmed(service: VoiceTrayService, *, timeout: float = 0.5) -> bool:
+    """Distinguish an explicit native Quit from an unexplained zero exit."""
+    return service.wait_for_ipc_quit(timeout=timeout)
+
+
+def _prepare_native_fallback(service: VoiceTrayService, console: Console) -> bool:
+    """Stop the prior backend and refuse overlap while model work is active."""
+    try:
+        cleanup_complete = service.stop()
+    except Exception as error:
+        logger.exception("Could not make the native backend safe for fallback")
+        console.print(
+            f"[red]Native backend cleanup failed:[/red] {error}. "
+            "Python fallback was not started to avoid overlapping voice resources."
+        )
+        return False
+    if cleanup_complete is False:
+        console.print(
+            "[red]Native backend model work is still stopping.[/red] "
+            "Python fallback was not started to avoid a second model allocation."
+        )
+        return False
+    return True
 
 
 def _run_native_tray(
@@ -313,12 +506,24 @@ def _run_native_tray(
         process = subprocess.Popen(arguments, env=environment)
         if not _wait_for_native_ready(service, process, timeout=5.0):
             exit_code = process.poll()
+            if exit_code == 0 and _native_quit_confirmed(service):
+                console.print("[cyan]Native tray was closed during startup.[/cyan]")
+                return 0
             detail = (
                 f"exited with status {exit_code}"
                 if exit_code is not None
                 else "did not confirm hotkey readiness within 5 seconds"
             )
-            _stop_native_process(process)
+            if not _stop_native_process(process):
+                logger.error("Native tray could not be stopped after readiness failure")
+                console.print(
+                    "[red]Native tray could not be stopped.[/red] "
+                    "Python fallback was not started to avoid duplicate hotkeys."
+                )
+                return 1
+            logger.warning("Native tray readiness failed: %s", detail)
+            if not _prepare_native_fallback(service, console):
+                return 1
             console.print(
                 f"[yellow]Native tray unavailable:[/yellow] {detail}. "
                 "Starting the Python tray fallback."
@@ -338,19 +543,39 @@ def _run_native_tray(
 
         exit_code = process.wait()
         if exit_code == 0:
-            return 0
+            if _native_quit_confirmed(service):
+                return 0
+            logger.warning("Native tray exited cleanly without an authenticated quit request")
+            if not _prepare_native_fallback(service, console):
+                return 1
+            console.print(
+                "[yellow]Native tray exited without an authenticated quit request.[/yellow] "
+                "Starting the Python tray fallback."
+            )
+            return None
+        logger.warning("Native tray stopped with status %s", exit_code)
+        if not _prepare_native_fallback(service, console):
+            return 1
         console.print(
             f"[yellow]Native tray stopped with status {exit_code}.[/yellow] "
             "Starting the Python tray fallback."
         )
         return None
     except KeyboardInterrupt:
-        if process is not None:
-            _stop_native_process(process)
+        if process is not None and not _stop_native_process(process):
+            console.print("[red]Native tray could not be stopped.[/red]")
+            return 1
         return 0
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
-        if process is not None:
-            _stop_native_process(process)
+        logger.exception("Native tray failed")
+        if process is not None and not _stop_native_process(process):
+            console.print(
+                f"[red]Native tray failed and could not be stopped:[/red] {error}. "
+                "Python fallback was not started to avoid duplicate hotkeys."
+            )
+            return 1
+        if not _prepare_native_fallback(service, console):
+            return 1
         console.print(
             f"[yellow]Native tray unavailable:[/yellow] {error}. Starting the Python tray fallback."
         )
@@ -365,6 +590,7 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
     _brand_windows_process()
     missing = missing_dependency_packages(include_tray=True)
     if missing:
+        logger.error("Tray dependencies are missing: %s", ", ".join(missing))
         console.print(f"[red]Missing tray packages:[/red] {', '.join(missing)}")
         console.print('Install them with `pip install "scribe[tray]"` or `uv sync --extra tray`.')
         return 1
@@ -373,121 +599,150 @@ def _run_python_tray(console: Console, settings: TraySettings) -> int:  # pragma
         import pystray
         from PIL import Image
     except ImportError:
+        logger.exception("Could not import the Python tray backend")
         console.print('Install tray support with `pip install "scribe[tray]"`.')
         return 1
 
     try:
-        image = Image.open(packaged_icon_path())
+        with Image.open(packaged_icon_path()) as source_image:
+            image = source_image.copy()
     except Exception as e:
+        logger.exception("Could not load the tray icon")
         console.print(f"[red]Could not load tray icon:[/red] {e}")
         return 1
 
     service = VoiceTrayService(settings, console)
-    if not service.start_hotkeys(preload_model=settings.preload_model):
-        return 1
+    requested_stop = threading.Event()
+    setup_errors: list[str] = []
+    try:
+        icon = pystray.Icon("scribe-voice", image, "Scribe Voice")
 
-    icon = pystray.Icon("scribe-voice", image, "Scribe Voice")
+        # Desktop notifications are the only visible cue once the tray detaches
+        # from the console, so route user-facing messages to them.
+        def _notify(title: str, message: str) -> None:
+            try:
+                console.print(f"[cyan]{title}[/cyan] [dim]{message}[/dim]")
+            except Exception:
+                logger.warning("Tray console notification failed", exc_info=True)
+            if settings.show_notifications:
+                try:
+                    icon.notify(message, title)
+                except Exception:
+                    logger.warning("Desktop notification failed", exc_info=True)
 
-    # Desktop notifications are the only visible cue once the tray detaches from
-    # the console, so route the service's user-facing messages to them.
-    def _notify(title: str, message: str) -> None:
-        # Echo to the console too: if the tray was launched from a terminal, the
-        # user sees the same feedback there, not only as a transient notification.
-        console.print(f"[cyan]{title}[/cyan] [dim]{message}[/dim]")
-        if settings.show_notifications:
-            with suppress(Exception):
-                icon.notify(message, title)
+        service.set_notifier(_notify)
 
-    service.set_notifier(_notify)
+        def update_menu(_state: object) -> None:
+            try:
+                icon.title = f"Scribe Voice - {service.status_text}"
+                icon.update_menu()
+            except Exception as error:
+                logger.warning("Could not refresh tray menu: %s", error)
+                _notify("Scribe Voice warning", f"Could not refresh the tray menu: {error}")
 
-    def update_menu(_state: object) -> None:
-        icon.title = f"Scribe Voice - {service.status_text}"
-        icon.update_menu()
-
-    def pause_resume(_icon: object, _item: object) -> None:
-        service.toggle_pause()
-        update_menu(service.state)
-
-    def quit_icon(icon_obj: Any, _item: object) -> None:
-        service.stop()
-        icon_obj.stop()
-
-    def _startup_enabled(_item: object = None) -> bool:
-        from scribe.voice.startup import is_startup_enabled
-
-        try:
-            return is_startup_enabled()
-        except Exception:
-            return False
-
-    def toggle_startup(_icon: object, _item: object) -> None:
-        from scribe.voice.startup import install_startup, remove_startup
-
-        with suppress(Exception):
-            remove_startup() if _startup_enabled() else install_startup()
-        update_menu(service.state)
-
-    def _speed_item(value: float) -> Any:
-        def _set(_icon: object, _item: object) -> None:
-            service.set_speed(value)
+        def pause_resume(_icon: object, _item: object) -> None:
+            service.toggle_pause()
             update_menu(service.state)
 
-        return pystray.MenuItem(
-            f"{value:g}x",
-            _set,
-            checked=lambda _item, v=value: abs(service.tts_speed - v) < 0.001,
-            radio=True,
+        def quit_icon(icon_obj: Any, _item: object) -> None:
+            requested_stop.set()
+            service.stop()
+            icon_obj.stop()
+
+        def toggle_startup(_icon: object, _item: object) -> None:
+            _toggle_startup(service)
+            update_menu(service.state)
+
+        def _speed_item(value: float) -> Any:
+            def _set(_icon: object, _item: object) -> None:
+                service.set_speed(value)
+                update_menu(service.state)
+
+            return pystray.MenuItem(
+                f"{value:g}x",
+                _set,
+                checked=lambda _item, v=value: abs(service.tts_speed - v) < 0.001,
+                radio=True,
+            )
+
+        speed_menu = pystray.Menu(*[_speed_item(v) for v in (0.8, 1.0, 1.2, 1.5, 2.0)])
+
+        def _hotkey_item(role: str, key: str) -> Any:
+            def _set(_icon: object, _item: object) -> None:
+                service.set_hotkey(role, key)
+                update_menu(service.state)
+
+            def _is_current(_item: object, r: str = role, k: str = key) -> bool:
+                current = service.dictate_hotkey if r == "dictate" else service.read_hotkey
+                return current == k
+
+            return pystray.MenuItem(key.upper(), _set, checked=_is_current, radio=True)
+
+        hotkey_choices = ("f6", "f7", "f8", "f9", "f10", "f11", "f12")
+        dictate_menu = pystray.Menu(*[_hotkey_item("dictate", k) for k in hotkey_choices])
+        read_menu = pystray.Menu(*[_hotkey_item("read", k) for k in hotkey_choices])
+        dictate_action = "tap" if settings.activation == "toggle" else "hold"
+
+        icon.menu = pystray.Menu(
+            pystray.MenuItem(lambda _item: f"Status: {service.status_text}", None, enabled=False),
+            pystray.MenuItem(
+                lambda _item: f"Dictate ({dictate_action}): {service.dictate_hotkey.upper()}",
+                dictate_menu,
+            ),
+            pystray.MenuItem(lambda _item: f"Read (tap): {service.read_hotkey.upper()}", read_menu),
+            pystray.MenuItem("Read speed", speed_menu),
+            pystray.MenuItem(
+                lambda _item: "Resume hotkeys" if service.paused else "Pause hotkeys",
+                pause_resume,
+            ),
+            pystray.MenuItem(
+                "Start at login",
+                toggle_startup,
+                checked=lambda _item: _startup_enabled_for_menu(),
+            ),
+            pystray.MenuItem("Quit Scribe Voice", quit_icon),
         )
 
-    speed_menu = pystray.Menu(*[_speed_item(v) for v in (0.8, 1.0, 1.2, 1.5, 2.0)])
+        if not service.start_hotkeys(preload_model=False):
+            return 1
+        console.print("[cyan]Starting Scribe Voice in the tray.[/cyan]")
 
-    def _hotkey_item(role: str, key: str) -> Any:
-        def _set(_icon: object, _item: object) -> None:
-            service.set_hotkey(role, key)
-            update_menu(service.state)
+        def setup_icon(icon_obj: Any) -> None:
+            try:
+                service.add_status_callback(update_menu)
+                _show_and_warm_python_tray(icon_obj, service, settings, console)
+            except Exception as error:
+                message = f"tray startup failed: {error}"
+                setup_errors.append(message)
+                logger.exception("%s", message)
+                if service._set_state_if_running("error", message):
+                    service._emit("Scribe Voice error", message)
+                service.stop()
+                icon_obj.stop()
 
-        def _is_current(_item: object, r: str = role, k: str = key) -> bool:
-            current = service.dictate_hotkey if r == "dictate" else service.read_hotkey
-            return current == k
-
-        return pystray.MenuItem(key.upper(), _set, checked=_is_current, radio=True)
-
-    hotkey_choices = ("f6", "f7", "f8", "f9", "f10", "f11", "f12")
-    dictate_menu = pystray.Menu(*[_hotkey_item("dictate", k) for k in hotkey_choices])
-    read_menu = pystray.Menu(*[_hotkey_item("read", k) for k in hotkey_choices])
-
-    icon.menu = pystray.Menu(
-        pystray.MenuItem(lambda _item: f"Status: {service.status_text}", None, enabled=False),
-        pystray.MenuItem(
-            lambda _item: f"Dictate (tap): {service.dictate_hotkey.upper()}", dictate_menu
-        ),
-        pystray.MenuItem(lambda _item: f"Read (tap): {service.read_hotkey.upper()}", read_menu),
-        pystray.MenuItem("Read speed", speed_menu),
-        pystray.MenuItem(
-            lambda _item: "Resume hotkeys" if service.paused else "Pause hotkeys",
-            pause_resume,
-        ),
-        pystray.MenuItem("Start at login", toggle_startup, checked=_startup_enabled),
-        pystray.MenuItem("Quit Scribe Voice", quit_icon),
-    )
-    console.print("[green]Scribe Voice is running in the tray.[/green]")
-    # Withhold the "tap F9/F8" hint until the preloaded model is actually ready, so
-    # we never claim readiness while still loading. Wait BEFORE wiring live menu
-    # updates so no tray method is called before icon.run().
-    dictate_hint, read_hint = hotkey_hints(settings)
-    if _await_model_ready(console, service):
-        console.print(f"[green]Ready.[/green] [dim]{dictate_hint} {read_hint}[/dim]")
-    else:
-        console.print(f"[dim]{dictate_hint} {read_hint} (model will load on first use)[/dim]")
-    service.add_status_callback(update_menu)
-    try:
-        icon.run()
+        try:
+            icon.run(setup=setup_icon)
+        except Exception as e:
+            logger.exception("Tray backend stopped unexpectedly")
+            console.print(f"[red]Tray backend stopped unexpectedly:[/red] {e}")
+            return 1
+        if setup_errors:
+            return 1
+        if not requested_stop.is_set():
+            logger.error("Tray backend exited without a quit request")
+            console.print("[red]Tray backend exited without a quit request.[/red]")
+            return 1
         return 0
     except Exception as e:
-        console.print(f"[red]Tray backend stopped unexpectedly:[/red] {e}")
+        logger.exception("Could not initialize the tray backend")
+        console.print(f"[red]Could not initialize the tray backend:[/red] {e}")
         return 1
     finally:
         service.stop()
+        try:
+            image.close()
+        except Exception:
+            logger.warning("Could not close tray icon image", exc_info=True)
 
 
 def _run_no_tray(console: Console, settings: TraySettings) -> int:  # pragma: no cover
@@ -495,21 +750,33 @@ def _run_no_tray(console: Console, settings: TraySettings) -> int:  # pragma: no
     if not service.start_hotkeys(preload_model=settings.preload_model):
         return 1
 
-    console.print(brand_header_markup("scribe voice"))
-    console.print()
-    # Hold the "ready" banner until the preloaded model is actually warm.
-    _await_model_ready(console, service)
-    console.print("[green]Resident voice hotkeys are active.[/green]")
-    dictate_hint, read_hint = hotkey_hints(settings)
-    console.print(f"[cyan]Dictate:[/cyan] {dictate_hint}")
-    console.print(f"[cyan]Read:[/cyan] {read_hint}")
-    console.print("[dim]Press Ctrl+C in this terminal to quit.[/dim]")
-
+    interrupted = False
     try:
+        console.print(brand_header_markup("scribe voice"))
+        console.print()
+        # Hold the "ready" banner until the preloaded model is actually warm.
+        _await_model_ready(console, service)
+        if not service.running:
+            console.print("[red]Resident voice stopped during startup.[/red]")
+            return 1
+        console.print("[green]Resident voice hotkeys are active.[/green]")
+        dictate_hint, read_hint = hotkey_hints(settings)
+        console.print(f"[cyan]Dictate:[/cyan] {dictate_hint}")
+        console.print(f"[cyan]Read:[/cyan] {read_hint}")
+        console.print("[dim]Press Ctrl+C in this terminal to quit.[/dim]")
+
         while service.running:
             time.sleep(0.25)
     except KeyboardInterrupt:
-        pass
+        interrupted = True
+    except Exception as error:
+        logger.exception("Resident voice stopped unexpectedly")
+        console.print(f"[red]Resident voice stopped unexpectedly:[/red] {error}")
+        return 1
     finally:
         service.stop()
+    if not interrupted:
+        logger.error("Resident voice stopped without a quit request")
+        console.print("[red]Resident voice stopped without a quit request.[/red]")
+        return 1
     return 0
