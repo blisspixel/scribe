@@ -1,0 +1,359 @@
+[build-system]
+requires = ["setuptools>=83.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scribe"
+version = "2.8.1"
+description = "Professional GPU-accelerated speech-to-text transcription system"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+authors = [
+    {name = "Nick Seal"}
+]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["transcription", "speech-to-text", "whisper", "gpu", "openai", "batch-processing", "custom-vocabulary"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
+    "faster-whisper>=0.10.0",
+    "openai>=1.0.0",
+    "pydub>=0.25.1",
+    "psutil>=7.2.2",
+    "audioop-lts; python_version >= '3.13'",
+    "numpy>=1.24.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.0.0",
+    "tqdm>=4.65.0",
+    "python-docx>=1.0.0",
+    "obsws-python>=1.5.0",
+    "httpx>=0.24.0",
+    "tenacity>=8.2.0",
+    "yt-dlp>=2026.7.4",
+    "deal>=4.1",
+]
+
+[project.optional-dependencies]
+whisperx = [
+    # WhisperX 3.8.x pins Torch 2.8 and huggingface-hub below 1.0, which keeps
+    # known Torch and Transformers advisories in the Python 3.12 lock.
+    "whisperx>=3.7.2,<3.8",
+    "pyannote.audio>=3.0.0",
+]
+
+# Apple Silicon: run Whisper on the Metal GPU via Apple's MLX. Wheels are
+# arm64-macOS only, so this is an opt-in extra rather than a base dependency.
+mlx = [
+    "mlx-whisper>=0.4.0",
+]
+
+# Portable whisper.cpp engine (Metal / Vulkan / ROCm / CPU) via pywhispercpp, for
+# Apple, AMD, and Intel machines that are not served by faster-whisper's CUDA path.
+whispercpp = [
+    "pywhispercpp>=1.2.0",
+]
+
+# Optional SDKs for non-OpenAI cloud intelligence providers.
+providers = [
+    "anthropic>=0.117.0",
+    "google-genai>=2.13.0",
+]
+
+# Local speaker diarization ("who said what") via pyannote.audio. Needs a Hugging
+# Face token with the pyannote model licenses accepted.
+diarize = [
+    "pyannote.audio>=3.0.0",
+]
+
+# Voice I/O: global-hotkey dictation (speech to type) and read-aloud (local TTS).
+# A deliberate opt-in real-time mode, separate from the batch pipeline (ADR-008).
+voice = [
+    "sounddevice>=0.4.6",
+    "pynput>=1.7.6",
+    "pyperclip>=1.8.2",
+    "pyttsx3>=2.90",
+]
+
+# Resident tray utility for always-available dictation and selection read-aloud.
+# Duplicates the voice deps so `scribe[tray]` is sufficient on its own.
+tray = [
+    "sounddevice>=0.4.6",
+    "pynput>=1.7.6",
+    "pyperclip>=1.8.2",
+    "pyttsx3>=2.90",
+    "pystray>=0.19.5",
+    "Pillow>=10.0.0",
+]
+
+# High-quality local neural read-aloud via Kokoro (82M, ONNX, runs on CPU). An
+# optional upgrade over the pyttsx3 baseline; Scribe falls back to pyttsx3 when
+# this extra or its model files are absent. Model/voice files download on setup.
+kokoro = [
+    "kokoro-onnx>=0.4.0",
+    "sounddevice>=0.4.6",  # playback of the synthesized audio
+]
+
+[project.urls]
+Homepage = "https://github.com/blisspixel/scribe"
+Repository = "https://github.com/blisspixel/scribe"
+Issues = "https://github.com/blisspixel/scribe/issues"
+
+[project.scripts]
+scribe = "scribe.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+scribe = ["py.typed", "assets/icons/*", "assets/glossaries/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "archive",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "S",      # flake8-bandit (security)
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by ruff format)
+    "B008",   # do not perform function calls in argument defaults
+    "C901",   # too complex (use with care; prefer focused functions)
+    "ARG001", # unused function argument (legacy test/style debt)
+    "ARG002", # unused method argument (legacy test/style debt)
+    "B017",   # broad exception assertion in tests
+    "B904",   # raise-without-from in legacy code paths
+    "E402",   # module import not at top of file in tests/scripts
+    "SIM102", # collapsible-if (readability tradeoff)
+    "SIM108", # ternary simplification preference
+    "SIM115", # open-file-with-context-handler in legacy paths
+    "SIM116", # dict-lookup simplification preference
+    "SIM117", # combine nested with statements
+]
+extend-select = ["I", "UP", "B", "S"]
+
+# Intentional typographic characters (kept for professional CLI output and docs)
+allowed-confusables = ["×"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__.py (intentional re-exports)
+"tests/**/*" = [
+    "S101",  # allow assert in tests
+    "S108",  # hardcoded temp paths are fine and common in test fixtures
+    "S110",  # bare except: pass is common in test setup/teardown for expected side effects
+    "S112",  # except: continue same pattern
+    "S603",  # subprocess calls when testing real CLI/device startup paths
+    "S607",  # partial executable paths in the same test contexts
+]  # Test-only security lints that do not reflect production risk
+
+# Production hardware-interaction and graceful-degradation paths.
+# These S-bandit rules (subprocess, broad except/pass for best-effort cleanup,
+# missing timeouts on trusted local tools) are intentional and required for
+# reliable operation on real user machines where OBS, ffmpeg, NVIDIA tools,
+# or providers may be missing, slow, or partially installed.
+# All sites were audited in Step 4; see docs/adr/002_exception_graceful_degradation.md
+# and the module docstrings. They are not network attack surface.
+"src/scribe/core/recorder.py" = ["S110", "S112", "S603", "S607"]
+"src/scribe/core/converter.py" = ["S603"]
+"src/scribe/utils/platform.py" = ["S603", "S606", "S607"]
+"src/scribe/utils/audio.py" = ["S110", "S603"]
+"src/scribe/utils/gpu.py" = ["S110"]
+"src/scribe/core/backends/hardware.py" = ["S110", "S603", "S607"]  # best-effort accelerator probes; sysctl/torch may be absent or fail (S603: trusted local sysctl)
+"src/scribe/utils/silence_remover.py" = ["S603"]
+"src/scribe/utils/diagnostics.py" = ["S603", "S607"]  # runs resolved ffmpeg/ffprobe to report versions
+"src/scribe/models/gpu.py" = ["S603", "S607"]  # nvidia-smi probe on user hardware; trusted, best effort
+"src/scribe/providers/openai_provider.py" = ["S113", "S310"]
+"src/scribe/providers/xai_provider.py" = ["S310"]
+"src/scribe/utils/files.py" = ["S110", "S112"]
+"src/scribe/utils/banner.py" = ["S110"]
+"src/scribe/utils/transcript_loader.py" = ["S112"]  # best-effort encoding fallback for user text files
+"src/scribe/utils/joke_generator.py" = ["S110", "S112", "S311"]  # S311: weighted choice only
+"src/scribe/utils/notes_generator.py" = ["S110"]
+"src/scribe/models/config.py" = ["S110"]
+"src/scribe/core/openai_api.py" = ["S311"]  # jitter only
+"src/scribe/cli/main.py" = ["S324"]  # md5 for stable non-crypto machine ID (two sites)
+"src/scribe/cli/shortcut.py" = ["S603", "S607"]  # launches trusted local tools (powershell, update-desktop-database) to create OS launchers
+"src/scribe/voice/startup.py" = ["S603", "S607"]  # launches trusted local tools (launchctl) to install the login autostart entry
+"src/scribe/voice/tray.py" = ["S603"]  # launches only a user-selected, unverified local Go prototype
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+exclude = [
+    "archive/",
+    "build/",
+    "dist/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "faster_whisper.*",
+    "pydub.*",
+    "obsws_python.*",
+    "torchaudio.*",
+    "anthropic.*",
+    "google.*",
+    "google.genai.*",
+    "PIL.*",
+    "demucs.*",
+    "librosa.*",
+    "click.*",
+    "mlx_whisper.*",
+    "pywhispercpp.*",
+    "pyannote.*",
+    "sounddevice.*",
+    "pynput.*",
+    "pyperclip.*",
+    "pystray.*",
+    "pyttsx3.*",
+    "kokoro_onnx.*",
+]
+ignore_missing_imports = true
+
+[tool.uv]
+python-preference = "only-managed"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "colorama>=0.4.6",  # Used by legacy standalone test scripts (test_audio/devices/startup, run_tests); transitive copy is win32-only, so declare it directly for cross-platform CI
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+    "hypothesis>=6.0",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pip-audit>=2.7",
+    "msgpack>=1.2.1",  # Pin above GHSA-6v7p-g79w-8964 until cachecontrol raises its floor
+    "mutmut>=3.0",  # mutation testing (Linux/WSL only); advisory CI job, see [tool.mutmut]
+    "types-tqdm",
+    "types-requests",
+]
+
+[tool.uv.sources]
+scribe-audio-core = { workspace = true }
+# Add any private indexes or workspace members here when needed.
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    # NOTE: Coverage flags are deliberately omitted here.
+    # The dedicated "Coverage (Python 3.12)" CI job passes --cov + --cov-fail-under=81 explicitly.
+    # Keeping them out of global addopts ensures the lightweight matrix "Tests (Python X)" jobs
+    # (which run only tests/unit with limited markers) stay fast and do not incorrectly enforce
+    # the full-suite coverage gate on a partial run. Local developers can still pass --cov manually.
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests that require GPU (deselect with '-m \"not gpu\"')",
+    "windows: marks tests specific to Windows",
+    "macos: marks tests specific to macOS",
+    "linux: marks tests specific to Linux",
+    "integration: marks integration tests",
+    "e2e: marks end-to-end tests",
+    "requires_ffmpeg: Tests that require ffmpeg binary",
+    "requires_openai: Tests that require OpenAI API key / network",
+    "requires_whisperx: Tests that require WhisperX",
+    "requires_pillow: Tests that require Pillow/PIL for optional meme/image features",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+]
+
+[tool.coverage.report]
+fail_under = 81  # Current enforced floor; target 90%+ as more pure logic gets property tests
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@abstractmethod",
+]
+
+# Mutation testing scope. Kept to the pure, property-tested core logic where a
+# surviving mutant is a real signal that a test is missing, not noise from
+# hardware glue. mutmut is Linux/WSL only, so it runs in the advisory CI job
+# (see .github/workflows/ci.yml) rather than on every developer machine.
+[tool.mutmut]
+paths_to_mutate = [
+    "src/scribe/models/transcript.py",
+    "src/scribe/core/backends/registry.py",
+    "src/scribe/core/diarizer.py",
+    "src/scribe/cli/voice.py",
+    "src/scribe/utils/transcript_writers.py",
+]
+tests_dir = "tests/unit"
+
+
+[tool.uv.workspace]
+members = ['crates/scribe-audio-core']
