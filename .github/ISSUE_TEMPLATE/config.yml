@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/blisspixel/scribe/security/policy
+    about: Read the private reporting instructions before sharing vulnerability details.
+  - name: Support guidance
+    url: https://github.com/blisspixel/scribe/blob/main/SUPPORT.md
+    about: Review diagnostics and data-safety guidance before opening an issue.

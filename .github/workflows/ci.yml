@@ -1,0 +1,460 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Test keys so providers don't fail during import/config
+  OPENAI_API_KEY: sk-test-key
+  XAI_API_KEY: test-key
+  GEMINI_API_KEY: test-key
+  ANTHROPIC_API_KEY: test-key
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint + Format + Type Checking
+  # Fastest failing job. Enforces Ruff (format + lint) + mypy --strict on the package.
+  # This is the required static quality gate.
+  # ---------------------------------------------------------------------------
+  lint-and-types:
+    name: Lint + Format + Types (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Ruff format check
+        run: uv run ruff format --check src tests
+
+      - name: Ruff lint
+        run: uv run ruff check src tests
+
+      - name: mypy --strict (package)
+        run: uv run mypy --strict src/scribe
+
+  # ---------------------------------------------------------------------------
+  # Test Matrix (fast CI-safe subset)
+  # Runs the non-GPU, non-slow unit tests across every declared Python version.
+  # Full suite (including integration) runs locally and is too heavy/sensitive for GitHub runners.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python ${{ matrix.python-version }} --group dev
+
+      - name: Run CI-safe test subset (fast feedback across Python matrix)
+        run: |
+          uv run --python ${{ matrix.python-version }} python -c \
+            "import sys; expected = tuple(map(int, '${{ matrix.python-version }}'.split('.'))); assert sys.version_info[:2] == expected, (sys.version_info[:2], expected)"
+          uv run --python ${{ matrix.python-version }} pytest tests/unit \
+            -m "not gpu and not slow and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" \
+            --maxfail=1 -q
+
+  # ---------------------------------------------------------------------------
+  # Native Python Platform Smoke
+  # Runs the real OS-specific path and launcher tests on Windows and macOS.
+  # The Windows job executes the generated Quick Record wrapper with cmd.exe.
+  # ---------------------------------------------------------------------------
+  platform-smoke:
+    name: Platform Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Run native platform contracts
+        run: >-
+          uv run pytest
+          tests/test_platform.py
+          tests/unit/test_shortcut.py
+          tests/unit/test_platform_utils.py
+          -m "not gpu and not slow"
+          --maxfail=1 -q
+
+  # ---------------------------------------------------------------------------
+  # Coverage Gate
+  # Enforce the 81%+ coverage gate (pyproject.toml [tool.coverage.report] + explicit flag).
+  # Fails the build on a coverage regression.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage (Python 3.12)
+    runs-on: ubuntu-latest
+    needs: [lint-and-types]  # Only run if static checks passed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Install ffmpeg
+        # The full tests/ tree (e2e + conversion tests) drives the real Converter,
+        # which shells out to ffmpeg. The ubuntu-latest image does not ship it, so
+        # install it here; the lighter matrix "Tests" job stays ffmpeg-free.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Run tests with coverage (fail under 81%)
+        run: |
+          uv run pytest \
+            --cov=scribe \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=81 \
+            -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow" \
+            --maxfail=1 -q
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Dependency Security Audit
+  # Blocking scan for known vulnerabilities with no ignored advisories.
+  # Blocks dependencies with known vulnerabilities.
+  # ---------------------------------------------------------------------------
+  security:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Run pip-audit (blocking, zero exceptions)
+        run: uv run pip-audit --local --progress-spinner off --desc on
+
+      - name: Generate locked CycloneDX SBOM
+        run: |
+          mkdir -p .agent/build
+          uv export --locked --package scribe --no-dev --no-default-groups \
+            --no-emit-workspace --format cyclonedx1.5 \
+            --output-file .agent/build/scribe-sbom.cdx.json
+
+      - name: Upload locked SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scribe-sbom
+          path: .agent/build/scribe-sbom.cdx.json
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Toolchain Sanity Check
+  # Exercises uv + pre-commit end-to-end as a hard gate.
+  # Pre-commit runs the full configured hooks (ruff, mypy strict, yaml/toml, trailing whitespace, etc).
+  # This keeps local hooks and CI repository checks aligned.
+  # ---------------------------------------------------------------------------
+  toolchain-check:
+    name: Toolchain Sanity (uv + pre-commit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync + pre-commit install
+        run: |
+          uv sync --locked --python 3.12 --group dev
+          uv run pre-commit install --install-hooks
+
+      - name: Run pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: Validate mutation configuration
+        run: uv run mutmut --help > /dev/null
+
+  # ---------------------------------------------------------------------------
+  # Release Artifact Contract
+  # Builds the portable root wheel, rejects workspace-only mandatory metadata,
+  # installs without workspace packages, and smokes the installed entry point.
+  # ---------------------------------------------------------------------------
+  package:
+    name: Release Artifact Contract (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Build and inspect root wheel
+        shell: bash
+        run: |
+          uv build --clear --package scribe --out-dir .agent/build
+          wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
+          test -n "$wheel"
+          python_path=$(uv python find 3.12)
+          "$python_path" scripts/check_release_artifact.py "$wheel"
+
+      - name: Install artifact without workspace packages
+        shell: bash
+        run: |
+          uv sync --locked --python 3.12 --group dev --no-install-workspace
+          wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
+          uv pip install --python .venv/bin/python --no-deps --reinstall "$wheel"
+          cd .agent
+          ../.venv/bin/scribe --version
+
+  # ---------------------------------------------------------------------------
+  # Native Tray Source Contract
+  # Verifies the explicit-only Windows Go prototype without publishing it.
+  # ---------------------------------------------------------------------------
+  native-tray:
+    name: Native Tray Source Contract (Windows amd64)
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go from module
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cmd/scribe-tray/go.mod
+          cache-dependency-path: cmd/scribe-tray/go.sum
+
+      - name: Verify native tray source and reproducible build
+        shell: pwsh
+        run: ./scripts/check_native_tray.ps1 -OutputDirectory "$env:RUNNER_TEMP/native-tray"
+
+  # ---------------------------------------------------------------------------
+  # Native Audio Source Contract
+  # Keeps the optional Rust acceleration crate formatted, warning-free, and tested.
+  # ---------------------------------------------------------------------------
+  native-audio:
+    name: Native Audio Source Contract (Rust stable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crates/scribe-audio-core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install stable Rust with quality components
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+
+      - name: Rust format
+        run: cargo +stable fmt --check
+
+      - name: Rust lint
+        run: cargo +stable clippy --locked --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo +stable test --locked
+
+  # ---------------------------------------------------------------------------
+  # Mutation Testing (advisory, non-blocking)
+  # Runs mutmut over the pure, property-tested core (transcript model, backend
+  # selection, diarization alignment, voice endpointing, output writers). A
+  # surviving mutant means a test is missing, not that the build is broken, so
+  # this is informational: it is continue-on-error and is NOT in the CI gate
+  # aggregator. mutmut is Linux-only, which is why it lives here rather than in
+  # the local developer workflow.
+  # ---------------------------------------------------------------------------
+  mutation:
+    name: Mutation Testing (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 25  # hard ceiling so an advisory job never churns for hours
+    needs: [lint-and-types]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync environment (dev group)
+        run: uv sync --locked --python 3.12 --group dev
+
+      - name: Run mutmut over the pure core (advisory, time-boxed)
+        # Scope, tests, and runner are configured in [tool.mutmut]. The job-level
+        # continue-on-error keeps surviving mutants advisory, while a crash remains
+        # visible instead of being converted into a false green step.
+        run: timeout 900 uv run mutmut run
+
+      - name: Show mutation results
+        if: always()
+        run: uv run mutmut results
+
+  # ---------------------------------------------------------------------------
+  # CI Gate Aggregator
+  # Single status that can be required in branch protection rules.
+  # All required Python and native-source jobs must pass.
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs:
+      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, native-tray, native-audio]
+    if: always()
+
+    steps:
+      - name: Verify all required gates passed
+        shell: bash
+        run: |
+          echo "CI gate results:"
+          echo "  lint-and-types: ${{ needs.lint-and-types.result }}"
+          echo "  toolchain-check: ${{ needs.toolchain-check.result }}"
+          echo "  test:           ${{ needs.test.result }}"
+          echo "  platform-smoke: ${{ needs.platform-smoke.result }}"
+          echo "  coverage:       ${{ needs.coverage.result }}"
+          echo "  security:       ${{ needs.security.result }}"
+          echo "  package:        ${{ needs.package.result }}"
+          echo "  native-tray:    ${{ needs.native-tray.result }}"
+          echo "  native-audio:   ${{ needs.native-audio.result }}"
+
+          failed=0
+          for result in "${{ needs.lint-and-types.result }}" \
+                        "${{ needs.toolchain-check.result }}" \
+                        "${{ needs.test.result }}" \
+                        "${{ needs.platform-smoke.result }}" \
+                        "${{ needs.coverage.result }}" \
+                        "${{ needs.security.result }}" \
+                        "${{ needs.package.result }}" \
+                        "${{ needs.native-tray.result }}" \
+                        "${{ needs.native-audio.result }}"; do
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          done
+
+          if [[ $failed -eq 1 ]]; then
+            echo "One or more required CI gates failed. See job logs above."
+            exit 1
+          fi
+
+          echo "All required CI gates passed."

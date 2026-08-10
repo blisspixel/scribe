@@ -1,0 +1,16 @@
+[package]
+name = "scribe-audio-core"
+version = "0.1.0"
+edition = "2024"
+authors = ["Nick Seal"]
+license = "Apache-2.0"
+repository = "https://github.com/blisspixel/scribe"
+
+[lib]
+name = "scribe_audio_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29.0", features = ["extension-module", "abi3-py312"] }
+symphonia = { version = "0.6.0", features = ["all"] }
+hound = "3.5.1"

@@ -1,0 +1,97 @@
+# Example Custom Vocabulary File
+# One term per line - use this to improve transcription accuracy
+# for domain-specific terms, proper nouns, and technical jargon
+
+# Technology & Frameworks
+Kubernetes
+PostgreSQL
+GraphQL
+TypeScript
+JavaScript
+React
+Redux
+Next.js
+Vue.js
+Angular
+WebSocket
+OAuth
+JWT
+API Gateway
+Microservices
+Docker
+Podman
+CI/CD
+Terraform
+Ansible
+
+# Cloud Services (AWS)
+AWS Lambda
+DynamoDB
+S3 bucket
+CloudFormation
+Elastic Beanstalk
+CloudWatch
+Route 53
+API Gateway
+Cognito
+
+# Cloud Services (Azure)
+Azure Functions
+Cosmos DB
+Blob Storage
+Azure DevOps
+App Service
+
+# Cloud Services (GCP)
+Cloud Functions
+BigQuery
+Cloud Storage
+Cloud Run
+Pub/Sub
+
+# Databases
+MongoDB
+Cassandra
+Elasticsearch
+Redis
+Memcached
+Neo4j
+CouchDB
+InfluxDB
+
+# Programming Languages
+Python
+Golang
+Rust
+Kotlin
+Swift
+Scala
+Elixir
+Clojure
+
+# DevOps & Tools
+Jenkins
+GitLab
+GitHub Actions
+CircleCI
+Prometheus
+Grafana
+Datadog
+New Relic
+Splunk
+
+# Methodologies
+Agile
+Scrum
+Kanban
+DevOps
+GitOps
+SRE
+
+# Company-Specific Terms (customize these)
+# Add your company name, product names, team names, etc.
+# Synthetic examples:
+# Example Company
+# Example Project
+# Example Team
+# Example Product API

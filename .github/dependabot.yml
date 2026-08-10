@@ -1,0 +1,90 @@
+version: 2
+
+# Dependency alerts remain enabled in GitHub. Automated update pull requests are
+# disabled under the current direct-maintenance policy. Raise the limits
+# deliberately when automated pull requests are wanted.
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+    rebase-strategy: "disabled"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:15"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+    rebase-strategy: "disabled"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      pre-commit-hooks:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:30"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+    rebase-strategy: "disabled"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "gomod"
+    directory: "/cmd/scribe-tray"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:45"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+    rebase-strategy: "disabled"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/scribe-audio-core"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 0
+    rebase-strategy: "disabled"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"

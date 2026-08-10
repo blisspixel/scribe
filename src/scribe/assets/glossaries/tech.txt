@@ -1,0 +1,37 @@
+# Scribe glossary preset: tech
+#
+# One term per line. A line of the form
+#   Canonical = misrecognition1, misrecognition2
+# also records known misrecognitions, which are rewritten to the canonical form
+# after transcription. Plain term lines just bias recognition.
+
+# Databases and infrastructure
+PostgreSQL = post gray sequel, postgres sql, postgre sql
+Kubernetes = kubernetis, cooper netties, kubernetties
+Redis
+nginx = engine x
+GraphQL = graph QL, graphics QL
+Terraform
+Grafana
+Prometheus
+
+# Protocols and standards
+OAuth = oh auth, o auth
+JWT
+gRPC = G RPC
+WebSocket = web socket
+REST API
+SAML
+
+# Languages and runtimes
+TypeScript
+Node.js = node JS
+Rust
+Golang
+
+# Cloud and vendors
+AWS Lambda
+S3 bucket
+Azure
+GCP
+CI/CD = CICD, C I C D

@@ -1,0 +1,317 @@
+# ============================================================================
+# Scribe .gitignore
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Python
+# ----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Native tray developer builds are generated from source and never tracked.
+cmd/scribe-tray/*.exe
+
+# ----------------------------------------------------------------------------
+# Virtual Environments
+# ----------------------------------------------------------------------------
+venv/
+ENV/
+env/
+.venv
+.virtualenv
+env.bak/
+venv.bak/
+pythonenv*/
+
+# ----------------------------------------------------------------------------
+# IDEs and Editors
+# ----------------------------------------------------------------------------
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ----------------------------------------------------------------------------
+# Testing and Coverage
+# ----------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+coverage.json
+*.cover
+.hypothesis/
+.pytest_cache/
+nosetests.xml
+test-results/
+junit.xml
+MagicMock/
+test_output/
+
+# ----------------------------------------------------------------------------
+# Type Checking and Linting
+# ----------------------------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ----------------------------------------------------------------------------
+# Environment and Secrets
+# ----------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets.json
+
+# Keep example files
+!.env.example
+
+# ----------------------------------------------------------------------------
+# Logs
+# ----------------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+log_*.txt
+
+# ----------------------------------------------------------------------------
+# Scribe-Specific: User Content
+# ----------------------------------------------------------------------------
+# Output files (transcriptions, recordings)
+output/
+!output/.gitkeep
+
+# Archive folder (old files)
+archive/
+!archive/.gitkeep
+
+# Input files (user audio/video)
+input/
+!input/.gitkeep
+
+# Custom vocabulary files (user-specific)
+# Keep example files but ignore custom ones
+vocabulary.txt
+vocabulary.json
+vocab.txt
+vocab.json
+custom-*.txt
+custom-*.json
+my-*.txt
+my-*.json
+*-vocabulary.txt
+*-vocabulary.json
+*-vocab.txt
+*-vocab.json
+# But keep the examples
+!examples/vocabulary.txt
+!examples/vocabulary.json
+
+# ----------------------------------------------------------------------------
+# Scribe-Specific: Temporary Files
+# ----------------------------------------------------------------------------
+# Intermediate processing files
+*.tmp
+*.temp
+*_temp.*
+*_tmp.*
+*_cleaned.*
+*_standardized.*
+*_chunk_*
+*_normalized.*
+
+# Audio conversion intermediates
+*.wav.tmp
+*.mp3.tmp
+
+# Session files
+.session_*
+session_*.json.tmp
+
+# ----------------------------------------------------------------------------
+# Media Files (Large Files)
+# ----------------------------------------------------------------------------
+# Audio files (unless explicitly tracked)
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.wma
+
+# Video files (unless explicitly tracked)
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Keep test fixtures
+!tests/fixtures/**/*.mp3
+!tests/fixtures/**/*.wav
+!tests/fixtures/**/*.mp4
+
+# ----------------------------------------------------------------------------
+# Documents (Generated)
+# ----------------------------------------------------------------------------
+# Generated transcripts (user content)
+*_transcription.txt
+*_transcription.docx
+*_summary.json
+
+# Keep example/template files
+!examples/**/*.txt
+!examples/**/*.docx
+!examples/**/*.json
+
+# ----------------------------------------------------------------------------
+# OS-Specific
+# ----------------------------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ----------------------------------------------------------------------------
+# Development and Debugging
+# ----------------------------------------------------------------------------
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Profiling
+*.prof
+*.lprof
+profile_*.txt
+
+# Debug files
+debug.log
+debug_*.txt
+*.dmp
+
+# ----------------------------------------------------------------------------
+# Documentation Build
+# ----------------------------------------------------------------------------
+docs/_build/
+docs/_static/
+docs/_templates/
+site/
+
+# ----------------------------------------------------------------------------
+# Database
+# ----------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ----------------------------------------------------------------------------
+# Backup Files
+# ----------------------------------------------------------------------------
+*.bak
+*.backup
+*.old
+*~
+
+# ----------------------------------------------------------------------------
+# Keep Important Files
+# ----------------------------------------------------------------------------
+# Keep directory structure
+!.gitkeep
+
+# Keep configuration examples
+!.env.example
+!config.example.json
+
+# Keep test data
+!tests/data/**
+!tests/fixtures/**
+# Local agent/editor working dirs
+.agent/
+.claude/
+agent-tools/
+
+/.kiro
+/docs/research
+/working
+
+# Personal launcher artifacts: use `scribe shortcut` to generate these locally.
+*.lnk
+/Scribe Quick Record.bat
