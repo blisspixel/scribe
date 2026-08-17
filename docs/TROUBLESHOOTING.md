@@ -14,8 +14,7 @@ issue, or support bundle.
 
 ## Installation and command discovery
 
-Scribe requires Python 3.12 or 3.13, FFmpeg, and uv. This private repository also
-requires a GitHub account with access.
+Scribe requires Python 3.12 or 3.13, FFmpeg, and uv.
 
 Install the current repository version as a tool:
 

@@ -140,6 +140,7 @@ from scribe.models.session import TranscriptionSession
 from scribe.models.transcript import Transcript
 from scribe.utils.files import cleanup_files
 from scribe.utils.logging import get_logger
+from scribe.utils.model_selection import resolve_local_model
 from scribe.utils.resource_limits import validate_audio_file
 
 logger = get_logger(__name__)
@@ -274,8 +275,10 @@ class Transcriber:
         if preference == "local":
             if not self.gpu_config.has_gpu:
                 logger.warning(
-                    "Local transcription requested but no GPU detected - "
-                    "transcription will likely fail or be very slow"
+                    "No GPU detected - transcribing on the CPU. This works and stays free, "
+                    "but is substantially slower than a GPU. Scribe selects a "
+                    "CPU-appropriate model automatically unless --model or "
+                    "SCRIBE_DEFAULT_MODEL overrides it."
                 )
             else:
                 logger.info(
@@ -367,17 +370,16 @@ class Transcriber:
         configured_fields: set[str] = cast(
             set[str], getattr(self.config, "model_fields_set", set())
         )
-        if "default_model" in configured_fields:
-            return configured_model
-
-        recommended_model = self.gpu_config.model_size
-        if recommended_model != configured_model:
+        effective_model, hardware_adjusted = resolve_local_model(
+            configured_model, configured_fields, self.gpu_config.model_size
+        )
+        if hardware_adjusted:
             logger.info(
                 "Auto-adjusting local Whisper model from %s to %s based on detected hardware",
                 configured_model,
-                recommended_model,
+                effective_model,
             )
-        return recommended_model
+        return effective_model
 
     def _attempt_fallback_transcription(
         self,

@@ -19,6 +19,7 @@ from rich.table import Table
 
 from scribe.exceptions import ScribeError
 from scribe.utils.branding import brand_header_markup
+from scribe.utils.model_selection import resolve_local_model
 from scribe.utils.theme import ScribeTheme
 
 if TYPE_CHECKING:
@@ -99,10 +100,23 @@ def show_info(
         f"[{ScribeTheme.TEXT_MUTED}]"
         f"{escape(str(config.output_folder))}[/{ScribeTheme.TEXT_MUTED}]"
     )
+    # Report the model that will actually run, not the configured preference:
+    # on a machine without a GPU the default is auto-tuned down (ADR-006).
+    effective_model, hardware_adjusted = resolve_local_model(
+        config.default_model,
+        config.model_fields_set,
+        gpu_config.model_size,
+    )
+    model_note = (
+        f" [{ScribeTheme.TEXT_MUTED}](auto for this hardware; "
+        f"{escape(str(config.default_model))} configured)[/{ScribeTheme.TEXT_MUTED}]"
+        if hardware_adjusted
+        else ""
+    )
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]model[/{ScribeTheme.TEXT_PRIMARY}]     "
         f"[{ScribeTheme.TEXT_MUTED}]"
-        f"{escape(str(config.default_model))}[/{ScribeTheme.TEXT_MUTED}]"
+        f"{escape(str(effective_model))}[/{ScribeTheme.TEXT_MUTED}]{model_note}"
     )
     language = config.default_language or "auto"
     console.print(

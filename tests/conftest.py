@@ -18,9 +18,16 @@ from scribe.models.config import ScribeConfig
 
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
-    """Create temporary directory for tests."""
+    """Create temporary directory for tests.
+
+    The path is resolved because Windows reports TEMP as an 8.3 short path when
+    the user profile name contains a space (``C:\\Users\\NICKSE~1\\...``). Scribe
+    canonicalizes paths at its boundary, so an unresolved fixture path would not
+    compare equal to anything the product returns. CI runs on profiles without
+    spaces and never exercises that difference.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
+        yield Path(tmpdir).resolve()
 
 
 @pytest.fixture

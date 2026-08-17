@@ -4,8 +4,9 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Versioned sections currently describe private development milestones. No public
-release has been published.
+Versioned sections below describe development milestones that predate this
+repository's public history. No public release has been published, so installs
+from `main` are development builds.
 
 ---
 
@@ -35,6 +36,14 @@ release has been published.
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Prepared the repository for public visibility: replaced the private-repository
+  install and reporting caveats in the README, security policy, deployment guide,
+  troubleshooting guide, changelog, and issue-template config with guidance that
+  is correct for a public repository, and pointed vulnerability reports at
+  GitHub's private reporting flow.
+- Documented that Scribe bundles no third-party source and that dependencies keep
+  their own licenses, naming the LGPL-3.0 `voice` and `tray` extras and the
+  separately licensed models and executables.
 - Reworked the root README into a concise project landing page and moved detailed command and resident-voice operations into linked CLI and voice guides.
 - Added a searchable CLI preview and documented CPU, NVIDIA, Apple Silicon, AMD,
   and Intel paths without treating one development GPU as a requirement.
@@ -99,6 +108,18 @@ release has been published.
 - Declared `psutil` as a required runtime dependency so the standard `scribe doctor` installation can report CPU and memory readiness instead of silently skipping the check.
 
 ### Fixed
+- Fixed four path-validation tests that failed on any Windows profile whose name
+  contains a space. Such profiles report `TEMP` as an 8.3 short path, which the
+  product correctly canonicalizes but the shared `temp_dir` fixture did not, so
+  fixture paths never compared equal to product output. CI runs on space-free
+  profiles and could not surface this.
+- `scribe info` now reports the local Whisper model that will actually run rather
+  than the configured preference. On a machine without a GPU the default is
+  auto-tuned down, so the previous output named a model the run would not use.
+  The pipeline and `scribe info` now share one resolution helper.
+- Corrected the no-GPU transcription warning, which claimed local transcription
+  would "likely fail" on CPU. CPU transcription is a supported, working path, and
+  the warning now states the real tradeoff and where the model comes from.
 - Repaired mutation-test configuration for the current mutmut schema and stopped
   masking runner crashes as successful steps. The advisory run now builds a
   complete importable package, limits mutations to the intended pure-core files,

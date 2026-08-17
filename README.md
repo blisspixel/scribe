@@ -24,9 +24,8 @@ scribe meeting.mp4
 After `uv tool update-shell`, open a new terminal. The `scribe` command then works
 from any directory.
 
-While this repository remains private, Git installs require a GitHub account with
-repository access. No package named `scribe` has been published for this project,
-so do not install an unrelated package from PyPI.
+No package named `scribe` has been published for this project, so install from
+this repository rather than PyPI, where an unrelated package holds that name.
 
 If a cloud-synced home folder causes a hardlink error, repeat the install with
 `--link-mode=copy`.
@@ -237,6 +236,14 @@ Copyright 2026 Nick Seal. Scribe is licensed under the
 [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for the copyright notice and
 [Responsible Use](docs/RESPONSIBLE_USE.md) for recording, privacy, cloud-sharing,
 accuracy, and warranty guidance.
+
+Scribe bundles no third-party source. Dependencies are installed from their own
+publishers and keep their own licenses, which are not all Apache-2.0: the
+optional `voice` and `tray` extras install `pynput` and `pystray` under
+LGPL-3.0, and models and executables such as FFmpeg, Whisper checkpoints, and
+Kokoro voices carry separate terms. Review the licenses of the extras and models
+you choose to install, particularly if you redistribute Scribe as part of a
+larger work.
 
 ## Contributing
 

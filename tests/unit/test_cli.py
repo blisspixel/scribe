@@ -491,6 +491,9 @@ class TestInfoCommand:
         mock_config = Mock()
         mock_config.output_folder = Path("/test/output")
         mock_config.default_model = "large-v3"
+        # Pydantic tracks explicitly-set fields here; empty means "left at default",
+        # which is what lets `info` report the hardware-tuned model.
+        mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
         mock_config.hf_token = None
@@ -524,6 +527,9 @@ class TestInfoCommand:
         mock_config = Mock()
         mock_config.output_folder = Path("/test")
         mock_config.default_model = "large-v3"
+        # Pydantic tracks explicitly-set fields here; empty means "left at default",
+        # which is what lets `info` report the hardware-tuned model.
+        mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
         mock_config.hf_token = None
@@ -560,6 +566,9 @@ class TestInfoCommand:
         mock_config = Mock()
         mock_config.output_folder = Path("/test/output")
         mock_config.default_model = "large-v3"
+        # Pydantic tracks explicitly-set fields here; empty means "left at default",
+        # which is what lets `info` report the hardware-tuned model.
+        mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
         mock_config.hf_token = None
@@ -668,6 +677,9 @@ class TestOutputFormatting:
         mock_config = Mock()
         mock_config.output_folder = Path("/test")
         mock_config.default_model = "large-v3"
+        # Pydantic tracks explicitly-set fields here; empty means "left at default",
+        # which is what lets `info` report the hardware-tuned model.
+        mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
         mock_config.hf_token = None

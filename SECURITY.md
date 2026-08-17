@@ -7,11 +7,12 @@ release range will be documented here. No public release is currently supported.
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability reporting flow under the repository Security
-tab when it is available. While the repository is private, use an existing private
-channel with the maintainer. Do not include API keys, transcripts, recordings, or
-other sensitive user data in an issue. If no private reporting channel is
-available, open a minimal issue asking for one without disclosing exploit details.
+Report vulnerabilities through GitHub's private vulnerability reporting flow,
+under this repository's Security tab ("Report a vulnerability"). Do not open a
+public issue for a suspected vulnerability, and do not include API keys,
+transcripts, recordings, or other sensitive user data in a report. If private
+reporting is unavailable to you, open a minimal issue asking for a private
+channel without disclosing exploit details.
 
 Include the affected version or commit, operating system, impact, reproduction
 steps, and whether the issue requires a malicious local file, local process,

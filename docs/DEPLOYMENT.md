@@ -36,9 +36,8 @@ scribe init
 scribe info
 ```
 
-While the repository remains private, both install forms require a GitHub account
-with repository access. This project has not published a PyPI package. A bare
-`pip install scribe` can install an unrelated project.
+This project has not published a PyPI package. Install from this repository; a
+bare `pip install scribe` installs an unrelated project.
 
 Use a project-local install when developing Scribe:
 
