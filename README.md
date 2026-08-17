@@ -1,5 +1,9 @@
 # Scribe
 
+[![CI](https://github.com/blisspixel/scribe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/blisspixel/scribe/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
+
 Local-first speech transcription, meeting notes, and recording tools for Windows,
 macOS, and Linux.
 
