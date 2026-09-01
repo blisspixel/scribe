@@ -54,6 +54,10 @@ the roadmap.
 limits from `recording_policy.py`. URL ingestion is isolated in `downloader.py`.
 Media conversion and validation occur before transcription. Scribe records only
 after the user accepts the consent prompt or supplies the explicit consent flag.
+The recorder treats OBS control state as necessary but not sufficient: startup
+requires advancing OBS output counters and a fresh growing media file. Recovery
+never stops an existing recording, and finalization never moves a file that is
+still growing.
 
 ### Transcription
 
@@ -123,6 +127,8 @@ bundle before sharing it.
 ## Reliability and security properties
 
 - Recording requires an explicit acknowledgement of authorization.
+- Recording startup requires positive output progress, not only a control-state flag.
+- Existing and still-growing OBS recordings are never stopped or moved by recovery.
 - Local transcription does not silently fail over to cloud transcription.
 - Provider features are opt-in and identify their cloud data boundary.
 - Artifact writes that represent run state use atomic replacement where needed.

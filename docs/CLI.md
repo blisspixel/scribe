@@ -78,7 +78,8 @@ scribe shortcut --desktop
 scribe shortcut --remove
 ```
 
-See [Troubleshooting](TROUBLESHOOTING.md) for OBS and launcher recovery.
+Read the [Recording Guide](RECORDING.md) before relying on OBS for an important
+meeting. See [Troubleshooting](TROUBLESHOOTING.md) for symptom-specific recovery.
 
 ## Transcript search and vocabulary
 

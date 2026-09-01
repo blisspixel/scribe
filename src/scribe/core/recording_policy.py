@@ -209,7 +209,7 @@ def recording_media_candidate_dirs(
     return tuple(unique)
 
 
-@deal.pre(lambda attempt: attempt >= 0)
+@deal.pre(lambda attempt, **_kwargs: attempt >= 0)
 @deal.post(lambda result: result > 0.0)
 def media_discovery_poll_interval(
     attempt: int,

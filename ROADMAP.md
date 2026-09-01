@@ -5,8 +5,9 @@ Scribe favors reliability, privacy, and maintainability over feature count. See
 
 ## Current status
 
-Version 2.8.1 is the current development version. No public release has been
-published.
+Version 2.8.1 is the current GitHub release for repository collaborators. No PyPI
+package has been published. Public distribution remains gated by the clean-machine
+and platform evidence below.
 
 The core product is a local-first desktop CLI for transcription, recording,
 structured transcript output, local notes, and explicitly selected cloud
@@ -18,15 +19,18 @@ voice remain experimental until their hardware validation records are complete.
 ### 1. Record clean-machine core workflow evidence
 
 Install the exact candidate commit on fresh Windows, macOS, and Linux machines,
-then run `scribe init`, `scribe doctor`, and one authorized synthetic local
-transcription. Record the operating system, Python version, install command,
-backend, exit status, and produced artifact types without committing local paths
-or user data.
+then run `scribe init`, `scribe doctor`, `scribe rec --check`, one authorized
+short OBS recording, and one synthetic local transcription. The OBS run must
+exercise positive byte and file-growth confirmation, safe stop and finalization,
+and recovery from an unreachable non-recording OBS process. Record the operating
+system, Python version, install command, backend, exit status, and produced
+artifact types without committing local paths or user data.
 
 CI proves the package contract and mocked platform behavior. It does not prove
-that a first-time user can install FFmpeg, resolve the native ML stack, and finish
-a real local transcription on each claimed platform. This evidence is the most
-important remaining check before a first public release.
+that a first-time user can install FFmpeg, resolve the native ML stack, control a
+real OBS installation, and finish the recording and transcription workflows on
+each claimed platform. This evidence is the most important remaining check before
+public distribution.
 
 ### 2. Complete macOS and Linux resident voice validation
 

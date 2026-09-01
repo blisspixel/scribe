@@ -4,18 +4,21 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Versioned sections below describe development milestones that predate this
-repository's public history. No public release has been published, so installs
-from `main` are development builds.
+Version 2.8.1 is the first GitHub release for repository collaborators. It is not
+published on PyPI. Older versioned sections describe development milestones that
+predate this repository's Git history.
 
 ---
 
 ## Unreleased
 
-- Selected Apache License 2.0 as the canonical project license and aligned source,
-  package, and wheel metadata with those terms.
+No changes yet.
+
+## [2.8.1] - 2026-09-01
 
 ### Added
+- Added a dedicated recording guide covering setup, positive startup proof,
+  defensive control paths, monitoring, safe stop, and recovery on each platform.
 - Added a sanitized README terminal screenshot generated from the real recording
   command, with a reproducible capture script and no personal runtime data.
 - Enabled GitHub dependency alerts. Automated update pull requests remain
@@ -36,6 +39,8 @@ from `main` are development builds.
 - Added durable terminal evidence for started file, URL, batch-item, recording, and per-track music sessions. Terminal summaries preserve surviving artifact and correlated local-log paths and distinguish success, partial completion, failure, and confirmed instrumentals.
 
 ### Changed
+- Selected Apache License 2.0 as the canonical project license and aligned source,
+  package, and wheel metadata with those terms.
 - Prepared the repository for public visibility: replaced the private-repository
   install and reporting caveats in the README, security policy, deployment guide,
   troubleshooting guide, changelog, and issue-template config with guidance that
@@ -44,6 +49,16 @@ from `main` are development builds.
 - Documented that Scribe bundles no third-party source and that dependencies keep
   their own licenses, naming the LGPL-3.0 `voice` and `tray` extras and the
   separately licensed models and executables.
+- Recovered Quick Record from OBS processes that completed shutdown without
+  exiting by attempting one non-destructive multi-instance relaunch when WebSocket
+  is unavailable. Normal startup requires advancing OBS output counters and checks
+  independently for a fresh growing file. Emergency startup requires file growth.
+  Existing recordings are never stopped, emergency fallback uses OBS's supported
+  start option, and live files are never moved during manual recovery. Unexpected
+  stops preserve the partial file and fail truthfully. Doctor now reports a
+  running OBS process whose configured WebSocket port is closed.
+- Raised the development pip floor to 26.2 to remediate PYSEC-2026-3721 and keep
+  the required zero-exception dependency audit passing.
 - Reworked the root README into a concise project landing page and moved detailed command and resident-voice operations into linked CLI and voice guides.
 - Added a searchable CLI preview and documented CPU, NVIDIA, Apple Silicon, AMD,
   and Intel paths without treating one development GPU as a requirement.

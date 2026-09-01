@@ -21,7 +21,8 @@ optional device or program is unavailable.
    - All carry structured `context: dict` for debugging and recovery hints.
 
 2. At **internal boundaries and hardware integration points**, allow controlled broader catching **only when**:
-   - The failure is non-fatal to the primary user goal (e.g., "recording still succeeds via CLI fallback").
+   - The failure is non-fatal to the primary user goal, such as a CLI fallback
+     whose fresh output file is positively verified as growing.
    - The site always logs at debug or warning level with context.
    - It either falls back to a secondary strategy or raises a typed `ScribeError` with actionable context.
    - A comment or ADR reference explains the "why".
@@ -36,7 +37,9 @@ optional device or program is unavailable.
 - Blind removal of the graceful paths would regress reliability for the Windows + GPU + OBS primary use case.
 
 ## Where Broad Catches Are Currently Accepted (with logging + recovery)
-- `src/scribe/core/recorder.py` - OBS WebSocket connection failures → CLI fallback; best-effort process cleanup; crash sentinel handling.
+- `src/scribe/core/recorder.py` - OBS WebSocket connection failures use a
+  non-destructive emergency start path with output verification; active OBS
+  recordings and growing files remain untouched.
 - `src/scribe/utils/joke_bakeoff.py` and `meme_bakeoff.py` - individual provider or judging failures → continue or safe default.
 - `src/scribe/core/local_whisper.py` - non-critical analysis (silence detection, language ID) → safe defaults + warning.
 - `src/scribe/cli/main.py` - top-level command handlers (user UX boundary).

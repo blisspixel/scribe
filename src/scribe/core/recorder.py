@@ -51,6 +51,9 @@ _SUBPROCESS_PROBE_ERRORS = (OSError, subprocess.SubprocessError)
 _OBS_SOCKET_ERRORS = (ConnectionError, OSError, TimeoutError)
 _STOP_COMMANDS = frozenset({"stop", "s", "q", "quit", "exit"})
 _RECORDING_STATUS_CLEAR_WIDTH = 80
+_RECORDING_START_TIMEOUT_SECONDS = 15.0
+_RECORDING_FILE_PROOF_TIMEOUT_SECONDS = 15.0
+_RECORDING_STALL_WARNING_SECONDS = 15.0
 
 
 class _WindowsConsoleInput(Protocol):
@@ -114,6 +117,14 @@ class OBSPreflightResult:
     def ok(self) -> bool:
         """Whether Quick Record can use OBS WebSocket."""
         return self.status == "pass"
+
+
+@dataclass(frozen=True)
+class RecordingStopResult:
+    """Outcome reported by the live recording monitor."""
+
+    output_path: str | None = None
+    unexpected_stop: bool = False
 
 
 class OBSRecorder:
@@ -183,7 +194,10 @@ class OBSRecorder:
                 return self._record_with_cli(meeting_name, stop_event)
 
         except ProcessError:
-            # Already a ProcessError - don't double-wrap
+            # Already a ProcessError - don't double-wrap, but retain truthful
+            # lifecycle evidence for session summaries.
+            with suppress(ValueError):
+                self._session.advance(RecordingEvent.CANCEL)
             raise
         except OSError as e:
             logger.error("Recording failed (OS error): %s", e)
@@ -219,26 +233,61 @@ class OBSRecorder:
         self._ensure_recording_session_started()
         try:
             with self._connect_obs() as client:
-                self._session.advance(RecordingEvent.CONNECT_OK)
                 self._set_record_dir_if_possible(client, str(self.output_folder))
                 eff_dir = self._get_effective_record_dir(client, str(self.output_folder))
 
-                self._start_recording_if_needed(client)
-                # Set timestamp AFTER recording has started
+                # Timestamp before StartRecord so a file created immediately by OBS
+                # cannot fall just outside the discovery window.
+                media_baseline = self._recording_media_snapshot(eff_dir)
                 start_ts = time.time()
-                self._wait_for_stop_with_input(client, stop_event)
+                self._start_recording_if_needed(client)
+                self._session.advance(RecordingEvent.CONNECT_OK)
+
+                confirmed_media = self._confirm_recording_file_progress(
+                    eff_dir,
+                    start_ts,
+                    exclude=media_baseline,
+                )
+                if confirmed_media is None:
+                    from scribe.utils.logging import console
+
+                    console.print(
+                        "[yellow]OBS output is advancing, but the recording file path "
+                        "is not visible yet. Recording will continue while Scribe keeps "
+                        "tracking it.[/yellow]"
+                    )
+
+                stop_result = self._wait_for_stop_with_input(client, stop_event)
                 self._session.advance(RecordingEvent.STOP_REQUESTED)
 
-                try:
-                    media, ext = self._discover_recorded_media(eff_dir, start_ts)
-                except ProcessError:
-                    with suppress(ValueError):
-                        self._session.advance(RecordingEvent.MEDIA_MISSING)
-                    raise
+                media_result = self._usable_reported_media(stop_result.output_path, start_ts)
+                if media_result is None and confirmed_media is not None:
+                    media_result = confirmed_media
+                if media_result is None:
+                    try:
+                        media_result = self._discover_recorded_media(
+                            eff_dir,
+                            start_ts,
+                            exclude=media_baseline,
+                        )
+                    except ProcessError:
+                        with suppress(ValueError):
+                            self._session.advance(RecordingEvent.MEDIA_MISSING)
+                        raise
+                media, ext = media_result
                 self._session.advance(RecordingEvent.MEDIA_FOUND)
 
-                self._wait_until_file_finalized(media)
+                if not self._wait_until_file_finalized(media):
+                    raise ProcessError(
+                        "OBS did not finish the recording file, so Scribe left the "
+                        f"live file untouched: {media}. Check OBS before processing it."
+                    )
                 final_path = self._finalize_recording(media, ext, meeting_name, start_ts)
+                if stop_result.unexpected_stop:
+                    raise ProcessError(
+                        "OBS stopped recording unexpectedly before Scribe received a stop "
+                        f"request. The partial recording was preserved at: {final_path}"
+                    )
                 self._session.advance(RecordingEvent.FINALIZED)
                 return final_path
 
@@ -260,7 +309,6 @@ class OBSRecorder:
         except ConnectionError as e:
             if should_fallback_websocket_to_cli(e):
                 logger.warning("WebSocket connection failed, falling back to CLI mode")
-                self._session.advance(RecordingEvent.USE_CLI_FALLBACK)
                 return self._record_with_cli(meeting_name, stop_event)
             with suppress(ValueError):
                 self._session.advance(RecordingEvent.CANCEL)
@@ -269,12 +317,98 @@ class OBSRecorder:
                 context={"phase": self._session.phase.value},
             ) from e
 
+    @staticmethod
+    def _usable_reported_media(path: str | None, start_ts: float) -> tuple[str, str] | None:
+        """Return an OBS-reported output path when it is a fresh real file."""
+        if not path:
+            return None
+        candidate = Path(path)
+        try:
+            if not candidate.is_file() or candidate.stat().st_mtime < start_ts - 5:
+                return None
+        except OSError:
+            return None
+        suffix = candidate.suffix.lower()
+        if suffix not in {".mp4", ".mkv"}:
+            return None
+        return str(candidate), suffix
+
+    def _confirm_recording_file_progress(
+        self,
+        primary_dir: str,
+        start_ts: float,
+        *,
+        timeout: float = _RECORDING_FILE_PROOF_TIMEOUT_SECONDS,
+        stop_event: threading.Event | None = None,
+        exclude: set[str] | None = None,
+    ) -> tuple[str, str] | None:
+        """Confirm that a fresh OBS media file exists and is growing.
+
+        OBS can buffer the filesystem write or report a path different from the
+        configured one. Failure to see the file is therefore a warning, not a
+        reason to stop an encoder that has already proven byte progress.
+        """
+        candidate_dirs = recording_media_candidate_dirs(
+            primary_dir,
+            temp_obs_dir=Path(tempfile.gettempdir()) / "obs_recordings",
+        )
+        sizes: dict[str, int] = {}
+        deadline = time.monotonic() + max(0.0, timeout)
+        attempt = 0
+
+        while time.monotonic() < deadline:
+            if stop_event is not None and stop_event.is_set():
+                return None
+            for directory in candidate_dirs:
+                if not directory.exists():
+                    continue
+                mp4, mkv = self._newest_media_since(str(directory), start_ts)
+                for path, ext in ((mp4, ".mp4"), (mkv, ".mkv")):
+                    if path is None:
+                        continue
+                    if self._normalized_media_path(path) in (exclude or set()):
+                        continue
+                    try:
+                        size = os.path.getsize(path)
+                    except OSError:
+                        continue
+                    previous = sizes.get(path)
+                    sizes[path] = size
+                    if previous is not None and size > previous:
+                        logger.info("Confirmed growing OBS media file: %s", path)
+                        return path, ext
+            time.sleep(media_discovery_poll_interval(attempt, base=0.2, max_interval=1.0))
+            attempt += 1
+        return None
+
+    @staticmethod
+    def _normalized_media_path(path: str | Path) -> str:
+        """Normalize a media path for stable cross-platform identity checks."""
+        return os.path.normcase(os.path.abspath(os.fspath(path)))
+
+    def _recording_media_snapshot(self, primary_dir: str | Path) -> set[str]:
+        """Snapshot existing MP4/MKV files so they cannot prove a new recording."""
+        snapshot: set[str] = set()
+        for directory in recording_media_candidate_dirs(
+            primary_dir,
+            temp_obs_dir=Path(tempfile.gettempdir()) / "obs_recordings",
+        ):
+            try:
+                entries = tuple(directory.iterdir())
+            except OSError:
+                continue
+            for entry in entries:
+                if entry.suffix.lower() in {".mp4", ".mkv"}:
+                    snapshot.add(self._normalized_media_path(entry))
+        return snapshot
+
     def _discover_recorded_media(
         self,
         primary_dir: str,
         start_ts: float,
         *,
         max_attempts: int = 30,
+        exclude: set[str] | None = None,
     ) -> tuple[str, str]:
         """Search adaptive candidate folders for media written after ``start_ts``."""
         temp_obs = Path(tempfile.gettempdir()) / "obs_recordings"
@@ -288,9 +422,17 @@ class OBSRecorder:
                 if not directory.exists():
                     continue
                 mp4, mkv = self._newest_media_since(str(directory), start_ts)
-                media = mp4 or mkv
+                media = next(
+                    (
+                        path
+                        for path in (mp4, mkv)
+                        if path is not None
+                        and self._normalized_media_path(path) not in (exclude or set())
+                    ),
+                    None,
+                )
                 if media:
-                    ext = ".mp4" if mp4 else ".mkv"
+                    ext = Path(media).suffix.lower()
                     logger.info(
                         "Located recorded media in %s after %d discovery attempt(s)",
                         directory,
@@ -311,35 +453,51 @@ class OBSRecorder:
         )
 
     def _record_with_cli(self, meeting_name: str, stop_event: threading.Event) -> Path:
-        """
-        Record using CLI fallback.
+        """Start emergency capture through OBS's supported command-line option.
 
-        This method handles the case where WebSocket connection fails.
-        It tries to launch OBS with recording, but provides clear feedback
-        if recording doesn't actually start.
+        CLI mode cannot safely stop OBS by command line. Scribe reconnects through
+        WebSocket when possible; otherwise it preserves the active file and asks
+        the user to stop OBS manually before finalization.
         """
-        from pathlib import Path as PathType
-
         from scribe.utils.logging import console
 
+        self._ensure_recording_session_started()
         console.print("[yellow]Using CLI fallback mode[/yellow]")
-        console.print("[dim]Note: CLI mode has limited control over OBS[/dim]")
-        console.print("[yellow]Please start recording manually in OBS[/yellow]")
-        console.print()
+        obs_exe = get_obs_executable_path()
+        obs_running = self._obs_process_running()
 
-        # CLI mode: Don't try to launch OBS automatically
-        # User must start OBS and recording manually
-        # This is intentional - CLI mode has limited control
-        console.print("[dim]CLI mode does not auto-launch OBS[/dim]")
-        console.print("[dim]Please ensure OBS is running and start recording manually[/dim]")
+        if self._obs_recording_process_running():
+            raise ProcessError(
+                "OBS appears to be recording already. Scribe left that recording "
+                "untouched. Finish it manually before starting another session."
+            )
 
-        # Set timestamp AFTER we've sent the start recording command
-        # This ensures we only detect files created after this point
+        media_baseline = self._recording_media_snapshot(self.output_folder)
         start_ts = time.time()
+        if obs_exe is not None:
+            if obs_running:
+                console.print(
+                    "[yellow]The existing OBS process is unreachable. Starting a "
+                    "separate recovery instance without interrupting it.[/yellow]"
+                )
+            else:
+                console.print("[cyan]Starting OBS emergency capture...[/cyan]")
+            try:
+                self._launch_obs(
+                    obs_exe,
+                    start_recording=True,
+                    allow_multi=obs_running,
+                )
+            except OSError as e:
+                raise ProcessError(f"Could not launch OBS emergency capture: {e}") from e
+        else:
+            console.print(
+                "[yellow]OBS executable was not found. Open OBS and click Start "
+                "Recording now; Scribe will verify the media file.[/yellow]"
+            )
 
-        # Monitor for new file with better feedback
         console.print()
-        console.print("[cyan]Waiting for recording to start...[/cyan]")
+        console.print("[cyan]Waiting for proof that recording data is being written...[/cyan]")
         console.print("[dim]Looking for new media files in:[/dim]")
 
         candidate_dirs = recording_media_candidate_dirs(self.output_folder)
@@ -347,43 +505,24 @@ class OBSRecorder:
             if d.exists():
                 console.print(f"[dim]  - {d}[/dim]")
 
-        found_path: str | None = None
-        ext = ".mp4"
-        deadline = time.time() + 30
-        last_check_msg = 0.0
-        attempt = 0
-
-        while time.time() < deadline and not found_path and not stop_event.is_set():
-            for d in candidate_dirs:
-                if not d.exists():
-                    continue
-                mp4, mkv = self._newest_media_since(str(d), start_ts)
-                found_path = mp4 or mkv
-                if found_path:
-                    ext = ".mp4" if mp4 else ".mkv"
-                    break
-
-            # Show progress every 5 seconds
-            elapsed = time.time() - start_ts
-            if elapsed - last_check_msg >= 5:
-                remaining = int(deadline - time.time())
-                console.print(f"[dim]Still waiting... ({remaining}s remaining)[/dim]")
-                last_check_msg = elapsed
-
-            time.sleep(media_discovery_poll_interval(attempt))
-            attempt += 1
-
-        if stop_event.is_set() and not found_path:
+        confirmed_media = self._confirm_recording_file_progress(
+            str(self.output_folder),
+            start_ts,
+            timeout=30.0,
+            stop_event=stop_event,
+            exclude=media_baseline,
+        )
+        if stop_event.is_set() and confirmed_media is None:
             raise ProcessError("Recording cancelled before a file was detected")
 
-        if not found_path:
+        if confirmed_media is None:
             console.print()
             console.print("[bold red]ERROR: No recording file detected[/bold red]")
             console.print()
             console.print("[yellow]Possible causes:[/yellow]")
             console.print("  1. OBS is not actually recording (check OBS window)")
             console.print("  2. OBS is recording to a different folder")
-            console.print("  3. Recording hasn't started yet (try waiting longer)")
+            console.print("  3. OBS could not initialize its encoder or output file")
             console.print()
             console.print("[yellow]To fix:[/yellow]")
             console.print("  1. Open OBS Studio manually")
@@ -396,32 +535,57 @@ class OBSRecorder:
                 context={"phase": self._session.phase.value},
             )
 
-        # Convert string path to Path object for consistent handling
-        recorded_path = PathType(found_path)
+        found_path, ext = confirmed_media
+        recorded_path = Path(found_path)
+        self._session.advance(RecordingEvent.USE_CLI_FALLBACK)
 
-        console.print(f"[green]Recording detected: {recorded_path.name}[/green]")
+        console.print(f"[green]Recording confirmed: {recorded_path.name} is growing[/green]")
         console.print()
 
-        # Now start the stop listener thread (after file is detected)
-        threading.Thread(target=self._wait_for_stop_cli, args=(stop_event,), daemon=True).start()
+        control_client = None
+        if OBS_AVAILABLE:
+            try:
+                candidate = self._try_connect_to_running_obs(
+                    self._candidate_obs_hosts(), self._candidate_obs_ports()
+                )
+                if candidate is not None:
+                    status = candidate.get_record_status()
+                    if getattr(status, "output_active", False):
+                        control_client = candidate
+                    else:
+                        with suppress(Exception):
+                            candidate.disconnect()
+            except OBSAuthenticationError:
+                logger.warning("Emergency capture is active, but WebSocket authentication failed")
 
-        # Wait for an explicit stop command or Ctrl-C (with a periodic timeout
-        # so we do not block forever if the listener thread dies).
-        while not stop_event.wait(timeout=1.0):
-            pass
+        try:
+            stopped_path = self._wait_for_stop_cli(stop_event, control_client)
+        finally:
+            if control_client is not None:
+                with suppress(Exception):
+                    control_client.disconnect()
+        self._session.advance(RecordingEvent.STOP_REQUESTED)
 
         console.print()
         console.print("[cyan]Waiting for OBS to finalize file...[/cyan]")
         console.print("[dim]This may take a few seconds...[/dim]")
 
-        # Give OBS time to stop and finalize the file
-        # The --stoprecording command was sent by _wait_for_stop_cli
-        time.sleep(3)
+        reported_media = self._usable_reported_media(stopped_path, start_ts)
+        if reported_media is not None:
+            found_path, ext = reported_media
+            recorded_path = Path(found_path)
 
-        # Wait for file to stabilize (stop growing)
-        self._wait_until_file_finalized(str(recorded_path))
+        if not self._wait_until_file_finalized(str(recorded_path)):
+            raise ProcessError(
+                "The recording file is still growing, so Scribe left it in place "
+                f"instead of moving a live file: {recorded_path}. Stop recording in "
+                "OBS, then process that file directly."
+            )
 
-        return self._finalize_recording(recorded_path, ext, meeting_name, start_ts)
+        self._session.advance(RecordingEvent.MEDIA_FOUND)
+        final_path = self._finalize_recording(recorded_path, ext, meeting_name, start_ts)
+        self._session.advance(RecordingEvent.FINALIZED)
+        return final_path
 
     def check_obs_preflight(self, timeout: float = 0.75) -> OBSPreflightResult:
         """Fast, read-only OBS WebSocket preflight.
@@ -633,70 +797,6 @@ class OBSRecorder:
             )
         )
 
-    def _kill_existing_obs(self) -> None:
-        """Kill any running OBS processes and clean up crash sentinels.
-
-        Without cleanup, OBS detects an "unclean shutdown" on next launch and
-        presents the safe-mode dialog, blocking automated startup.
-        """
-        from scribe.utils.platform import is_windows
-
-        try:
-            if is_windows():
-                for exe in ("obs64.exe", "obs32.exe"):
-                    subprocess.run(
-                        ["taskkill", "/F", "/IM", exe],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-            else:
-                # Match the exact process name, never a substring: "pkill -f obs"
-                # would also kill obsidian, an editor with "obs" in its path, or even
-                # this process if "obs" appears in its argv. OBS is "obs" on Linux and
-                # "OBS" on macOS.
-                for name in ("obs", "OBS"):
-                    subprocess.run(
-                        ["pkill", "-x", name],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=5,
-                    )
-        except _SUBPROCESS_PROBE_ERRORS as e:
-            logger.debug(f"Could not kill OBS processes: {e}")
-
-        # Wait for process to fully exit, then verify
-        time.sleep(1.0)
-
-        # Verify OBS is actually gone
-        if self._obs_process_running():
-            logger.warning("OBS still running after kill attempt, retrying")
-            try:
-                if is_windows():
-                    for exe in ("obs64.exe", "obs32.exe"):
-                        subprocess.run(
-                            ["taskkill", "/F", "/T", "/IM", exe],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                else:
-                    for name in ("obs", "OBS"):
-                        subprocess.run(
-                            ["pkill", "-9", "-x", name],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            timeout=5,
-                        )
-            except _SUBPROCESS_PROBE_ERRORS:
-                # Best-effort cleanup only - OBS may already be dead or permissions
-                # may prevent kill on this platform. Non-fatal; proceed to sentinel clean.
-                logger.debug("Secondary kill attempt failed (non-fatal during OBS cleanup)")
-            time.sleep(1.0)
-
-        # Clean OBS crash sentinel so it won't ask about safe mode
-        self._clean_obs_crash_sentinel()
-
-        logger.debug("OBS process cleanup complete")
-
     def _obs_process_running(self) -> bool:
         """Check whether an OBS process is currently running."""
         from scribe.utils.platform import is_windows
@@ -714,8 +814,8 @@ class OBSRecorder:
                         return True
                 return False
             else:
-                # Exact name match only (see _kill_existing_obs); a substring match
-                # would treat unrelated processes as OBS and trigger a SIGKILL escalation.
+                # Exact name match only. A substring match would treat unrelated
+                # processes as OBS and trigger unsafe recovery decisions.
                 for name in ("obs", "OBS"):
                     result = subprocess.run(
                         ["pgrep", "-x", name],
@@ -802,31 +902,46 @@ class OBSRecorder:
         except OSError as e:
             logger.debug(f"Could not clean OBS crash sentinel: {e}")
 
-    def _launch_obs(self, obs_exe: Path) -> None:
+    def _launch_obs(
+        self,
+        obs_exe: Path,
+        *,
+        start_recording: bool = False,
+        allow_multi: bool = False,
+    ) -> None:
         """Launch OBS for the current platform.
 
         On macOS, OBS is an app bundle that must be started via ``open`` so it
         finds its bundle resources (Popen-ing the inner binary is unreliable),
         and ``--minimize-to-tray`` has no meaning there. On Windows and Linux we
-        run the executable directly with the appropriate flags.
+        run the executable directly with the appropriate flags. ``--multi`` is
+        required for non-blocking recovery when an unreachable OBS process is
+        already present, and ``--startrecording`` is OBS's supported emergency
+        capture path when WebSocket control is unavailable.
         """
         from scribe.utils.platform import is_macos, is_windows
+
+        flags = ["--disable-shutdown-check"]
+        if allow_multi:
+            flags.append("--multi")
+        if start_recording:
+            flags.append("--startrecording")
 
         if is_macos():
             bundle = next((p for p in obs_exe.parents if p.suffix == ".app"), None)
             app_ref = str(bundle) if bundle is not None else "OBS"
+            open_args = ["open"]
+            if allow_multi:
+                open_args.append("-n")
             subprocess.Popen(
-                ["open", "-a", app_ref, "--args", "--disable-shutdown-check"],
+                [*open_args, "-a", app_ref, "--args", *flags],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             return
 
-        flags = (
-            ["--minimize-to-tray", "--disable-shutdown-check"]
-            if is_windows()
-            else ["--disable-shutdown-check"]
-        )
+        if is_windows():
+            flags.insert(0, "--minimize-to-tray")
         subprocess.Popen(
             [str(obs_exe), *flags],
             stdout=subprocess.DEVNULL,
@@ -986,8 +1101,8 @@ class OBSRecorder:
 
         Strategy:
         1. Try connecting to already-running OBS
-        2. If OBS is already running or recording, refuse to restart it
-        3. If no OBS process is present, clean crash sentinels and launch once more
+        2. If OBS is recording, refuse recovery
+        3. Launch OBS without terminating an unreachable existing process
         """
         from scribe.utils.logging import console
 
@@ -1016,31 +1131,38 @@ class OBSRecorder:
                 "recording manually, then run `scribe rec --check` before the next one."
             )
 
-        if self._obs_process_running():
-            raise ConnectionError(
-                "OBS is already running, but WebSocket is unreachable. Refusing to "
-                "restart a running OBS instance. Enable Tools > WebSocket Server "
-                "Settings or close OBS manually, then run `scribe rec --check`."
+        obs_was_running = self._obs_process_running()
+        if obs_was_running:
+            console.print(
+                "[yellow]OBS is running without WebSocket; attempting a "
+                "non-destructive relaunch...[/yellow]"
+            )
+            logger.warning(
+                "OBS process detected without a reachable WebSocket; launching "
+                "another instance without terminating the existing process"
             )
 
-        # Phase 2: no OBS process is present, so launch without terminating anything.
+        # Phase 2: launch without terminating anything. This also recovers from an
+        # OBS process that completed shutdown but remained in the process table.
         obs_exe = get_obs_executable_path()
-        max_launch_attempts = 2
+        max_launch_attempts = 1 if obs_was_running else 2
 
         for attempt in range(1, max_launch_attempts + 1):
             console.print(
                 f"[cyan]Preparing OBS (attempt {attempt}/{max_launch_attempts})...[/cyan]"
             )
 
-            self._clean_obs_crash_sentinel()
+            if not obs_was_running:
+                self._clean_obs_crash_sentinel()
 
             if not obs_exe:
                 break  # nothing to launch
 
-            console.print("[cyan]Starting OBS Studio...[/cyan]")
-            logger.info("Starting OBS (attempt %d)...", attempt)
+            action = "Relaunching" if obs_was_running else "Starting"
+            console.print(f"[cyan]{action} OBS Studio...[/cyan]")
+            logger.info("%s OBS (attempt %d)...", action, attempt)
             try:
-                self._launch_obs(obs_exe)
+                self._launch_obs(obs_exe, allow_multi=obs_was_running)
             except OSError as e:
                 logger.warning(f"Could not launch OBS: {e}")
                 continue
@@ -1059,6 +1181,12 @@ class OBSRecorder:
             # Launch succeeded but WebSocket never became reachable - retry
             logger.warning("OBS launched but WebSocket unreachable (attempt %d)", attempt)
 
+        if obs_was_running:
+            raise ConnectionError(
+                "OBS was running without a reachable WebSocket, and relaunching it did "
+                "not restore the connection. Close all OBS instances, reopen OBS, and "
+                "run `scribe rec --check`."
+            )
         raise ConnectionError(
             "Could not connect to OBS WebSocket. Ensure OBS is installed, "
             "WebSocket server is enabled (Tools -> WebSocket Server Settings), "
@@ -1126,50 +1254,27 @@ class OBSRecorder:
             )
             return False
 
-    def _start_recording_if_needed(self, client: Any) -> None:
-        """Ensure a fresh recording is running.
+    def _start_recording_if_needed(
+        self,
+        client: Any,
+        *,
+        timeout: float = _RECORDING_START_TIMEOUT_SECONDS,
+    ) -> None:
+        """Start a fresh recording and prove that OBS output is advancing.
 
-        If a stale recording from a previous session is active, stop it first
-        so the new session gets its own clean file.
+        An active recording is never classified as stale and never stopped. It
+        may contain the only copy of an in-progress meeting, so attaching to or
+        replacing it requires an explicit future recovery workflow.
         """
         from scribe.utils.logging import console
 
         status = client.get_record_status()
         if getattr(status, "output_active", False):
-            console.print("[yellow]Stale recording detected - stopping it first...[/yellow]")
-            logger.info("Stopping stale recording before starting new one")
-            stale_stopped = False
-            try:
-                client.stop_record()
-                # Wait for OBS to finalize the old file
-                for _ in range(20):
-                    time.sleep(0.25)
-                    status = client.get_record_status()
-                    if not getattr(status, "output_active", False):
-                        stale_stopped = True
-                        break
-            except Exception as e:
-                logger.warning(f"Could not stop stale recording: {e}")
-
-            if not stale_stopped:
-                # Verify one more time
-                try:
-                    status = client.get_record_status()
-                    stale_stopped = not getattr(status, "output_active", False)
-                except _OBS_SOCKET_ERRORS as e:
-                    # ADR-002: OBS may drop the socket during stale-stop; treat as unknown.
-                    logger.debug(f"Could not re-check OBS record status: {e}")
-
-            if not stale_stopped:
-                raise ProcessError(
-                    "Cannot start new recording - OBS still has an active "
-                    "recording that could not be stopped. Please stop it "
-                    "manually in OBS and try again."
-                )
-
-            console.print("[green]Stale recording stopped[/green]")
-            # Brief pause so OBS is ready to start a new recording
-            time.sleep(0.5)
+            raise OBSActiveRecordingError(
+                "OBS is already recording. Scribe left that recording untouched "
+                "to protect the captured media. Stop it manually only when the "
+                "meeting is finished, then start a new Scribe session."
+            )
 
         console.print("[cyan]Starting recording...[/cyan]")
         logger.info("Starting recording...")
@@ -1178,27 +1283,72 @@ class OBSRecorder:
         except Exception as e:
             err_str = str(e).lower()
             if "already" in err_str:
-                # Shouldn't reach here (stale-stop above), but handle
-                console.print("[yellow]OBS reports recording already active[/yellow]")
-                return
+                raise OBSActiveRecordingError(
+                    "OBS became active before Scribe could start its recording. "
+                    "Scribe left that recording untouched."
+                ) from e
             raise ProcessError(
                 f"OBS refused to start recording: {e}. "
                 "Check OBS Settings -> Output for valid recording path and codec."
             )
 
-        # Verify recording started
-        for _ in range(25):
+        # StartRecord is asynchronous. Do not claim success from output_active
+        # alone. GetRecordStatus exposes outputBytes and outputDuration, and at
+        # least one must advance between samples before Scribe reports capture.
+        deadline = time.monotonic() + max(0.0, timeout)
+        previous_bytes: int | float | None = None
+        previous_duration: int | float | None = None
+        active_seen = False
+        while time.monotonic() < deadline:
             time.sleep(0.2)
             try:
                 status = client.get_record_status()
             except _OBS_SOCKET_ERRORS:
                 continue
-            if getattr(status, "output_active", False):
-                console.print("Recording started")
-                logger.info("Recording started successfully")
-                return
+            if not getattr(status, "output_active", False):
+                continue
 
-        raise ProcessError("Recording failed to start within 5 seconds")
+            active_seen = True
+            output_bytes = self._numeric_status_value(status, "output_bytes")
+            output_duration = self._numeric_status_value(status, "output_duration")
+            bytes_advanced = (
+                output_bytes is not None
+                and previous_bytes is not None
+                and output_bytes > previous_bytes
+            )
+            duration_advanced = (
+                output_duration is not None
+                and previous_duration is not None
+                and output_duration > previous_duration
+            )
+            if bytes_advanced or duration_advanced:
+                console.print("[green]Recording confirmed: OBS output is advancing[/green]")
+                logger.info(
+                    "Recording output confirmed (bytes=%s, duration=%s)",
+                    output_bytes,
+                    output_duration,
+                )
+                return
+            if output_bytes is not None:
+                previous_bytes = output_bytes
+            if output_duration is not None:
+                previous_duration = output_duration
+
+        if active_seen:
+            raise ProcessError(
+                "OBS entered recording mode, but its byte and duration counters did not "
+                "advance. Scribe did not stop OBS because media may still be writing. "
+                "Check the OBS status bar and recording folder immediately."
+            )
+        raise ProcessError(f"Recording failed to start within {timeout:.0f} seconds")
+
+    @staticmethod
+    def _numeric_status_value(status: Any, name: str) -> int | float | None:
+        """Read a real numeric OBS status counter without accepting mock-like values."""
+        value = getattr(status, name, None)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return value
 
     def _reconnect_client(self) -> Any | None:
         """Try to re-establish a WebSocket connection to OBS.
@@ -1318,7 +1468,9 @@ class OBSRecorder:
             sys.stdout.write("\r" + " " * _RECORDING_STATUS_CLEAR_WIDTH + "\r")
             sys.stdout.flush()
 
-    def _wait_for_stop_with_input(self, client: Any, stop_event: threading.Event) -> None:
+    def _wait_for_stop_with_input(
+        self, client: Any, stop_event: threading.Event
+    ) -> RecordingStopResult:
         """Wait for user to stop recording, with automatic reconnect.
 
         Includes a deadman timer: after the user sends stop, if OBS doesn't
@@ -1367,6 +1519,16 @@ class OBSRecorder:
         deadman_seconds = 30  # max time to wait for OBS to confirm stop
         warning_issued = False
         auto_stop_announced = False
+        stopped_output_path: str | None = None
+        last_output_bytes: int | float | None = None
+        last_output_progress_at = time.monotonic()
+        stall_warning_issued = False
+
+        def remember_output_path(response: Any) -> None:
+            nonlocal stopped_output_path
+            value = getattr(response, "output_path", None)
+            if isinstance(value, str) and value:
+                stopped_output_path = value
 
         self._write_recording_status(0.0, include_prompt=inline_command)
         if has_tty and not inline_command:
@@ -1376,6 +1538,7 @@ class OBSRecorder:
         stop_requested = False
 
         while True:
+            status = None
             try:
                 status = client.get_record_status()
                 active = getattr(status, "output_active", False)
@@ -1403,8 +1566,33 @@ class OBSRecorder:
                                 "[yellow]Assuming recording stopped (connection lost)[/yellow]"
                             )
                             disconnect_replacement()
-                            return
+                            return RecordingStopResult(stopped_output_path)
                 active = last_active  # assume unchanged while disconnected
+
+            output_bytes = (
+                self._numeric_status_value(status, "output_bytes")
+                if active and status is not None
+                else None
+            )
+            if output_bytes is not None:
+                if last_output_bytes is None or output_bytes > last_output_bytes:
+                    last_output_progress_at = time.monotonic()
+                    stall_warning_issued = False
+                elif (
+                    not stop_requested
+                    and not stall_warning_issued
+                    and time.monotonic() - last_output_progress_at
+                    >= _RECORDING_STALL_WARNING_SECONDS
+                ):
+                    self._clear_recording_status()
+                    console.print(
+                        "[bold red]Recording warning: OBS is active, but its output byte "
+                        "counter has stopped advancing. Check OBS and available disk "
+                        "space immediately.[/bold red]"
+                    )
+                    logger.error("OBS recording output byte counter stalled")
+                    stall_warning_issued = True
+                last_output_bytes = output_bytes
 
             if stop_event.is_set() and active and not stop_requested:
                 # Clear the timer line and print stop message (only once)
@@ -1414,7 +1602,7 @@ class OBSRecorder:
                 stop_requested = True
                 stop_requested_at = time.time()
                 try:
-                    client.stop_record()
+                    remember_output_path(client.stop_record())
                 except Exception as e:
                     logger.warning(f"Stop command failed: {e}")
                     # Try reconnect and stop again
@@ -1424,7 +1612,7 @@ class OBSRecorder:
                             client.disconnect()
                         client = new_client
                         try:
-                            client.stop_record()
+                            remember_output_path(client.stop_record())
                         except _OBS_SOCKET_ERRORS:
                             logger.warning("Stop failed after reconnect too")
 
@@ -1439,15 +1627,24 @@ class OBSRecorder:
                     )
                     logger.warning("Deadman timer expired waiting for OBS to confirm stop")
                     disconnect_replacement()
-                    return
+                    return RecordingStopResult(stopped_output_path)
 
             if not active and last_active:
                 # Clear the timer line and print stopped message
                 self._clear_recording_status()
-                console.print("[green]Recording stopped[/green]")
-                logger.info("Recording stopped")
+                unexpected_stop = not stop_requested and not stop_event.is_set()
+                if unexpected_stop:
+                    console.print(
+                        "[bold red]OBS stopped recording unexpectedly. Scribe will "
+                        "preserve the partial file and report this session as "
+                        "incomplete.[/bold red]"
+                    )
+                    logger.error("OBS stopped recording before a Scribe stop request")
+                else:
+                    console.print("[green]Recording stopped[/green]")
+                    logger.info("Recording stopped")
                 disconnect_replacement()
-                return
+                return RecordingStopResult(stopped_output_path, unexpected_stop)
 
             elapsed_seconds = max(0.0, time.time() - start_time)
             warning_issued, auto_stop_announced = self._check_recording_duration_limit(
@@ -1465,7 +1662,7 @@ class OBSRecorder:
                 stop_requested = True
                 stop_requested_at = time.time()
                 try:
-                    client.stop_record()
+                    remember_output_path(client.stop_record())
                 except Exception as e:
                     logger.warning(f"Stop command failed: {e}")
                     new_client = self._reconnect_client()
@@ -1474,7 +1671,7 @@ class OBSRecorder:
                             client.disconnect()
                         client = new_client
                         try:
-                            client.stop_record()
+                            remember_output_path(client.stop_record())
                         except _OBS_SOCKET_ERRORS:
                             logger.warning("Stop failed after reconnect too")
 
@@ -1491,8 +1688,15 @@ class OBSRecorder:
             last_active = active
             time.sleep(0.5)
 
-    def _wait_for_stop_cli(self, stop_event: threading.Event) -> None:
-        """CLI fallback stop listener with timer."""
+    def _wait_for_stop_cli(
+        self, stop_event: threading.Event, client: Any | None = None
+    ) -> str | None:
+        """Wait for stop in fallback mode and use WebSocket only when available.
+
+        OBS does not provide a supported ``--stoprecording`` command-line option.
+        When WebSocket is unavailable, asking for a manual stop is safer than
+        terminating OBS or moving a file that is still being written.
+        """
         from rich.panel import Panel
 
         from scribe.utils.logging import console
@@ -1542,40 +1746,27 @@ class OBSRecorder:
         # Clear the timer line
         self._clear_recording_status()
 
-        console.print("[cyan]Sending stop signal...[/cyan]")
-        logger.info("Sending stop signal...")
-        obs_exe = get_obs_executable_path()
-        if obs_exe:
+        if client is not None:
+            console.print("[cyan]Stopping recording through OBS WebSocket...[/cyan]")
+            logger.info("Stopping CLI-started recording through OBS WebSocket")
             try:
-                from scribe.utils.platform import is_macos
-
-                obs_dir = obs_exe.parent
-                if is_macos():
-                    # macOS: forward the flag to the running instance via the bundle.
-                    bundle = next((p for p in obs_exe.parents if p.suffix == ".app"), None)
-                    app_ref = str(bundle) if bundle is not None else "OBS"
-                    stop_cmd = ["open", "-a", app_ref, "--args", "--stoprecording"]
-                else:
-                    stop_cmd = [str(obs_exe), "--stoprecording"]
-                proc = subprocess.run(
-                    stop_cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    cwd=str(obs_dir),
-                    timeout=10,
+                response = client.stop_record()
+            except Exception as e:
+                console.print(
+                    "[yellow]OBS did not accept the safe stop request. Stop recording "
+                    "manually; Scribe will not terminate OBS.[/yellow]"
                 )
-                if proc.returncode != 0:
-                    console.print("[yellow]Stop signal may not have reached OBS[/yellow]")
-                    logger.warning(f"OBS --stoprecording exited with code {proc.returncode}")
-            except subprocess.TimeoutExpired:
-                console.print("[yellow]Stop signal timed out[/yellow]")
-                logger.warning("OBS --stoprecording timed out after 10s")
-            except _SUBPROCESS_PROBE_ERRORS as e:
-                console.print("[yellow]Could not signal OBS to stop - stop manually[/yellow]")
-                logger.warning(f"Could not signal OBS to stop: {e}")
-        else:
-            console.print("[yellow]OBS executable not found - stop recording manually[/yellow]")
-            logger.warning("Cannot send stop signal: OBS executable not found")
+                logger.warning("Could not stop emergency capture through WebSocket: %s", e)
+                return None
+            value = getattr(response, "output_path", None)
+            return value if isinstance(value, str) and value else None
+
+        console.print(
+            "[yellow]Stop recording in OBS now. Scribe will wait for the file to "
+            "finish and will not terminate OBS or touch a live file.[/yellow]"
+        )
+        logger.warning("Manual OBS stop required because WebSocket control is unavailable")
+        return None
 
     def _start_stop_listener(self) -> tuple[threading.Event, Callable[[], None]]:
         """Start background thread listening for stop command.
@@ -1740,10 +1931,11 @@ class OBSRecorder:
 
     def _wait_until_file_finalized(
         self, path: str, idle_seconds: float = 3.0, max_wait: float = 600.0
-    ) -> None:
+    ) -> bool:
         """Wait for file to stop growing.
 
-        Raises ProcessError if the file never stabilizes within max_wait.
+        Returns False if the file never stabilizes within max_wait. Callers must
+        leave an unstable file in place because moving it can corrupt capture.
         """
         previous_size: int | None = None
         stable = 0.0
@@ -1761,7 +1953,7 @@ class OBSRecorder:
             if assessment.ready:
                 stable += 0.5
                 if stable >= idle_seconds:
-                    return
+                    return True
             else:
                 stable = 0.0
             previous_size = size
@@ -1777,6 +1969,7 @@ class OBSRecorder:
             f"[yellow]Warning: recording file may still be writing "
             f"(waited {int(max_wait)}s)[/yellow]"
         )
+        return False
 
     def _finalize_recording(
         self, media_path: str | Path, ext: str, meeting_name: str, start_ts: float

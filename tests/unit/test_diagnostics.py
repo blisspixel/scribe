@@ -558,6 +558,27 @@ class TestOBSWebSocketCheck:
         assert result.status == "pass"
         assert result.message == "Configured"
 
+    @patch("scribe.utils.diagnostics._tcp_port_listening", return_value=False)
+    @patch("scribe.utils.diagnostics._obs_process_running", return_value=True)
+    @patch("scribe.utils.obs_config.get_platform", return_value="windows")
+    def test_running_obs_with_closed_websocket_warns(
+        self, _platform, _running, _listening, tmp_path, monkeypatch
+    ):
+        """Doctor reports a live OBS process whose configured port is closed."""
+        self._write_obs_config(tmp_path, monkeypatch, auth_required=False)
+        diagnostics = SystemDiagnostics()
+
+        with patch(
+            "scribe.models.config.ScribeConfig",
+            return_value=SimpleNamespace(obs_host="localhost", obs_port=4455, obs_password=None),
+        ):
+            result = diagnostics.check_obs_websocket()
+
+        assert result.status == "warn"
+        assert result.message == "OBS is running, but WebSocket is not listening"
+        assert result.fix_suggestion is not None
+        assert "non-destructive relaunch" in result.fix_suggestion
+
     @patch("scribe.utils.obs_config.get_platform", return_value="windows")
     def test_obs_port_mismatch_warns(self, _platform, tmp_path, monkeypatch):
         """OBS and Scribe must use the same WebSocket port."""

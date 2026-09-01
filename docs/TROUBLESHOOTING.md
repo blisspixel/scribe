@@ -16,11 +16,11 @@ issue, or support bundle.
 
 Scribe requires Python 3.12 or 3.13, FFmpeg, and uv.
 
-Install the current repository version as a tool:
+Install the current GitHub release as a tool:
 
 ```bash
 uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git
+  git+https://github.com/blisspixel/scribe.git@v2.8.1
 uv tool update-shell
 ```
 
@@ -34,7 +34,7 @@ If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
 uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git
+  git+https://github.com/blisspixel/scribe.git@v2.8.1
 ```
 
 For a development checkout:
@@ -104,10 +104,10 @@ Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -115,6 +115,9 @@ native build available for the target host. Neither extra guarantees acceleratio
 on every configuration.
 
 ## OBS recording fails
+
+Read the [Recording Guide](RECORDING.md) for the complete startup, monitoring,
+safe-stop, and recovery contract.
 
 Run the non-recording preflight first:
 
@@ -125,6 +128,25 @@ scribe record --check
 Confirm OBS is installed, can open normally, and has permission to capture the
 intended display and audio devices. On macOS, review Screen Recording and
 Microphone permissions. On Windows, verify the expected OBS profile and sources.
+
+If OBS appears in the process list but its configured WebSocket port is closed,
+Scribe attempts one non-destructive multi-instance relaunch before using emergency
+fallback mode. It never terminates an existing OBS process and refuses recovery
+when a recording mux is active. Emergency fallback uses OBS's supported startup
+recording option, verifies that a new media file is growing, and reconnects to
+WebSocket for a safe stop when possible. If WebSocket remains unavailable, stop
+recording in OBS when prompted; Scribe waits for the file to finish instead of
+using an unsupported stop option or moving a live file.
+
+Scribe reports recording as confirmed only after OBS byte or duration counters
+advance. It separately checks that a media file not present before startup is
+growing. If OBS reports active capture but its byte counter later stalls, check
+OBS and available disk space immediately. If OBS stops before a Scribe stop
+request, Scribe preserves the partial recording and reports the session as
+incomplete rather than claiming success.
+
+If `scribe rec --check` still fails, close all OBS instances only after confirming
+that none is recording, reopen OBS, and rerun the check.
 
 Do not delete OBS configuration files as a first troubleshooting step. They can
 contain unrelated scenes and settings. Back up the OBS profile and use OBS itself
@@ -160,7 +182,7 @@ printing it:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 scribe doctor
 ```
 
@@ -174,7 +196,7 @@ Install the tray extra and run its check without starting the resident process:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 scribe tray --check
 ```
 

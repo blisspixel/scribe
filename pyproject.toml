@@ -284,6 +284,7 @@ dev = [
     "hypothesis>=6.0",
     "mypy>=1.13",
     "pre-commit>=4.0",
+    "pip>=26.2",  # Fix PYSEC-2026-3721 in the developer audit environment
     "pip-audit>=2.7",
     "msgpack>=1.2.1",  # Pin above GHSA-6v7p-g79w-8964 until cachecontrol raises its floor
     "mutmut>=3.0",  # mutation testing (Linux/WSL only); advisory CI job, see [tool.mutmut]

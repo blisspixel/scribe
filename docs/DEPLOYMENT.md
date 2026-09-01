@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Updated:** 2026-08-11
+**Last Updated:** 2026-09-01
 
 ## Scope
 
@@ -30,14 +30,15 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.8.1
 uv tool update-shell
 scribe init
 scribe info
 ```
 
-This project has not published a PyPI package. Install from this repository; a
-bare `pip install scribe` installs an unrelated project.
+This project has not published a PyPI package. Install the versioned GitHub
+release from this repository; a bare `pip install scribe` installs an unrelated
+project. GitHub access is required while the repository is private.
 
 Use a project-local install when developing Scribe:
 
@@ -73,13 +74,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
@@ -219,6 +220,17 @@ scribe doctor
 scribe vocab
 scribe rec --check
 ```
+
+## Licensing and redistribution
+
+Scribe bundles no third-party source. Python dependencies are installed from
+their publishers and keep their own licenses. The optional `voice` and `tray`
+extras include LGPL-3.0 dependencies. FFmpeg, OBS, Whisper checkpoints, Kokoro
+voices, and other external models or executables also carry separate terms.
+
+Review the licenses for every extra, model, and executable you install. A GitHub
+release of Scribe does not grant redistribution rights for those separate
+components.
 
 ## Security
 

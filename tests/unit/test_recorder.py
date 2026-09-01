@@ -28,7 +28,6 @@ Coverage Areas:
 
 import os
 import socket
-import subprocess
 import sys
 import threading
 import time
@@ -37,7 +36,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from scribe.core.recorder import OBSAuthenticationError, OBSRecorder
+from scribe.core.recorder import (
+    OBSActiveRecordingError,
+    OBSAuthenticationError,
+    OBSRecorder,
+    RecordingStopResult,
+)
 from scribe.exceptions import ProcessError
 from scribe.models.config import ScribeConfig
 from scribe.utils.obs_config import OBSWebSocketConfig
@@ -238,7 +242,6 @@ class TestWebSocketConnection:
             patch.object(recorder, "_port_listening", return_value=True),
             patch.object(recorder, "_obs_process_running", return_value=True),
             patch.object(recorder, "_obs_recording_process_running", return_value=True),
-            patch.object(recorder, "_kill_existing_obs") as kill_obs,
             patch.object(recorder, "_launch_obs") as launch_obs,
         ):
             result = recorder.check_obs_preflight()
@@ -249,7 +252,6 @@ class TestWebSocketConnection:
         mock_obs_client.get_record_status.assert_called_once()
         mock_obs_client.start_record.assert_not_called()
         mock_obs_client.stop_record.assert_not_called()
-        kill_obs.assert_not_called()
         launch_obs.assert_not_called()
 
     @patch("scribe.core.recorder.obs_reqs")
@@ -600,16 +602,16 @@ class TestRecordingLifecycle:
 
     @patch("scribe.core.recorder.obs_reqs")
     def test_start_recording_when_not_active(self, mock_obs_reqs, recorder, mock_obs_client):
-        """Test starting recording when OBS is not recording."""
-        # Initially not active, then becomes active after start
+        """Start is confirmed only after OBS output counters advance."""
         status_inactive = Mock()
         status_inactive.output_active = False
-        status_active = Mock()
-        status_active.output_active = True
+        status_active_1 = Mock(output_active=True, output_bytes=100, output_duration=20)
+        status_active_2 = Mock(output_active=True, output_bytes=200, output_duration=40)
 
         mock_obs_client.get_record_status.side_effect = [
-            status_inactive,  # Initial check
-            status_active,  # Verification after start
+            status_inactive,
+            status_active_1,
+            status_active_2,
         ]
 
         recorder._start_recording_if_needed(mock_obs_client)
@@ -617,46 +619,33 @@ class TestRecordingLifecycle:
         mock_obs_client.start_record.assert_called_once()
 
     @patch("scribe.core.recorder.obs_reqs")
-    def test_stops_stale_recording_before_starting_new(
-        self, mock_obs_reqs, recorder, mock_obs_client
-    ):
-        """Test that a stale active recording is stopped before starting a new one."""
-        status_active = Mock()
-        status_active.output_active = True
-        status_inactive = Mock()
-        status_inactive.output_active = False
-        status_new_active = Mock()
-        status_new_active.output_active = True
+    def test_existing_recording_is_never_stopped(self, mock_obs_reqs, recorder, mock_obs_client):
+        """An active recording may be irreplaceable and is left untouched."""
+        mock_obs_client.get_record_status.return_value = Mock(output_active=True)
 
-        mock_obs_client.get_record_status.side_effect = [
-            status_active,  # Initial check - stale recording detected
-            status_inactive,  # After stop_record - confirmed stopped
-            status_inactive,  # Pre-start check (re-enter start path)
-            status_new_active,  # Verification - new recording started
-        ]
+        with pytest.raises(OBSActiveRecordingError, match="left that recording untouched"):
+            recorder._start_recording_if_needed(mock_obs_client)
 
-        recorder._start_recording_if_needed(mock_obs_client)
-
-        mock_obs_client.stop_record.assert_called_once()
-        mock_obs_client.start_record.assert_called_once()
+        mock_obs_client.stop_record.assert_not_called()
+        mock_obs_client.start_record.assert_not_called()
 
     @patch("scribe.core.recorder.obs_reqs")
     def test_start_recording_verification(self, mock_obs_reqs, recorder, mock_obs_client):
         """Test recording start is verified before proceeding."""
-        # Initially not active, then becomes active
         status_inactive = Mock()
         status_inactive.output_active = False
-        status_active = Mock()
-        status_active.output_active = True
+        status_active_1 = Mock(output_active=True, output_bytes=1, output_duration=1)
+        status_active_2 = Mock(output_active=True, output_bytes=2, output_duration=2)
 
         mock_obs_client.get_record_status.side_effect = [
-            status_inactive,  # Initial check
-            status_active,  # Verification check
+            status_inactive,
+            status_active_1,
+            status_active_2,
         ]
 
         recorder._start_recording_if_needed(mock_obs_client)
 
-        assert mock_obs_client.get_record_status.call_count >= 2
+        assert mock_obs_client.get_record_status.call_count >= 3
 
     @patch("scribe.core.recorder.obs_reqs")
     def test_start_recording_timeout(self, mock_obs_reqs, recorder, mock_obs_client):
@@ -666,7 +655,77 @@ class TestRecordingLifecycle:
         mock_obs_client.get_record_status.return_value = status
 
         with pytest.raises(ProcessError, match="failed to start"):
-            recorder._start_recording_if_needed(mock_obs_client)
+            recorder._start_recording_if_needed(mock_obs_client, timeout=0.0)
+
+    def test_active_without_counter_progress_is_not_reported_as_started(
+        self, recorder, mock_obs_client
+    ):
+        """An active flag without advancing output is not sufficient proof."""
+        mock_obs_client.get_record_status.side_effect = [
+            Mock(output_active=False),
+            Mock(output_active=True, output_bytes=100, output_duration=20),
+        ]
+
+        with (
+            patch("scribe.core.recorder.time.monotonic", side_effect=[0.0, 0.0, 2.0]),
+            patch("scribe.core.recorder.time.sleep"),
+            pytest.raises(ProcessError, match="counters did not advance"),
+        ):
+            recorder._start_recording_if_needed(mock_obs_client, timeout=1.0)
+
+        mock_obs_client.stop_record.assert_not_called()
+
+
+class TestRecordingStartProof:
+    """Test fresh-file identity and growth proof."""
+
+    def test_growing_fresh_file_confirms_recording(self, recorder, tmp_path):
+        media = tmp_path / "capture.mkv"
+        media.write_bytes(b"data")
+
+        with (
+            patch.object(recorder, "_newest_media_since", return_value=(None, str(media))),
+            patch("scribe.core.recorder.os.path.getsize", side_effect=[100, 200]),
+            patch("scribe.core.recorder.time.monotonic", side_effect=[0.0, 0.0, 0.0]),
+            patch("scribe.core.recorder.time.sleep"),
+        ):
+            result = recorder._confirm_recording_file_progress(
+                str(tmp_path), time.time(), timeout=1.0
+            )
+
+        assert result == (str(media), ".mkv")
+
+    def test_baseline_file_cannot_prove_new_recording(self, recorder, tmp_path):
+        media = tmp_path / "old.mp4"
+        media.write_bytes(b"old")
+        baseline = {recorder._normalized_media_path(media)}
+
+        with (
+            patch.object(recorder, "_newest_media_since", return_value=(str(media), None)),
+            patch("scribe.core.recorder.os.path.getsize") as getsize,
+            patch("scribe.core.recorder.time.monotonic", side_effect=[0.0, 0.0, 2.0]),
+            patch("scribe.core.recorder.time.sleep"),
+        ):
+            result = recorder._confirm_recording_file_progress(
+                str(tmp_path), time.time(), timeout=1.0, exclude=baseline
+            )
+
+        assert result is None
+        getsize.assert_not_called()
+
+    def test_snapshot_contains_existing_media_only(self, recorder, tmp_path):
+        mp4 = tmp_path / "old.mp4"
+        mkv = tmp_path / "old.mkv"
+        text_file = tmp_path / "notes.txt"
+        mp4.touch()
+        mkv.touch()
+        text_file.touch()
+
+        result = recorder._recording_media_snapshot(tmp_path)
+
+        assert recorder._normalized_media_path(mp4) in result
+        assert recorder._normalized_media_path(mkv) in result
+        assert recorder._normalized_media_path(text_file) not in result
 
 
 class TestFileDetection:
@@ -745,16 +804,18 @@ class TestFileFinalization:
         test_file.write_bytes(b"initial content")
 
         # File should be considered finalized immediately (not growing)
-        recorder._wait_until_file_finalized(str(test_file), idle_seconds=0.5, max_wait=2.0)
+        result = recorder._wait_until_file_finalized(str(test_file), idle_seconds=0.5, max_wait=2.0)
 
         assert test_file.exists()
+        assert result is True
 
     def test_wait_until_file_finalized_timeout(self, recorder, tmp_path):
         """Test finalization timeout doesn't raise error."""
         test_file = tmp_path / "recording.mp4"
 
         # File doesn't exist - should timeout gracefully
-        recorder._wait_until_file_finalized(str(test_file), idle_seconds=0.5, max_wait=1.0)
+        result = recorder._wait_until_file_finalized(str(test_file), idle_seconds=0.5, max_wait=1.0)
+        assert result is False
 
     @patch("scribe.core.recorder.get_ffmpeg_path")
     @patch("scribe.core.recorder.subprocess.run")
@@ -1076,67 +1137,6 @@ class TestDefensiveProgramming:
 # ---------------------------------------------------------------------------
 
 
-class TestKillExistingObs:
-    """Test _kill_existing_obs and helpers."""
-
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.utils.platform.is_windows", return_value=True)
-    def test_kill_windows_basic(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Kill on Windows calls taskkill for both exe names."""
-        with patch.object(recorder, "_obs_process_running", return_value=False):
-            with patch.object(recorder, "_clean_obs_crash_sentinel"):
-                recorder._kill_existing_obs()
-        # 2 taskkill calls (obs64 + obs32)
-        assert mock_run.call_count == 2
-
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.utils.platform.is_windows", return_value=True)
-    def test_kill_windows_retry_with_tree(self, _mock_win, mock_run, mock_sleep, recorder):
-        """If OBS survives first kill, retry with /T flag."""
-        with patch.object(recorder, "_obs_process_running", return_value=True):
-            with patch.object(recorder, "_clean_obs_crash_sentinel"):
-                recorder._kill_existing_obs()
-        # 2 initial + 2 retry = 4
-        assert mock_run.call_count == 4
-
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.utils.platform.is_windows", return_value=False)
-    def test_kill_linux(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Kill on Linux calls pkill -x for each exact process name (obs, OBS)."""
-        with patch.object(recorder, "_obs_process_running", return_value=False):
-            with patch.object(recorder, "_clean_obs_crash_sentinel"):
-                recorder._kill_existing_obs()
-        assert mock_run.call_count == 2
-        # Exact-name match, never the dangerous "-f obs" substring match.
-        for call in mock_run.call_args_list:
-            assert "-x" in call.args[0]
-            assert "-f" not in call.args[0]
-
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.utils.platform.is_windows", return_value=False)
-    def test_kill_linux_retry(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Linux retries with -9 when process survives (two exact names each pass)."""
-        with patch.object(recorder, "_obs_process_running", return_value=True):
-            with patch.object(recorder, "_clean_obs_crash_sentinel"):
-                recorder._kill_existing_obs()
-        # 2 initial pkill -x (obs, OBS) + 2 pkill -9 -x (obs, OBS)
-        assert mock_run.call_count == 4
-
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.utils.platform.is_windows", return_value=True)
-    def test_kill_exception_suppressed(self, _mock_win, mock_run, mock_sleep, recorder):
-        """Exceptions during kill are suppressed."""
-        mock_run.side_effect = OSError("access denied")
-        with patch.object(recorder, "_obs_process_running", return_value=False):
-            with patch.object(recorder, "_clean_obs_crash_sentinel"):
-                recorder._kill_existing_obs()  # should not raise
-
-
 class TestObsProcessRunning:
     """Test _obs_process_running."""
 
@@ -1294,37 +1294,39 @@ class TestConnectObsPhase2:
             patch.object(recorder, "_port_listening", return_value=False),
             patch.object(recorder, "_obs_recording_process_running", return_value=True),
             patch.object(recorder, "_obs_process_running", return_value=True),
-            patch.object(recorder, "_kill_existing_obs") as kill_obs,
             patch.object(recorder, "_launch_obs") as launch_obs,
         ):
             with pytest.raises(ConnectionError, match="actively recording"):
                 with recorder._connect_obs(max_wait_seconds=1):
                     pass
 
-        kill_obs.assert_not_called()
         launch_obs.assert_not_called()
 
     @patch("scribe.core.recorder.obs_reqs")
     @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_refuses_restart_when_obs_is_running(self, mock_exe, mock_reqs, recorder, tmp_path):
-        """A running OBS process is not killed just because WebSocket is unavailable."""
+    def test_relaunches_without_killing_when_obs_is_running(
+        self, mock_exe, mock_reqs, recorder, tmp_path
+    ):
+        """An unreachable OBS process gets a non-destructive relaunch attempt."""
         obs_exe = tmp_path / "obs.exe"
         obs_exe.touch()
         mock_exe.return_value = obs_exe
+        client = MagicMock()
 
         with (
             patch.object(recorder, "_port_listening", return_value=False),
             patch.object(recorder, "_obs_recording_process_running", return_value=False),
             patch.object(recorder, "_obs_process_running", return_value=True),
-            patch.object(recorder, "_kill_existing_obs") as kill_obs,
+            patch.object(recorder, "_wait_for_obs_startup", return_value=client),
+            patch.object(recorder, "_clean_obs_crash_sentinel") as clean_sentinel,
             patch.object(recorder, "_launch_obs") as launch_obs,
         ):
-            with pytest.raises(ConnectionError, match="already running"):
-                with recorder._connect_obs(max_wait_seconds=1):
-                    pass
+            with recorder._connect_obs(max_wait_seconds=1) as connected:
+                assert connected is client
 
-        kill_obs.assert_not_called()
-        launch_obs.assert_not_called()
+        clean_sentinel.assert_not_called()
+        launch_obs.assert_called_once_with(obs_exe, allow_multi=True)
+        client.disconnect.assert_called_once()
 
     @patch("scribe.core.recorder.obs_reqs")
     @patch("scribe.core.recorder.get_obs_executable_path")
@@ -1339,14 +1341,12 @@ class TestConnectObsPhase2:
             patch.object(recorder, "_port_listening", return_value=True),
             patch.object(recorder, "_obs_recording_process_running", return_value=False),
             patch.object(recorder, "_obs_process_running", return_value=True),
-            patch.object(recorder, "_kill_existing_obs") as kill_obs,
             patch.object(recorder, "_launch_obs") as launch_obs,
         ):
             with pytest.raises(OBSAuthenticationError, match="rejected"):
                 with recorder._connect_obs(max_wait_seconds=1):
                     pass
 
-        kill_obs.assert_not_called()
         launch_obs.assert_not_called()
 
     @patch("scribe.core.recorder.obs_reqs")
@@ -1364,7 +1364,6 @@ class TestConnectObsPhase2:
             patch.object(recorder, "_obs_process_running", return_value=False),
             patch.object(recorder, "_obs_recording_process_running", return_value=False),
             patch.object(recorder, "_clean_obs_crash_sentinel") as clean_sentinel,
-            patch.object(recorder, "_kill_existing_obs") as kill_obs,
             patch.object(recorder, "_launch_obs", side_effect=OSError("cannot start")),
         ):
             with pytest.raises(ConnectionError):
@@ -1372,24 +1371,22 @@ class TestConnectObsPhase2:
                     pass
 
         clean_sentinel.assert_called()
-        kill_obs.assert_not_called()
 
 
-class TestStartRecordingStaleStop:
-    """Test stale-stop path in _start_recording_if_needed."""
+class TestStartRecordingConflict:
+    """Test active-recording protection in _start_recording_if_needed."""
 
-    def test_stale_stop_fails_raises(self, recorder, mock_obs_client):
-        """Stale recording detected but stop fails → ProcessError."""
+    def test_active_recording_is_protected(self, recorder, mock_obs_client):
+        """An active recording is reported without any destructive action."""
         status_active = Mock()
         status_active.output_active = True
 
-        # Always stays active
         mock_obs_client.get_record_status.return_value = status_active
-        mock_obs_client.stop_record.return_value = None
 
-        with patch("scribe.core.recorder.time.sleep"):
-            with pytest.raises(ProcessError, match="Cannot start new recording"):
-                recorder._start_recording_if_needed(mock_obs_client)
+        with pytest.raises(OBSActiveRecordingError, match="left that recording untouched"):
+            recorder._start_recording_if_needed(mock_obs_client)
+
+        mock_obs_client.stop_record.assert_not_called()
 
     def test_start_record_refused(self, recorder, mock_obs_client):
         """start_record raises unexpected error → ProcessError."""
@@ -1402,13 +1399,14 @@ class TestStartRecordingStaleStop:
             recorder._start_recording_if_needed(mock_obs_client)
 
     def test_start_record_already_active(self, recorder, mock_obs_client):
-        """start_record says 'already' → handled gracefully."""
+        """A start race is treated as an active-recording conflict."""
         status = Mock()
         status.output_active = False
         mock_obs_client.get_record_status.return_value = status
         mock_obs_client.start_record.side_effect = Exception("already recording")
 
-        recorder._start_recording_if_needed(mock_obs_client)  # should not raise
+        with pytest.raises(OBSActiveRecordingError, match="left that recording untouched"):
+            recorder._start_recording_if_needed(mock_obs_client)
 
 
 class TestReconnectClient:
@@ -1452,7 +1450,7 @@ class TestWaitForStopWithInput:
 
     @patch("scribe.core.recorder.time.sleep")
     def test_recording_stops_normally(self, mock_sleep, recorder, mock_obs_client):
-        """Active→inactive triggers return."""
+        """An unsolicited active-to-inactive transition is reported as unexpected."""
         status_active = Mock(output_active=True)
         status_inactive = Mock(output_active=False)
         mock_obs_client.get_record_status.side_effect = [
@@ -1463,7 +1461,30 @@ class TestWaitForStopWithInput:
         stop_event = threading.Event()
         with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
             with patch("sys.stdout"):
-                recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+                result = recorder._wait_for_stop_with_input(mock_obs_client, stop_event)
+
+        assert result.unexpected_stop is True
+
+    @patch("scribe.core.recorder.time.sleep")
+    def test_stalled_output_counter_emits_high_visibility_warning(
+        self, mock_sleep, recorder, mock_obs_client, caplog
+    ):
+        """An active encoder with no byte progress is never silently trusted."""
+        mock_obs_client.get_record_status.side_effect = [
+            Mock(output_active=True, output_bytes=100),
+            Mock(output_active=True, output_bytes=100),
+            Mock(output_active=False),
+        ]
+
+        with (
+            patch("scribe.core.recorder.time.monotonic", side_effect=[0.0, 0.0, 16.0]),
+            patch("sys.stdin", Mock(isatty=Mock(return_value=False))),
+            patch("sys.stdout"),
+            caplog.at_level("ERROR"),
+        ):
+            recorder._wait_for_stop_with_input(mock_obs_client, threading.Event())
+
+        assert "output byte counter stalled" in caplog.text
 
     @patch("scribe.core.recorder.time.sleep")
     def test_deadman_timer(self, mock_sleep, recorder, mock_obs_client):
@@ -1587,74 +1608,62 @@ class TestWaitForStopCli:
     """Test _wait_for_stop_cli."""
 
     @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_cli_auto_stop_at_max_duration(
-        self, mock_exe, mock_run, mock_sleep, recorder, tmp_path
-    ):
+    def test_cli_auto_stop_at_max_duration(self, mock_sleep, recorder):
         """CLI fallback also auto-stops at the configured max duration."""
         recorder.max_recording_hours = 0.001  # 3.6 seconds
         recorder.recording_warning_fraction = 0.5
-
-        obs_exe = tmp_path / "obs.exe"
-        obs_exe.touch()
-        mock_exe.return_value = obs_exe
-        mock_run.return_value = Mock(returncode=0)
+        client = MagicMock()
 
         time_values = iter([100.0, 104.0, 104.0, 104.0])
 
         with patch("scribe.core.recorder.time.time", side_effect=lambda: next(time_values, 104.0)):
             with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
                 with patch("sys.stdout"):
-                    recorder._wait_for_stop_cli(threading.Event())
+                    recorder._wait_for_stop_cli(threading.Event(), client)
 
-        mock_run.assert_called_once()
+        client.stop_record.assert_called_once()
 
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_stop_signal_sent(self, mock_exe, mock_run, mock_sleep, recorder, tmp_path):
-        """Stop event set → --stoprecording called."""
-        obs_exe = tmp_path / "obs.exe"
-        obs_exe.touch()
-        mock_exe.return_value = obs_exe
-        mock_run.return_value = Mock(returncode=0)
-
+    def test_websocket_stop_returns_output_path(self, recorder):
+        """A fallback recording uses WebSocket for a safe stop when available."""
         stop_event = threading.Event()
         stop_event.set()
+        client = MagicMock()
+        client.stop_record.return_value = Mock(output_path="recording.mkv")
 
         with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
             with patch("sys.stdout"):
-                recorder._wait_for_stop_cli(stop_event)
-        mock_run.assert_called_once()
+                result = recorder._wait_for_stop_cli(stop_event, client)
 
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.get_obs_executable_path", return_value=None)
-    def test_obs_exe_not_found(self, mock_exe, mock_sleep, recorder):
-        """No obs executable → warns user."""
+        assert result == "recording.mkv"
+        client.stop_record.assert_called_once()
+
+    def test_no_client_requires_manual_stop(self, recorder):
+        """Without WebSocket, no unsupported or destructive stop is attempted."""
         stop_event = threading.Event()
         stop_event.set()
 
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
-                recorder._wait_for_stop_cli(stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=False))),
+            patch("sys.stdout"),
+            patch("scribe.core.recorder.subprocess.run") as run,
+        ):
+            result = recorder._wait_for_stop_cli(stop_event)
 
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_stop_timeout(self, mock_exe, mock_run, mock_sleep, recorder, tmp_path):
-        """--stoprecording times out."""
-        obs_exe = tmp_path / "obs.exe"
-        obs_exe.touch()
-        mock_exe.return_value = obs_exe
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="obs", timeout=10)
+        assert result is None
+        run.assert_not_called()
 
+    def test_websocket_stop_failure_preserves_manual_recovery(self, recorder):
+        """A failed safe stop never escalates to process termination."""
         stop_event = threading.Event()
         stop_event.set()
+        client = MagicMock()
+        client.stop_record.side_effect = ConnectionError("lost")
 
         with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
             with patch("sys.stdout"):
-                recorder._wait_for_stop_cli(stop_event)
+                result = recorder._wait_for_stop_cli(stop_event, client)
+
+        assert result is None
 
 
 class TestStartStopListener:
@@ -1714,11 +1723,19 @@ class TestRecordWithWebsocket:
                     recorder, "_get_effective_record_dir", return_value=str(rec_file.parent)
                 ):
                     with patch.object(recorder, "_start_recording_if_needed"):
-                        with patch.object(recorder, "_wait_for_stop_with_input"):
+                        with patch.object(
+                            recorder,
+                            "_confirm_recording_file_progress",
+                            return_value=(str(rec_file), ".mp4"),
+                        ):
                             with patch.object(
-                                recorder, "_newest_media_since", return_value=(str(rec_file), None)
+                                recorder,
+                                "_wait_for_stop_with_input",
+                                return_value=RecordingStopResult(),
                             ):
-                                with patch.object(recorder, "_wait_until_file_finalized"):
+                                with patch.object(
+                                    recorder, "_wait_until_file_finalized", return_value=True
+                                ):
                                     with patch.object(
                                         recorder, "_finalize_recording", return_value=rec_file
                                     ):
@@ -1726,6 +1743,37 @@ class TestRecordWithWebsocket:
                                             "test", threading.Event()
                                         )
         assert result == rec_file
+
+    def test_unexpected_stop_preserves_partial_file_and_fails_truthfully(
+        self, recorder, mock_obs_client, tmp_path
+    ):
+        """A partial file is named and retained, but the session is not successful."""
+        rec_file = tmp_path / "capture.mp4"
+        rec_file.write_bytes(b"partial")
+        recorder.output_folder = tmp_path
+
+        with (
+            patch.object(recorder, "_connect_obs") as connect,
+            patch.object(recorder, "_set_record_dir_if_possible"),
+            patch.object(recorder, "_get_effective_record_dir", return_value=str(tmp_path)),
+            patch.object(recorder, "_recording_media_snapshot", return_value=set()),
+            patch.object(recorder, "_start_recording_if_needed"),
+            patch.object(
+                recorder,
+                "_confirm_recording_file_progress",
+                return_value=(str(rec_file), ".mp4"),
+            ),
+            patch.object(
+                recorder,
+                "_wait_for_stop_with_input",
+                return_value=RecordingStopResult(unexpected_stop=True),
+            ),
+            patch.object(recorder, "_wait_until_file_finalized", return_value=True),
+            patch.object(recorder, "_finalize_recording", return_value=rec_file),
+            pytest.raises(ProcessError, match="partial recording was preserved"),
+        ):
+            connect.return_value.__enter__.return_value = mock_obs_client
+            recorder._record_with_websocket("test", threading.Event())
 
     @patch("scribe.core.recorder.obs_reqs")
     def test_connection_error_falls_back(self, mock_reqs, recorder):
@@ -1791,12 +1839,19 @@ class TestRecordWithWebsocket:
                     recorder, "_get_effective_record_dir", return_value=str(tmp_path)
                 ):
                     with patch.object(recorder, "_start_recording_if_needed"):
-                        with patch.object(recorder, "_wait_for_stop_with_input"):
+                        with patch.object(
+                            recorder, "_confirm_recording_file_progress", return_value=None
+                        ):
                             with patch.object(
-                                recorder, "_newest_media_since", return_value=(None, None)
+                                recorder,
+                                "_wait_for_stop_with_input",
+                                return_value=RecordingStopResult(),
                             ):
-                                with pytest.raises(ProcessError, match="Could not locate"):
-                                    recorder._record_with_websocket("test", threading.Event())
+                                with patch.object(
+                                    recorder, "_newest_media_since", return_value=(None, None)
+                                ):
+                                    with pytest.raises(ProcessError, match="Could not locate"):
+                                        recorder._record_with_websocket("test", threading.Event())
 
 
 class TestRecord:
@@ -2124,20 +2179,22 @@ class TestWaitForObsStartup:
 class TestRecordWithCli:
     """Test _record_with_cli."""
 
-    @patch("scribe.core.recorder.time.sleep")
-    def test_stop_event_before_file_found(self, mock_sleep, recorder, tmp_path):
+    def test_stop_event_before_file_found(self, recorder, tmp_path):
         """Stop event set before file detected → ProcessError."""
         recorder.output_folder = tmp_path
         stop_event = threading.Event()
         stop_event.set()
 
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
-                with patch("scribe.core.recorder.time.time") as mock_time:
-                    # Make deadline check pass on first iter, then expire
-                    mock_time.side_effect = [100, 100, 100, 200, 200]
-                    with pytest.raises(ProcessError, match="cancelled"):
-                        recorder._record_with_cli("test", stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=False))),
+            patch("sys.stdout"),
+            patch("scribe.core.recorder.get_obs_executable_path", return_value=None),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(recorder, "_confirm_recording_file_progress", return_value=None),
+        ):
+            with pytest.raises(ProcessError, match="cancelled"):
+                recorder._record_with_cli("test", stop_event)
 
 
 class TestListenReadline:
@@ -2218,57 +2275,51 @@ class TestListenWindows:
 class TestRecordWithCliMore:
     """Additional _record_with_cli tests for coverage."""
 
-    @patch("scribe.core.recorder.time.sleep")
-    def test_happy_path_file_found(self, mock_sleep, recorder, tmp_path):
-        """File found during scan → finalization."""
+    def test_happy_path_file_found(self, recorder, tmp_path):
+        """A growing file is safely finalized after fallback capture."""
         rec_file = tmp_path / "rec.mp4"
         rec_file.write_bytes(b"video")
         recorder.output_folder = tmp_path
 
         stop_event = threading.Event()
+        stop_event.set()
 
-        def fake_newest(d, ts):
-            # After finding the file, set stop_event for the later wait loop
-            stop_event.set()
-            return (str(rec_file), None)
-
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
-                with patch.object(recorder, "_newest_media_since", side_effect=fake_newest):
-                    with patch.object(recorder, "_wait_until_file_finalized"):
-                        with patch.object(
-                            recorder, "_finalize_recording", return_value=Path(rec_file)
-                        ):
-                            # Prevent real _wait_for_stop_cli thread
-                            with patch("threading.Thread"):
-                                result = recorder._record_with_cli("test", stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=False))),
+            patch("sys.stdout"),
+            patch("scribe.core.recorder.get_obs_executable_path", return_value=None),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(
+                recorder,
+                "_confirm_recording_file_progress",
+                return_value=(str(rec_file), ".mp4"),
+            ),
+            patch.object(recorder, "_try_connect_to_running_obs", return_value=None),
+            patch.object(recorder, "_wait_for_stop_cli", return_value=None),
+            patch.object(recorder, "_wait_until_file_finalized", return_value=True),
+            patch.object(recorder, "_finalize_recording", return_value=Path(rec_file)),
+        ):
+            result = recorder._record_with_cli("test", stop_event)
         assert result == Path(rec_file)
 
-    @patch("scribe.core.recorder.time.sleep")
-    def test_no_file_found_timeout(self, mock_sleep, recorder, tmp_path):
+    def test_no_file_found_timeout(self, recorder, tmp_path):
         """No file found before deadline → ProcessError."""
         out_dir = tmp_path / "empty_out"
         out_dir.mkdir()
         recorder.output_folder = out_dir
         stop_event = threading.Event()
 
-        # Mock _newest_media_since to always return nothing
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
-                with patch.object(recorder, "_newest_media_since", return_value=(None, None)):
-                    # Make the deadline expire quickly
-                    _call = [0]
-                    _base = 1000.0
-
-                    def fake_time():
-                        _call[0] += 1
-                        if _call[0] <= 2:
-                            return _base
-                        return _base + 50  # past 30s deadline
-
-                    with patch("scribe.core.recorder.time.time", side_effect=fake_time):
-                        with pytest.raises(ProcessError, match="No media file appeared"):
-                            recorder._record_with_cli("test", stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=False))),
+            patch("sys.stdout"),
+            patch("scribe.core.recorder.get_obs_executable_path", return_value=None),
+            patch.object(recorder, "_obs_process_running", return_value=False),
+            patch.object(recorder, "_obs_recording_process_running", return_value=False),
+            patch.object(recorder, "_confirm_recording_file_progress", return_value=None),
+        ):
+            with pytest.raises(ProcessError, match="No media file appeared"):
+                recorder._record_with_cli("test", stop_event)
 
 
 class TestTryConnectAuthError:
@@ -2404,40 +2455,26 @@ class TestWaitForStopCliTTY:
     """Test TTY panel in _wait_for_stop_cli."""
 
     @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_tty_panel_and_nonzero_exit(self, mock_exe, mock_run, mock_sleep, recorder, tmp_path):
-        """TTY shows panel; non-zero exit warns."""
-        obs_exe = tmp_path / "obs.exe"
-        obs_exe.touch()
-        mock_exe.return_value = obs_exe
-        mock_run.return_value = Mock(returncode=1)
-
+    def test_tty_panel_and_manual_stop_guidance(self, mock_sleep, recorder):
+        """TTY fallback remains visible without issuing an unsupported command."""
         stop_event = threading.Event()
         stop_event.set()
 
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=True))):
-            with patch("sys.stdout"):
-                recorder._wait_for_stop_cli(stop_event)
+        with (
+            patch("sys.stdin", Mock(isatty=Mock(return_value=True))),
+            patch("sys.stdout"),
+            patch("scribe.utils.logging.console") as mock_console,
+            patch("scribe.core.recorder.subprocess.run") as run,
+        ):
+            recorder._wait_for_stop_cli(stop_event)
 
-    @patch("scribe.core.recorder.time.sleep")
-    @patch("scribe.core.recorder.subprocess.run")
-    @patch("scribe.core.recorder.get_obs_executable_path")
-    def test_generic_exception_during_stop(
-        self, mock_exe, mock_run, mock_sleep, recorder, tmp_path
-    ):
-        """Generic exception during --stoprecording."""
-        obs_exe = tmp_path / "obs.exe"
-        obs_exe.touch()
-        mock_exe.return_value = obs_exe
-        mock_run.side_effect = PermissionError("access denied")
-
-        stop_event = threading.Event()
-        stop_event.set()
-
-        with patch("sys.stdin", Mock(isatty=Mock(return_value=False))):
-            with patch("sys.stdout"):
-                recorder._wait_for_stop_cli(stop_event)
+        panel_text = "\n".join(
+            str(call.args[0].renderable)
+            for call in mock_console.print.call_args_list
+            if call.args and hasattr(call.args[0], "renderable")
+        )
+        assert "RECORDING" in panel_text
+        run.assert_not_called()
 
 
 class TestSetRecordDirMore:
@@ -2540,6 +2577,25 @@ class TestLaunchObs:
         assert "--minimize-to-tray" not in args
         assert "--disable-shutdown-check" in args
 
+    def test_macos_recovery_launch_is_new_and_starts_capture(self, recorder, monkeypatch):
+        """macOS recovery bypasses the existing-instance prompt and starts recording."""
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "macos")
+        calls: list[list[str]] = []
+        monkeypatch.setattr(
+            "scribe.core.recorder.subprocess.Popen",
+            lambda args, **_kwargs: calls.append(args) or MagicMock(),
+        )
+
+        recorder._launch_obs(
+            Path("/Applications/OBS.app/Contents/MacOS/OBS"),
+            start_recording=True,
+            allow_multi=True,
+        )
+
+        assert "-n" in calls[0]
+        assert "--multi" in calls[0]
+        assert "--startrecording" in calls[0]
+
     def test_windows_runs_exe_with_flags(self, recorder, monkeypatch):
         monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
         calls: list[list[str]] = []
@@ -2552,3 +2608,40 @@ class TestLaunchObs:
         recorder._launch_obs(Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"))
         assert "--minimize-to-tray" in calls[0]
         assert "--disable-shutdown-check" in calls[0]
+
+    def test_windows_recovery_launch_uses_supported_flags(self, recorder, monkeypatch):
+        """Windows recovery starts a separate capture without stopping another OBS."""
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
+        calls: list[list[str]] = []
+        monkeypatch.setattr(
+            "scribe.core.recorder.subprocess.Popen",
+            lambda args, **_kwargs: calls.append(args) or MagicMock(),
+        )
+
+        recorder._launch_obs(
+            Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"),
+            start_recording=True,
+            allow_multi=True,
+        )
+
+        assert "--multi" in calls[0]
+        assert "--startrecording" in calls[0]
+
+    def test_linux_recovery_launch_uses_supported_flags(self, recorder, monkeypatch):
+        """Linux recovery uses the same OBS capture contract without tray flags."""
+        monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "linux")
+        calls: list[list[str]] = []
+        monkeypatch.setattr(
+            "scribe.core.recorder.subprocess.Popen",
+            lambda args, **_kwargs: calls.append(args) or MagicMock(),
+        )
+
+        recorder._launch_obs(
+            Path("/usr/bin/obs"),
+            start_recording=True,
+            allow_multi=True,
+        )
+
+        assert "--multi" in calls[0]
+        assert "--startrecording" in calls[0]
+        assert "--minimize-to-tray" not in calls[0]

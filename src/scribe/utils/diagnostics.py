@@ -16,6 +16,7 @@ the whole run.
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
 from collections.abc import Callable
@@ -28,6 +29,28 @@ from openai import AuthenticationError, OpenAI
 from scribe.models.gpu import GPUConfig
 from scribe.utils.obs_config import read_obs_websocket_config
 from scribe.utils.platform import get_platform, is_windows
+
+
+def _obs_process_running() -> bool:
+    """Return whether an OBS desktop process is present."""
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return any(
+            (process.info.get("name") or "").lower() in {"obs", "obs64.exe", "obs32.exe"}
+            for process in psutil.process_iter(["name"])
+        )
+    except (ImportError, OSError):
+        return False
+
+
+def _tcp_port_listening(host: str, port: int, timeout: float = 0.2) -> bool:
+    """Return whether a local TCP endpoint accepts a connection."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 @dataclass
@@ -434,13 +457,21 @@ class SystemDiagnostics:
         from scribe.models.config import ScribeConfig
 
         config = ScribeConfig()
+        obs_running = _obs_process_running()
+        obs_host = str(getattr(config, "obs_host", "localhost"))
+        candidate_hosts = dict.fromkeys((obs_host, "127.0.0.1", "::1"))
+        websocket_listening = obs_running and any(
+            _tcp_port_listening(host, config.obs_port) for host in candidate_hosts
+        )
         details = (
             f"OBS config: {obs_config.path}\n"
             f"OBS server enabled: {server_enabled}\n"
             f"OBS port: {server_port}\n"
             f"OBS auth required: {auth_required}\n"
             f"Scribe port: {config.obs_port}\n"
-            f"Scribe password configured: {bool(config.obs_password)}"
+            f"Scribe password configured: {bool(config.obs_password)}\n"
+            f"OBS process running: {obs_running}\n"
+            f"OBS WebSocket listening: {websocket_listening if obs_running else 'not checked'}"
         )
 
         if not server_enabled:
@@ -474,6 +505,18 @@ class SystemDiagnostics:
                     "`set SCRIBE_OBS_PASSWORD=<password>` or PowerShell "
                     "`$env:SCRIBE_OBS_PASSWORD='<password>'`. Persistent config: "
                     "add [obs].password to ~/.scribe/config.toml."
+                ),
+            )
+        elif obs_running and not websocket_listening:
+            result = DiagnosticResult(
+                name="OBS WebSocket",
+                status="warn",
+                message="OBS is running, but WebSocket is not listening",
+                details=details,
+                fix_suggestion=(
+                    "Run `scribe rec --check`. Scribe will attempt a non-destructive "
+                    "relaunch when recording starts. If the check still fails, close all "
+                    "OBS instances and reopen OBS."
                 ),
             )
         else:
@@ -1172,7 +1215,7 @@ class SystemDiagnostics:
     def check_system_resources(self) -> DiagnosticResult:
         """Check system resources (CPU, RAM)."""
         try:
-            import psutil  # type: ignore[import-untyped]
+            import psutil
 
             # Check RAM
             ram = psutil.virtual_memory()

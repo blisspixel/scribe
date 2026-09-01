@@ -6,6 +6,7 @@ Documentation for Scribe, a local-first transcription and recording CLI.
 
 ### Getting Started
 - [Main README](../README.md) - Concise overview and quick start
+- [Recording Guide](RECORDING.md) - OBS setup, startup proof, defensive control, safe stop, and recovery
 - [CLI Guide](CLI.md) - User workflows, flags, exit behavior, and failure evidence
 - [Resident Voice Guide](VOICE.md) - Tray setup, ownership, platforms, diagnostics, and recovery
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
