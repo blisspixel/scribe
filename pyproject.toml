@@ -55,6 +55,7 @@ whisperx = [
     # WhisperX 3.8.x pins Torch 2.8 and huggingface-hub below 1.0, which keeps
     # known Torch and Transformers advisories in the Python 3.12 lock.
     "whisperx>=3.7.2,<3.8",
+    "nltk>=3.10.3",  # Fix the current critical and high WhisperX transitive advisories
     "pyannote.audio>=3.0.0",
 ]
 

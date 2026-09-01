@@ -59,6 +59,8 @@ No changes yet.
   running OBS process whose configured WebSocket port is closed.
 - Raised the development pip floor to 26.2 to remediate PYSEC-2026-3721 and keep
   the required zero-exception dependency audit passing.
+- Constrained the optional WhisperX dependency graph to NLTK 3.10.3 or newer,
+  remediating the current critical and high transitive advisories in the lock.
 - Reworked the root README into a concise project landing page and moved detailed command and resident-voice operations into linked CLI and voice guides.
 - Added a searchable CLI preview and documented CPU, NVIDIA, Apple Silicon, AMD,
   and Intel paths without treating one development GPU as a requirement.
