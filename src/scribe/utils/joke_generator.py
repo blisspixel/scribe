@@ -532,7 +532,7 @@ def _build_client(api_key: str | None) -> OpenAI:
 
 def _redact(s: str, max_chars: int = 400) -> str:
     s = s.replace("\r", " ").replace("\n", " ")
-    return (s[:max_chars] + " …[truncated]") if len(s) > max_chars else s
+    return (s[:max_chars] + " ...[truncated]") if len(s) > max_chars else s
 
 
 def _extract_output_text(resp: Any) -> str:
@@ -578,7 +578,7 @@ def _resp_to_dict_trunc(resp: Any, n: int = 1200) -> str:
     try:
         blob = getattr(resp, "to_dict", None)
         s = json.dumps(blob(), ensure_ascii=False) if callable(blob) else str(resp)
-        return (s[:n] + " …[truncated]") if len(s) > n else s
+        return (s[:n] + " ...[truncated]") if len(s) > n else s
     except Exception:
         return "<unserializable>"
 

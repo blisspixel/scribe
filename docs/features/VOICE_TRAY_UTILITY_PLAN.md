@@ -141,4 +141,4 @@ an exact Scribe commit demonstrates:
 - Sanitized evidence without user paths, secrets, participant names, or company
   data.
 
-Last verified against Scribe 2.9.1 on 2026-09-01.
+Version baseline: Scribe 2.9.2.

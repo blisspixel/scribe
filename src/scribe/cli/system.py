@@ -62,8 +62,8 @@ def show_info(
             f"{gpu_config.gpu_memory_gb:.0f}GB VRAM[/{ScribeTheme.TEXT_MUTED}]"
         )
         console.print(
-            f"  [{ScribeTheme.TEXT_MUTED}]{escape(cuda_status)} · "
-            f"{escape(str(gpu_config.model_size))} · beam={gpu_config.beam_size} · "
+            f"  [{ScribeTheme.TEXT_MUTED}]{escape(cuda_status)} | "
+            f"{escape(str(gpu_config.model_size))} | beam={gpu_config.beam_size} | "
             f"{escape(gpu_config.get_expected_speed())}[/{ScribeTheme.TEXT_MUTED}]"
         )
     else:
@@ -85,7 +85,7 @@ def show_info(
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]selected[/{ScribeTheme.TEXT_PRIMARY}]  "
         f"[{ScribeTheme.SUCCESS}]{escape(chosen_backend)}[/{ScribeTheme.SUCCESS}] "
-        f"[{ScribeTheme.TEXT_MUTED}]· vendor "
+        f"[{ScribeTheme.TEXT_MUTED}]| vendor "
         f"{escape(hardware.vendor)}[/{ScribeTheme.TEXT_MUTED}]"
     )
     console.print(
@@ -122,6 +122,13 @@ def show_info(
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  "
         f"[{ScribeTheme.TEXT_MUTED}]{escape(language)}[/{ScribeTheme.TEXT_MUTED}]"
+    )
+    console.print(
+        f"  [{ScribeTheme.TEXT_PRIMARY}]openrouter[/{ScribeTheme.TEXT_PRIMARY}] "
+        f"[{ScribeTheme.TEXT_MUTED}]"
+        f"{escape(config.openrouter_model)} | "
+        f"${config.openrouter_max_spend_usd:.2f} reported-cost guard"
+        f"[/{ScribeTheme.TEXT_MUTED}]"
     )
 
     from scribe.config_file import CONFIG_PATH
@@ -188,7 +195,7 @@ def show_info(
         console.print(
             f"  [{ScribeTheme.TEXT_PRIMARY}]ollama[/{ScribeTheme.TEXT_PRIMARY}]    "
             f"[{ScribeTheme.SUCCESS}]{len(ollama_models)} models[/{ScribeTheme.SUCCESS}] "
-            f"[{ScribeTheme.TEXT_MUTED}]· {budget_label}[/{ScribeTheme.TEXT_MUTED}]"
+            f"[{ScribeTheme.TEXT_MUTED}]| {budget_label}[/{ScribeTheme.TEXT_MUTED}]"
         )
         console.print(
             f"  [{ScribeTheme.TEXT_PRIMARY}]auto[/{ScribeTheme.TEXT_PRIMARY}]      "
@@ -228,6 +235,7 @@ def _print_api_key_status(console: Console, name: str, configured: bool) -> None
 
 def run_doctor(console: Console, version: str, live: bool, logger: Logger) -> None:
     """Run diagnostics and render a complete local-readiness report."""
+    from scribe.models.config import ScribeConfig
     from scribe.utils.diagnostics import SystemDiagnostics
 
     console.print()
@@ -245,7 +253,11 @@ def run_doctor(console: Console, version: str, live: bool, logger: Logger) -> No
         )
     console.print()
 
-    diagnostics = SystemDiagnostics()
+    try:
+        config = ScribeConfig()
+    except Exception:
+        config = None
+    diagnostics = SystemDiagnostics(config=config)
     with console.status(
         f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",
         spinner="dots",
@@ -287,7 +299,7 @@ def run_doctor(console: Console, version: str, live: bool, logger: Logger) -> No
         console.print()
 
     if failures:
-        _print_diagnostic_group(console, "FAILED", failures, ScribeTheme.ERROR, "×")
+        _print_diagnostic_group(console, "FAILED", failures, ScribeTheme.ERROR, "x")
     if warnings:
         _print_diagnostic_group(console, "WARNINGS", warnings, ScribeTheme.WARNING, "!")
 

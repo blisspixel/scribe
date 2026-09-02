@@ -84,4 +84,4 @@ validation before investing in native distribution. Those results identify actua
 platform failures. Without them, native packaging would optimize an assumed
 problem and add a larger signing and support surface.
 
-Last verified against Scribe 2.9.1 on 2026-09-01.
+Version baseline: Scribe 2.9.2.

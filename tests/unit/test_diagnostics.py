@@ -372,6 +372,24 @@ class TestOpenRouterAPIKeyCheck:
         assert "123.456" not in str(result)
 
     @patch("scribe.utils.diagnostics.httpx.get")
+    def test_uses_effective_configured_spend_guard(self, get):
+        get.return_value = MagicMock(status_code=200)
+        get.return_value.json.return_value = {"data": {"limit": 3.0, "limit_remaining": 2.0}}
+        config = SimpleNamespace(
+            openrouter_api_key="sk-or-v1-" + "test-key-1234567890",
+            openrouter_max_spend_usd=2.5,
+        )
+        diagnostics = SystemDiagnostics(config=config)
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = diagnostics.check_openrouter_api_key()
+
+        assert result is not None
+        assert result.status == "warn"
+        assert result.fix_suggestion is not None
+        assert "$2.50" in result.fix_suggestion
+
+    @patch("scribe.utils.diagnostics.httpx.get")
     def test_rejected_key(self, get):
         get.return_value = MagicMock(status_code=401)
         diagnostics = SystemDiagnostics()

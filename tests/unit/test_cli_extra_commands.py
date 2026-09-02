@@ -1853,7 +1853,7 @@ def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
     runner = CliRunner()
 
     for command in ("transcribe", "url", "record", "batch", "music"):
-        result = runner.invoke(app, [command, "--help"])
+        result = runner.invoke(app, [command, "--help"], terminal_width=180)
         linear_output = unstyle(result.stdout).replace("│", " ").replace("|", " ")
         normalized_output = " ".join(linear_output.split())
         assert result.exit_code == 0
@@ -1862,6 +1862,7 @@ def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
         assert "GPU or CPU" in normalized_output
         assert "paid cloud" in normalized_output
         assert "local (GPU)" not in result.stdout
+        assert "--max-spend" in normalized_output
 
 
 def test_health_check_success() -> None:

@@ -255,4 +255,4 @@ Public CLI failures are normalized through the exception types in
 with implementation changes. Pin an exact Scribe commit and add integration tests
 if an application imports these modules directly.
 
-Last verified against Scribe 2.9.1 on 2026-09-01.
+Version baseline: Scribe 2.9.2.

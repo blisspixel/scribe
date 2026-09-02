@@ -35,11 +35,18 @@ For high-value meetings, also verify these external conditions:
 
 ```bash
 scribe rec "Team Meeting"
+scribe rec "Cloud Meeting" --method openrouter --max-spend 5
 ```
 
 `scribe record` exposes the advanced form of the same workflow. Scribe shows the
 effective output folder and settings before capture. During a terminal recording,
 type `s` or `stop` and press Enter, or press Ctrl+C, to request a safe stop.
+
+Recording and transcription have separate data boundaries. The default `auto`
+method transcribes locally. An explicit `--method openrouter` uploads the finished
+recording after capture, and `--max-spend` sets that input's
+reported-cost guard. A provider key limit is still required for an absolute cap.
+See [Cloud Transcription](CLOUD_TRANSCRIPTION.md) before enabling upload.
 
 Keep the OBS window available during an important session. Its meters and status
 bar are the independent source of truth for capture devices and encoder health.

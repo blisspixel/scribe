@@ -186,11 +186,19 @@ class TestTranscribeCommand:
 
         result = cli_runner.invoke(
             app,
-            ["transcribe", str(source), "--method", "openrouter"],
+            [
+                "transcribe",
+                str(source),
+                "--method",
+                "openrouter",
+                "--openrouter-max-spend",
+                "2.50",
+            ],
         )
 
         assert result.exit_code == 1
         assert "OPENROUTER_API_KEY" in _strip_ansi(result.output)
+        config_class.assert_called_once_with(openrouter_max_spend_usd=2.5)
         transcriber_class.assert_not_called()
 
     @patch("scribe.utils.audio.get_audio_duration")
@@ -405,7 +413,7 @@ class TestRecShortcut:
 
     def test_rec_help(self, cli_runner):
         """Test rec shortcut help."""
-        result = cli_runner.invoke(app, ["rec", "--help"])
+        result = cli_runner.invoke(app, ["rec", "--help"], terminal_width=180)
         output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
@@ -525,6 +533,8 @@ class TestInfoCommand:
         mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
+        mock_config.openrouter_model = "openai/whisper-large-v3"
+        mock_config.openrouter_max_spend_usd = 5.0
         mock_config.hf_token = None
         mock_config_class.return_value = mock_config
 
@@ -548,6 +558,8 @@ class TestInfoCommand:
         assert result.exit_code == 0
         # Should show some system info
         assert len(result.stdout) > 100
+        assert "$5.00 reported-cost guard" in result.stdout
+        assert "·" not in result.stdout
 
     @patch("scribe.cli.main.ScribeConfig")
     @patch("scribe.cli.main.GPUConfig")
@@ -561,6 +573,8 @@ class TestInfoCommand:
         mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
+        mock_config.openrouter_model = "openai/whisper-large-v3"
+        mock_config.openrouter_max_spend_usd = 5.0
         mock_config.hf_token = None
         mock_config_class.return_value = mock_config
 
@@ -600,6 +614,8 @@ class TestInfoCommand:
         mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
+        mock_config.openrouter_model = "openai/whisper-large-v3"
+        mock_config.openrouter_max_spend_usd = 5.0
         mock_config.hf_token = None
         mock_config_class.return_value = mock_config
 
@@ -672,6 +688,10 @@ class TestCommandAliases:
         assert result.exit_code == 0
         # Should show help for recording
         assert "record" in result.stdout.lower() or "rec" in result.stdout.lower()
+        output = _strip_ansi(result.output)
+        assert "--max-spend" in output
+        assert "$0" in output
+        assert "paid" in output
 
 
 class TestArgumentValidation:
@@ -695,6 +715,20 @@ class TestArgumentValidation:
 
         assert result.exit_code != 0
 
+    @pytest.mark.parametrize("value", [0.0, -1.0, 1000.01, float("inf"), float("nan")])
+    def test_invalid_openrouter_max_spend_value(self, value):
+        from typer import BadParameter
+
+        from scribe.cli.main import _validate_openrouter_max_spend
+
+        with pytest.raises(BadParameter, match="finite and greater than 0"):
+            _validate_openrouter_max_spend(value)
+
+    def test_openrouter_max_spend_accepts_five_dollars(self):
+        from scribe.cli.main import _validate_openrouter_max_spend
+
+        assert _validate_openrouter_max_spend(5.0) == 5.0
+
 
 class TestOutputFormatting:
     """Test CLI output formatting."""
@@ -711,6 +745,8 @@ class TestOutputFormatting:
         mock_config.model_fields_set = set()
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
+        mock_config.openrouter_model = "openai/whisper-large-v3"
+        mock_config.openrouter_max_spend_usd = 5.0
         mock_config.hf_token = None
         mock_config_class.return_value = mock_config
 
@@ -741,6 +777,33 @@ class TestOutputFormatting:
         assert result.exit_code == 0
         # Should be concise
         assert len(result.stdout) < 500
+
+
+def test_explicit_output_dir_places_transcript_atomically_and_updates_session(tmp_path):
+    from scribe.cli.main import _place_transcript_in_output_dir
+    from scribe.models.session import TranscriptionSession
+
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "output"
+    source_dir.mkdir()
+    output_dir.mkdir()
+    transcript = source_dir / "meeting_transcription.txt"
+    transcript.write_text("new complete transcript", encoding="utf-8")
+    existing = output_dir / transcript.name
+    existing.write_text("prior transcript", encoding="utf-8")
+    session = TranscriptionSession.create("meeting")
+    session.add_file(transcript, "transcript")
+
+    result = _place_transcript_in_output_dir(transcript, output_dir, session)
+
+    assert result == existing
+    assert existing.read_text(encoding="utf-8") == "new complete transcript"
+    assert existing.with_suffix(".txt.previous").read_text(encoding="utf-8") == ("prior transcript")
+    assert not transcript.exists()
+    assert session.transcript_file == existing
+    assert existing in session.files_created
+    assert transcript not in session.files_created
+    assert transcript.resolve() in session.files_cleaned
 
 
 class TestIntegrationScenarios:

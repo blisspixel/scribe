@@ -4,7 +4,7 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.9.1 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.9.2 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
@@ -13,6 +13,36 @@ milestones that predate this repository's Git history.
 ## Unreleased
 
 No changes yet.
+
+## [2.9.2] - 2026-09-02
+
+### Added
+
+- Added a validated `--max-spend` per-run OpenRouter option, with an explicit
+  `--openrouter-max-spend` alias, to file, URL, recording, batch, music, and Quick
+  Record commands.
+- Added live CLI evidence for the default $5 guard and a non-default $0.01
+  override using the synthetic 60-second OpenRouter round-trip clip.
+
+### Changed
+
+- Made `scribe info` show the effective OpenRouter model and reported-cost guard,
+  and made live diagnostics use the effective `.env`, environment, or user-config
+  spend value.
+- Reworked the roadmap into a dependency-ordered, versioned release plan with
+  explicit prerequisites, operations, exit criteria, and a continuous patch lane.
+- Added a release-process guide that keeps version metadata, changelog, install
+  examples, roadmap state, artifacts, exact-commit CI, and post-release
+  verification synchronized without calendar or effort-duration promises.
+
+### Fixed
+
+- Replaced remaining decorative non-ASCII separators in redirected CLI and
+  diagnostic output so Windows legacy encodings do not render replacement
+  characters.
+- Made an explicit `--output-dir` place the transcript and structured sidecars in
+  that directory, while atomically preserving an existing transcript and keeping
+  the newly generated source copy if relocation fails.
 
 ## [2.9.1] - 2026-09-01
 

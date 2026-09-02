@@ -18,7 +18,7 @@ Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpe
 OBS Studio is required only for recording.
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.1
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.2
 uv tool update-shell
 
 scribe init
@@ -87,9 +87,10 @@ disabled by default and require positive flags.
 OpenRouter is fully optional and uses its dedicated speech-to-text endpoint with
 bounded local chunking, price-prioritized routing, a $5 per-transcription
 reported-cost circuit breaker, and confirmed partial preservation. A provider-side
-key limit is required for an absolute spending cap. See the [cloud transcription
-guide](docs/CLOUD_TRANSCRIPTION.md) for setup, data sharing, model selection,
-spending limits, failure behavior, and safe testing.
+key limit is required for an absolute spending cap. Override the guard for one
+input with `--max-spend USD`. See the
+[cloud transcription guide](docs/CLOUD_TRANSCRIPTION.md) for setup, data sharing,
+model selection, spending limits, failure behavior, and safe testing.
 
 No particular GPU is required. The standard backend runs on CPU and compatible
 NVIDIA GPUs. Optional `mlx` and `whispercpp` installs support Apple Silicon and
@@ -127,6 +128,7 @@ diagnostic bundle for review before sharing.
 - [Troubleshooting guide](docs/TROUBLESHOOTING.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development guide](docs/DEVELOPMENT.md)
+- [Release process](docs/RELEASE_PROCESS.md)
 - [Responsible use](docs/RESPONSIBLE_USE.md)
 - [Security policy](SECURITY.md)
 - [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md)
@@ -134,11 +136,11 @@ diagnostic bundle for review before sharing.
 
 ## Project status
 
-Version 2.9.1 is the current GitHub release. It is not published on PyPI. CI
+Version 2.9.2 is the current GitHub release. It is not published on PyPI. CI
 enforces Ruff, strict mypy, an 81 percent combined
 statement-and-branch coverage floor, dependency and artifact audits, and native
-source checks. Platform evidence still in progress is tracked in the
-[roadmap](ROADMAP.md).
+source checks. The dependency-ordered version plan and remaining platform
+evidence are tracked in the [roadmap](ROADMAP.md).
 
 ## Responsible use and security
 

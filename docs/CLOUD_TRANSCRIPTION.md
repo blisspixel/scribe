@@ -52,6 +52,19 @@ SCRIBE_OPENROUTER_MAX_SPEND_USD=5
 SCRIBE_MAX_RETRIES=3
 ```
 
+Override the reported-cost guard for one input without changing saved
+configuration:
+
+```bash
+scribe meeting.mp4 --method openrouter --max-spend 5
+scribe rec "Cloud Meeting" --method openrouter --max-spend 5
+```
+
+The option is available on file, URL, recording, Quick Record, batch, and music
+commands. `--openrouter-max-spend` is an explicit alias. The value must be finite
+and greater than zero, up to $1,000. On batch and music commands it applies
+separately to each input, not to the whole command.
+
 The model must be an OpenRouter speech-to-text model slug. Discover current
 models with OpenRouter's transcription model filter rather than assuming an old
 slug is still available. Scribe defaults to the stable
@@ -80,8 +93,9 @@ provider is unavailable.
 
 ## Spending controls
 
-`SCRIBE_OPENROUTER_MAX_SPEND_USD` defaults to `5`. This is a fail-closed,
-per-transcription circuit breaker based on the `usage.cost` values OpenRouter
+`SCRIBE_OPENROUTER_MAX_SPEND_USD` defaults to `5`.
+`--max-spend` overrides it for one command. The effective value is a
+fail-closed, per-input circuit breaker based on the `usage.cost` values OpenRouter
 returns after each chunk:
 
 1. Scribe makes a no-cost `GET /api/v1/key` preflight before audio conversion or
@@ -101,10 +115,11 @@ ambiguous and a retry may be billed. Create a dedicated OpenRouter key with a
 provider-side limit at or below your budget for hard enforcement across first
 requests, final chunks, retries, concurrent commands, and other clients.
 
-The guard is per input file. Batch commands may process multiple files, so use the
-provider-side key limit as the overall batch ceiling. `scribe doctor --live`
-reports whether a matching hard cap was verified without displaying the account
-balance.
+The guard is per input file. Batch and music commands may process multiple files,
+so use the provider-side key limit as the overall command or account ceiling.
+`scribe info` shows the effective model and configured guard. `scribe doctor
+--live` reports whether a matching provider hard cap was verified without
+displaying the account balance.
 
 ## Long-recording reliability
 
@@ -165,19 +180,21 @@ audio or displaying the balance.
 For an end-to-end test, use a short synthetic or non-sensitive audio file:
 
 ```bash
-scribe synthetic-test.wav --method openrouter --language en
+scribe synthetic-test.wav --method openrouter --language en --max-spend 5
 ```
 
 Review the terminal notice before upload, the TXT result, the JSON provenance,
 and the session summary. Avoid using a real meeting merely to test credentials.
 
-The 2.9.1 release was live-checked on Windows with a synthetic clip created by
+The 2.9.2 release was live-checked on Windows with a synthetic clip created by
 OpenRouter's dedicated
 [`/api/v1/audio/speech`](https://openrouter.ai/docs/guides/overview/multimodal/tts)
 endpoint, trimmed locally to 60 seconds, and transcribed through
-`openai/whisper-large-v3`. The STT response completed in one chunk and included
-provider cost metadata. This is contract evidence for that machine, not a promise
-that a provider or model will remain available.
+`openai/whisper-large-v3`. Live CLI runs verified the default $5 guard and a
+non-default `$0.01` `--max-spend` override. Each STT response completed in one
+chunk, included provider cost metadata, and placed the transcript and structured
+sidecar in the explicit output directory. This is contract evidence for that
+machine, not a promise that a provider or model will remain available.
 
 ## Troubleshooting
 

@@ -18,6 +18,9 @@ scribe transcribe meeting.mp4 --vocab path/to/terms.txt
 scribe url https://example.com/podcast.mp3
 scribe url https://youtu.be/VIDEO_ID --cookies edge
 
+# Explicit OpenRouter upload with a per-file reported-cost guard
+scribe meeting.mp4 --method openrouter --max-spend 5
+
 # Multiple inputs
 scribe batch *.mp4
 scribe batch first.wav second.wav
@@ -68,6 +71,7 @@ can incur a separate image-generation charge.
 ```bash
 scribe rec "Team Meeting"
 scribe record --name "Board Meeting"
+scribe record --name "Cloud Meeting" --method openrouter --max-spend 5
 scribe record --no-auto-transcribe
 scribe rec --check
 ```
@@ -136,6 +140,7 @@ network calls when a provider key is configured.
 | Flag | Meaning |
 |---|---|
 | `--method auto\|local\|openai\|openrouter` | Local automatic, forced local, or an explicit cloud provider |
+| `--max-spend USD` | Per-file OpenRouter reported-cost guard; default $5, with a provider key limit required for an absolute cap |
 | `--model MODEL` | Whisper model selection |
 | `--language CODE` | ISO 639-1 language code |
 | `--vocab NAME_OR_FILE` | Bundled glossary or custom TXT/JSON vocabulary |

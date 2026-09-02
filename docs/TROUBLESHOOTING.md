@@ -20,7 +20,7 @@ Install the current GitHub release as a tool:
 
 ```bash
 uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.9.1
+  git+https://github.com/blisspixel/scribe.git@v2.9.2
 uv tool update-shell
 ```
 
@@ -34,7 +34,7 @@ If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
 uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.9.1
+  git+https://github.com/blisspixel/scribe.git@v2.9.2
 ```
 
 For a development checkout:
@@ -127,10 +127,10 @@ Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
 
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -205,7 +205,7 @@ printing it:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
 scribe doctor
 ```
 
@@ -219,7 +219,7 @@ Install the tray extra and run its check without starting the resident process:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
 scribe tray --check
 ```
 
@@ -263,4 +263,4 @@ Python version, command shape with private values replaced, exit code, and the
 smallest relevant sanitized error excerpt. Never attach a real recording unless
 all necessary permissions and an approved transfer method are in place.
 
-Last verified against Scribe 2.9.1 on 2026-09-01.
+Version baseline: Scribe 2.9.2.

@@ -7,6 +7,7 @@ transcription, recording, and system information.
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import sys
@@ -59,6 +60,61 @@ logger = get_logger(__name__)
 _TRANSCRIPTION_METHOD_HELP = (
     "Method: auto/local $0 local (GPU or CPU); openai/openrouter paid cloud (opt-in)"
 )
+_OPENROUTER_MAX_SPEND_HELP = (
+    "OpenRouter reported-cost guard per input file in USD; defaults to config ($5). "
+    "Set a provider key limit for an absolute cap."
+)
+
+
+def _validate_openrouter_max_spend(value: float | None) -> float | None:
+    """Reject unusable per-run OpenRouter spend guards during CLI parsing."""
+    if value is not None and (not math.isfinite(value) or not 0 < value <= 1000):
+        raise typer.BadParameter("must be finite and greater than 0, up to 1000")
+    return value
+
+
+def _load_transcription_config(openrouter_max_spend: float | None) -> ScribeConfigType:
+    """Load validated configuration with an optional per-run spend override."""
+    if openrouter_max_spend is None:
+        return ScribeConfig()
+    return ScribeConfig(openrouter_max_spend_usd=openrouter_max_spend)
+
+
+def _place_transcript_in_output_dir(
+    transcript_path: Path,
+    output_dir: Path,
+    session: TranscriptionSessionType | None,
+) -> Path:
+    """Atomically place an explicitly redirected transcript in its output directory."""
+    from scribe.utils.safe_write import backup_file, safe_copy
+
+    source = transcript_path.resolve()
+    resolved_output = output_dir.resolve()
+    target = (resolved_output / transcript_path.name).resolve()
+    if not target.is_relative_to(resolved_output):
+        raise TranscriptionError("Transcript output path escaped the requested output directory")
+    if source == target:
+        return transcript_path
+
+    if target.exists() and backup_file(target, suffix=".previous") is None:
+        raise TranscriptionError(
+            f"Could not preserve existing transcript before replacement: {target}"
+        )
+
+    safe_copy(source, target)
+    try:
+        source.unlink()
+        if session is not None:
+            session.add_cleaned_file(source)
+    except OSError as exc:
+        logger.warning("Copied transcript to output directory but could not remove source: %s", exc)
+
+    if session is not None:
+        session.transcript_file = target
+        session.files_created = [
+            target if path == transcript_path else path for path in session.files_created
+        ]
+    return target
 
 
 class BatchResult(TypedDict, total=False):
@@ -437,6 +493,13 @@ def transcribe_command(
         "-m",
         help=_TRANSCRIPTION_METHOD_HELP,
     ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
     ),
@@ -496,6 +559,8 @@ def transcribe_command(
 
       scribe transcribe podcast.mp3 --method openai --language spanish
 
+      scribe transcribe meeting.mp4 --method openrouter --openrouter-max-spend 5
+
       scribe transcribe meeting.mp4 --notes        # add notes this run (off by default)
 
       scribe transcribe technical.mp4 --vocabulary terms.txt
@@ -508,7 +573,7 @@ def transcribe_command(
         from scribe.utils.vocabulary import CustomVocabulary
 
         # Load configuration
-        config = ScribeConfig()
+        config = _load_transcription_config(openrouter_max_spend)
 
         # Override config with CLI options
         if model:
@@ -756,6 +821,11 @@ def transcribe_command(
         if transcript_path.stat().st_size < 10:
             raise TranscriptionError("Transcription output file is empty")
 
+        if output_dir is not None:
+            transcript_path = _place_transcript_in_output_dir(
+                transcript_path, config.output_folder, session
+            )
+
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
         _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
 
@@ -942,6 +1012,13 @@ def url_command(
         "-m",
         help=_TRANSCRIPTION_METHOD_HELP,
     ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
     ),
@@ -1032,7 +1109,7 @@ def url_command(
         display_url = safe_url_for_logs(validated_url)
 
         # Load configuration
-        config = ScribeConfig()
+        config = _load_transcription_config(openrouter_max_spend)
 
         # Override config with CLI options
         if model:
@@ -1170,9 +1247,9 @@ def url_command(
         details = []
         if duration_mins:
             details.append(f"{duration_mins} min")
-        details.append(" · ".join(outputs))
+        details.append(" | ".join(outputs))
         panel_lines.append(
-            f"[{ScribeTheme.TEXT_MUTED}]{' · '.join(details)}[/{ScribeTheme.TEXT_MUTED}]"
+            f"[{ScribeTheme.TEXT_MUTED}]{' | '.join(details)}[/{ScribeTheme.TEXT_MUTED}]"
         )
 
         console.print(
@@ -1518,6 +1595,13 @@ def record(
     method: TranscriptionMethod = typer.Option(
         "auto", "--method", "-m", help=_TRANSCRIPTION_METHOD_HELP
     ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
     notes: bool | None = typer.Option(
         None,
         "--notes/--no-notes",
@@ -1569,7 +1653,7 @@ def record(
     incomplete_run = False
     try:
         # Load configuration
-        config = ScribeConfig()
+        config = _load_transcription_config(openrouter_max_spend)
         session_output_dir = config.output_folder
 
         # Display header first
@@ -1593,6 +1677,10 @@ def record(
             settings_table.add_row("Method", method.upper())
             settings_table.add_row("Model", config.default_model)
             settings_table.add_row("Language", config.default_language or "auto")
+            if method == "openrouter":
+                settings_table.add_row(
+                    "OpenRouter Guard", f"${config.openrouter_max_spend_usd:.2f} reported cost"
+                )
 
         console.print(settings_table)
         console.print()
@@ -1921,6 +2009,13 @@ def batch_transcribe(
         "-m",
         help=_TRANSCRIPTION_METHOD_HELP,
     ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
         None, "--language", "-l", help="Language (english, spanish, etc. or ISO code)"
@@ -1977,7 +2072,7 @@ def batch_transcribe(
         from scribe.utils.vocabulary import CustomVocabulary
 
         # Load configuration
-        config = ScribeConfig()
+        config = _load_transcription_config(openrouter_max_spend)
 
         # Override config with CLI options
         if model:
@@ -2252,6 +2347,13 @@ def music_transcribe(
         "-m",
         help=_TRANSCRIPTION_METHOD_HELP,
     ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
     language: str | None = typer.Option(
         None, "--language", "-l", help="Language (english, spanish, etc. or ISO code)"
@@ -2290,7 +2392,7 @@ def music_transcribe(
     incomplete_run = False
     try:
         # Load configuration
-        config = ScribeConfig()
+        config = _load_transcription_config(openrouter_max_spend)
 
         # Override config with CLI options
         if model:
@@ -2855,6 +2957,16 @@ def rec_shortcut(
         "--check",
         help="Run a read-only OBS preflight for Quick Record, then exit",
     ),
+    method: TranscriptionMethod = typer.Option(
+        "auto", "--method", "-m", help=_TRANSCRIPTION_METHOD_HELP
+    ),
+    openrouter_max_spend: float | None = typer.Option(
+        None,
+        "--max-spend",
+        "--openrouter-max-spend",
+        callback=_validate_openrouter_max_spend,
+        help=_OPENROUTER_MAX_SPEND_HELP,
+    ),
 ) -> None:
     """
     Quick record shortcut - starts recording immediately.
@@ -2878,7 +2990,8 @@ def rec_shortcut(
         name=name,
         check=check,
         auto_transcribe=True,
-        method="auto",
+        method=method,
+        openrouter_max_spend=openrouter_max_spend,
         # None = respect the user's config defaults for the paid AI extras
         # (off unless they opted in), rather than forcing them on.
         notes=None,
@@ -3226,7 +3339,7 @@ def notes(
         # Display header
         _show_command_banner(console)
         panel_lines = [f"[white]{transcript_file.name}[/white]"]
-        panel_lines.append("[dim]notes · compare[/dim]" if compare else "[dim]notes[/dim]")
+        panel_lines.append("[dim]notes | compare[/dim]" if compare else "[dim]notes[/dim]")
 
         console.print(Panel.fit("\n".join(panel_lines), border_style="cyan", padding=(0, 1)))
         console.print()

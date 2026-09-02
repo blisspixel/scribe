@@ -133,7 +133,9 @@ does not.
 
 ## Release verification
 
-Before creating any release:
+The canonical version-selection, candidate, publication, and post-release
+workflow is [RELEASE_PROCESS.md](RELEASE_PROCESS.md). Before creating any
+release:
 
 1. Set the same version in `pyproject.toml` and `src/scribe/__init__.py`.
 2. Refresh and verify `uv.lock`.
@@ -145,7 +147,12 @@ Before creating any release:
    transcripts, logs, support bundles, or generated native binaries.
 7. Create a tag only after the exact commit has passed CI.
 
-Version 2.9.1 is the current GitHub release. The source repository is ready for
+Roadmap targets are planning labels, not delivery dates. Keep work under the
+`Unreleased` changelog while developing, then synchronize package metadata,
+lockfile, install examples, changelog, and roadmap state in one release candidate
+commit.
+
+Version 2.9.2 is the current GitHub release. The source repository is ready for
 public visibility. No PyPI package or native binary has been published. Broader
 package and binary distribution remains gated by the live platform evidence in
 the roadmap.

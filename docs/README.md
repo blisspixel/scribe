@@ -24,6 +24,7 @@ Documentation for Scribe, a local-first transcription and recording CLI.
 
 ### Development
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Development setup and workflows
+- [RELEASE_PROCESS.md](RELEASE_PROCESS.md) - Version planning, release gates, publication, and post-release verification
 - [Contributing](../CONTRIBUTING.md) - Contribution scope, data hygiene, and review expectations
 - [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
 - [EVALUATION.md](EVALUATION.md) - Reproducible WER and real-time-factor evaluation
@@ -35,7 +36,7 @@ Documentation for Scribe, a local-first transcription and recording CLI.
 - [Security Policy](../SECURITY.md) - Reporting guidance and documented trust boundaries
 
 ### Project Status
-- [ROADMAP](../ROADMAP.md) - Current priorities and scope boundaries
+- [ROADMAP](../ROADMAP.md) - Dependency-ordered version plan, next steps, and exit criteria
 - [CHANGELOG](../CHANGELOG.md) - Shipped changes and development history
 
 ## Additional Resources

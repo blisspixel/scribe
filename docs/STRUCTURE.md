@@ -1,7 +1,6 @@
 # Documentation Structure
 
-**Last Updated**: 2026-08-11
-**Status**: Canonical documentation map
+Status: Canonical documentation map for Scribe 2.9.2.
 
 ---
 
@@ -21,6 +20,7 @@
 - **ARCHITECTURE.md** - System architecture and design patterns
 - **AGENTIC_BALANCE.md** - Deterministic control flow versus bounded model judgment
 - **DEVELOPMENT.md** - Development setup and workflows
+- **RELEASE_PROCESS.md** - Version planning, release gates, and publication workflow
 - **DEPLOYMENT.md** - Local installation and self-managed operation
 - **EVALUATION.md** - Reproducible quality and performance evidence
 - **PERFORMANCE_TUNING.md** - Optimization and benchmarking

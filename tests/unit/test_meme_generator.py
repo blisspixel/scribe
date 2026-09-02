@@ -555,7 +555,12 @@ class TestCLIParameterPassing:
         from scribe.cli.main import rec_shortcut
 
         with patch("scribe.cli.main.record") as mock_record:
-            rec_shortcut(name="Test Meeting")
+            rec_shortcut(
+                name="Test Meeting",
+                check=False,
+                method="auto",
+                openrouter_max_spend=None,
+            )
 
             # Verify record was called with correct parameters
             mock_record.assert_called_once()
@@ -564,6 +569,7 @@ class TestCLIParameterPassing:
             assert call_kwargs["name"] == "Test Meeting"
             assert call_kwargs["auto_transcribe"] is True
             assert call_kwargs["method"] == "auto"
+            assert call_kwargs["openrouter_max_spend"] is None
             # None = respect the user's config defaults (don't force features on/off)
             assert call_kwargs["notes"] is None
             assert call_kwargs["joke"] is None

@@ -180,8 +180,9 @@ def assess_local_readiness() -> LocalReadiness:
 class SystemDiagnostics:
     """System diagnostics and health checks."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: Any | None = None) -> None:
         self.results: list[DiagnosticResult] = []
+        self.config = config
 
     def run_all_checks(self, live: bool = False) -> list[DiagnosticResult]:
         """Run all diagnostic checks.
@@ -702,7 +703,11 @@ class SystemDiagnostics:
 
     def check_openrouter_api_key(self) -> DiagnosticResult | None:
         """Validate a configured OpenRouter key without making a paid request."""
-        api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("SCRIBE_OPENROUTER_API_KEY")
+        api_key = (
+            getattr(self.config, "openrouter_api_key", None)
+            if self.config is not None
+            else os.getenv("OPENROUTER_API_KEY") or os.getenv("SCRIBE_OPENROUTER_API_KEY")
+        )
         if not api_key:
             return None
         api_key = api_key.strip()
@@ -732,9 +737,14 @@ class SystemDiagnostics:
                 data = body.get("data") if isinstance(body, dict) else None
                 provider_limit = data.get("limit") if isinstance(data, dict) else None
                 remaining = data.get("limit_remaining") if isinstance(data, dict) else None
+                configured_limit = (
+                    getattr(self.config, "openrouter_max_spend_usd", 5.0)
+                    if self.config is not None
+                    else os.getenv("SCRIBE_OPENROUTER_MAX_SPEND_USD", "5")
+                )
                 try:
-                    local_limit = float(os.getenv("SCRIBE_OPENROUTER_MAX_SPEND_USD", "5"))
-                except ValueError:
+                    local_limit = float(configured_limit)
+                except (TypeError, ValueError):
                     local_limit = 5.0
                 if not math.isfinite(local_limit) or not 0 < local_limit <= 1000:
                     local_limit = 5.0
