@@ -322,14 +322,60 @@ class TestAPIKeyCheck:
             assert "Invalid format" in result.message
 
     def test_no_api_key(self):
-        """Test no API key configured."""
+        """An optional, unconfigured provider is omitted from live checks."""
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {}, clear=True):
             result = diagnostics.check_openai_api_key()
 
-            assert result.status == "fail"
-            assert "Not configured" in result.message
+            assert result is None
+            assert diagnostics.results == []
+
+
+class TestOpenRouterAPIKeyCheck:
+    """Test the opt-in, no-cost OpenRouter key diagnostic."""
+
+    @patch("scribe.utils.diagnostics.httpx.get")
+    def test_valid_key(self, get):
+        get.return_value = MagicMock(status_code=200)
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(
+            os.environ,
+            {"OPENROUTER_API_KEY": "sk-or-v1-test-key-1234567890"},
+            clear=True,
+        ):
+            result = diagnostics.check_openrouter_api_key()
+
+        assert result is not None
+        assert result.status == "pass"
+        assert get.call_args.kwargs["headers"]["Authorization"].startswith("Bearer sk-or-")
+
+    @patch("scribe.utils.diagnostics.httpx.get")
+    def test_rejected_key(self, get):
+        get.return_value = MagicMock(status_code=401)
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(
+            os.environ,
+            {"OPENROUTER_API_KEY": "sk-or-v1-test-key-1234567890"},
+            clear=True,
+        ):
+            result = diagnostics.check_openrouter_api_key()
+
+        assert result is not None
+        assert result.status == "fail"
+        assert "401" in result.message
+
+    @patch("scribe.utils.diagnostics.httpx.get")
+    def test_unconfigured_key_is_silent_and_offline(self, get):
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = diagnostics.check_openrouter_api_key()
+
+        assert result is None
+        get.assert_not_called()
 
 
 class TestAdditionalProviders:
@@ -373,15 +419,27 @@ class TestAdditionalProviders:
             assert "401" in xai.message
 
     def test_no_providers(self):
-        """Test no additional providers configured."""
+        """Unconfigured optional providers do not create warnings."""
         diagnostics = SystemDiagnostics()
 
         with patch.dict(os.environ, {}, clear=True):
             results = diagnostics.check_additional_providers()
 
-            assert len(results) == 1
-            assert results[0].status == "warn"
-            assert "No additional" in results[0].message
+            assert results == []
+            assert diagnostics.results == []
+
+    @patch("scribe.utils.diagnostics.OpenAI")
+    def test_provider_diagnostics_never_include_key_fragments(self, mock_openai_cls):
+        key = "xai-private-key-1234567890"
+        mock_openai_cls.return_value.models.list.side_effect = ConnectionError("offline")
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(os.environ, {"XAI_API_KEY": key}, clear=True):
+            results = diagnostics.check_additional_providers()
+
+        assert key not in str(results)
+        assert key[:8] not in str(results)
+        assert key[-4:] not in str(results)
 
 
 class TestOutputFolderCheck:

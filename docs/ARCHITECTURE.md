@@ -19,6 +19,7 @@ Typer CLI and consent checks
        |       +--> MLX on supported Apple Silicon installs
        |       +--> whisper.cpp when configured
        |       +--> OpenAI only when explicitly selected
+       |       +--> OpenRouter only when explicitly selected
        |
        +--> local artifact writers
        |
@@ -29,7 +30,7 @@ Typer CLI and consent checks
 
 The default `auto` transcription path is local-first. A local failure remains a
 local failure; it does not become an unannounced paid upload. Cloud-backed notes,
-jokes, memes, health checks, and OpenAI transcription are separate opt-in data
+jokes, memes, health checks, and cloud transcription are separate opt-in data
 boundaries.
 
 ## Main components
@@ -69,6 +70,13 @@ uses `diarizer.py` and requires its extra plus a Hugging Face token.
 OpenAI transcription is implemented in `openai_api.py`. Large files can use
 provider-side chunking or temporary local preparation, depending on the active
 configuration. Temporary files are cleaned unless preservation was requested.
+
+OpenRouter transcription is implemented in `openrouter_api.py` against the
+provider's dedicated speech-to-text JSON contract. Streaming FFmpeg normalization
+and bounded duration chunks prevent a long recording from becoming one in-memory
+payload. Confirmed chunks are atomically preserved as an explicitly incomplete
+artifact until every request succeeds. The backend refuses to publish a normal
+transcript if any chunk is missing.
 
 ### Sessions and artifacts
 
@@ -167,4 +175,4 @@ coverage floor, dependency audits, native source checks, and package build check
 
 These constraints are prioritized in [ROADMAP.md](../ROADMAP.md).
 
-Last verified against Scribe 2.8.1 on 2026-08-11.
+Last verified against Scribe 2.9.0 on 2026-09-01.

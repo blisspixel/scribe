@@ -13,7 +13,7 @@ This guide covers supported local installation and self-managed operation on mac
 Supported:
 - Single-user workstation installs with `uv tool install` or project-local `uv sync`.
 - Local transcription on GPU or CPU.
-- Explicit opt-in cloud transcription with `--method openai`.
+- Explicit opt-in cloud transcription with `--method openai` or `--method openrouter`.
 - Explicit opt-in paid extras for notes, jokes, and memes.
 - Local-only mode with `SCRIBE_LOCAL_ONLY=1`.
 - OBS recording on the local desktop.
@@ -30,7 +30,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.8.1
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.0
 uv tool update-shell
 scribe init
 scribe info
@@ -74,13 +74,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.8.1"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
@@ -117,6 +117,8 @@ SCRIBE_ENABLE_NOTES=false
 SCRIBE_ENABLE_JOKE=false
 SCRIBE_ENABLE_MEME=false
 OPENAI_API_KEY=
+OPENROUTER_API_KEY=
+SCRIBE_OPENROUTER_MODEL=openai/whisper-1
 XAI_API_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
@@ -125,10 +127,15 @@ SCRIBE_LOG_LEVEL=INFO
 
 Cost safety:
 - A plain `scribe meeting.mp4` transcribes locally and does not spend on an API.
-- API transcription requires `--method openai`.
+- API transcription requires `--method openai` or `--method openrouter`.
 - Notes, jokes, and memes default off unless enabled by config, env, or per-run flags.
 - `SCRIBE_LOCAL_ONLY=1` adds a strict cloud-provider guard and routes supported
   intelligence features to local Ollama.
+
+OpenRouter needs no additional Python extra. Scribe uses the base `httpx` runtime
+dependency and OpenRouter's dedicated speech-to-text endpoint. Read the
+[Cloud Transcription Guide](CLOUD_TRANSCRIPTION.md) before selecting it for
+sensitive or long recordings.
 
 ## Local Operations
 

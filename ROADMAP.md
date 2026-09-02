@@ -5,14 +5,15 @@ Scribe favors reliability, privacy, and maintainability over feature count. See
 
 ## Current status
 
-Version 2.8.1 is the current GitHub release for repository collaborators. No PyPI
+Version 2.9.0 is the current GitHub release for repository collaborators. No PyPI
 package has been published. Public distribution remains gated by the clean-machine
 and platform evidence below.
 
 The core product is a local-first desktop CLI for transcription, recording,
-structured transcript output, local notes, and explicitly selected cloud
-features. Windows resident voice has live validation. macOS and Linux resident
-voice remain experimental until their hardware validation records are complete.
+structured transcript output, local notes, and explicitly selected OpenAI or
+OpenRouter cloud transcription. Windows resident voice has live validation.
+macOS and Linux resident voice remain experimental until their hardware
+validation records are complete.
 
 ## Current priorities
 
@@ -88,20 +89,20 @@ system, enterprise account platform, or general-purpose media framework. Batch
 transcription remains file-oriented. The separate resident voice mode is the only
 real-time exception and remains opt-in.
 
-Local transcription and Ollama-backed notes can run offline. Cloud transcription,
-cloud notes, humor providers, and image providers transmit the relevant user
-content only when the user selects those features. Scribe does not add telemetry
-that phones home.
+Local transcription and Ollama-backed notes can run offline. OpenAI and
+OpenRouter transcription, cloud notes, humor providers, and image providers
+transmit the relevant user content only when the user selects those features.
+Scribe does not add telemetry that phones home.
 
 ## Completed foundation
 
 The current foundation includes local GPU and CPU transcription, multiple local
-backends, explicit cloud transcription, OBS recording, batch and music workflows,
-structured TXT/JSON/DOCX/Markdown/VTT/SRT output, transcript search, optional local
-speaker diarization, optional local notes, resident voice, redacted support bundles,
-locked dependencies, SBOM generation, dependency auditing, and cross-platform
-smoke tests.
+backends, explicit OpenAI and OpenRouter cloud transcription, OBS recording,
+batch and music workflows, structured TXT/JSON/DOCX/Markdown/VTT/SRT output,
+transcript search, optional local speaker diarization, optional local notes,
+resident voice, redacted support bundles, locked dependencies, SBOM generation,
+dependency auditing, and cross-platform smoke tests.
 
 Detailed release notes belong in [CHANGELOG.md](CHANGELOG.md), not this roadmap.
 
-Last updated: 2026-08-11
+Last updated: 2026-09-01

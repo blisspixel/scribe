@@ -18,7 +18,7 @@ Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpe
 OBS Studio is required only for recording.
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.8.1
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.0
 uv tool update-shell
 
 scribe init
@@ -39,6 +39,7 @@ For setup variants, optional backends, upgrades, and recovery, see the
 - Downloads and transcribes supported media URLs.
 - Processes batches and music collections with truthful partial-failure results.
 - Records through OBS without taking control of an existing recording.
+- Offers explicit OpenAI or OpenRouter cloud transcription when local processing is not desired.
 - Adds optional local speaker labels and vocabulary correction.
 - Generates opt-in notes, jokes, and memes with a selected local or cloud provider.
 - Provides optional speech-to-type, read-aloud, and resident voice hotkeys.
@@ -78,10 +79,16 @@ control paths, platform requirements, monitoring, safe stop, and recovery. The
 ## Local and explicit by default
 
 `scribe meeting.mp4`, `--method auto`, and `--method local` stay local and do not
-require an API key. Cloud transcription requires `--method openai`. Notes, jokes,
-and memes are disabled by default and require positive flags.
+require an API key. Cloud transcription requires `--method openai` or
+`--method openrouter`; neither is selected by `auto`. Notes, jokes, and memes are
+disabled by default and require positive flags.
 `SCRIBE_LOCAL_ONLY=1` adds a strict cloud-provider guard. `scribe doctor` is local;
 `scribe doctor --live` is the explicit provider-connectivity check.
+
+OpenRouter is fully optional and uses its dedicated speech-to-text endpoint with
+bounded local chunking, retries, and confirmed partial preservation. See the
+[cloud transcription guide](docs/CLOUD_TRANSCRIPTION.md) for setup, data sharing,
+model selection, failure behavior, and safe testing.
 
 No particular GPU is required. The standard backend runs on CPU and compatible
 NVIDIA GPUs. Optional `mlx` and `whispercpp` installs support Apple Silicon and
@@ -113,6 +120,7 @@ diagnostic bundle for review before sharing.
 
 - [Recording guide](docs/RECORDING.md)
 - [CLI guide](docs/CLI.md)
+- [Cloud transcription guide](docs/CLOUD_TRANSCRIPTION.md)
 - [Deployment guide](docs/DEPLOYMENT.md)
 - [Resident voice guide](docs/VOICE.md)
 - [Troubleshooting guide](docs/TROUBLESHOOTING.md)
@@ -125,7 +133,7 @@ diagnostic bundle for review before sharing.
 
 ## Project status
 
-Version 2.8.1 is the current GitHub release for repository collaborators. It is
+Version 2.9.0 is the current GitHub release for repository collaborators. It is
 not published on PyPI. CI enforces Ruff, strict mypy, an 81 percent combined
 statement-and-branch coverage floor, dependency and artifact audits, and native
 source checks. Platform evidence still in progress is tracked in the

@@ -60,19 +60,31 @@ class TestDiagnosticsIsolation:
 
     def test_live_false_skips_api_network_checks(self):
         diag = SystemDiagnostics()
-        with patch.object(diag, "check_openai_api_key") as mock_key:
+        with (
+            patch.object(diag, "check_openai_api_key") as mock_key,
+            patch.object(diag, "check_openrouter_api_key") as mock_openrouter,
+        ):
             diag.run_all_checks(live=False)
         mock_key.assert_not_called()
+        mock_openrouter.assert_not_called()
 
     def test_default_skips_api_network_checks(self):
         diag = SystemDiagnostics()
-        with patch.object(diag, "check_openai_api_key") as mock_key:
+        with (
+            patch.object(diag, "check_openai_api_key") as mock_key,
+            patch.object(diag, "check_openrouter_api_key") as mock_openrouter,
+        ):
             diag.run_all_checks()
         mock_key.assert_not_called()
+        mock_openrouter.assert_not_called()
 
     def test_live_true_runs_api_checks(self):
         diag = SystemDiagnostics()
-        with patch.object(diag, "check_openai_api_key") as mock_key:
-            with patch.object(diag, "check_additional_providers"):
-                diag.run_all_checks(live=True)
+        with (
+            patch.object(diag, "check_openai_api_key") as mock_key,
+            patch.object(diag, "check_openrouter_api_key") as mock_openrouter,
+            patch.object(diag, "check_additional_providers"),
+        ):
+            diag.run_all_checks(live=True)
         mock_key.assert_called_once()
+        mock_openrouter.assert_called_once()

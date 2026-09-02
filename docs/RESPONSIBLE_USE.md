@@ -37,6 +37,11 @@ provider. Meme concept and image providers can be different. Provider terms,
 privacy policies, retention, and training choices apply. Review the current terms
 and obtain any required approval before using a cloud feature.
 
+OpenRouter can route speech-to-text audio to the provider serving the selected
+model. Approval for `--method openrouter` must therefore cover processing by both
+OpenRouter and the routed provider. Use `SCRIBE_LOCAL_ONLY=1` when that sharing is
+not permitted.
+
 ## Output accuracy
 
 Transcripts and AI-generated notes can be wrong. Do not rely on them as an

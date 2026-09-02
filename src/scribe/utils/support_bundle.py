@@ -405,6 +405,8 @@ def get_environment_config() -> dict[str, Any]:
         "SCRIBE_DEFAULT_MODEL",
         "SCRIBE_DEFAULT_LANGUAGE",
         "SCRIBE_DEFAULT_METHOD",
+        "SCRIBE_OPENROUTER_MODEL",
+        "SCRIBE_OPENROUTER_TIMEOUT_SECONDS",
         "SCRIBE_OBS_HOST",
         "SCRIBE_OBS_PORT",
         "SCRIBE_MEME_QA_THRESHOLD",
@@ -425,6 +427,9 @@ def get_environment_config() -> dict[str, Any]:
         config["OPENAI_API_KEY"] = "[CONFIGURED]"
     else:
         config["OPENAI_API_KEY"] = None
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("SCRIBE_OPENROUTER_API_KEY")
+    config["OPENROUTER_API_KEY"] = "[CONFIGURED]" if openrouter_key else None
 
     return config
 

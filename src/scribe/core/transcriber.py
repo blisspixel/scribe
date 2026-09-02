@@ -45,7 +45,7 @@ TRANSCRIPTION PIPELINE:
 │    └─ Validate file format and accessibility                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ 2. METHOD SELECTION PHASE                                                   │
-│    ├─ User preference: "local", "openai", or "auto"                        │
+│    ├─ User preference: "local", "openai", "openrouter", or "auto"        │
 │    ├─ Detect the available local backend and model tier                    │
 │    ├─ Check an API key only for an explicit cloud request                  │
 │    └─ Decision: local by default; cloud only when selected                  │
@@ -82,6 +82,8 @@ Decision matrix:
 │ "local"      │ No          │ Any         │ local (warning)  │
 │ "openai"     │ Any         │ Yes         │ openai           │
 │ "openai"     │ Any         │ No          │ local (fallback) │
+│ "openrouter" │ Any         │ Yes         │ openrouter       │
+│ "openrouter" │ Any         │ No          │ local (fallback) │
 │ "auto"       │ Yes         │ Any         │ local            │
 │ "auto"       │ No          │ Yes         │ local            │
 │ "auto"       │ No          │ No          │ local (warning)  │
@@ -132,6 +134,7 @@ if TYPE_CHECKING:
 from scribe.core.converter import Converter
 from scribe.core.local_whisper import LocalWhisperTranscriber
 from scribe.core.openai_api import OpenAITranscriber
+from scribe.core.openrouter_api import OpenRouterTranscriber
 from scribe.exceptions import TranscriptionError, ValidationError
 from scribe.models.config import ScribeConfig
 from scribe.models.gpu import GPUConfig
@@ -193,8 +196,8 @@ class Transcriber:
 
         Args:
             config: System configuration containing:
-                - Model settings (default_model, openai_model)
-                - API keys (openai_api_key)
+                - Model settings (default_model, openai_model, openrouter_model)
+                - API keys (openai_api_key, openrouter_api_key)
                 - File paths (output_folder, log_folder)
                 - Processing options (keep_intermediate_files)
 
@@ -220,7 +223,9 @@ class Transcriber:
         logger.info(
             f"Transcriber initialized - GPU: {self.gpu_config.has_gpu}, "
             f"Model: {config.default_model}, "
-            f"API: {'configured' if config.openai_api_key else 'not configured'}"
+            "Cloud keys: OpenAI=%s, OpenRouter=%s",
+            "configured" if config.openai_api_key else "not configured",
+            "configured" if config.openrouter_api_key else "not configured",
         )
 
         if self.gpu_config.has_gpu:
@@ -230,7 +235,9 @@ class Transcriber:
                 f"Recommended model: {self.gpu_config.model_size}"
             )
 
-    def choose_method(self, preference: TranscriptionMethod = "auto") -> Literal["local", "openai"]:
+    def choose_method(
+        self, preference: TranscriptionMethod = "auto"
+    ) -> Literal["local", "openai", "openrouter"]:
         """
         Choose transcription method based on preference and system capabilities.
 
@@ -245,9 +252,10 @@ class Transcriber:
                 - "auto": Automatic selection based on capabilities
                 - "local": Force local transcription
                 - "openai": Force OpenAI API transcription
+                - "openrouter": Force OpenRouter API transcription
 
         Returns:
-            Chosen method: "local" or "openai"
+            Chosen method: "local", "openai", or "openrouter"
 
         Example:
             >>> transcriber = Transcriber(config)
@@ -258,17 +266,19 @@ class Transcriber:
         Notes:
             - "local" runs on a compatible accelerator or the CPU fallback
             - "openai" without API key falls back to "local"
+            - "openrouter" without API key falls back to "local"
             - "auto" stays local and never silently selects a paid API
             - Warnings are logged for suboptimal configurations
         """
         logger.debug(f"Choosing transcription method - preference: {preference}")
 
-        # Local-only mode ($0): never touch the paid API, whatever the preference.
+        # Local-only mode ($0): never touch a cloud API, whatever the preference.
         if getattr(self.config, "local_only", False):
-            if preference == "openai":
+            if preference in {"openai", "openrouter"}:
                 logger.warning(
-                    "OpenAI transcription requested but local-only mode is enabled "
-                    "(SCRIBE_LOCAL_ONLY); using free local transcription instead."
+                    "%s transcription requested but local-only mode is enabled "
+                    "(SCRIBE_LOCAL_ONLY); using free local transcription instead.",
+                    preference,
                 )
             return "local"
 
@@ -297,17 +307,28 @@ class Transcriber:
             logger.info(f"OpenAI API transcription selected - Model: {self.config.openai_model}")
             return "openai"
 
+        elif preference == "openrouter":
+            if not self.config.openrouter_api_key:
+                logger.warning(
+                    "OpenRouter requested but OPENROUTER_API_KEY is not configured; "
+                    "falling back to local transcription"
+                )
+                return "local"
+            logger.info(
+                "OpenRouter transcription selected - Model: %s", self.config.openrouter_model
+            )
+            return "openrouter"
+
         else:  # auto
             # $0-first: local transcription runs on any machine (GPU when present,
             # CPU int8 as the universal floor), so "auto" never silently spends on
-            # the paid API. Users opt into the API explicitly with --method openai.
+            # a paid API. Users opt in explicitly with --method openai or openrouter.
             if self.gpu_config.recommendation == "local":
                 logger.info(f"Auto-selected local transcription - {self.gpu_config.reason}")
             else:
                 logger.info(
                     "Auto-selected free local transcription (%s). Local runs on CPU "
-                    "here, which is slower; pass --method openai to use the paid "
-                    "OpenAI API instead.",
+                    "here, which is slower; select a cloud method explicitly if needed.",
                     self.gpu_config.reason,
                 )
             return "local"
@@ -320,7 +341,7 @@ class Transcriber:
                 return audio_path
             logger.info("Converting to 16kHz mono WAV for local transcription...")
             return self.converter.convert_to_wav(audio_path)
-        else:
+        elif method == "openai":
             # OpenAI API - check file size
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             if file_size_mb > 24:
@@ -335,6 +356,11 @@ class Transcriber:
             else:
                 logger.info(f"Using original file for OpenAI API ({file_size_mb:.1f}MB)")
                 return audio_path
+        else:
+            # OpenRouter always normalizes and splits behind its upload boundary.
+            # Keeping the original here avoids a lossy double conversion in CLI paths.
+            logger.info("OpenRouter will normalize audio into bounded upload chunks")
+            return audio_path
 
     def _detect_language_for_music(self, audio_file: Path) -> str | None:
         """Detect language for music mode transcription."""
@@ -392,7 +418,7 @@ class Transcriber:
         language_override: str | None = None,
     ) -> Path:
         """Fall back from explicitly selected cloud transcription to local processing."""
-        if chosen_method != "openai":
+        if chosen_method not in {"openai", "openrouter"}:
             raise TranscriptionError(
                 "Cloud transcription was not explicitly selected; local audio was not uploaded",
                 context={"primary_method": chosen_method},
@@ -479,8 +505,12 @@ class Transcriber:
                     music_mode,
                     local_language_override,
                 )
-            else:
+            elif chosen_method == "openai":
                 transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
+            else:
+                transcript_path = self._transcribe_openrouter(
+                    audio_file, session, custom_vocabulary
+                )
 
             self._apply_term_normalization(transcript_path, custom_vocabulary)
 
@@ -505,7 +535,8 @@ class Transcriber:
             if chosen_method == "local":
                 logger.error(
                     "Local transcription failed; audio remains on-device. Select "
-                    "--method openai explicitly to permit cloud transcription."
+                    "--method openai or --method openrouter explicitly to permit "
+                    "cloud transcription."
                 )
                 raise
 
@@ -781,6 +812,49 @@ class Transcriber:
             session.transcription_method = "openai"
             session.model_used = self.config.openai_model
 
+        return transcript_path
+
+    def _transcribe_openrouter(
+        self,
+        audio_path: Path,
+        session: TranscriptionSession | None,
+        custom_vocabulary: Optional["CustomVocabulary"] = None,
+    ) -> Path:
+        """Transcribe through OpenRouter only after explicit method selection."""
+        if not self.config.openrouter_api_key:
+            raise ValidationError("OpenRouter API key not configured")
+
+        if custom_vocabulary:
+            logger.info(
+                "OpenRouter STT does not have a provider-neutral prompt field; "
+                "configured vocabulary aliases will still be normalized locally"
+            )
+
+        transcriber = OpenRouterTranscriber(
+            api_key=self.config.openrouter_api_key,
+            model=self.config.openrouter_model,
+            language=self.config.default_language,
+            max_attempts=self.config.max_retries,
+            timeout_seconds=self.config.openrouter_timeout_seconds,
+        )
+        try:
+            transcript_path = transcriber.transcribe(
+                audio_path,
+                cleanup_temp=not self.config.keep_intermediate_files,
+            )
+        except TranscriptionError:
+            self.last_transcript = transcriber.last_transcript
+            partial_path = audio_path.parent / (
+                f"{OpenRouterTranscriber._clean_stem(audio_path)}_transcription.partial.txt"
+            )
+            if session and partial_path.exists():
+                session.add_file(partial_path, "partial_transcript")
+            raise
+
+        self.last_transcript = transcriber.last_transcript
+        if session:
+            session.transcription_method = "openrouter"
+            session.model_used = self.config.openrouter_model
         return transcript_path
 
     def cleanup_intermediate_files(

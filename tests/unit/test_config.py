@@ -296,6 +296,22 @@ class TestTranscriptionValidation:
         # Should not raise (GPU validation done at runtime)
         config.validate_for_transcription("local")
 
+    def test_validate_for_openrouter_with_key(self):
+        config = ScribeConfig(openrouter_api_key="sk-or-v1-test-key-1234567890")
+
+        config.validate_for_transcription("openrouter")
+
+    def test_validate_for_openrouter_without_key(self, tmp_path):
+        config = ScribeConfig(output_folder=tmp_path / "out", log_folder=tmp_path / "logs")
+        config.openrouter_api_key = None
+
+        with pytest.raises(ValidationError, match="OpenRouter API key required"):
+            config.validate_for_transcription("openrouter")
+
+    def test_invalid_openrouter_key_is_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid OpenRouter API key format"):
+            ScribeConfig(openrouter_api_key="short key")
+
     def test_validate_for_auto(self):
         """Test auto transcription validation."""
         config = ScribeConfig()
@@ -375,6 +391,19 @@ class TestEnvironmentVariables:
         # If .env exists, we get that key instead (which is fine - .env takes precedence)
         assert config.openai_api_key is not None
         assert len(config.openai_api_key) > 0
+
+    def test_load_openrouter_key_standard_name(self, monkeypatch):
+        key = "sk-or-v1-test-key-1234567890"
+        monkeypatch.setenv("OPENROUTER_API_KEY", key)
+
+        config = ScribeConfig()
+
+        assert config.openrouter_api_key == key
+
+    @pytest.mark.parametrize("model", ["", "   ", "model with spaces"])
+    def test_invalid_openrouter_model_is_rejected(self, model):
+        with pytest.raises(ValidationError, match="OpenRouter model"):
+            ScribeConfig(openrouter_model=model)
 
 
 class TestConfigIntegration:

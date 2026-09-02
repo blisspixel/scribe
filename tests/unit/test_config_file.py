@@ -40,7 +40,13 @@ def test_flatten_for_settings_maps_known_sections_only():
     flattened = config_file.flatten_for_settings(
         {
             "output": {"folder": "C:/scribe/out", "ignored": "value"},
-            "transcription": {"method": "local", "model": "large-v3", "language": "es"},
+            "transcription": {
+                "method": "local",
+                "model": "large-v3",
+                "language": "es",
+                "openrouter_model": "openai/whisper-1",
+                "openrouter_timeout_seconds": 120,
+            },
             "features": {
                 "generate_notes": 1,
                 "generate_joke": 0,
@@ -56,6 +62,8 @@ def test_flatten_for_settings_maps_known_sections_only():
         "default_method": "local",
         "default_model": "large-v3",
         "default_language": "es",
+        "openrouter_model": "openai/whisper-1",
+        "openrouter_timeout_seconds": 120,
         "enable_notes": 1,
         "enable_joke": 0,
         "enable_meme": True,

@@ -166,6 +166,7 @@ def show_info(
 
     console.print(f"[bold {ScribeTheme.SECONDARY}]api keys[/bold {ScribeTheme.SECONDARY}]")
     _print_api_key_status(console, "openai", bool(config.openai_api_key))
+    _print_api_key_status(console, "openrouter", bool(getattr(config, "openrouter_api_key", None)))
     _print_api_key_status(console, "xai", bool(os.getenv("XAI_API_KEY")))
     _print_api_key_status(console, "gemini", bool(os.getenv("GEMINI_API_KEY")))
     _print_api_key_status(console, "anthropic", bool(os.getenv("ANTHROPIC_API_KEY")))
@@ -210,8 +211,8 @@ def show_info(
     )
     if tx_kind == "CPU":
         console.print(
-            f"  [{ScribeTheme.TEXT_MUTED}]CPU is slower; pass --method openai to use "
-            f"the paid OpenAI API instead.[/{ScribeTheme.TEXT_MUTED}]"
+            f"  [{ScribeTheme.TEXT_MUTED}]CPU is slower; select --method openai or "
+            f"--method openrouter for opt-in cloud transcription.[/{ScribeTheme.TEXT_MUTED}]"
         )
     console.print()
 

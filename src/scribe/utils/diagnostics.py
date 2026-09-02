@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+import httpx
 from openai import AuthenticationError, OpenAI
 
 from scribe.models.gpu import GPUConfig
@@ -208,7 +209,11 @@ class SystemDiagnostics:
             self.check_local_readiness,
         ]
         if live:
-            checks += [self.check_openai_api_key, self.check_additional_providers]
+            checks += [
+                self.check_openai_api_key,
+                self.check_openrouter_api_key,
+                self.check_additional_providers,
+            ]
         checks += [
             self.check_output_folder,
             self.check_disk_space,
@@ -641,20 +646,12 @@ class SystemDiagnostics:
         self.results.append(result)
         return result
 
-    def check_openai_api_key(self) -> DiagnosticResult:
+    def check_openai_api_key(self) -> DiagnosticResult | None:
         """Check OpenAI API key existence and validity."""
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SCRIBE_OPENAI_API_KEY")
 
         if not api_key:
-            result = DiagnosticResult(
-                name="OpenAI API Key",
-                status="fail",
-                message="Not configured",
-                details="Required for API transcription, notes, jokes, and memes",
-                fix_suggestion="Set OPENAI_API_KEY in your .env file",
-            )
-            self.results.append(result)
-            return result
+            return None
 
         # Basic format check
         if not (api_key.startswith("sk-") and len(api_key) > 20):
@@ -696,6 +693,67 @@ class SystemDiagnostics:
                 status="warn",
                 message="Could not verify",
                 details=f"The configured OpenAI API key could not be verified: {type(e).__name__}",
+                fix_suggestion="Check your internet connection",
+            )
+
+        self.results.append(result)
+        return result
+
+    def check_openrouter_api_key(self) -> DiagnosticResult | None:
+        """Validate a configured OpenRouter key without making a paid request."""
+        api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("SCRIBE_OPENROUTER_API_KEY")
+        if not api_key:
+            return None
+        api_key = api_key.strip()
+
+        if len(api_key) < 16 or any(character.isspace() for character in api_key):
+            result = DiagnosticResult(
+                name="OpenRouter API Key",
+                status="warn",
+                message="Invalid format",
+                details="The configured key is too short or contains whitespace.",
+                fix_suggestion="Create a key at https://openrouter.ai/settings/keys",
+            )
+            self.results.append(result)
+            return result
+
+        try:
+            response = httpx.get(
+                "https://openrouter.ai/api/v1/key",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                result = DiagnosticResult(
+                    name="OpenRouter API Key",
+                    status="pass",
+                    message="Valid",
+                    details="An OpenRouter API key is configured and valid.",
+                )
+            elif response.status_code in {401, 403}:
+                result = DiagnosticResult(
+                    name="OpenRouter API Key",
+                    status="fail",
+                    message=f"Invalid key ({response.status_code})",
+                    details="The configured OpenRouter API key was rejected.",
+                    fix_suggestion="Create a key at https://openrouter.ai/settings/keys",
+                )
+            else:
+                result = DiagnosticResult(
+                    name="OpenRouter API Key",
+                    status="warn",
+                    message="Could not verify",
+                    details=f"OpenRouter key check returned HTTP {response.status_code}.",
+                    fix_suggestion="Check OpenRouter service status and your internet connection",
+                )
+        except httpx.RequestError as exc:
+            result = DiagnosticResult(
+                name="OpenRouter API Key",
+                status="warn",
+                message="Could not verify",
+                details=(
+                    f"The configured OpenRouter API key could not be verified: {type(exc).__name__}"
+                ),
                 fix_suggestion="Check your internet connection",
             )
 
@@ -1026,7 +1084,7 @@ class SystemDiagnostics:
                         name="XAI/Grok API Key",
                         status="pass",
                         message="Valid",
-                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                        details="An XAI API key is configured and valid.",
                     )
                 )
             except AuthenticationError:
@@ -1035,7 +1093,7 @@ class SystemDiagnostics:
                         name="XAI/Grok API Key",
                         status="fail",
                         message="Invalid key (401 Unauthorized)",
-                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]}",
+                        details="The configured XAI API key was rejected.",
                         fix_suggestion="Update XAI_API_KEY in your .env file",
                     )
                 )
@@ -1045,7 +1103,7 @@ class SystemDiagnostics:
                         name="XAI/Grok API Key",
                         status="warn",
                         message="Could not verify",
-                        details=f"Key: {xai_key[:8]}...{xai_key[-4:]} | Error: {e}",
+                        details=f"XAI key verification failed: {type(e).__name__}",
                         fix_suggestion="Check your internet connection",
                     )
                 )
@@ -1077,7 +1135,7 @@ class SystemDiagnostics:
                             name="Gemini API Key",
                             status="fail",
                             message="Invalid key",
-                            details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                            details="The configured Gemini API key was rejected.",
                             fix_suggestion="Update GEMINI_API_KEY in your .env file",
                         )
                     )
@@ -1087,7 +1145,7 @@ class SystemDiagnostics:
                             name="Gemini API Key",
                             status="warn",
                             message="Could not verify",
-                            details=f"Error: {e}",
+                            details=f"Gemini key verification failed: {type(e).__name__}",
                             fix_suggestion="Check your internet connection",
                         )
                     )
@@ -1100,18 +1158,7 @@ class SystemDiagnostics:
                     name="Anthropic API Key",
                     status="pass",
                     message="Configured",
-                    details=f"Key: {anthropic_key[:8]}...{anthropic_key[-4:]}",
-                )
-            )
-
-        if not results:
-            results.append(
-                DiagnosticResult(
-                    name="Additional Providers",
-                    status="warn",
-                    message="No additional providers",
-                    details="Only OpenAI configured",
-                    fix_suggestion="Consider adding XAI or other providers for cost savings",
+                    details="An Anthropic API key is configured.",
                 )
             )
 

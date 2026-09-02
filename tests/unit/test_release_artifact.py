@@ -9,12 +9,14 @@ import pytest
 
 import scripts.check_release_artifact as artifact_check
 
+PROJECT_VERSION = artifact_check._declared_project_version()
+
 
 def _write_wheel(
     path: Path,
     *,
     requirements: tuple[str, ...] = ("deal>=4.1",),
-    version: str = "2.8.1",
+    version: str = PROJECT_VERSION,
     requires_python: str = "<3.14,>=3.12",
     packaged_version: str | None = None,
     license_expression: str | None = "Apache-2.0",
@@ -41,13 +43,13 @@ def _write_wheel(
         wheel.writestr("scribe/__init__.py", f'__version__ = "{runtime_version}"\n')
         if include_typed_marker:
             wheel.writestr("scribe/py.typed", "")
-        wheel.writestr("scribe-2.8.1.dist-info/METADATA", "\n".join(metadata) + "\n")
+        wheel.writestr(f"scribe-{version}.dist-info/METADATA", "\n".join(metadata) + "\n")
         wheel.writestr(
-            "scribe-2.8.1.dist-info/entry_points.txt",
+            f"scribe-{version}.dist-info/entry_points.txt",
             "[console_scripts]\nscribe = scribe.cli.main:main\n",
         )
         if include_license_member and license_file is not None:
-            wheel.writestr(f"scribe-2.8.1.dist-info/licenses/{license_file}", "terms\n")
+            wheel.writestr(f"scribe-{version}.dist-info/licenses/{license_file}", "terms\n")
         for member in extra_members:
             wheel.writestr(member, b"native payload")
 
@@ -200,12 +202,12 @@ def _write_licensed_repository(path: Path, *, expression: str = "MIT") -> None:
     (path / "src" / "scribe").mkdir(parents=True)
     (path / "LICENSE").write_text("terms\n", encoding="utf-8")
     (path / "pyproject.toml").write_text(
-        f'[project]\nname = "scribe"\nversion = "2.8.1"\n'
+        f'[project]\nname = "scribe"\nversion = "2.9.0"\n'
         f'requires-python = ">=3.12,<3.14"\nlicense = "{expression}"\n',
         encoding="utf-8",
     )
     (path / "src" / "scribe" / "__init__.py").write_text(
-        '__version__ = "2.8.1"\n', encoding="utf-8"
+        '__version__ = "2.9.0"\n', encoding="utf-8"
     )
 
 

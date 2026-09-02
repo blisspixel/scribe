@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-TranscriptionMethod = Literal["auto", "local", "openai"]
+TranscriptionMethod = Literal["auto", "local", "openai", "openrouter"]
 ModelSize = Literal[
     "tiny",
     "base",

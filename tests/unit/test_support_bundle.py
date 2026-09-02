@@ -72,6 +72,23 @@ def test_get_environment_config_fully_redacts_short_api_key() -> None:
     assert "sk-short" not in str(config)
 
 
+def test_get_environment_config_fully_redacts_openrouter_key() -> None:
+    key = "sk-or-v1-private-key-1234567890"
+    with patch.dict(
+        "os.environ",
+        {
+            "OPENROUTER_API_KEY": key,
+            "SCRIBE_OPENROUTER_MODEL": "openai/whisper-1",
+        },
+        clear=True,
+    ):
+        config = support_bundle.get_environment_config()
+
+    assert config["OPENROUTER_API_KEY"] == "[CONFIGURED]"
+    assert config["SCRIBE_OPENROUTER_MODEL"] == "openai/whisper-1"
+    assert key not in str(config)
+
+
 def test_recursive_sanitizer_removes_nested_paths_and_credentials() -> None:
     home = Path.home()
     configured_secret = "-".join(("configured", "secret", "123"))

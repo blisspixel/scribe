@@ -56,7 +56,9 @@ warnings.filterwarnings("ignore", message=".*MPEG_LAYER_III.*")
 
 logger = get_logger(__name__)
 
-_TRANSCRIPTION_METHOD_HELP = "Method: auto/local are $0 local (GPU or CPU); openai is paid cloud"
+_TRANSCRIPTION_METHOD_HELP = (
+    "Method: auto/local $0 local (GPU or CPU); openai/openrouter paid cloud (opt-in)"
+)
 
 
 class BatchResult(TypedDict, total=False):
@@ -541,6 +543,13 @@ def transcribe_command(
                 "For local transcription use --method local."
             )
             raise typer.Exit(1)
+        if method == "openrouter" and not config.openrouter_api_key:
+            console.print(
+                "[red]--method openrouter needs an OpenRouter API key.[/red] "
+                "Set OPENROUTER_API_KEY in your environment or .env, or run `scribe init`. "
+                "For local transcription use --method local."
+            )
+            raise typer.Exit(1)
 
         # Load custom vocabulary if provided
         custom_vocab = None
@@ -661,7 +670,7 @@ def transcribe_command(
             except Exception as e:
                 console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
                 raise typer.Exit(1) from e
-        else:
+        elif chosen_method == "openai":
             # OpenAI API accepts multiple formats but has 25MB limit
             try:
                 file_size_mb = audio_path.stat().st_size / (1024 * 1024)
@@ -708,6 +717,11 @@ def transcribe_command(
                 # File size OK - use original audio file
                 audio_file = audio_path
             console.print()
+        else:
+            # OpenRouter owns normalization and bounded chunking so the source is
+            # encoded once, regardless of its original size or media format.
+            audio_file = audio_path
+            unified_progress.update_phase("preparing", 1.0)
 
         # Phase 2: Transcribing (18-68%)
         unified_progress.update_phase("transcribing", 0.0)
@@ -1209,7 +1223,7 @@ def url_command(
             except Exception as e:
                 console.print(f"[bold red]Unexpected conversion error:[/bold red] {e}")
                 raise typer.Exit(1) from e
-        else:
+        elif chosen_method == "openai":
             try:
                 file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             except (FileNotFoundError, OSError) as e:
@@ -1244,6 +1258,9 @@ def url_command(
             else:
                 audio_file = audio_path
             console.print()
+        else:
+            audio_file = audio_path
+            unified_progress.update_phase("preparing", 1.0)
 
         # Phase 2: Transcribing (18-68%)
         unified_progress.update_phase("transcribing", 0.0)
@@ -1653,7 +1670,7 @@ def record(
                     raise TranscriptionError(f"Recording conversion failed: {e}") from e
                 except Exception as e:
                     raise TranscriptionError(f"Recording conversion failed: {e}") from e
-            else:
+            elif chosen_method == "openai":
                 # OpenAI API accepts multiple formats but has 25MB limit
                 try:
                     file_size_mb = recording_path.stat().st_size / (1024 * 1024)
@@ -1702,6 +1719,10 @@ def record(
 
                 console.print()
                 console.print("[cyan]Transcribing with OpenAI API...[/cyan]")
+            else:
+                audio_file = recording_path
+                console.print()
+                console.print("[cyan]Transcribing with OpenRouter...[/cyan]")
 
             # Transcribe
             transcript_path = transcriber.transcribe(
@@ -2055,7 +2076,7 @@ def batch_transcribe(
 
                     converter = Converter()
                     audio_file_converted = converter.convert_to_wav(audio_path, show_progress=True)
-                else:
+                elif chosen_method == "openai":
                     # Check file size for OpenAI API
                     file_size_mb = audio_path.stat().st_size / (1024 * 1024)
                     if file_size_mb > 24:
@@ -2068,6 +2089,8 @@ def batch_transcribe(
                         audio_file_converted = converter.convert_to_mp3(audio_path, bitrate=48)
                     else:
                         audio_file_converted = audio_path
+                else:
+                    audio_file_converted = audio_path
 
                 # Transcribe with custom vocabulary
                 transcript_path = transcriber.transcribe(

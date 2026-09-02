@@ -11,7 +11,7 @@ All examples assume Scribe is installed from this repository and Python 3.12 or
 
 ## Transcription orchestration
 
-`scribe.core.transcriber.Transcriber` selects a local or OpenAI transcription
+`scribe.core.transcriber.Transcriber` selects a local, OpenAI, or OpenRouter transcription
 path from `ScribeConfig` and writes a transcript artifact.
 
 ```python
@@ -34,7 +34,7 @@ Current signature:
 Transcriber(config: ScribeConfig)
 Transcriber.transcribe(
     audio_path: Path,
-    method: Literal["auto", "local", "openai"] = "auto",
+    method: Literal["auto", "local", "openai", "openrouter"] = "auto",
     session: TranscriptionSession | None = None,
     custom_vocabulary: CustomVocabulary | None = None,
     music_mode: bool = False,
@@ -42,7 +42,8 @@ Transcriber.transcribe(
 ```
 
 `auto` is local-first and does not silently send a failed local job to a paid
-cloud provider. Use `openai` explicitly when cloud transcription is intended.
+cloud provider. Use `openai` or `openrouter` explicitly when cloud transcription
+is intended.
 
 ## Local transcription
 
@@ -108,6 +109,50 @@ OpenAITranscriber.transcribe(
     initial_prompt: str | None = None,
 ) -> Path
 ```
+
+## OpenRouter transcription
+
+This interface uploads bounded audio chunks to OpenRouter's dedicated
+speech-to-text endpoint. It preserves confirmed partial output if a later chunk
+fails.
+
+```python
+import os
+from pathlib import Path
+
+from scribe.core.openrouter_api import OpenRouterTranscriber
+
+worker = OpenRouterTranscriber(
+    api_key=os.environ["OPENROUTER_API_KEY"],
+    model="openai/whisper-1",
+    language="en",
+)
+transcript = worker.transcribe(Path("authorized-audio.wav"))
+```
+
+Current signature:
+
+```python
+OpenRouterTranscriber(
+    api_key: str,
+    model: str = "openai/whisper-1",
+    *,
+    language: str | None = None,
+    max_attempts: int = 3,
+    timeout_seconds: float = 90.0,
+    client: httpx.Client | None = None,
+)
+OpenRouterTranscriber.transcribe(
+    audio_path: Path,
+    output_path: Path | None = None,
+    prompt: str | None = None,
+    cleanup_temp: bool = True,
+    initial_prompt: str | None = None,
+) -> Path
+```
+
+See [CLOUD_TRANSCRIPTION.md](CLOUD_TRANSCRIPTION.md) for the upload, retry,
+partial-artifact, and provider-routing contract.
 
 ## Notes, jokes, and memes
 
@@ -208,4 +253,4 @@ Public CLI failures are normalized through the exception types in
 with implementation changes. Pin an exact Scribe commit and add integration tests
 if an application imports these modules directly.
 
-Last verified against Scribe 2.8.1 on 2026-08-11.
+Last verified against Scribe 2.9.0 on 2026-09-01.

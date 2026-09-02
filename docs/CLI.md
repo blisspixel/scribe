@@ -27,8 +27,10 @@ scribe music song.mp3
 scribe music album/*.flac --method local
 ```
 
-`--method auto` and `--method local` are local and do not silently select a paid
-API. Use `--method openai` only when cloud transcription is intentional.
+`--method auto` and `--method local` are local and do not silently select a cloud
+API. Use `--method openai` or `--method openrouter` only when cloud transcription
+is intentional. OpenRouter setup and partial-chunk recovery are in the
+[Cloud Transcription Guide](CLOUD_TRANSCRIPTION.md).
 
 Local speaker diarization requires the `diarize` extra, an `HF_TOKEN`, and accepted
 pyannote model terms:
@@ -133,7 +135,7 @@ network calls when a provider key is configured.
 
 | Flag | Meaning |
 |---|---|
-| `--method auto\|local\|openai` | Local automatic, forced local, or explicit cloud transcription |
+| `--method auto\|local\|openai\|openrouter` | Local automatic, forced local, or an explicit cloud provider |
 | `--model MODEL` | Whisper model selection |
 | `--language CODE` | ISO 639-1 language code |
 | `--vocab NAME_OR_FILE` | Bundled glossary or custom TXT/JSON vocabulary |

@@ -66,6 +66,7 @@ def _detected_keys() -> dict[str, bool]:
 
     return {
         "openai": has("OPENAI_API_KEY", "SCRIBE_OPENAI_API_KEY"),
+        "openrouter": has("OPENROUTER_API_KEY", "SCRIBE_OPENROUTER_API_KEY"),
         "xai": has("XAI_API_KEY", "SCRIBE_XAI_API_KEY"),
     }
 
@@ -213,12 +214,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     else:
         method_help = (
             "[yellow]No CUDA GPU[/yellow] - auto stays local on CPU at no cost, but runs slower. "
-            "Choose openai only for explicit paid cloud transcription."
+            "Choose openai or openrouter only for explicit cloud transcription."
         )
     console.print(method_help)
     method = Prompt.ask(
         "[bold]Transcription method[/bold]",
-        choices=["auto", "local", "openai"],
+        choices=["auto", "local", "openai", "openrouter"],
         default=method_default,
         console=console,
     )
@@ -259,9 +260,14 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
             "\n[yellow]No AI vendor keys detected.[/yellow] "
             "[dim]Set OPENAI_API_KEY or XAI_API_KEY in .env then re-run `scribe init`.[/dim]"
         )
-    elif method == "openai" and not keys["openai"]:
+    if method == "openai" and not keys["openai"]:
         console.print(
             "\n[yellow]OpenAI transcription requires OPENAI_API_KEY.[/yellow] "
+            "[dim]Set it before transcribing, or choose auto for local processing.[/dim]"
+        )
+    if method == "openrouter" and not keys["openrouter"]:
+        console.print(
+            "\n[yellow]OpenRouter transcription requires OPENROUTER_API_KEY.[/yellow] "
             "[dim]Set it before transcribing, or choose auto for local processing.[/dim]"
         )
 

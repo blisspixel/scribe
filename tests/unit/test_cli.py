@@ -115,6 +115,7 @@ class TestCLIHelp:
         assert "--language" in output
         assert "--no-joke" in output
         assert "scribe[diarize]" in output
+        assert "openrouter" in output
 
     def test_voice_help_preserves_extra_names(self, cli_runner):
         """Rich help must not consume bracketed Python extra names as markup."""
@@ -163,6 +164,34 @@ class TestTranscribeCommand:
         result = cli_runner.invoke(app, ["transcribe", "nonexistent.mp4"])
 
         assert result.exit_code != 0
+
+    @patch("scribe.cli.main.Transcriber")
+    @patch("scribe.cli.main.ScribeConfig")
+    def test_explicit_openrouter_without_key_fails_before_processing(
+        self, config_class, transcriber_class, cli_runner, tmp_path
+    ):
+        source = tmp_path / "authorized.wav"
+        source.write_bytes(b"audio")
+        config = Mock(
+            openrouter_api_key=None,
+            openai_api_key=None,
+            output_folder=tmp_path,
+            log_folder=tmp_path,
+            default_model="large-v3",
+            default_language="en",
+            keep_intermediate_files=False,
+            enable_speaker_diarization=False,
+        )
+        config_class.return_value = config
+
+        result = cli_runner.invoke(
+            app,
+            ["transcribe", str(source), "--method", "openrouter"],
+        )
+
+        assert result.exit_code == 1
+        assert "OPENROUTER_API_KEY" in _strip_ansi(result.output)
+        transcriber_class.assert_not_called()
 
     @patch("scribe.utils.audio.get_audio_duration")
     @patch("scribe.utils.unified_progress.UnifiedProgress")

@@ -145,8 +145,8 @@ class ScribeConfig(BaseSettings):
     local_only: bool = Field(
         default=False,
         description=(
-            "Run everything locally at $0: force local transcription (never the "
-            "paid OpenAI API, even on fallback) and route notes/jokes/meme-concepts "
+            "Run everything locally at $0: force local transcription (never a "
+            "cloud transcription API, even on fallback) and route notes/jokes/meme-concepts "
             "to local Ollama. Meme image generation has no local backend and is "
             "unavailable in this mode. Env: SCRIBE_LOCAL_ONLY."
         ),
@@ -162,6 +162,26 @@ class ScribeConfig(BaseSettings):
     openai_model: str = Field(
         default="gpt-4o-transcribe-diarize",
         description="OpenAI transcription model (with speaker diarization)",
+    )
+
+    # OpenRouter settings. These are inert unless --method openrouter (or an
+    # equivalent explicit default_method) is selected.
+    openrouter_api_key: str | None = Field(
+        default=None,
+        description="OpenRouter API key for optional cloud transcription",
+        alias="OPENROUTER_API_KEY",
+    )
+
+    openrouter_model: str = Field(
+        default="openai/whisper-1",
+        description="OpenRouter speech-to-text model slug",
+    )
+
+    openrouter_timeout_seconds: float = Field(
+        default=90.0,
+        ge=10.0,
+        le=600.0,
+        description="Per-request timeout for OpenRouter transcription",
     )
 
     # Hugging Face settings (for speaker diarization)
@@ -377,6 +397,35 @@ class ScribeConfig(BaseSettings):
 
         return v
 
+    @field_validator("openrouter_api_key", mode="before")
+    @classmethod
+    def validate_openrouter_api_key(cls, v: str | None) -> str | None:
+        """Normalize an optional OpenRouter key without logging or exposing it."""
+        if v is None:
+            return None
+
+        value = str(v).strip()
+        if not value:
+            return None
+        if len(value) < 16 or any(character.isspace() for character in value):
+            raise ValidationError(
+                "Invalid OpenRouter API key format",
+                context={"provider": "openrouter"},
+            )
+        return value
+
+    @field_validator("openrouter_model", mode="before")
+    @classmethod
+    def validate_openrouter_model(cls, v: str) -> str:
+        """Require a bounded provider model slug before transcription starts."""
+        value = str(v).strip()
+        if not value or len(value) > 200 or any(character.isspace() for character in value):
+            raise ValidationError(
+                "Invalid OpenRouter model slug",
+                context={"provider": "openrouter"},
+            )
+        return value
+
     @field_validator("default_language")
     @classmethod
     def validate_language_code(cls, v: str | None) -> str | None:
@@ -438,6 +487,12 @@ class ScribeConfig(BaseSettings):
         if method == "openai" and not self.openai_api_key:
             raise ValidationError(
                 "OpenAI API key required for OpenAI transcription method",
+                context={"method": method},
+            )
+
+        if method == "openrouter" and not self.openrouter_api_key:
+            raise ValidationError(
+                "OpenRouter API key required for OpenRouter transcription method",
                 context={"method": method},
             )
 

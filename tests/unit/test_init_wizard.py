@@ -42,12 +42,20 @@ def test_detect_gpu_summary_handles_detection_failure():
 
 def test_detected_keys_reads_discovered_env_file(tmp_path, monkeypatch):
     env_path = tmp_path / ".env"
-    env_path.write_text("OPENAI_API_KEY=sk-test\nXAI_API_KEY=xai-test\n", encoding="utf-8")
+    env_path.write_text(
+        "OPENAI_API_KEY=sk-test\nOPENROUTER_API_KEY=sk-or-v1-test\nXAI_API_KEY=xai-test\n",
+        encoding="utf-8",
+    )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("XAI_API_KEY", raising=False)
 
     with patch("scribe.models.config._find_env_file", return_value=env_path):
-        assert init_wizard._detected_keys() == {"openai": True, "xai": True}
+        assert init_wizard._detected_keys() == {
+            "openai": True,
+            "openrouter": True,
+            "xai": True,
+        }
 
 
 def test_default_output_folder_prefers_env(tmp_path, monkeypatch):
@@ -86,7 +94,11 @@ def test_run_wizard_writes_expected_config(tmp_path, monkeypatch):
     monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
     monkeypatch.setattr(init_wizard, "save_config_file", save_config)
     monkeypatch.setattr(init_wizard, "_detect_gpu_summary", lambda: (True, "RTX 4090"))
-    monkeypatch.setattr(init_wizard, "_detected_keys", lambda: {"openai": True, "xai": True})
+    monkeypatch.setattr(
+        init_wizard,
+        "_detected_keys",
+        lambda: {"openai": True, "openrouter": True, "xai": True},
+    )
     monkeypatch.setattr(init_wizard, "_resolve_env_conflicts", Mock())
 
     with (
@@ -145,7 +157,11 @@ def test_run_wizard_defaults_to_local_first_auto(
     monkeypatch.setattr(init_wizard, "CONFIG_PATH", config_path)
     monkeypatch.setattr(init_wizard, "save_config_file", save_config)
     monkeypatch.setattr(init_wizard, "_detect_gpu_summary", lambda: (has_gpu, gpu_summary))
-    monkeypatch.setattr(init_wizard, "_detected_keys", lambda: {"openai": False, "xai": False})
+    monkeypatch.setattr(
+        init_wizard,
+        "_detected_keys",
+        lambda: {"openai": False, "openrouter": False, "xai": False},
+    )
     monkeypatch.setattr(init_wizard, "_resolve_env_conflicts", Mock())
     monkeypatch.setattr(init_wizard, "_maybe_setup_voice", Mock())
 

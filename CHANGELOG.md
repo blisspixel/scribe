@@ -4,15 +4,45 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.8.1 is the first GitHub release for repository collaborators. It is not
-published on PyPI. Older versioned sections describe development milestones that
-predate this repository's Git history.
+Version 2.9.0 is the current GitHub release for repository collaborators. Version
+2.8.1 was the first. Scribe is not published on PyPI. Older versioned sections
+describe development milestones that predate this repository's Git history.
 
 ---
 
 ## Unreleased
 
 No changes yet.
+
+## [2.9.0] - 2026-09-01
+
+### Added
+
+- Added fully optional OpenRouter speech-to-text with `--method openrouter`, a
+  separate `OPENROUTER_API_KEY`, configurable model and timeout, and no change to
+  the local `auto` default.
+- Added streaming local normalization in a collision-safe temporary workspace,
+  five-minute upload chunks, a defensive chunk-size ceiling, retryable status
+  handling, immediate auth and credit failures, provider-reported cost metadata,
+  atomic confirmed partial output, and truthful `.previous` archives on reruns.
+- Added OpenRouter setup discovery, `scribe info` key status, an opt-in no-cost
+  `scribe doctor --live` key check, support-bundle redaction, and a dedicated
+  cloud transcription guide.
+
+### Changed
+
+- Extended file, URL, recording, batch, and music method selection to accept
+  OpenRouter without precompressing its source twice.
+- Made `SCRIBE_LOCAL_ONLY=1` override both cloud transcription providers and kept
+  `auto` entirely local even when either cloud key is configured.
+- Updated the README, roadmap, CLI, deployment, architecture, API, responsible-use,
+  and troubleshooting documentation for the new cloud boundary and recovery
+  behavior.
+
+### Fixed
+
+- Made live provider diagnostics skip unconfigured optional providers and removed
+  partial API-key fragments from diagnostic output.
 
 ## [2.8.1] - 2026-09-01
 

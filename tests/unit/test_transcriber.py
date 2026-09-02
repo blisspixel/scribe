@@ -80,6 +80,20 @@ class TestMethodSelection:
 
         assert method == "openai"
 
+    def test_choose_method_explicit_openrouter(self, temp_config: ScribeConfig):
+        """OpenRouter is selected only when explicitly requested and configured."""
+        temp_config.openrouter_api_key = "sk-or-v1-test-key-1234567890"
+        transcriber = Transcriber(temp_config)
+
+        assert transcriber.choose_method("openrouter") == "openrouter"
+
+    def test_choose_method_openrouter_without_key_stays_local(self, temp_config: ScribeConfig):
+        """A missing optional key never turns into an attempted network call."""
+        temp_config.openrouter_api_key = None
+        transcriber = Transcriber(temp_config)
+
+        assert transcriber.choose_method("openrouter") == "local"
+
     def test_choose_method_auto_prefers_gpu_with_high_vram(
         self, temp_config: ScribeConfig, mock_gpu
     ):
@@ -104,11 +118,13 @@ class TestMethodSelection:
         assert method == "local"
 
     def test_choose_method_local_only_forces_local(self, temp_config: ScribeConfig, mock_no_gpu):
-        """local_only mode forces local even when openai is explicitly requested."""
+        """local_only mode forces local even when a cloud method is requested."""
         temp_config.local_only = True
+        temp_config.openrouter_api_key = "sk-or-v1-test-key-1234567890"
         transcriber = Transcriber(temp_config)
 
         assert transcriber.choose_method("openai") == "local"
+        assert transcriber.choose_method("openrouter") == "local"
         assert transcriber.choose_method("auto") == "local"
 
 
@@ -181,6 +197,21 @@ class TestAudioPreparation:
                 mock_convert.assert_called_once()
                 assert result == sample_audio.parent / "compressed.mp3"
 
+    def test_prepare_audio_for_openrouter_defers_bounded_chunking(
+        self, temp_config: ScribeConfig, sample_audio: Path
+    ):
+        """OpenRouter receives the source so its backend can normalize exactly once."""
+        transcriber = Transcriber(temp_config)
+        with (
+            patch.object(transcriber.converter, "convert_to_wav") as convert_wav,
+            patch.object(transcriber.converter, "convert_to_mp3") as convert_mp3,
+        ):
+            result = transcriber._prepare_audio_for_method(sample_audio, "openrouter")
+
+        assert result == sample_audio
+        convert_wav.assert_not_called()
+        convert_mp3.assert_not_called()
+
 
 class TestTranscriptionMethods:
     """Test actual transcription execution."""
@@ -218,6 +249,33 @@ class TestTranscriptionMethods:
 
         assert result == sample_audio.parent / "transcript.txt"
         mock_api.transcribe.assert_called_once()
+
+    @patch("scribe.core.transcriber.OpenRouterTranscriber")
+    def test_transcribe_openrouter_success(
+        self, mock_api_class, temp_config: ScribeConfig, sample_audio: Path
+    ):
+        """The orchestrator passes only OpenRouter-specific settings to the backend."""
+        temp_config.openrouter_api_key = "sk-or-v1-test-key-1234567890"
+        temp_config.openrouter_model = "openai/whisper-1"
+        transcriber = Transcriber(temp_config)
+        backend = Mock()
+        backend.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_api_class.return_value = backend
+
+        result = transcriber._transcribe_openrouter(sample_audio, None, None)
+
+        assert result == sample_audio.parent / "transcript.txt"
+        mock_api_class.assert_called_once_with(
+            api_key="sk-or-v1-test-key-1234567890",
+            model="openai/whisper-1",
+            language=temp_config.default_language,
+            max_attempts=temp_config.max_retries,
+            timeout_seconds=temp_config.openrouter_timeout_seconds,
+        )
+        backend.transcribe.assert_called_once_with(
+            sample_audio,
+            cleanup_temp=not temp_config.keep_intermediate_files,
+        )
 
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
     def test_transcribe_local_uses_gpu_recommended_model_by_default(
