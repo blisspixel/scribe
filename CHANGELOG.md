@@ -4,7 +4,7 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.9.2 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.9.3 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
@@ -13,6 +13,19 @@ milestones that predate this repository's Git history.
 ## Unreleased
 
 No changes yet.
+
+## [2.9.3] - 2026-09-02
+
+### Changed
+
+- Reserved 2.9.3 for this urgent Windows output fix and moved the operational
+  proof gate to 2.9.4 without changing its scope or evidence requirements.
+
+### Fixed
+
+- Switched subcommand help to Click's plain ASCII formatter. Redirected or piped
+  Windows help now preserves complete long option names instead of sending a
+  code-page ellipsis that PowerShell can render as a replacement character.
 
 ## [2.9.2] - 2026-09-02
 

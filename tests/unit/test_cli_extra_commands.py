@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from click import unstyle
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from scribe.cli.main import _persist_failed_session, _persist_music_session, app
@@ -1853,7 +1854,7 @@ def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
     runner = CliRunner()
 
     for command in ("transcribe", "url", "record", "batch", "music"):
-        result = runner.invoke(app, [command, "--help"], terminal_width=180)
+        result = runner.invoke(app, [command, "--help"])
         linear_output = unstyle(result.stdout).replace("│", " ").replace("|", " ")
         normalized_output = " ".join(linear_output.split())
         assert result.exit_code == 0
@@ -1863,6 +1864,20 @@ def test_transcription_method_help_is_local_first_and_cost_explicit() -> None:
         assert "paid cloud" in normalized_output
         assert "local (GPU)" not in result.stdout
         assert "--max-spend" in normalized_output
+        assert "--openrouter-max-spend" in normalized_output
+        assert result.stdout.isascii()
+
+
+def test_every_registered_subcommand_help_is_ascii_safe() -> None:
+    runner = CliRunner()
+    root_command = get_command(app)
+    commands = getattr(root_command, "commands", {})
+
+    assert commands
+    for command in sorted(commands):
+        result = runner.invoke(app, [command, "--help"])
+        assert result.exit_code == 0, command
+        assert result.stdout.isascii(), command
 
 
 def test_health_check_success() -> None:

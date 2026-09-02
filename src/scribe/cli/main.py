@@ -453,7 +453,9 @@ app = typer.Typer(
     name="scribe",
     cls=CleanGroup,
     add_completion=False,  # Remove shell completion clutter
-    rich_markup_mode="rich",
+    # Click's plain formatter keeps redirected help ASCII-only and preserves
+    # complete long option names in narrow Windows shells.
+    rich_markup_mode=None,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -545,7 +547,7 @@ def transcribe_command(
     diarize: bool | None = typer.Option(
         None,
         "--diarize/--no-diarize",
-        help="Label speakers locally (needs HF_TOKEN and the scribe\\[diarize] extra)",
+        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
     ),
 ) -> None:
     """
@@ -1072,7 +1074,7 @@ def url_command(
     diarize: bool | None = typer.Option(
         None,
         "--diarize/--no-diarize",
-        help="Label speakers locally (needs HF_TOKEN and the scribe\\[diarize] extra)",
+        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
     ),
 ) -> None:
     """
@@ -3770,7 +3772,7 @@ def listen_command(
     A real-time mode separate from the batch pipeline. Default is tap-to-toggle:
     tap F9 to start, tap again to insert; Esc quits. Use --mode hold for
     push-to-talk or --mode continuous for always-listening. Needs a microphone and
-    the voice extra (install with the scribe\\[voice] extra).
+    the voice extra (install with the scribe[voice] extra).
     """
     from scribe.cli.voice import run_listen
 
@@ -3796,7 +3798,7 @@ def say_command(
     Read a file, the current selection, or the clipboard aloud with a local voice.
 
     Examples: `scribe say notes.md`, `scribe say --selection`, `scribe say --speed 1.2`.
-    Esc stops playback. Needs the voice extra (install with the scribe\\[voice] extra).
+    Esc stops playback. Needs the voice extra (install with the scribe[voice] extra).
     """
     from scribe.cli.voice import run_say
 

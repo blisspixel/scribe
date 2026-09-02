@@ -6,7 +6,7 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.9.2 is the current GitHub release. The source repository is ready for
+Version 2.9.3 is the current GitHub release. The source repository is ready for
 public visibility. The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
@@ -50,17 +50,18 @@ The detailed version-sync and release workflow is in
 |---|---|---|---|
 | 2.9.1 | Released | Windows recording hardening and optional OpenRouter transcription | None |
 | 2.9.2 | Released | Add the per-run OpenRouter spend control, correct explicit output routing, and establish the versioned release plan | 2.9.1 |
-| 2.9.3 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.9.2 |
-| 2.10.0 | Planned | Validate and finish the cross-platform desktop experience | 2.9.3 evidence gate |
+| 2.9.3 | Released | Keep redirected Windows subcommand help ASCII-only and preserve complete option names | 2.9.2 |
+| 2.9.4 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.9.3 |
+| 2.10.0 | Planned | Validate and finish the cross-platform desktop experience | 2.9.4 evidence gate |
 | 2.11.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.10.0 behavior contract |
 | 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.11.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
 
-Version numbers after 2.9.3 are planning targets. SemVer impact discovered during
+Version numbers after 2.9.4 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.9.3 operational proof
+## Next release: 2.9.4 operational proof
 
 ### Objective
 

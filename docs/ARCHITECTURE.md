@@ -175,4 +175,4 @@ coverage floor, dependency audits, native source checks, and package build check
 
 These constraints are prioritized in [ROADMAP.md](../ROADMAP.md).
 
-Version baseline: Scribe 2.9.2.
+Version baseline: Scribe 2.9.3.

@@ -5906,7 +5906,7 @@ wheels = [
 
 [[package]]
 name = "scribe"
-version = "2.9.2"
+version = "2.9.3"
 source = { editable = "." }
 dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },

@@ -413,11 +413,13 @@ class TestRecShortcut:
 
     def test_rec_help(self, cli_runner):
         """Test rec shortcut help."""
-        result = cli_runner.invoke(app, ["rec", "--help"], terminal_width=180)
+        result = cli_runner.invoke(app, ["rec", "--help"])
         output = _strip_ansi(result.stdout)
 
         assert result.exit_code == 0
         assert "rec" in output.lower() or "record" in output.lower()
+        assert "--max-spend, --openrouter-max-spend" in output
+        assert output.isascii()
         assert "--check" in output
 
     def test_rec_without_name(self, cli_runner):

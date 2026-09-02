@@ -1,6 +1,6 @@
 # macOS and Linux Voice Tray Validation Plan
 
-Status: live hardware evidence pending for the Scribe 2.9.2 baseline.
+Status: live hardware evidence pending for the Scribe 2.9.3 baseline.
 
 This file is a validation plan, not a record of completed platform testing. The
 repository has automated advisory and failure-message coverage, but it does not
@@ -11,7 +11,7 @@ live-validated resident-tray platform.
 
 ## Automated Evidence Available
 
-Automated evidence in the Scribe 2.9.2 baseline:
+Automated evidence in the Scribe 2.9.3 baseline:
 
 - `tray_platform_matrix` classifies Windows as `validated`, macOS/Linux as
   `experimental`, and other systems as `unsupported`.

@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.2
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.3
 uv tool update-shell
 scribe init
 scribe info
@@ -74,13 +74,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.2"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
