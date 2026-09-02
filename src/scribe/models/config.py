@@ -173,7 +173,7 @@ class ScribeConfig(BaseSettings):
     )
 
     openrouter_model: str = Field(
-        default="openai/whisper-1",
+        default="openai/whisper-large-v3",
         description="OpenRouter speech-to-text model slug",
     )
 
@@ -182,6 +182,17 @@ class ScribeConfig(BaseSettings):
         ge=10.0,
         le=600.0,
         description="Per-request timeout for OpenRouter transcription",
+    )
+
+    openrouter_max_spend_usd: float = Field(
+        default=5.0,
+        gt=0.0,
+        le=1000.0,
+        allow_inf_nan=False,
+        description=(
+            "Per-transcription OpenRouter reported-cost circuit breaker in USD. "
+            "A provider-side key limit is still required for an absolute cap."
+        ),
     )
 
     # Hugging Face settings (for speaker diarization)

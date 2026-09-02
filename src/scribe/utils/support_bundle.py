@@ -407,6 +407,7 @@ def get_environment_config() -> dict[str, Any]:
         "SCRIBE_DEFAULT_METHOD",
         "SCRIBE_OPENROUTER_MODEL",
         "SCRIBE_OPENROUTER_TIMEOUT_SECONDS",
+        "SCRIBE_OPENROUTER_MAX_SPEND_USD",
         "SCRIBE_OBS_HOST",
         "SCRIBE_OBS_PORT",
         "SCRIBE_MEME_QA_THRESHOLD",

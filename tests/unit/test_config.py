@@ -312,6 +312,17 @@ class TestTranscriptionValidation:
         with pytest.raises(ValidationError, match="Invalid OpenRouter API key format"):
             ScribeConfig(openrouter_api_key="short key")
 
+    def test_openrouter_defaults_are_bounded_and_quality_focused(self):
+        config = ScribeConfig()
+
+        assert config.openrouter_model == "openai/whisper-large-v3"
+        assert config.openrouter_max_spend_usd == 5.0
+
+    @pytest.mark.parametrize("value", [0, -1, 1001, float("inf"), float("nan")])
+    def test_invalid_openrouter_spend_limit_is_rejected(self, value):
+        with pytest.raises(ValueError, match="openrouter_max_spend_usd"):
+            ScribeConfig(openrouter_max_spend_usd=value)
+
     def test_validate_for_auto(self):
         """Test auto transcription validation."""
         config = ScribeConfig()
@@ -399,6 +410,13 @@ class TestEnvironmentVariables:
         config = ScribeConfig()
 
         assert config.openrouter_api_key == key
+
+    def test_load_openrouter_spend_limit_from_env(self, monkeypatch):
+        monkeypatch.setenv("SCRIBE_OPENROUTER_MAX_SPEND_USD", "2.50")
+
+        config = ScribeConfig()
+
+        assert config.openrouter_max_spend_usd == 2.5
 
     @pytest.mark.parametrize("model", ["", "   ", "model with spaces"])
     def test_invalid_openrouter_model_is_rejected(self, model):

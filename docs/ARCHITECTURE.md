@@ -175,4 +175,4 @@ coverage floor, dependency audits, native source checks, and package build check
 
 These constraints are prioritized in [ROADMAP.md](../ROADMAP.md).
 
-Last verified against Scribe 2.9.0 on 2026-09-01.
+Last verified against Scribe 2.9.1 on 2026-09-01.

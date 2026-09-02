@@ -46,6 +46,7 @@ def test_flatten_for_settings_maps_known_sections_only():
                 "language": "es",
                 "openrouter_model": "openai/whisper-1",
                 "openrouter_timeout_seconds": 120,
+                "openrouter_max_spend_usd": 2.5,
             },
             "features": {
                 "generate_notes": 1,
@@ -64,6 +65,7 @@ def test_flatten_for_settings_maps_known_sections_only():
         "default_language": "es",
         "openrouter_model": "openai/whisper-1",
         "openrouter_timeout_seconds": 120,
+        "openrouter_max_spend_usd": 2.5,
         "enable_notes": 1,
         "enable_joke": 0,
         "enable_meme": True,

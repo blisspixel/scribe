@@ -338,18 +338,38 @@ class TestOpenRouterAPIKeyCheck:
     @patch("scribe.utils.diagnostics.httpx.get")
     def test_valid_key(self, get):
         get.return_value = MagicMock(status_code=200)
+        get.return_value.json.return_value = {"data": {"limit": 5.0, "limit_remaining": 4.0}}
         diagnostics = SystemDiagnostics()
 
         with patch.dict(
             os.environ,
-            {"OPENROUTER_API_KEY": "sk-or-v1-test-key-1234567890"},
+            {"OPENROUTER_API_KEY": "sk-or-v1-" + "test-key-1234567890"},
             clear=True,
         ):
             result = diagnostics.check_openrouter_api_key()
 
         assert result is not None
         assert result.status == "pass"
+        assert "hard cap" in result.message
         assert get.call_args.kwargs["headers"]["Authorization"].startswith("Bearer sk-or-")
+
+    @patch("scribe.utils.diagnostics.httpx.get")
+    def test_valid_key_without_matching_hard_cap_warns_without_disclosing_balance(self, get):
+        get.return_value = MagicMock(status_code=200)
+        get.return_value.json.return_value = {"data": {"limit": None, "limit_remaining": 123.456}}
+        diagnostics = SystemDiagnostics()
+
+        with patch.dict(
+            os.environ,
+            {"OPENROUTER_API_KEY": "sk-or-v1-" + "test-key-1234567890"},
+            clear=True,
+        ):
+            result = diagnostics.check_openrouter_api_key()
+
+        assert result is not None
+        assert result.status == "warn"
+        assert "hard cap" in result.message
+        assert "123.456" not in str(result)
 
     @patch("scribe.utils.diagnostics.httpx.get")
     def test_rejected_key(self, get):

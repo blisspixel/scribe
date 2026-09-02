@@ -1,0 +1,13 @@
+# Synthetic OpenRouter key placeholders from the v2.9.0 test suite.
+# Each entry is pinned to one commit, file, rule, and line so other findings remain blocking.
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_config.py:generic-api-key:300
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_config.py:generic-api-key:396
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_diagnostics.py:generic-api-key:345
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_diagnostics.py:generic-api-key:361
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_diagnostics.py:generic-api-key:433
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_support_bundle.py:generic-api-key:76
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_transcriber.py:generic-api-key:85
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_transcriber.py:generic-api-key:123
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_transcriber.py:generic-api-key:258
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_transcriber.py:generic-api-key:269
+14cf6adeaf9c3b3f30fdb0be57d89c3dfb6c5e01:tests/unit/test_openrouter_api.py:generic-api-key:180

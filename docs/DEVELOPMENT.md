@@ -145,9 +145,10 @@ Before creating any release:
    transcripts, logs, support bundles, or generated native binaries.
 7. Create a tag only after the exact commit has passed CI.
 
-Version 2.9.0 is the current GitHub release for repository collaborators. No PyPI
-package has been published. Public distribution remains gated by the live
-platform evidence in the roadmap.
+Version 2.9.1 is the current GitHub release. The source repository is ready for
+public visibility. No PyPI package or native binary has been published. Broader
+package and binary distribution remains gated by the live platform evidence in
+the roadmap.
 
 ## Getting help
 

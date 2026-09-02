@@ -1,7 +1,7 @@
 # ADR-001: Python 3.12 Development Baseline
 
 ## Status
-Accepted in 2026; amended 2026-07-28
+Accepted in 2026; amended 2026-09-01
 
 ## Context
 Scribe is a **local-first desktop CLI** with heavy native dependencies:
@@ -15,12 +15,22 @@ failed because the universal optional-ML graph selected NumPy and CTranslate2
 releases without compatible CPython 3.14 wheels. Standard and free-threaded 3.14
 support therefore remain unproven for the stack that defines Scribe's value.
 
+A Windows wheel-only probe on 2026-09-01 found that the base dependency graph
+now resolves on Python 3.14.7. That is necessary but not sufficient evidence:
+the full runtime suite and required platform matrix have not passed on 3.14.
+
+Python 3.15 was still prerelease on the same date. The official schedule targets
+3.15.0 final for 2026-10-01. A CPython 3.15.0rc1 wheel-only probe failed because
+Torch 2.13 had no `cp315` wheel, so the required base graph was unsatisfiable.
+
 ## Decision
 - Set `requires-python = ">=3.12,<3.14"` in pyproject.toml.
 - Run the CI-safe unit suite on every declared standard CPython version: 3.12
   and 3.13.
-- Reconsider Python 3.14 only after the complete dependency graph has compatible
-  wheels and CI validates both installation and runtime behavior.
+- Add Python 3.14 only after CI validates installation and runtime behavior on
+  the declared platform matrix.
+- Reconsider Python 3.15 after its final release and compatible native wheels are
+  available. Do not claim support from a prerelease syntax-only probe.
 - `.python-version` file pins `3.12` for local development consistency (uv + pyenv compatible).
 - No chasing of bleeding-edge runtime versions that would break the primary Windows + NVIDIA user base.
 
@@ -44,6 +54,7 @@ support therefore remain unproven for the stack that defines Scribe's value.
 - ROADMAP.md (heavy dependency redesign priority)
 - pyproject.toml `[project] requires-python`
 - .github/workflows/ci.yml (matrix)
+- [PEP 790: Python 3.15 release schedule](https://peps.python.org/pep-0790/)
 
 ## Related Decisions
 - ADR-002: Exception taxonomy and intentional graceful degradation

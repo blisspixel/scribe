@@ -5,15 +5,21 @@ Scribe favors reliability, privacy, and maintainability over feature count. See
 
 ## Current status
 
-Version 2.9.0 is the current GitHub release for repository collaborators. No PyPI
-package has been published. Public distribution remains gated by the clean-machine
-and platform evidence below.
+Version 2.9.1 is the current GitHub release. The source repository is ready for
+public visibility. No PyPI package or native binary has been published. Broader
+package and binary distribution remains gated by the clean-machine and platform
+evidence below.
 
 The core product is a local-first desktop CLI for transcription, recording,
 structured transcript output, local notes, and explicitly selected OpenAI or
 OpenRouter cloud transcription. Windows resident voice has live validation.
 macOS and Linux resident voice remain experimental until their hardware
 validation records are complete.
+
+The dedicated OpenRouter TTS and STT endpoints have a live Windows round-trip
+record using a synthetic 60-second clip. This validates the cloud contract and
+reported-cost metadata on one machine, but it does not replace clean-machine or
+real OBS evidence on Windows, macOS, and Linux.
 
 ## Current priorities
 
@@ -31,7 +37,7 @@ CI proves the package contract and mocked platform behavior. It does not prove
 that a first-time user can install FFmpeg, resolve the native ML stack, control a
 real OBS installation, and finish the recording and transcription workflows on
 each claimed platform. This evidence is the most important remaining check before
-public distribution.
+broader package or binary distribution.
 
 ### 2. Complete macOS and Linux resident voice validation
 
@@ -54,8 +60,17 @@ smaller tested boundaries.
 ### 4. Redesign heavy dependency extras
 
 Separate portable base functionality from PyTorch-backed features in a compatible
-major release. This work should restore a credible Intel macOS install path without
-downgrading the validated Windows and Apple Silicon dependency stack.
+major release. This work should restore a credible Intel macOS install path,
+allow cloud-only workflows to adopt new Python releases without waiting for
+PyTorch wheels, and avoid downgrading the validated Windows and Apple Silicon
+dependency stack.
+
+The Windows Python 3.14.7 wheel-only base graph resolved on September 1, 2026,
+but 3.14 still needs the complete runtime and platform matrix before support is
+declared. Python 3.15 was at release candidate 2 on that date, with final planned
+for October 1, 2026. A CPython 3.15 RC1 probe could not resolve Torch 2.13 because
+no `cp315` wheel existed. Recheck after Python 3.15 final and compatible native
+wheels are published.
 
 ### 5. Strengthen release provenance
 
@@ -101,7 +116,8 @@ backends, explicit OpenAI and OpenRouter cloud transcription, OBS recording,
 batch and music workflows, structured TXT/JSON/DOCX/Markdown/VTT/SRT output,
 transcript search, optional local speaker diarization, optional local notes,
 resident voice, redacted support bundles, locked dependencies, SBOM generation,
-dependency auditing, and cross-platform smoke tests.
+dependency auditing, cross-platform smoke tests, and an OpenRouter reported-cost
+circuit breaker backed by provider-limit diagnostics.
 
 Detailed release notes belong in [CHANGELOG.md](CHANGELOG.md), not this roadmap.
 

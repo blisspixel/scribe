@@ -70,6 +70,8 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["openrouter_model"] = transcription["openrouter_model"]
     if "openrouter_timeout_seconds" in transcription:
         out["openrouter_timeout_seconds"] = transcription["openrouter_timeout_seconds"]
+    if "openrouter_max_spend_usd" in transcription:
+        out["openrouter_max_spend_usd"] = transcription["openrouter_max_spend_usd"]
 
     features = _section(data, "features")
     if "generate_notes" in features:

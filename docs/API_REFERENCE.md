@@ -124,8 +124,9 @@ from scribe.core.openrouter_api import OpenRouterTranscriber
 
 worker = OpenRouterTranscriber(
     api_key=os.environ["OPENROUTER_API_KEY"],
-    model="openai/whisper-1",
+    model="openai/whisper-large-v3",
     language="en",
+    max_spend_usd=5.0,
 )
 transcript = worker.transcribe(Path("authorized-audio.wav"))
 ```
@@ -135,11 +136,12 @@ Current signature:
 ```python
 OpenRouterTranscriber(
     api_key: str,
-    model: str = "openai/whisper-1",
+    model: str = "openai/whisper-large-v3",
     *,
     language: str | None = None,
     max_attempts: int = 3,
     timeout_seconds: float = 90.0,
+    max_spend_usd: float = 5.0,
     client: httpx.Client | None = None,
 )
 OpenRouterTranscriber.transcribe(
@@ -253,4 +255,4 @@ Public CLI failures are normalized through the exception types in
 with implementation changes. Pin an exact Scribe commit and add integration tests
 if an application imports these modules directly.
 
-Last verified against Scribe 2.9.0 on 2026-09-01.
+Last verified against Scribe 2.9.1 on 2026-09-01.

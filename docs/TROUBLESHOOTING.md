@@ -20,7 +20,7 @@ Install the current GitHub release as a tool:
 
 ```bash
 uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.9.0
+  git+https://github.com/blisspixel/scribe.git@v2.9.1
 uv tool update-shell
 ```
 
@@ -34,7 +34,7 @@ If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
 uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.9.0
+  git+https://github.com/blisspixel/scribe.git@v2.9.1
 ```
 
 For a development checkout:
@@ -93,6 +93,11 @@ multi-chunk failure leaves a labeled `*_transcription.partial.txt`; do not treat
 that file as complete. Scribe then attempts full local transcription unless the
 workflow is music mode.
 
+If `doctor --live` says the key is valid but its hard cap is not verified, set an
+OpenRouter key limit at or below `SCRIBE_OPENROUTER_MAX_SPEND_USD`. Scribe's local
+guard stops before another chunk when reported cost reaches the configured limit
+or when cost is missing, but only OpenRouter can enforce an absolute account cap.
+
 See the [Cloud Transcription Guide](CLOUD_TRANSCRIPTION.md) for model discovery,
 chunk safeguards, privacy boundaries, and safe end-to-end testing.
 
@@ -122,10 +127,10 @@ Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -200,7 +205,7 @@ printing it:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 scribe doctor
 ```
 
@@ -214,7 +219,7 @@ Install the tray extra and run its check without starting the resident process:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 scribe tray --check
 ```
 
@@ -258,4 +263,4 @@ Python version, command shape with private values replaced, exit code, and the
 smallest relevant sanitized error excerpt. Never attach a real recording unless
 all necessary permissions and an approved transfer method are in place.
 
-Last verified against Scribe 2.9.0 on 2026-09-01.
+Last verified against Scribe 2.9.1 on 2026-09-01.

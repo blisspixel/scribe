@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,41 @@ from rich.progress import (
 from scribe.exceptions import AudioFormatError, ProcessError
 from scribe.utils.audio import get_audio_duration
 from scribe.utils.files import verify_file_content
-from scribe.utils.logging import console, get_logger
+from scribe.utils.logging import (
+    TERMINAL_OUTPUT_ERRORS,
+    console,
+    get_logger,
+    is_terminal_output_error,
+)
 from scribe.utils.platform import get_ffmpeg_path
+from scribe.utils.terminal_ui import get_terminal_ui_config
 
 logger = get_logger(__name__)
+
+
+def _show_rich_progress(requested: bool = True) -> bool:
+    """Only animate where the shared terminal policy says rendering is safe."""
+    if not requested or get_terminal_ui_config().animation_mode == "off":
+        return False
+    encoding = getattr(console.file, "encoding", None) or "utf-8"
+    try:
+        "━".encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        return False
+    return True
+
+
+def _stop_progress_safely(progress: Progress | None) -> None:
+    """Do not let a broken or legacy terminal turn successful FFmpeg work into failure."""
+    if progress is None:
+        return
+    try:
+        progress.__exit__(None, None, None)
+    except TERMINAL_OUTPUT_ERRORS as error:
+        if not is_terminal_output_error(error):
+            raise
+        with suppress(Exception):
+            logger.warning("Conversion progress display disabled: %s", error)
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -99,9 +131,10 @@ class Converter:
             "-",
         ]
 
-        if show_progress:
+        render_progress = _show_rich_progress(show_progress)
+        if render_progress:
             progress_ctx = Progress(
-                SpinnerColumn(),
+                SpinnerColumn("line" if os.name == "nt" else "dots"),
                 TextColumn("[bold blue]Analyzing audio for optimal normalization..."),
                 TimeElapsedColumn(),
                 console=console,
@@ -160,13 +193,13 @@ class Converter:
                             "Loudnorm measurements are not finite (near-silent audio); "
                             "using default normalization"
                         )
-                        if show_progress and progress_ctx:
+                        if progress_ctx:
                             progress_ctx.update(task, description="Using default settings")
                         return defaults
                     logger.info(
                         f"Audio analysis complete: I={measured['measured_i']}, TP={measured['measured_tp']}"
                     )
-                    if show_progress and progress_ctx:
+                    if progress_ctx:
                         progress_ctx.update(task, description="Analysis complete")
                     return measured
                 except json.JSONDecodeError as e:
@@ -174,20 +207,19 @@ class Converter:
             else:
                 logger.warning("Could not find loudnorm JSON in output")
 
-            if show_progress and progress_ctx:
+            if progress_ctx:
                 progress_ctx.update(task, description="[yellow]Warning: using default settings")
             return defaults
 
         except Exception as e:
             logger.warning(f"Audio analysis failed, using defaults: {e}")
-            if show_progress and progress_ctx:
+            if progress_ctx:
                 progress_ctx.update(
                     task, description="[yellow]Warning: analysis failed, using defaults"
                 )
             return defaults
         finally:
-            if show_progress and progress_ctx:
-                progress_ctx.__exit__(None, None, None)
+            _stop_progress_safely(progress_ctx)
 
     def _build_conversion_command(
         self,
@@ -243,9 +275,10 @@ class Converter:
         timeout_seconds = max(300, (duration * 2) if duration else 600)
         expected_total_time = max(15, (duration / 25)) if duration else 30
 
-        if show_progress:
+        render_progress = _show_rich_progress(show_progress)
+        if render_progress:
             progress_ctx = Progress(
-                SpinnerColumn(),
+                SpinnerColumn("line" if os.name == "nt" else "dots"),
                 TextColumn("[bold blue]{task.description}"),
                 BarColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
@@ -290,7 +323,7 @@ class Converter:
                         progress_ratio = 0.50 + (conversion_progress * 0.50)
                         overall_progress = progress_ratio * 100
 
-                        if show_progress and progress_ctx is not None and task is not None:
+                        if progress_ctx is not None and task is not None:
                             progress_ctx.update(task, completed=overall_progress)
                         if progress_callback:
                             progress_callback(progress_ratio)
@@ -309,9 +342,8 @@ class Converter:
                 _stdout, stderr = process.communicate()
                 raise ProcessError("Process hung during final communication")
 
-            if show_progress and progress_ctx is not None and task is not None:
+            if progress_ctx is not None and task is not None:
                 progress_ctx.update(task, description="Converted to WAV", completed=100)
-                progress_ctx.__exit__(None, None, None)
 
             if process.returncode != 0:
                 raise ProcessError(
@@ -326,6 +358,8 @@ class Converter:
             raise
         except Exception as e:
             raise ProcessError(f"Conversion failed: {e}")
+        finally:
+            _stop_progress_safely(progress_ctx)
 
     def convert_to_wav(
         self,
@@ -463,15 +497,28 @@ class Converter:
         start_time = time.time()
         timeout_seconds = max(300, (duration * 2) if duration else 600)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn(f"[bold blue]Converting to {format_name}..."),
-            TimeElapsedColumn(),
-            console=console,
-            transient=False,
-        ) as progress:
-            task = progress.add_task("Converting", total=None)
+        progress: Progress | None = None
+        task: TaskID | None = None
+        if _show_rich_progress():
+            progress = Progress(
+                SpinnerColumn("line" if os.name == "nt" else "dots"),
+                TextColumn(f"[bold blue]Converting to {format_name}..."),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False,
+            )
+            try:
+                progress.__enter__()
+                task = progress.add_task("Converting", total=None)
+            except TERMINAL_OUTPUT_ERRORS as error:
+                if not is_terminal_output_error(error):
+                    raise
+                _stop_progress_safely(progress)
+                progress = None
+                task = None
+                logger.warning("Conversion progress display disabled: %s", error)
 
+        try:
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
@@ -491,7 +538,8 @@ class Converter:
                     )
 
                 time.sleep(0.1)
-                progress.update(task)
+                if progress is not None and task is not None:
+                    progress.update(task)
 
             try:
                 _stdout, stderr = process.communicate(timeout=10)
@@ -511,6 +559,8 @@ class Converter:
                         "stderr": stderr[-500:] if stderr else None,
                     },
                 )
+        finally:
+            _stop_progress_safely(progress)
 
     def convert_to_mp3(
         self, input_file: Path, output_file: Path | None = None, bitrate: int = 48

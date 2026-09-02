@@ -836,6 +836,7 @@ class Transcriber:
             language=self.config.default_language,
             max_attempts=self.config.max_retries,
             timeout_seconds=self.config.openrouter_timeout_seconds,
+            max_spend_usd=self.config.openrouter_max_spend_usd,
         )
         try:
             transcript_path = transcriber.transcribe(

@@ -4,15 +4,54 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.9.0 is the current GitHub release for repository collaborators. Version
-2.8.1 was the first. Scribe is not published on PyPI. Older versioned sections
-describe development milestones that predate this repository's Git history.
+Version 2.9.1 is the current GitHub release. Version 2.8.1 was the first. Scribe
+is not published on PyPI. Older versioned sections describe development
+milestones that predate this repository's Git history.
 
 ---
 
 ## Unreleased
 
 No changes yet.
+
+## [2.9.1] - 2026-09-01
+
+### Added
+
+- Added a default $5 per-transcription OpenRouter reported-cost circuit breaker.
+  It preserves confirmed partial output and stops before another chunk when the
+  reported total reaches the limit or provider cost becomes unavailable.
+- Added a no-cost OpenRouter account preflight before conversion and upload. It
+  fails early on rejected credentials or exhausted provider budget.
+- Added safe hard-cap diagnostics to `scribe doctor --live`. The check reports
+  whether a provider-side key limit is at or below Scribe's guard without
+  displaying the account balance.
+- Added live Windows round-trip evidence using OpenRouter TTS to create synthetic
+  speech and the dedicated STT endpoint to transcribe a 60-second clip.
+- Added a redacted full-history secret-scan baseline containing only exact,
+  commit-pinned synthetic test-key false positives. New findings remain blocking.
+- Added current interpreter compatibility evidence: the Windows Python 3.14
+  wheel-only base graph now resolves, while Python 3.15 RC1 remains blocked by
+  the absence of CPython 3.15 Torch wheels. Supported metadata stays at the fully
+  tested Python 3.12 and 3.13 range.
+
+### Changed
+
+- Changed the configurable OpenRouter default to `openai/whisper-large-v3`, the
+  stable quality model in OpenRouter's current STT examples. Requests use
+  temperature zero and price-prioritized provider routing.
+- Documented model selection, per-file and provider-side spending controls,
+  ambiguous retries, synthetic testing, and the exact cloud data boundary.
+
+### Fixed
+
+- Fixed FFmpeg conversion failures caused by Unicode Rich progress glyphs on
+  Windows legacy or redirected output. Converter animation now follows the shared
+  terminal policy and checks stream encoding before rendering.
+- Replaced a non-ASCII command-summary separator that rendered as a replacement
+  character in Windows redirected output.
+- Made OpenRouter temporary-workspace cleanup remove incomplete conversion files,
+  while continuing to preserve source media and confirmed transcript artifacts.
 
 ## [2.9.0] - 2026-09-01
 

@@ -271,6 +271,7 @@ class TestTranscriptionMethods:
             language=temp_config.default_language,
             max_attempts=temp_config.max_retries,
             timeout_seconds=temp_config.openrouter_timeout_seconds,
+            max_spend_usd=temp_config.openrouter_max_spend_usd,
         )
         backend.transcribe.assert_called_once_with(
             sample_audio,

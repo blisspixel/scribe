@@ -8,7 +8,7 @@ Author: Nick Seal
 License: Apache-2.0
 """
 
-__version__ = "2.9.0"
+__version__ = "2.9.1"
 __author__ = "Nick Seal"
 __license__ = "Apache-2.0"
 

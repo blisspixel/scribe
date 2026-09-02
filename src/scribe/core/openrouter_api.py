@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import math
 import secrets
+import shutil
 import tempfile
 import time
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from scribe.utils.safe_write import atomic_write
 logger = get_logger(__name__)
 
 _TRANSCRIPTIONS_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
+_KEY_URL = "https://openrouter.ai/api/v1/key"
 _MAX_CHUNK_BYTES = 12 * 1024 * 1024
 _MAX_ERROR_DETAIL_CHARS = 400
 _CHUNK_MINUTES = 5
@@ -44,6 +46,15 @@ class _ChunkResult:
     generation_id: str | None
 
 
+@dataclass(frozen=True)
+class _AccountStatus:
+    """Non-sensitive OpenRouter budget facts returned by the key endpoint."""
+
+    checked: bool
+    provider_limit_usd: float | None
+    remaining_usd: float | None
+
+
 class OpenRouterTranscriber(OpenAITranscriber):
     """Transcribe bounded MP3 chunks through OpenRouter.
 
@@ -56,11 +67,12 @@ class OpenRouterTranscriber(OpenAITranscriber):
     def __init__(
         self,
         api_key: str,
-        model: str = "openai/whisper-1",
+        model: str = "openai/whisper-large-v3",
         *,
         language: str | None = None,
         max_attempts: int = 3,
         timeout_seconds: float = 90.0,
+        max_spend_usd: float = 5.0,
         client: httpx.Client | None = None,
     ) -> None:
         if max_attempts < 1:
@@ -69,6 +81,8 @@ class OpenRouterTranscriber(OpenAITranscriber):
             raise ValueError("max_attempts cannot exceed 10")
         if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 600:
             raise ValueError("timeout_seconds must be finite and between 0 and 600")
+        if not math.isfinite(max_spend_usd) or not 0 < max_spend_usd <= 1000:
+            raise ValueError("max_spend_usd must be finite and between 0 and 1000")
 
         normalized_key = api_key.strip()
         if not normalized_key or any(character.isspace() for character in normalized_key):
@@ -86,11 +100,84 @@ class OpenRouterTranscriber(OpenAITranscriber):
         self.language = language
         self.max_attempts = max_attempts
         self.timeout_seconds = timeout_seconds
+        self.max_spend_usd = max_spend_usd
         self.http_client = client or httpx.Client()
         self._owns_client = client is None
         self.last_transcript: Transcript | None = None
 
         logger.debug("Initialized OpenRouter transcriber for model %s", self.model)
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        """Build authentication headers without retaining them in logs or errors."""
+        return {"Authorization": f"Bearer {self.api_key}"}
+
+    @staticmethod
+    def _nonnegative_number(value: Any) -> float | None:
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and value >= 0
+        ):
+            return float(value)
+        return None
+
+    def _preflight_account(self) -> _AccountStatus:
+        """Fail early on invalid credentials or exhausted provider-side credit."""
+        try:
+            response = self.http_client.get(
+                _KEY_URL,
+                headers=self._headers,
+                timeout=min(10.0, self.timeout_seconds),
+            )
+        except httpx.RequestError as exc:
+            logger.warning(
+                "OpenRouter account preflight was unavailable (%s); continuing with the "
+                "per-transcription spend guard",
+                type(exc).__name__,
+            )
+            return _AccountStatus(False, None, None)
+
+        if response.status_code in {401, 403}:
+            raise APIError(
+                "OpenRouter authentication failed. Check OPENROUTER_API_KEY",
+                context={"status_code": response.status_code},
+            )
+        if response.status_code == 402:
+            raise APIError(
+                "OpenRouter has insufficient credits for transcription",
+                context={"status_code": response.status_code},
+            )
+        if not response.is_success:
+            logger.warning(
+                "OpenRouter account preflight returned HTTP %d; continuing with the "
+                "per-transcription spend guard",
+                response.status_code,
+            )
+            return _AccountStatus(False, None, None)
+
+        try:
+            body = response.json()
+        except ValueError:
+            logger.warning(
+                "OpenRouter account preflight returned invalid JSON; continuing with the "
+                "per-transcription spend guard"
+            )
+            return _AccountStatus(False, None, None)
+        data = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(data, dict):
+            logger.warning(
+                "OpenRouter account preflight omitted account data; continuing with the "
+                "per-transcription spend guard"
+            )
+            return _AccountStatus(False, None, None)
+
+        provider_limit = self._nonnegative_number(data.get("limit"))
+        remaining = self._nonnegative_number(data.get("limit_remaining"))
+        if remaining is not None and remaining <= 0:
+            raise APIError("OpenRouter has no remaining budget for transcription")
+        return _AccountStatus(True, provider_limit, remaining)
 
     def standardize_audio(
         self,
@@ -155,22 +242,8 @@ class OpenRouterTranscriber(OpenAITranscriber):
         usage = body.get("usage")
         usage = usage if isinstance(usage, dict) else {}
 
-        seconds_value = usage.get("seconds")
-        seconds = (
-            float(seconds_value)
-            if isinstance(seconds_value, int | float)
-            and math.isfinite(float(seconds_value))
-            and float(seconds_value) >= 0
-            else None
-        )
-        cost_value = usage.get("cost")
-        cost = (
-            float(cost_value)
-            if isinstance(cost_value, int | float)
-            and math.isfinite(float(cost_value))
-            and float(cost_value) >= 0
-            else None
-        )
+        seconds = OpenRouterTranscriber._nonnegative_number(usage.get("seconds"))
+        cost = OpenRouterTranscriber._nonnegative_number(usage.get("cost"))
         generation_id = response.headers.get("X-Generation-Id")
         return _ChunkResult(
             text=text.strip(),
@@ -205,14 +278,13 @@ class OpenRouterTranscriber(OpenAITranscriber):
         payload: dict[str, Any] = {
             "model": self.model,
             "input_audio": {"data": encoded_audio, "format": chunk_path.suffix.lstrip(".")},
+            "temperature": 0,
+            "provider": {"sort": "price"},
         }
         if self.language:
             payload["language"] = self.language
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {**self._headers, "Content-Type": "application/json"}
 
         last_error = "request failed"
         for attempt in range(self.max_attempts):
@@ -341,15 +413,29 @@ class OpenRouterTranscriber(OpenAITranscriber):
         total_cost: float | None,
         completed_chunks: int,
         total_chunks: int,
+        cost_reporting_complete: bool,
     ) -> Transcript:
         metadata: dict[str, Any] = {
             "completed_chunks": completed_chunks,
             "total_chunks": total_chunks,
+            "max_spend_usd": self.max_spend_usd,
         }
         if generation_ids:
             metadata["generation_ids"] = generation_ids
         if total_cost is not None:
             metadata["reported_cost_usd"] = total_cost
+        if not cost_reporting_complete:
+            metadata["spend_guard_status"] = "provider_cost_unavailable"
+        elif (
+            total_cost is not None
+            and total_cost >= self.max_spend_usd
+            and completed_chunks < total_chunks
+        ):
+            metadata["spend_guard_status"] = "reported_limit_reached"
+        elif total_cost is not None and total_cost > self.max_spend_usd:
+            metadata["spend_guard_status"] = "reported_limit_exceeded_on_final_chunk"
+        else:
+            metadata["spend_guard_status"] = "active"
         return Transcript(
             segments=list(segments),
             language=self.language,
@@ -385,9 +471,30 @@ class OpenRouterTranscriber(OpenAITranscriber):
             "[yellow]Cloud transcription selected:[/yellow] audio will be sent to "
             f"OpenRouter using [bold]{self.model}[/bold]."
         )
+        console.print(
+            f"[dim]Cloud spend guard: ${self.max_spend_usd:.2f} for this transcription, "
+            "checked between chunks using provider-reported cost.[/dim]"
+        )
         logger.info("Starting explicit OpenRouter transcription with model %s", self.model)
 
         try:
+            try:
+                account_status = self._preflight_account()
+            except APIError as exc:
+                raise TranscriptionError(
+                    "OpenRouter account preflight failed",
+                    context={"error": str(exc)},
+                ) from exc
+            if (
+                not account_status.checked
+                or account_status.provider_limit_usd is None
+                or account_status.provider_limit_usd > self.max_spend_usd
+            ):
+                console.print(
+                    "[yellow]Hard-cap warning:[/yellow] this key has no verified provider-side "
+                    f"limit at or below ${self.max_spend_usd:.2f}. Set one in OpenRouter for "
+                    "an absolute cap."
+                )
             self._archive_existing(output_path)
             self._archive_existing(partial_path)
             work_directory = Path(tempfile.mkdtemp(prefix="scribe-openrouter-"))
@@ -409,8 +516,32 @@ class OpenRouterTranscriber(OpenAITranscriber):
             elapsed_seconds = 0.0
             reported_cost = 0.0
             has_reported_cost = False
+            cost_reporting_complete = True
 
             for index, chunk_path in enumerate(chunk_paths, 1):
+                if index > 1 and not cost_reporting_complete:
+                    raise TranscriptionError(
+                        "OpenRouter did not report the prior chunk cost, so Scribe refused "
+                        "to upload another chunk under the cloud spend guard",
+                        context={
+                            "completed_chunks": index - 1,
+                            "total_chunks": len(chunk_paths),
+                            "partial_transcript": str(partial_path),
+                            "max_spend_usd": self.max_spend_usd,
+                        },
+                    )
+                if index > 1 and reported_cost >= self.max_spend_usd:
+                    raise TranscriptionError(
+                        "OpenRouter reported-cost limit reached; Scribe refused to upload "
+                        "another chunk",
+                        context={
+                            "completed_chunks": index - 1,
+                            "total_chunks": len(chunk_paths),
+                            "partial_transcript": str(partial_path),
+                            "reported_cost_usd": reported_cost,
+                            "max_spend_usd": self.max_spend_usd,
+                        },
+                    )
                 try:
                     result = self._transcribe_chunk(chunk_path)
                 except (APIError, TranscriptionError) as exc:
@@ -422,6 +553,7 @@ class OpenRouterTranscriber(OpenAITranscriber):
                             total_cost=reported_cost if has_reported_cost else None,
                             completed_chunks=len(segments),
                             total_chunks=len(chunk_paths),
+                            cost_reporting_complete=cost_reporting_complete,
                         )
                         atomic_write(
                             partial_path,
@@ -452,6 +584,8 @@ class OpenRouterTranscriber(OpenAITranscriber):
                 if result.cost_usd is not None:
                     reported_cost += result.cost_usd
                     has_reported_cost = True
+                else:
+                    cost_reporting_complete = False
 
                 partial_transcript = self._build_transcript(
                     segments,
@@ -460,6 +594,7 @@ class OpenRouterTranscriber(OpenAITranscriber):
                     total_cost=reported_cost if has_reported_cost else None,
                     completed_chunks=index,
                     total_chunks=len(chunk_paths),
+                    cost_reporting_complete=cost_reporting_complete,
                 )
                 atomic_write(
                     partial_path,
@@ -474,6 +609,7 @@ class OpenRouterTranscriber(OpenAITranscriber):
                 total_cost=reported_cost if has_reported_cost else None,
                 completed_chunks=len(chunk_paths),
                 total_chunks=len(chunk_paths),
+                cost_reporting_complete=cost_reporting_complete,
             )
             atomic_write(
                 output_path, self._render_transcript(transcript, audio_path, partial=False)
@@ -488,8 +624,19 @@ class OpenRouterTranscriber(OpenAITranscriber):
                 len(chunk_paths),
                 len(chunk_paths),
             )
-            if has_reported_cost:
+            if cost_reporting_complete:
                 logger.info("OpenRouter reported transcription cost: $%.6f", reported_cost)
+                if reported_cost > self.max_spend_usd:
+                    console.print(
+                        "[yellow]Spend guard notice:[/yellow] the final provider response "
+                        "reported a total above the configured limit. The completed transcript "
+                        "was preserved; set a provider-side key limit for a hard cap."
+                    )
+            else:
+                console.print(
+                    "[yellow]Spend guard notice:[/yellow] OpenRouter did not report cost for "
+                    "every chunk. No additional chunk was uploaded after cost became unknown."
+                )
             return output_path
         except OSError as exc:
             raise TranscriptionError(
@@ -506,7 +653,7 @@ class OpenRouterTranscriber(OpenAITranscriber):
                         )
                 if work_directory is not None:
                     try:
-                        work_directory.rmdir()
+                        shutil.rmtree(work_directory)
                     except OSError as exc:
                         logger.warning(
                             "Could not remove OpenRouter temporary directory %s: %s",
@@ -525,7 +672,7 @@ class OpenRouterTranscriber(OpenAITranscriber):
 def transcribe_with_openrouter(
     audio_path: Path,
     api_key: str,
-    model: str = "openai/whisper-1",
+    model: str = "openai/whisper-large-v3",
     **kwargs: Any,
 ) -> Path:
     """Convenience wrapper for one explicit OpenRouter transcription."""

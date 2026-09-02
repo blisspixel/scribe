@@ -599,9 +599,9 @@ def transcribe_command(
         details = []
         if duration_mins:
             details.append(f"{duration_mins} min")
-        details.append(" · ".join(outputs))
+        details.append(" | ".join(outputs))
         panel_lines.append(
-            f"[{ScribeTheme.TEXT_MUTED}]{' · '.join(details)}[/{ScribeTheme.TEXT_MUTED}]"
+            f"[{ScribeTheme.TEXT_MUTED}]{' | '.join(details)}[/{ScribeTheme.TEXT_MUTED}]"
         )
 
         console.print(

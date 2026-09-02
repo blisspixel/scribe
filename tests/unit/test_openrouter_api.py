@@ -21,14 +21,23 @@ def _transcriber(
     *,
     attempts: int = 3,
     api_key: str = "sk-or-v1-test-key-1234567890",
+    max_spend_usd: float = 5.0,
 ) -> OpenRouterTranscriber:
     return OpenRouterTranscriber(
         api_key=api_key,
-        model="openai/whisper-1",
+        model="openai/whisper-large-v3",
         language="en",
         max_attempts=attempts,
         timeout_seconds=30,
+        max_spend_usd=max_spend_usd,
         client=_client(handler),
+    )
+
+
+def _account_ok() -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"data": {"limit": 5.0, "limit_remaining": 4.0}},
     )
 
 
@@ -45,6 +54,26 @@ def _mock_audio_pipeline(
     )
 
 
+def test_constructor_uses_stable_quality_default_model() -> None:
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200))
+
+    transcriber = OpenRouterTranscriber("test-key", client=_client(transport))
+
+    assert transcriber.model == "openai/whisper-large-v3"
+
+
+def test_boolean_usage_values_are_not_accepted_as_numbers() -> None:
+    response = httpx.Response(
+        200,
+        json={"text": "Confirmed.", "usage": {"seconds": True, "cost": False}},
+    )
+
+    result = OpenRouterTranscriber._parse_success(response)
+
+    assert result.seconds is None
+    assert result.cost_usd is None
+
+
 def test_success_uses_documented_json_contract_and_writes_complete_transcript(
     tmp_path: Path,
 ) -> None:
@@ -55,17 +84,21 @@ def test_success_uses_documented_json_contract_and_writes_complete_transcript(
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/key"):
+            return _account_ok()
         requests.append(request)
         body = json.loads(request.content)
         assert request.url == "https://openrouter.ai/api/v1/audio/transcriptions"
         assert request.headers["Authorization"] == "Bearer sk-or-v1-test-key-1234567890"
         assert body == {
-            "model": "openai/whisper-1",
+            "model": "openai/whisper-large-v3",
             "input_audio": {
                 "data": base64.b64encode(b"bounded-audio").decode("ascii"),
                 "format": "mp3",
             },
             "language": "en",
+            "temperature": 0,
+            "provider": {"sort": "price"},
         }
         return httpx.Response(
             200,
@@ -90,9 +123,11 @@ def test_success_uses_documented_json_contract_and_writes_complete_transcript(
     assert not chunk.exists()
     assert transcriber.last_transcript is not None
     assert transcriber.last_transcript.backend == "openrouter"
-    assert transcriber.last_transcript.model == "openai/whisper-1"
+    assert transcriber.last_transcript.model == "openai/whisper-large-v3"
     assert transcriber.last_transcript.metadata["generation_ids"] == ["gen-1"]
     assert transcriber.last_transcript.metadata["reported_cost_usd"] == 0.01
+    assert transcriber.last_transcript.metadata["max_spend_usd"] == 5.0
+    assert transcriber.last_transcript.metadata["spend_guard_status"] == "active"
 
 
 def test_retryable_response_honors_bounded_retry_after(tmp_path: Path) -> None:
@@ -100,7 +135,9 @@ def test_retryable_response_honors_bounded_retry_after(tmp_path: Path) -> None:
     chunk.write_bytes(b"audio")
     calls = 0
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/key"):
+            return _account_ok()
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -123,8 +160,10 @@ def test_nonfinite_retry_after_uses_normal_backoff(tmp_path: Path) -> None:
     chunk.write_bytes(b"audio")
     calls = 0
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
+        if request.url.path.endswith("/key"):
+            return _account_ok()
         calls += 1
         if calls == 1:
             return httpx.Response(429, headers={"Retry-After": "NaN"})
@@ -278,12 +317,18 @@ def test_later_chunk_failure_preserves_labeled_partial_transcript(tmp_path: Path
     second_chunk.write_bytes(b"second")
     calls = 0
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
+        if request.url.path.endswith("/key"):
+            return _account_ok()
         calls += 1
         if calls == 1:
             return httpx.Response(
-                200, json={"text": "Confirmed first chunk.", "usage": {"seconds": 5.0}}
+                200,
+                json={
+                    "text": "Confirmed first chunk.",
+                    "usage": {"seconds": 5.0, "cost": 0.01},
+                },
             )
         return httpx.Response(503, json={"error": {"message": "temporarily unavailable"}})
 
@@ -306,9 +351,151 @@ def test_later_chunk_failure_preserves_labeled_partial_transcript(tmp_path: Path
     assert transcriber.last_transcript.metadata == {
         "completed_chunks": 1,
         "total_chunks": 2,
+        "max_spend_usd": 5.0,
+        "reported_cost_usd": 0.01,
+        "spend_guard_status": "active",
     }
     assert not first_chunk.exists()
     assert not second_chunk.exists()
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_account_preflight_rejects_invalid_key_before_audio_work(
+    tmp_path: Path, status_code: int
+) -> None:
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"source")
+    transport = httpx.MockTransport(lambda _request: httpx.Response(status_code))
+    transcriber = _transcriber(transport)
+
+    with (
+        patch.object(transcriber, "standardize_audio") as standardize,
+        pytest.raises(TranscriptionError, match="account preflight failed"),
+    ):
+        transcriber.transcribe(source)
+
+    standardize.assert_not_called()
+
+
+def test_account_preflight_rejects_exhausted_budget_before_audio_work(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"source")
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            200,
+            json={"data": {"limit": 5.0, "limit_remaining": 0.0}},
+        )
+    )
+    transcriber = _transcriber(transport)
+
+    with (
+        patch.object(transcriber, "standardize_audio") as standardize,
+        pytest.raises(TranscriptionError, match="account preflight failed"),
+    ):
+        transcriber.transcribe(source)
+
+    standardize.assert_not_called()
+
+
+def test_reported_cost_limit_stops_before_next_chunk_and_keeps_partial(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"source")
+    chunks = [tmp_path / "chunk-1.mp3", tmp_path / "chunk-2.mp3"]
+    for chunk in chunks:
+        chunk.write_bytes(b"audio")
+    uploads = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal uploads
+        if request.url.path.endswith("/key"):
+            return _account_ok()
+        uploads += 1
+        return httpx.Response(
+            200,
+            json={"text": "Confirmed first chunk.", "usage": {"seconds": 5.0, "cost": 0.5}},
+        )
+
+    transcriber = _transcriber(httpx.MockTransport(handler), max_spend_usd=0.5)
+    standardize, split = _mock_audio_pipeline(transcriber, source, chunks)
+    with (
+        standardize,
+        split,
+        patch("scribe.core.openrouter_api.get_audio_duration", return_value=10.0),
+        pytest.raises(TranscriptionError, match="reported-cost limit reached"),
+    ):
+        transcriber.transcribe(source)
+
+    assert uploads == 1
+    partial = tmp_path / "meeting_transcription.partial.txt"
+    assert "Confirmed first chunk." in partial.read_text(encoding="utf-8")
+    assert transcriber.last_transcript is not None
+    assert transcriber.last_transcript.metadata["reported_cost_usd"] == 0.5
+    assert transcriber.last_transcript.metadata["spend_guard_status"] == ("reported_limit_reached")
+
+
+def test_missing_reported_cost_stops_before_next_chunk_and_keeps_partial(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"source")
+    chunks = [tmp_path / "chunk-1.mp3", tmp_path / "chunk-2.mp3"]
+    for chunk in chunks:
+        chunk.write_bytes(b"audio")
+    uploads = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal uploads
+        if request.url.path.endswith("/key"):
+            return _account_ok()
+        uploads += 1
+        return httpx.Response(
+            200,
+            json={"text": "Confirmed without cost.", "usage": {"seconds": 5.0}},
+        )
+
+    transcriber = _transcriber(httpx.MockTransport(handler))
+    standardize, split = _mock_audio_pipeline(transcriber, source, chunks)
+    with (
+        standardize,
+        split,
+        patch("scribe.core.openrouter_api.get_audio_duration", return_value=10.0),
+        pytest.raises(TranscriptionError, match="did not report the prior chunk cost"),
+    ):
+        transcriber.transcribe(source)
+
+    assert uploads == 1
+    assert transcriber.last_transcript is not None
+    assert transcriber.last_transcript.metadata["spend_guard_status"] == (
+        "provider_cost_unavailable"
+    )
+
+
+def test_final_chunk_above_reported_limit_is_preserved_and_labeled(tmp_path: Path) -> None:
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"source")
+    chunk = tmp_path / "chunk.mp3"
+    chunk.write_bytes(b"audio")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/key"):
+            return _account_ok()
+        return httpx.Response(
+            200,
+            json={"text": "Complete transcript.", "usage": {"seconds": 5.0, "cost": 0.6}},
+        )
+
+    transcriber = _transcriber(httpx.MockTransport(handler), max_spend_usd=0.5)
+    standardize, split = _mock_audio_pipeline(transcriber, source, [chunk])
+    with (
+        standardize,
+        split,
+        patch("scribe.core.openrouter_api.get_audio_duration", return_value=5.0),
+    ):
+        result = transcriber.transcribe(source)
+
+    assert result.exists()
+    assert transcriber.last_transcript is not None
+    assert transcriber.last_transcript.metadata["spend_guard_status"] == (
+        "reported_limit_exceeded_on_final_chunk"
+    )
 
 
 def test_unique_workspace_preserves_same_named_user_file(tmp_path: Path) -> None:
@@ -353,11 +540,19 @@ def test_interrupt_keeps_latest_confirmed_partial_and_metadata(tmp_path: Path) -
     second_chunk.write_bytes(b"second")
     calls = 0
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/key"):
+            return _account_ok()
         nonlocal calls
         calls += 1
         if calls == 1:
-            return httpx.Response(200, json={"text": "Confirmed before cancel."})
+            return httpx.Response(
+                200,
+                json={
+                    "text": "Confirmed before cancel.",
+                    "usage": {"seconds": 5.0, "cost": 0.01},
+                },
+            )
         raise KeyboardInterrupt
 
     transcriber = _transcriber(httpx.MockTransport(handler), attempts=1)
@@ -431,6 +626,10 @@ def test_constructor_rejects_invalid_retry_and_timeout_settings() -> None:
         OpenRouterTranscriber("key", timeout_seconds=float("nan"), client=_client(transport))
     with pytest.raises(ValueError, match="max_attempts"):
         OpenRouterTranscriber("key", max_attempts=11, client=_client(transport))
+    with pytest.raises(ValueError, match="max_spend_usd"):
+        OpenRouterTranscriber("key", max_spend_usd=0, client=_client(transport))
+    with pytest.raises(ValueError, match="max_spend_usd"):
+        OpenRouterTranscriber("key", max_spend_usd=float("nan"), client=_client(transport))
     with pytest.raises(ValueError, match="model"):
         OpenRouterTranscriber("key", model="bad slug", client=_client(transport))
 

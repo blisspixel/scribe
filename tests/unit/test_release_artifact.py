@@ -202,12 +202,12 @@ def _write_licensed_repository(path: Path, *, expression: str = "MIT") -> None:
     (path / "src" / "scribe").mkdir(parents=True)
     (path / "LICENSE").write_text("terms\n", encoding="utf-8")
     (path / "pyproject.toml").write_text(
-        f'[project]\nname = "scribe"\nversion = "2.9.0"\n'
+        f'[project]\nname = "scribe"\nversion = "{PROJECT_VERSION}"\n'
         f'requires-python = ">=3.12,<3.14"\nlicense = "{expression}"\n',
         encoding="utf-8",
     )
     (path / "src" / "scribe" / "__init__.py").write_text(
-        '__version__ = "2.9.0"\n', encoding="utf-8"
+        f'__version__ = "{PROJECT_VERSION}"\n', encoding="utf-8"
     )
 
 

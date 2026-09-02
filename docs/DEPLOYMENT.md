@@ -30,7 +30,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.0
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.1
 uv tool update-shell
 scribe init
 scribe info
@@ -38,7 +38,7 @@ scribe info
 
 This project has not published a PyPI package. Install the versioned GitHub
 release from this repository; a bare `pip install scribe` installs an unrelated
-project. GitHub access is required while the repository is private.
+project.
 
 Use a project-local install when developing Scribe:
 
@@ -53,7 +53,9 @@ uv run scribe doctor
 ## Workstation Requirements
 
 Required:
-- Python 3.12 or 3.13. Python 3.12 remains the recommended GPU baseline.
+- Python 3.12 or 3.13. Python 3.12 remains the recommended GPU baseline. Python
+  3.14 and 3.15 are not yet in the supported runtime matrix; see
+  [ADR-001](adr/ADR-001-python-312-baseline.md) for current probe evidence.
 - uv.
 - FFmpeg.
 - Disk space for local media, converted audio, transcripts, logs, and model caches.
@@ -74,13 +76,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.1"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
@@ -118,7 +120,8 @@ SCRIBE_ENABLE_JOKE=false
 SCRIBE_ENABLE_MEME=false
 OPENAI_API_KEY=
 OPENROUTER_API_KEY=
-SCRIBE_OPENROUTER_MODEL=openai/whisper-1
+SCRIBE_OPENROUTER_MODEL=openai/whisper-large-v3
+SCRIBE_OPENROUTER_MAX_SPEND_USD=5
 XAI_API_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
@@ -128,6 +131,8 @@ SCRIBE_LOG_LEVEL=INFO
 Cost safety:
 - A plain `scribe meeting.mp4` transcribes locally and does not spend on an API.
 - API transcription requires `--method openai` or `--method openrouter`.
+- OpenRouter has a $5 per-transcription reported-cost circuit breaker by default.
+  Set a provider-side key limit for an absolute cap, including ambiguous retries.
 - Notes, jokes, and memes default off unless enabled by config, env, or per-run flags.
 - `SCRIBE_LOCAL_ONLY=1` adds a strict cloud-provider guard and routes supported
   intelligence features to local Ollama.

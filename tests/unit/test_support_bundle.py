@@ -79,6 +79,7 @@ def test_get_environment_config_fully_redacts_openrouter_key() -> None:
         {
             "OPENROUTER_API_KEY": key,
             "SCRIBE_OPENROUTER_MODEL": "openai/whisper-1",
+            "SCRIBE_OPENROUTER_MAX_SPEND_USD": "2.50",
         },
         clear=True,
     ):
@@ -86,6 +87,7 @@ def test_get_environment_config_fully_redacts_openrouter_key() -> None:
 
     assert config["OPENROUTER_API_KEY"] == "[CONFIGURED]"
     assert config["SCRIBE_OPENROUTER_MODEL"] == "openai/whisper-1"
+    assert config["SCRIBE_OPENROUTER_MAX_SPEND_USD"] == "2.50"
     assert key not in str(config)
 
 

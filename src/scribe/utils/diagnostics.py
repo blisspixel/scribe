@@ -14,6 +14,7 @@ check so one unexpected failure becomes a diagnostic result rather than aborting
 the whole run.
 """
 
+import math
 import os
 import shutil
 import socket
@@ -724,12 +725,60 @@ class SystemDiagnostics:
                 timeout=10.0,
             )
             if response.status_code == 200:
-                result = DiagnosticResult(
-                    name="OpenRouter API Key",
-                    status="pass",
-                    message="Valid",
-                    details="An OpenRouter API key is configured and valid.",
-                )
+                try:
+                    body = response.json()
+                except (TypeError, ValueError):
+                    body = None
+                data = body.get("data") if isinstance(body, dict) else None
+                provider_limit = data.get("limit") if isinstance(data, dict) else None
+                remaining = data.get("limit_remaining") if isinstance(data, dict) else None
+                try:
+                    local_limit = float(os.getenv("SCRIBE_OPENROUTER_MAX_SPEND_USD", "5"))
+                except ValueError:
+                    local_limit = 5.0
+                if not math.isfinite(local_limit) or not 0 < local_limit <= 1000:
+                    local_limit = 5.0
+
+                if (
+                    isinstance(remaining, int | float)
+                    and not isinstance(remaining, bool)
+                    and remaining <= 0
+                ):
+                    result = DiagnosticResult(
+                        name="OpenRouter API Key",
+                        status="fail",
+                        message="Valid key, no remaining budget",
+                        details="The key is valid but cannot fund another request.",
+                        fix_suggestion="Add credit or raise the key limit in OpenRouter settings",
+                    )
+                elif (
+                    isinstance(provider_limit, int | float)
+                    and not isinstance(provider_limit, bool)
+                    and 0 <= provider_limit <= local_limit
+                ):
+                    result = DiagnosticResult(
+                        name="OpenRouter API Key",
+                        status="pass",
+                        message="Valid with provider hard cap",
+                        details=(
+                            "The key is valid and its provider-side limit is at or below "
+                            "Scribe's per-transcription guard."
+                        ),
+                    )
+                else:
+                    result = DiagnosticResult(
+                        name="OpenRouter API Key",
+                        status="warn",
+                        message="Valid, hard cap not verified",
+                        details=(
+                            "The key is valid, but no provider-side limit at or below "
+                            "Scribe's per-transcription guard was reported."
+                        ),
+                        fix_suggestion=(
+                            "Set an OpenRouter key limit at or below "
+                            f"${local_limit:.2f} for an absolute cap"
+                        ),
+                    )
             elif response.status_code in {401, 403}:
                 result = DiagnosticResult(
                     name="OpenRouter API Key",

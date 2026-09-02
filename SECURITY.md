@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Security fixes are applied to `main`. After public releases begin, the supported
-release range will be documented here. No public release is currently supported.
+Security fixes are applied to `main` and the latest 2.9.x GitHub release. Earlier
+release lines are not supported.
 
 ## Reporting a vulnerability
 
