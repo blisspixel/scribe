@@ -8,11 +8,18 @@ import pytest
 from scribe.core.transcriber import Transcriber
 from scribe.exceptions import TranscriptionError
 from scribe.models.config import ScribeConfig
+from scribe.models.gpu import GPUConfig
 
 
 @pytest.fixture
 def transcriber(tmp_path: Path) -> Transcriber:
-    return Transcriber(ScribeConfig(output_folder=tmp_path))
+    # Bypass __init__, which needs FFmpeg; these tests only exercise resource release.
+    instance = object.__new__(Transcriber)
+    instance.config = ScribeConfig(output_folder=tmp_path)
+    instance.gpu_config = GPUConfig(has_gpu=False)
+    instance._cached_diarizer = None
+    instance.last_transcript = None
+    return instance
 
 
 def test_release_after_success(transcriber: Transcriber, tmp_path: Path) -> None:
