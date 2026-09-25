@@ -170,6 +170,31 @@ class GPUConfig:
             "gpu_memory_gb": memory_gb,
         }
 
+    @staticmethod
+    def query_free_memory_gb() -> float | None:
+        """Currently free VRAM on the first NVIDIA GPU via nvidia-smi, or None if unknown.
+
+        Other processes (a local LLM server, games, other ML jobs) can hold most of a
+        card. On Windows the driver then spills CUDA allocations into system RAM,
+        which makes transcription dramatically slower rather than failing.
+        """
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        try:
+            return float(result.stdout.strip().splitlines()[0]) / 1024
+        except ValueError:
+            return None
+
     def _configure_for_gpu(self) -> None:
         """Configure optimal settings based on detected GPU."""
         if not self.gpu_name:
@@ -181,7 +206,7 @@ class GPUConfig:
         # High-memory accelerator
         if "RTX 4090" in gpu_name_upper or vram >= 22:
             self.model_size = "large-v3"
-            self.beam_size = 10
+            self.beam_size = 5
             self.batch_size = 16
             self.use_fp16 = True
             self.enable_tensor_cores = True
@@ -191,7 +216,7 @@ class GPUConfig:
         # Upper-mid memory accelerator
         elif "RTX 4080" in gpu_name_upper or (16 <= vram < 22):
             self.model_size = "large-v3"
-            self.beam_size = 8
+            self.beam_size = 5
             self.batch_size = 12
             self.use_fp16 = True
             self.enable_tensor_cores = True
@@ -233,7 +258,7 @@ class GPUConfig:
         # Professional GPUs (Quadro, Tesla, A100, etc.)
         elif any(x in gpu_name_upper for x in ["QUADRO", "TESLA", "A100", "V100", "A40"]):
             self.model_size = "large-v3"
-            self.beam_size = 10
+            self.beam_size = 5
             self.batch_size = 16
             self.use_fp16 = True
             self.enable_tensor_cores = True

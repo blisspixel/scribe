@@ -12,7 +12,57 @@ milestones that predate this repository's Git history.
 
 ## Unreleased
 
-No changes yet.
+### Added
+
+- Added pluggable local speaker diarization under `scribe.core.diarization`, with
+  word-level alignment that splits a Whisper segment at speaker changes.
+- Added token-free NVIDIA Nemotron-3 Diarization (`nvidia/Nemotron-3-Diarization`,
+  up to eight speakers) as the preferred local backend on every platform. It runs
+  on CUDA when the installed PyTorch build supports it and on CPU otherwise. Install
+  it with the `diarize-nemotron` extra.
+- Added the experimental `diarize-mlx` extra for Apple Silicon Metal diarization.
+- Added the `--diarizer auto|nemotron|pyannote|mlx|none` option to `transcribe`,
+  `url`, and `batch`, and `--diarize/--no-diarize` to `batch`.
+- Added a `[diarization]` config section (`enabled`, `backend`,
+  `pyannote_pipeline`) and the `SCRIBE_DIARIZATION_BACKEND` setting.
+- Added a `speaker labels` line to `scribe info` that shows the backend and device
+  that will run, including when PyTorch has no CUDA support.
+- Added per-word timing and speakers to JSON output when diarization runs.
+- Added a warning before local GPU transcription when other processes, such as a
+  local LLM, leave too little free GPU memory for the Whisper model.
+
+### Changed
+
+- Local NVIDIA transcription now uses faster-whisper's batched pipeline with a
+  batch size chosen from the GPU tier and free VRAM, falling back to sequential
+  decoding when memory is short or a batched run fails. Long batched chunks are
+  split into sentence-sized segments with word timings. On an RTX 4090, a
+  13-minute recording transcribed about nine times faster than with the previous
+  settings, with word agreement within the variation between beam widths; the
+  main difference is fewer filler words. Set `local_batch_size = 0` under
+  `[transcription]` to restore sequential decoding.
+- Every GPU tier now uses beam width 5. Widths 8 and 10 cost up to twice the
+  decoding time with no measurable accuracy benefit on the same recording.
+- pyannote now defaults to `pyannote/speaker-diarization-community-1`, falls back
+  to 3.1, and is skipped in favor of Nemotron when no Hugging Face token is set.
+- An unknown configured diarization backend now logs a warning and uses `auto`
+  instead of being ignored silently.
+
+### Fixed
+
+- Fixed OpenAI `gpt-4o-transcribe-diarize` transcription returning no speaker
+  labels. Scribe now requests `diarized_json`, stops sending the unsupported
+  `timestamp_granularities` parameter, and merges fragments into speaker turns.
+- Fixed pyannote diarization failing on pyannote.audio 4.x, which renamed the
+  token argument and changed the pipeline output type.
+- A speaker-labeling failure now keeps the unlabeled transcript instead of
+  failing the transcription.
+- Fixed finished transcriptions keeping the Whisper model (about 4 GB on a
+  high-end GPU) and the diarizer in GPU memory for the life of the process. A
+  `scribe rec` window launched from the desktop shortcut and left at its
+  "Press Enter" prompt held that memory until closed, so several open windows
+  starved later transcriptions and local LLM notes of VRAM. Models are now
+  released as soon as each file finishes, including after failures.
 
 ## [2.9.3] - 2026-09-02
 

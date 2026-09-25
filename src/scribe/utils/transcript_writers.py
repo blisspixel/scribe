@@ -38,6 +38,28 @@ def _clock(seconds: float, *, millis_sep: str) -> str:
 
 def transcript_to_dict(transcript: Transcript) -> dict[str, Any]:
     """The JSON-serializable representation of a transcript."""
+    segments_data: list[dict[str, Any]] = []
+    for s in transcript.segments:
+        seg_dict: dict[str, Any] = {
+            "start": round(s.start, 3),
+            "end": round(s.end, 3),
+            "text": s.text.strip(),
+            "speaker": s.speaker,
+            "confidence": s.confidence,
+        }
+        if s.words is not None:
+            seg_dict["words"] = [
+                {
+                    "start": round(w.start, 3),
+                    "end": round(w.end, 3),
+                    "text": w.text,
+                    "speaker": w.speaker,
+                    "confidence": w.confidence,
+                }
+                for w in s.words
+            ]
+        segments_data.append(seg_dict)
+
     return {
         "schema": JSON_SCHEMA,
         "language": transcript.language,
@@ -46,16 +68,7 @@ def transcript_to_dict(transcript: Transcript) -> dict[str, Any]:
         "model": transcript.model,
         "speakers": transcript.speakers,
         "metadata": transcript.metadata,
-        "segments": [
-            {
-                "start": round(s.start, 3),
-                "end": round(s.end, 3),
-                "text": s.text.strip(),
-                "speaker": s.speaker,
-                "confidence": s.confidence,
-            }
-            for s in transcript.segments
-        ],
+        "segments": segments_data,
     }
 
 

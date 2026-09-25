@@ -198,20 +198,39 @@ Provider model names, rate limits, prices, and availability change. Consult the
 provider's current official documentation instead of relying on an old command
 example.
 
-## Diarization is unavailable
+## Speaker labels are missing
 
-Install the diarization extra and set `HF_TOKEN` in the local environment without
-printing it:
+Run `scribe info` and read the `speaker labels` line. If it reports no backend,
+install the token-free Nemotron extra:
 
 ```bash
-uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
-scribe doctor
+uv tool install --force --python 3.12 --torch-backend auto \
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+scribe info
 ```
 
-The token's account must have access to the required gated models. Diarization is
-local inference after model acquisition, but downloading the models contacts
-Hugging Face.
+For pyannote, install the `diarize` extra and set `HF_TOKEN` in the local
+environment without printing it. The token's account must have accepted the
+pyannote model terms. Nemotron handles at most eight speakers; use
+`--diarizer pyannote` for larger groups.
+
+If the line reports `cpu; this PyTorch build has no CUDA`, labels still work but
+run on the CPU. Reinstall with `--torch-backend auto` to use the GPU. Labeling is
+local inference after the first model download from Hugging Face. A labeling
+failure keeps the unlabeled transcript and logs the reason.
+
+## Transcription is slow on a capable GPU
+
+Another process can hold most of the GPU's memory; a local LLM loaded by Ollama
+is a common example. On Windows the driver then spills CUDA memory into system
+RAM, which makes transcription many times slower instead of failing. Scribe warns
+when free GPU memory is below what the Whisper model needs. Check and free it:
+
+```bash
+nvidia-smi
+ollama ps
+ollama stop MODEL_NAME
+```
 
 ## Resident voice fails
 

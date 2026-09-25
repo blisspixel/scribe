@@ -122,7 +122,6 @@ transcription "just work" by handling the complexity of method selection,
 format conversion, error recovery, and resource management transparently.
 """
 
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
@@ -219,6 +218,7 @@ class Transcriber:
         # Structured transcript from the most recent transcribe(), so the CLI can
         # write JSON/VTT/SRT/Markdown artifacts without re-parsing the .txt.
         self.last_transcript: Transcript | None = None
+        self._cached_diarizer: SpeakerDiarizer | None = None
 
         logger.info(
             f"Transcriber initialized - GPU: {self.gpu_config.has_gpu}, "
@@ -468,6 +468,44 @@ class Transcriber:
             TranscriptionError: If all methods fail
             ValidationError: If file exceeds resource limits
         """
+        try:
+            return self._transcribe(audio_path, method, session, custom_vocabulary, music_mode)
+        finally:
+            # Free GPU memory as soon as this file is done, so a finished run never
+            # holds the Whisper model while notes use a local LLM, while a shortcut
+            # window waits for Enter, or across long-lived processes.
+            self.release_resources()
+
+    def release_resources(self) -> None:
+        """Unload local models (Whisper and the diarizer) and release GPU memory.
+
+        Safe to call repeatedly and after any failure. The next transcription loads
+        what it needs again.
+        """
+        self._cached_diarizer = None
+        try:
+            from scribe.utils.gpu_manager import get_gpu_manager
+
+            get_gpu_manager().unload_current_model()
+        except Exception as e:
+            logger.debug(f"GPU model release failed: {e}")
+        import gc
+
+        gc.collect()
+        if self.gpu_config.has_gpu:
+            from scribe.utils.gpu import clear_gpu_cache
+
+            clear_gpu_cache()
+
+    def _transcribe(
+        self,
+        audio_path: Path,
+        method: TranscriptionMethod,
+        session: TranscriptionSession | None,
+        custom_vocabulary: Optional["CustomVocabulary"],
+        music_mode: bool,
+    ) -> Path:
+        """Body of :meth:`transcribe`; the public wrapper releases GPU resources."""
         # Reset so a stale transcript from a previous call can never be written as
         # this file's structured sidecar if a path forgets to repopulate it.
         self.last_transcript = None
@@ -670,30 +708,25 @@ class Transcriber:
         return transcript_path
 
     def _build_diarizer(self) -> "SpeakerDiarizer | None":
-        """Build a local diarizer when enabled, a token is set, and pyannote is present.
+        """Build a local diarizer when enabled, or None when disabled or nothing can run.
 
-        Returns None (and logs why) in every other case, so diarization is a clean
-        opt-in that degrades to unlabeled output rather than failing.
+        Resolves the backend from hardware, installed extras, credentials, and the
+        ``diarization_backend`` setting, falling back through the preference order,
+        so diarization degrades to unlabeled output rather than failing.
         """
         if not getattr(self.config, "enable_speaker_diarization", False):
             return None
 
-        from scribe.core.diarizer import LocalDiarizer
+        if self._cached_diarizer is not None:
+            return self._cached_diarizer
 
-        token = self.config.hf_token or os.getenv("HF_TOKEN")
-        if not token:
-            logger.info("Speaker diarization is enabled but no HF token is set; skipping labels")
-            return None
-        if not LocalDiarizer.is_available():
-            logger.info(
-                "Speaker diarization is enabled but pyannote.audio is not installed "
-                '(install Scribe with its "diarize" extra); skipping labels'
-            )
-            return None
+        from scribe.core.backends import detect_hardware
+        from scribe.core.diarization.registry import resolve_diarizer
 
         device = "cuda" if self.gpu_config.has_gpu else "cpu"
-        logger.info(f"Local speaker diarization enabled ({device})")
-        return LocalDiarizer(token, device=device)
+        diarizer = resolve_diarizer(detect_hardware(), config=self.config, device=device)
+        self._cached_diarizer = diarizer
+        return diarizer
 
     def _transcribe_faster_whisper(
         self,
@@ -705,7 +738,10 @@ class Transcriber:
     ) -> Path:
         """Run the production faster-whisper engine (CUDA or CPU int8)."""
         transcriber = LocalWhisperTranscriber(
-            model_size=model_size, language=language, gpu_config=self.gpu_config
+            model_size=model_size,
+            language=language,
+            gpu_config=self.gpu_config,
+            batch_size=getattr(self.config, "local_batch_size", None),
         )
         transcript_path = transcriber.transcribe(
             audio_path,
@@ -726,7 +762,7 @@ class Transcriber:
         diarizer: "SpeakerDiarizer | None" = None,
     ) -> Path:
         """Run a non-CUDA backend (mlx-whisper, whisper.cpp) and write the .txt."""
-        from scribe.core.local_whisper import write_clean_transcript
+        from scribe.core.local_whisper import apply_diarizer_safely, write_clean_transcript
         from scribe.utils.audio import detect_silence_periods, get_audio_duration
 
         try:
@@ -758,7 +794,7 @@ class Transcriber:
             transcript.duration = duration
 
         if diarizer is not None:
-            transcript = diarizer.apply(audio_path, transcript)
+            transcript = apply_diarizer_safely(diarizer, audio_path, transcript)
 
         # Silence markers are engine-independent (they read the audio file), so the
         # alt path emits them too rather than dropping them for Apple/AMD users.

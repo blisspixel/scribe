@@ -148,10 +148,10 @@ class OpenAITranscriber:
 
                 # Configure response format based on model
                 if "diarize" in self.model:
-                    # New diarization models only support 'json' format, not 'verbose_json'
-                    params["response_format"] = "json"
-                    params["timestamp_granularities"] = ["word"]
-                    # chunking_strategy is required for diarize models with long audio
+                    # Speaker labels only come back as diarized_json. The diarize model
+                    # rejects prompts and timestamp_granularities, and requires a
+                    # chunking_strategy for audio longer than 30 seconds.
+                    params["response_format"] = "diarized_json"
                     params["chunking_strategy"] = "auto"
                 else:
                     params["response_format"] = "text"
@@ -260,37 +260,15 @@ class OpenAITranscriber:
         if isinstance(response, str):
             # response_format="text" returns a plain string
             lines.append(response.strip())
-        elif hasattr(response, "segments") and response.segments:
-            # response_format="verbose_json" with segments (diarization)
-            try:
-                for segment in response.segments:
-                    # Safely extract segment data
-                    if isinstance(segment, dict):
-                        start = segment.get("start", 0)
-                        text = segment.get("text", "").strip()
-                        speaker = segment.get("speaker")
-                    else:
-                        start = getattr(segment, "start", 0)
-                        text = getattr(segment, "text", "").strip()
-                        speaker = getattr(segment, "speaker", None)
-
-                    # Skip empty segments
-                    if not text:
-                        continue
-
-                    timestamp = self._format_timestamp(start)
-
-                    # Format with speaker label if available
-                    if speaker:
-                        lines.append(f"[{timestamp}] {speaker}: {text}")
-                    else:
-                        lines.append(f"[{timestamp}] {text}")
-                    lines.append("")
-            except (AttributeError, KeyError, TypeError, ValueError) as e:
-                logger.warning(f"Error processing segments: {e}, falling back to text extraction")
-                # Fallback to text attribute if segment processing fails
-                if hasattr(response, "text"):
-                    lines.append(response.text.strip())
+        elif (segments := self._extract_segments(response)) is not None and segments:
+            # diarized_json: one line per speaker turn, consecutive fragments merged.
+            for segment in segments:
+                timestamp = self._format_timestamp(segment.start)
+                if segment.speaker:
+                    lines.append(f"[{timestamp}] {segment.speaker}: {segment.text}")
+                else:
+                    lines.append(f"[{timestamp}] {segment.text}")
+                lines.append("")
         elif hasattr(response, "text"):
             # response_format="json" or "verbose_json" with simple text
             lines.append(response.text.strip())
@@ -323,9 +301,29 @@ class OpenAITranscriber:
 
         # Try the diarized/segmented shape, falling back to a plain text blob the same
         # way the renderer does, so a malformed response never crashes.
+        segments = self._extract_segments(response) or []
+
+        if not segments:
+            blob = getattr(response, "text", None)
+            text = str(blob).strip() if blob else ""
+            if text:
+                segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
+
+        return Transcript(segments=segments, duration=duration, backend="openai", model=self.model)
+
+    #: Consecutive same-speaker fragments closer than this merge into one turn.
+    _MERGE_GAP_SECONDS = 2.0
+
+    def _extract_segments(self, response: Any) -> list[TranscriptSegment] | None:
+        """Typed segments from a segmented response, merged into speaker turns.
+
+        The diarize model returns short fragments ("Good morning," / "everyone.").
+        Consecutive fragments from the same speaker separated by a short gap merge
+        into one readable turn. Returns None when the response is malformed.
+        """
+        segments: list[TranscriptSegment] = []
         try:
-            raw_segments = getattr(response, "segments", None)
-            for segment in raw_segments or []:
+            for segment in getattr(response, "segments", None) or []:
                 if isinstance(segment, dict):
                     start = float(segment.get("start", 0) or 0)
                     end = float(segment.get("end", start) or start)
@@ -338,22 +336,29 @@ class OpenAITranscriber:
                     speaker = getattr(segment, "speaker", None)
                 if not text:
                     continue
-                segments.append(
-                    TranscriptSegment(
-                        start=start, end=max(start, end), text=text, speaker=speaker or None
+                speaker = str(speaker) if speaker else None
+                end = max(start, end)
+                previous = segments[-1] if segments else None
+                if (
+                    previous is not None
+                    and speaker is not None
+                    and previous.speaker == speaker
+                    and start - previous.end <= self._MERGE_GAP_SECONDS
+                ):
+                    segments[-1] = TranscriptSegment(
+                        start=previous.start,
+                        end=max(previous.end, end),
+                        text=f"{previous.text} {text}",
+                        speaker=speaker,
                     )
-                )
+                else:
+                    segments.append(
+                        TranscriptSegment(start=start, end=end, text=text, speaker=speaker)
+                    )
         except (AttributeError, KeyError, TypeError, ValueError) as e:
             logger.warning(f"Could not structure segments, using plain text: {e}")
-            segments = []
-
-        if not segments:
-            blob = getattr(response, "text", None)
-            text = str(blob).strip() if blob else ""
-            if text:
-                segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
-
-        return Transcript(segments=segments, duration=duration, backend="openai", model=self.model)
+            return None
+        return segments
 
     def _format_timestamp(self, seconds: float) -> str:
         """Format seconds as HH:MM:SS."""

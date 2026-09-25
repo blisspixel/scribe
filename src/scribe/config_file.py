@@ -64,6 +64,8 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["default_language"] = transcription["language"]
     if "local_backend" in transcription:
         out["local_backend"] = transcription["local_backend"]
+    if "local_batch_size" in transcription:
+        out["local_batch_size"] = transcription["local_batch_size"]
     if "local_only" in transcription:
         out["local_only"] = transcription["local_only"]
     if "openrouter_model" in transcription:
@@ -88,6 +90,14 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["obs_port"] = obs["port"]
     if "password" in obs:
         out["obs_password"] = obs["password"]
+
+    diarization = _section(data, "diarization")
+    if "enabled" in diarization:
+        out["enable_speaker_diarization"] = diarization["enabled"]
+    if "backend" in diarization:
+        out["diarization_backend"] = diarization["backend"]
+    if "pyannote_pipeline" in diarization:
+        out["pyannote_pipeline"] = diarization["pyannote_pipeline"]
 
     return out
 

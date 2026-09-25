@@ -110,6 +110,57 @@ class TestOpenAITranscriber:
         assert "[00:00:00]" in formatted
 
     @patch("scribe.core.openai_api.OpenAI")
+    def test_diarize_model_merges_same_speaker_fragments(self, mock_openai):
+        """diarized_json fragments from one speaker become one turn per speaker change."""
+        transcriber = OpenAITranscriber(api_key="sk-test", model="gpt-4o-transcribe-diarize")
+        response = Mock()
+        response.duration = 12.0
+        response.segments = [
+            Mock(start=0.0, end=0.6, text=" Good morning,", speaker="A"),
+            Mock(start=0.8, end=1.1, text=" everyone.", speaker="A"),
+            Mock(start=4.6, end=5.0, text=" Thanks,", speaker="B"),
+            Mock(start=5.1, end=5.4, text=" David.", speaker="B"),
+            Mock(start=10.0, end=10.4, text=" Yes.", speaker="A"),
+        ]
+
+        transcript = transcriber._response_to_transcript(response)
+        assert [(s.speaker, s.text) for s in transcript.segments] == [
+            ("A", "Good morning, everyone."),
+            ("B", "Thanks, David."),
+            ("A", "Yes."),
+        ]
+        formatted = transcriber._format_transcript_response(response, Path("m.wav"))
+        assert "[00:00:00] A: Good morning, everyone." in formatted
+        assert "[00:00:04] B: Thanks, David." in formatted
+
+    @patch("scribe.core.openai_api.OpenAI")
+    @patch("scribe.core.openai_api.open", create=True)
+    @patch("scribe.core.openai_api.verify_file_content")
+    @patch("scribe.core.openai_api.get_audio_duration", return_value=None)
+    def test_diarize_model_requests_diarized_json(
+        self, _duration, _verify, mock_open, mock_openai_class, tmp_path: Path
+    ):
+        """Speaker labels require diarized_json; granularities and prompts are rejected."""
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+        response = Mock(segments=[], text="hi")
+        del response.duration
+        mock_client.audio.transcriptions.create.return_value = response
+
+        transcriber = OpenAITranscriber(api_key="sk-test", model="gpt-4o-transcribe-diarize")
+        audio_path = tmp_path / "test.wav"
+        audio_path.write_bytes(b"audio")
+        transcriber.transcribe_with_server_chunking(
+            audio_path, tmp_path / "out.txt", prompt="glossary"
+        )
+
+        kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
+        assert kwargs["response_format"] == "diarized_json"
+        assert kwargs["chunking_strategy"] == "auto"
+        assert "timestamp_granularities" not in kwargs
+        assert "prompt" not in kwargs
+
+    @patch("scribe.core.openai_api.OpenAI")
     @patch("scribe.core.openai_api.get_logger")
     @patch("scribe.core.openai_api.get_audio_duration")
     @patch("scribe.core.openai_api.OpenAITranscriber.standardize_audio")

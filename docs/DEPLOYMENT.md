@@ -63,7 +63,9 @@ Optional:
 - `scribe[mlx]` for Apple Silicon local acceleration.
 - `scribe[whispercpp]` for AMD, Intel, or portable local acceleration.
 - `scribe[providers]` for Anthropic and Google Gemini cloud intelligence SDKs.
-- `scribe[diarize]` and `HF_TOKEN` for local speaker diarization.
+- `scribe[diarize-nemotron]` for token-free local speaker labels (recommended), or
+  `scribe[diarize]` plus `HF_TOKEN` for pyannote. `scribe[diarize-mlx]` adds the
+  Apple Silicon Metal port.
 - `scribe[voice]`, `scribe[tray]`, or `scribe[kokoro]` for voice I/O and read-aloud.
 - OBS Studio for `scribe rec` and `scribe record`.
 - The workspace `scribe-audio-core` build for native silence analysis during
@@ -77,8 +79,8 @@ uv tool install --force --python 3.12 \
   "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 uv tool install --force --python 3.12 \
   "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
-uv tool install --force --python 3.12 \
-  "scribe[diarize] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+uv tool install --force --python 3.12 --torch-backend auto \
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 uv tool install --force --python 3.12 \
   "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
 ```
@@ -86,6 +88,21 @@ uv tool install --force --python 3.12 \
 The current base install includes the PyTorch and faster-whisper stack, so it is
 portable in behavior but not small. Separating heavy ML dependencies is planned
 for a compatible major release.
+
+Local Whisper transcription reaches an NVIDIA GPU through CTranslate2's own CUDA
+runtime, so it is accelerated even when PyTorch is a CPU-only build. PyTorch-based
+features, such as speaker labels, need a CUDA build of PyTorch to use the GPU, and
+the default PyPI PyTorch wheel on Windows is CPU-only. Pass `--torch-backend auto`
+to `uv tool install` so uv selects the PyTorch build that matches the installed
+driver, or the CPU build where there is no GPU. Without it, those features still
+work on the CPU, and `scribe info` reports the device in use.
+
+The `diarize-nemotron` and `diarize-mlx` extras are new after 2.9.3. Until the next
+release, install them from `@main` instead of the version tag.
+
+The `diarize-nemotron` extra pins a reviewed Transformers commit because Nemotron
+support is newer than the latest Transformers release. The pin becomes a normal
+version range once that release is published.
 
 The Go tray is also source-only. Scribe ships no native tray executable and never
 selects one implicitly. Developers can run `pwsh -File

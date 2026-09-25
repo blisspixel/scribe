@@ -35,12 +35,24 @@ API. Use `--method openai` or `--method openrouter` only when cloud transcriptio
 is intentional. OpenRouter setup and partial-chunk recovery are in the
 [Cloud Transcription Guide](CLOUD_TRANSCRIPTION.md).
 
-Local speaker diarization requires the `diarize` extra, an `HF_TOKEN`, and accepted
-pyannote model terms:
+Local speaker labels ("who said what") need one diarization extra. The
+recommended `diarize-nemotron` extra runs NVIDIA Nemotron-3 Diarization, which
+needs no Hugging Face token, handles up to eight speakers, and runs on CUDA or CPU.
+The `diarize` extra runs pyannote and needs an `HF_TOKEN` with the pyannote model
+terms accepted. When an extra is installed, labels are on by default for local
+transcription; `--no-diarize` turns them off for one run.
 
 ```bash
 scribe transcribe meeting.mp4 --diarize
+scribe transcribe meeting.mp4 --diarizer pyannote   # more than eight speakers
+scribe transcribe meeting.mp4 --no-diarize
 ```
+
+`auto` prefers MLX on Apple Silicon, then Nemotron, then pyannote, skipping any
+backend whose extra or token is missing. `scribe info` shows the backend that will
+run and its device. The first run downloads the model from Hugging Face; later
+runs are offline. Speaker labels never fail a transcription: if labeling fails,
+the unlabeled transcript is kept and the reason is logged.
 
 ## Optional generated outputs
 
@@ -145,7 +157,8 @@ network calls when a provider key is configured.
 | `--language CODE` | ISO 639-1 language code |
 | `--vocab NAME_OR_FILE` | Bundled glossary or custom TXT/JSON vocabulary |
 | `--format json,vtt,srt,md` | Structured sidecars in addition to TXT |
-| `--diarize` | Local speaker labels with the optional diarization extra |
+| `--diarize` / `--no-diarize` | Force local speaker labels on or off for this run |
+| `--diarizer auto\|nemotron\|pyannote\|mlx\|none` | Choose the local speaker-label backend |
 | `--no-docx` | Skip DOCX output |
 | `--notes` / `--no-notes` | Force notes on or off for this run |
 | `--joke` / `--no-joke` | Force joke generation on or off |

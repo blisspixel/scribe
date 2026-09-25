@@ -30,7 +30,9 @@ justifies expanding the base install. The current extras are:
 |---|---|---|
 | `mlx` | mlx-whisper | Apple Silicon local transcription |
 | `whispercpp` | pywhispercpp | Optional portable native transcription |
-| `diarize` | pyannote.audio | Local speaker diarization |
+| `diarize` | pyannote.audio | Local speaker diarization with pyannote (needs an HF token) |
+| `diarize-nemotron` | Transformers (pinned commit) and librosa | Token-free NVIDIA Nemotron-3 speaker diarization |
+| `diarize-mlx` | mlx-audio (arm64 macOS only) | Apple Silicon Metal speaker diarization |
 | `whisperx` | WhisperX and pyannote | Word-aligned diarization |
 | `providers` | Anthropic and Gemini SDKs | Optional cloud text providers |
 | `voice` | Audio, hotkey, clipboard, and system TTS packages | Direct dictation and read-aloud |

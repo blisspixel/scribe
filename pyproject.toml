@@ -83,6 +83,25 @@ diarize = [
     "pyannote.audio>=3.0.0",
 ]
 
+# Token-free local speaker diarization with NVIDIA Nemotron-3 Diarization
+# (ungated, openmdw-1.1, up to 8 speakers). Runs on CUDA when the installed PyTorch
+# build supports it and on CPU otherwise. The model landed in Transformers after
+# 5.17.0, so this pins the reviewed upstream commit; replace the pin with
+# "transformers>=5.18.0" once that release is published. The feature extractor
+# needs librosa.
+diarize-nemotron = [
+    "transformers @ git+https://github.com/huggingface/transformers@763a150e59e2d2f0494646999472d41ad370fd9c",
+    "librosa>=0.11.0",
+]
+
+# Apple Silicon Metal speaker diarization with the MLX port of Nemotron-3. The
+# model ships in mlx-audio releases after 0.5.5; until one is published, upgrade
+# with `pip install "mlx-audio @ git+https://github.com/Blaizzy/mlx-audio"`.
+# Scribe detects the missing model and falls back to Nemotron via Transformers.
+diarize-mlx = [
+    "mlx-audio>=0.5.5 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
 # Voice I/O: global-hotkey dictation (speech to type) and read-aloud (local TTS).
 # A deliberate opt-in real-time mode, separate from the batch pipeline (ADR-008).
 voice = [
@@ -268,6 +287,9 @@ module = [
     "pystray.*",
     "pyttsx3.*",
     "kokoro_onnx.*",
+    "transformers.*",
+    "librosa.*",
+    "mlx_audio.*",
 ]
 ignore_missing_imports = true
 

@@ -1078,13 +1078,13 @@ class SystemDiagnostics:
             vram_gb = gpu_config.gpu_memory_gb
 
             if vram_gb >= 24:
-                recommendation = "large-v3 with beam_size=10 (optimal)"
+                recommendation = "large-v3, batched GPU decoding (optimal)"
                 status = "pass"
             elif vram_gb >= 16:
-                recommendation = "large-v3 with beam_size=8 (good)"
+                recommendation = "large-v3, batched GPU decoding (good)"
                 status = "pass"
             elif vram_gb >= 12:
-                recommendation = "large-v3 with beam_size=5 (adequate)"
+                recommendation = "large-v3 (adequate)"
                 status = "warn"
             elif vram_gb >= 8:
                 recommendation = "large-v2 or medium (recommended)"

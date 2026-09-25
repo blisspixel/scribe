@@ -481,6 +481,28 @@ def _root(
     """Scribe: local-first speech transcription, notes, and humor."""
 
 
+def _apply_diarization_options(
+    config: ScribeConfigType, diarize: bool | None, diarizer: str | None
+) -> None:
+    """Apply --diarize/--diarizer to ``config``, rejecting unknown backend names."""
+    from scribe.core.diarization.registry import DIARIZER_CHOICES, NONE, normalize_diarizer
+
+    if diarize is not None:
+        config.enable_speaker_diarization = diarize
+    if diarizer is None:
+        return
+    name = normalize_diarizer(diarizer)
+    if name not in DIARIZER_CHOICES:
+        console.print(
+            f"[red]Unknown --diarizer '{escape(diarizer)}'.[/red] "
+            f"Choose one of: {', '.join(DIARIZER_CHOICES)}."
+        )
+        raise typer.Exit(1)
+    config.diarization_backend = name
+    if diarize is None:
+        config.enable_speaker_diarization = name != NONE
+
+
 @app.command(name="transcribe")
 def transcribe_command(
     audio_file: Path = typer.Argument(
@@ -547,7 +569,12 @@ def transcribe_command(
     diarize: bool | None = typer.Option(
         None,
         "--diarize/--no-diarize",
-        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
+        help="Label speakers locally (needs scribe[diarize-nemotron], or scribe[diarize] with HF_TOKEN)",
+    ),
+    diarizer: str | None = typer.Option(
+        None,
+        "--diarizer",
+        help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
     ),
 ) -> None:
     """
@@ -596,8 +623,7 @@ def transcribe_command(
                 raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
-        if diarize is not None:
-            config.enable_speaker_diarization = diarize
+        _apply_diarization_options(config, diarize, diarizer)
         if output_dir is not None:
             config.output_folder = output_dir
 
@@ -1074,7 +1100,12 @@ def url_command(
     diarize: bool | None = typer.Option(
         None,
         "--diarize/--no-diarize",
-        help="Label speakers locally (needs HF_TOKEN and the scribe[diarize] extra)",
+        help="Label speakers locally (needs scribe[diarize-nemotron], or scribe[diarize] with HF_TOKEN)",
+    ),
+    diarizer: str | None = typer.Option(
+        None,
+        "--diarizer",
+        help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
     ),
 ) -> None:
     """
@@ -1116,8 +1147,7 @@ def url_command(
         # Override config with CLI options
         if model:
             config.default_model = model
-        if diarize is not None:
-            config.enable_speaker_diarization = diarize
+        _apply_diarization_options(config, diarize, diarizer)
         if language:
             from scribe.exceptions import ValidationError
             from scribe.utils.validation import validate_language_code
@@ -2052,6 +2082,16 @@ def batch_transcribe(
         "--continue-on-error/--stop-on-error",
         help="Continue after failures; incomplete runs exit nonzero",
     ),
+    diarize: bool | None = typer.Option(
+        None,
+        "--diarize/--no-diarize",
+        help="Label speakers locally (needs scribe[diarize-nemotron], or scribe[diarize] with HF_TOKEN)",
+    ),
+    diarizer: str | None = typer.Option(
+        None,
+        "--diarizer",
+        help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
+    ),
 ) -> None:
     """
     Batch transcribe multiple audio/video files.
@@ -2079,6 +2119,7 @@ def batch_transcribe(
         # Override config with CLI options
         if model:
             config.default_model = model
+        _apply_diarization_options(config, diarize, diarizer)
         if language:
             from scribe.utils.validation import validate_language_code
 

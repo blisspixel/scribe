@@ -142,6 +142,15 @@ class ScribeConfig(BaseSettings):
         ),
     )
 
+    local_batch_size: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Batched GPU decoding size for local Whisper: unset picks one from the GPU "
+            "and free VRAM, 0 forces sequential decoding. Env: SCRIBE_LOCAL_BATCH_SIZE."
+        ),
+    )
+
     local_only: bool = Field(
         default=False,
         description=(
@@ -261,7 +270,21 @@ class ScribeConfig(BaseSettings):
     )
 
     enable_speaker_diarization: bool = Field(
-        default=True, description="Enable speaker diarization (requires HF_TOKEN)"
+        default=True,
+        description=("Label speakers on local transcripts when a diarization backend is installed"),
+    )
+
+    diarization_backend: str = Field(
+        default="auto",
+        description=(
+            "Speaker diarization engine: auto (hardware-adaptive), nemotron, pyannote, mlx, "
+            "or none. Env: SCRIBE_DIARIZATION_BACKEND."
+        ),
+    )
+
+    pyannote_pipeline: str = Field(
+        default="pyannote/speaker-diarization-community-1",
+        description="Hugging Face pipeline ID for pyannote diarization.",
     )
 
     enable_notes: bool = Field(
@@ -464,6 +487,28 @@ class ScribeConfig(BaseSettings):
             )
 
         return v
+
+    @field_validator("diarization_backend", mode="before")
+    @classmethod
+    def validate_diarization_backend(cls, v: object) -> str:
+        """Normalize the diarization backend; an unknown value falls back to auto.
+
+        Speaker labels are optional, so a typo in the config file or environment
+        must not block recording or transcription.
+        """
+        norm = str(v or "").strip().lower() or "auto"
+        if norm == "default":
+            norm = "auto"
+        allowed = ("auto", "nemotron", "pyannote", "mlx", "none")
+        if norm not in allowed:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"Unknown diarization_backend {norm!r}; using auto "
+                f"(choose one of: {', '.join(allowed)})"
+            )
+            return "auto"
+        return norm
 
     @field_validator("obs_port")
     @classmethod

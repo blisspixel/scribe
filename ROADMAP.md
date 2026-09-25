@@ -52,7 +52,7 @@ The detailed version-sync and release workflow is in
 | 2.9.2 | Released | Add the per-run OpenRouter spend control, correct explicit output routing, and establish the versioned release plan | 2.9.1 |
 | 2.9.3 | Released | Keep redirected Windows subcommand help ASCII-only and preserve complete option names | 2.9.2 |
 | 2.9.4 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.9.3 |
-| 2.10.0 | Planned | Validate and finish the cross-platform desktop experience | 2.9.4 evidence gate |
+| 2.10.0 | Planned | Validate and finish the cross-platform desktop experience and ship local speaker labels | 2.9.4 evidence gate |
 | 2.11.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.10.0 behavior contract |
 | 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.11.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
@@ -148,6 +148,29 @@ voice, with tested fallbacks where an operating system cannot provide parity.
   matrix agree.
 - Unsupported compositor or desktop behavior is explicit and has a tested
   terminal or shortcut fallback where practical.
+
+### Local speech models (also 2.10.0)
+
+The pluggable diarization layer, token-free Nemotron default, and OpenAI diarized
+output fix are implemented in `Unreleased`. Before 2.10.0 ships:
+
+1. Replace the pinned Transformers commit in `diarize-nemotron` with
+   `transformers>=5.18.0` once that release is published, and relock.
+2. Record Nemotron speaker-label evidence on Windows NVIDIA, Linux NVIDIA, CPU-only,
+   and Apple Silicon (MLX with a released mlx-audio that includes the model).
+3. Confirm the `--torch-backend auto` install path on each platform and that
+   `scribe info` reports the diarization device correctly.
+4. Batched GPU decoding and beam width 5 are implemented from one RTX 4090
+   measurement. Before release, repeat the speed and quality comparison on a
+   mid-range NVIDIA GPU and on a non-English recording, and record the results.
+5. Evaluate NVIDIA Parakeet TDT v3 as an optional local ASR backend. It leads
+   Whisper large-v3 on English benchmarks and is much faster, but covers 25
+   European languages and takes no vocabulary prompt, so it must stay opt-in until
+   quality, timestamps, long-audio handling, and language fallback are verified.
+
+Exit criteria: speaker labels never fail a transcription, the documented install
+commands work on every claimed platform, and default decoding changes are backed
+by measured speed and quality evidence.
 
 ## Planned release: 2.11.0 maintainability and verification
 

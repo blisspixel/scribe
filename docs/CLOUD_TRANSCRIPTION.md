@@ -162,8 +162,11 @@ directory is logged.
 OpenRouter's dedicated STT response contract returns transcript text, not
 speaker-labeled or word-timestamped segments. Scribe therefore records
 OpenRouter provenance and chunk-level approximate timing in structured output.
-Use local diarization or the supported OpenAI diarization model when speaker
-labels are required.
+Local speaker labels need word or segment timing, so they are not applied to
+OpenRouter's chunk-level output. When speaker labels are required, use local
+transcription with a diarization extra, or `--method openai` with the default
+`gpt-4o-transcribe-diarize` model, which returns labeled speaker turns (`A`, `B`,
+and so on).
 
 When OpenRouter reports usage cost, Scribe records the aggregate, configured
 limit, and guard state in transcript metadata. It logs no request audio or API

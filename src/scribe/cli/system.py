@@ -94,6 +94,48 @@ def show_info(
     )
     console.print()
 
+    from scribe.core.diarization.registry import (
+        INSTALL_HINTS,
+        NEMOTRON,
+        NONE,
+        PYANNOTE,
+        diarizer_availability,
+        hf_token,
+        select_diarizer,
+    )
+
+    diar_avail = diarizer_availability()
+    # pyannote is importable but unusable without a token; don't report it as the choice.
+    if diar_avail.get(PYANNOTE) and not hf_token(config):
+        diar_avail[PYANNOTE] = False
+    chosen_diarizer = select_diarizer(
+        hardware,
+        override=getattr(config, "diarization_backend", "auto"),
+        available=diar_avail,
+    )
+    diar_enabled = bool(getattr(config, "enable_speaker_diarization", False))
+    if not diar_enabled:
+        diar_state = "off"
+    elif chosen_diarizer == NONE:
+        diar_state = f"no backend ({INSTALL_HINTS[NEMOTRON]})"
+    else:
+        diar_state = chosen_diarizer
+        if chosen_diarizer in (NEMOTRON, PYANNOTE):
+            from scribe.core.diarization.device import resolve_torch_device
+
+            torch_device = resolve_torch_device("cuda" if gpu_config.has_gpu else "cpu")
+            if gpu_config.has_gpu and torch_device == "cpu":
+                diar_state += " (cpu; this PyTorch build has no CUDA)"
+            else:
+                diar_state += f" ({torch_device})"
+
+    console.print(f"[bold {ScribeTheme.SECONDARY}]speaker labels[/bold {ScribeTheme.SECONDARY}]")
+    console.print(
+        f"  [{ScribeTheme.TEXT_PRIMARY}]local[/{ScribeTheme.TEXT_PRIMARY}]     "
+        f"[{ScribeTheme.SUCCESS}]{escape(diar_state)}[/{ScribeTheme.SUCCESS}]"
+    )
+    console.print()
+
     console.print(f"[bold {ScribeTheme.SECONDARY}]config[/bold {ScribeTheme.SECONDARY}]")
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]output[/{ScribeTheme.TEXT_PRIMARY}]    "

@@ -47,6 +47,7 @@ class TranscriptWord:
     end: float
     text: str
     confidence: float | None = None
+    speaker: str | None = None
 
     def __post_init__(self) -> None:
         _check_span(self.start, self.end)

@@ -39,7 +39,8 @@ For setup variants, optional backends, upgrades, and recovery, see the
 - Processes batches and music collections with truthful partial-failure results.
 - Records through OBS without taking control of an existing recording.
 - Offers explicit OpenAI or OpenRouter cloud transcription when local processing is not desired.
-- Adds optional local speaker labels and vocabulary correction.
+- Adds optional local speaker labels (token-free NVIDIA Nemotron on GPU or CPU) and
+  vocabulary correction.
 - Generates opt-in notes, jokes, and memes with a selected local or cloud provider.
 - Provides optional speech-to-type, read-aloud, and resident voice hotkeys.
 - Searches structured transcript archives.
@@ -95,6 +96,9 @@ model selection, spending limits, failure behavior, and safe testing.
 No particular GPU is required. The standard backend runs on CPU and compatible
 NVIDIA GPUs. Optional `mlx` and `whispercpp` installs support Apple Silicon and
 portable AMD or Intel paths. Run `scribe doctor` to see the available backend.
+Local speaker labels need the `diarize-nemotron` extra and run on any of these
+machines; `scribe info` shows the backend and device. See the
+[CLI guide](docs/CLI.md) for speaker-label options.
 
 ## Optional resident voice
 

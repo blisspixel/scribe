@@ -1,6 +1,7 @@
 """Local CPU and NVIDIA transcription through faster-whisper."""
 
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
 
 from scribe.exceptions import TranscriptionError
 from scribe.models.gpu import GPUConfig
-from scribe.models.transcript import Transcript, TranscriptSegment
+from scribe.models.transcript import Transcript, TranscriptSegment, TranscriptWord
 from scribe.utils.audio import detect_silence_periods, format_timestamp, get_audio_duration
 from scribe.utils.files import extract_date_from_filename, format_date, format_duration_minutes
 from scribe.utils.gpu import clear_gpu_cache, set_gpu_optimizations
@@ -18,6 +19,132 @@ from scribe.utils.gpu_manager import get_gpu_manager
 from scribe.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+#: Approximate VRAM (GB) a float16 Whisper model needs to run without spilling.
+_MODEL_VRAM_GB = {"tiny": 1.5, "base": 1.5, "small": 2.5, "medium": 4.0}
+_LARGE_MODEL_VRAM_GB = 5.0
+
+
+def _vram_key(model_size: str) -> str:
+    size = model_size.lower()
+    if size.startswith(("large", "distil", "turbo")):
+        return "large"
+    return size.split(".")[0]
+
+
+def warn_if_gpu_memory_contended(model_size: str, free: float | None = None) -> float | None:
+    """Warn when other processes leave too little free VRAM for the Whisper model.
+
+    Returns the free VRAM in GB (queried when not supplied), or None if unknown.
+    """
+    if free is None:
+        free = GPUConfig.query_free_memory_gb()
+    needed = _MODEL_VRAM_GB.get(_vram_key(model_size), _LARGE_MODEL_VRAM_GB)
+    if free is None or free >= needed:
+        return free
+    logger.warning(
+        f"Only {free:.1f} GB of GPU memory is free; Whisper {model_size} needs about "
+        f"{needed:.0f} GB. Another app (for example a local LLM loaded in Ollama) is using "
+        "the GPU, so transcription may run far slower than usual. Free GPU memory "
+        "(for example `ollama stop <model>`) or choose a smaller --model."
+    )
+    return free
+
+
+#: Measured float16 VRAM for batched decoding at beam 5, as (fixed GB, GB per batch
+#: item), including model weights. large-v3 measured 6.7 GB at batch 8 and 9.1 GB at
+#: batch 16 on an RTX 4090; medium measured 3.8 GB and 5.3 GB.
+_BATCHED_VRAM_GB = {
+    "large": (4.4, 0.3),
+    "medium": (2.2, 0.2),
+    "small": (1.2, 0.1),
+    "base": (0.8, 0.05),
+    "tiny": (0.6, 0.05),
+}
+#: Below this batch size the batched pipeline is not worth its VAD chunking.
+_MIN_BATCH_SIZE = 4
+#: Free VRAM to leave untouched for the diarizer, the desktop, and allocator slack.
+_VRAM_MARGIN_GB = 1.0
+
+
+def choose_batch_size(model_size: str, requested: int, free_gb: float | None) -> int:
+    """Largest batch size up to ``requested`` that fits in free VRAM; 0 means sequential.
+
+    With unknown free memory the requested (tier-based) size is trusted. Too little
+    room for a useful batch falls back to sequential decoding, which needs the least
+    memory.
+    """
+    if requested < _MIN_BATCH_SIZE:
+        return 0
+    if free_gb is None:
+        return requested
+    fixed, per_item = _BATCHED_VRAM_GB.get(_vram_key(model_size), _BATCHED_VRAM_GB["large"])
+    fits = int((free_gb - _VRAM_MARGIN_GB - fixed) / per_item)
+    batch = min(requested, fits)
+    return batch if batch >= _MIN_BATCH_SIZE else 0
+
+
+#: Batched decoding returns whole VAD chunks (often 25 to 35 seconds). These bounds
+#: split them back into readable, subtitle-sized segments using word timings.
+_SPLIT_MAX_SECONDS = 12.0
+_SPLIT_MAX_WORDS = 40
+_SPLIT_MIN_WORDS = 4
+_SENTENCE_END = (".", "?", "!")
+
+
+def split_long_segment(segment: TranscriptSegment) -> list[TranscriptSegment]:
+    """Split a long segment at sentence ends, falling back to the longest pause.
+
+    Needs word timestamps; a segment without words, or already within bounds, is
+    returned unchanged. Text is rebuilt by concatenating word tokens, which carry
+    their own leading whitespace, so no words are added or lost.
+    """
+    words = segment.words
+    if not words or (
+        segment.end - segment.start <= _SPLIT_MAX_SECONDS and len(words) <= _SPLIT_MAX_WORDS
+    ):
+        return [segment]
+
+    pieces: list[list[TranscriptWord]] = []
+    current: list[TranscriptWord] = []
+    for word in words:
+        current.append(word)
+        span = current[-1].end - current[0].start
+        sentence_end = word.text.strip().endswith(_SENTENCE_END)
+        if sentence_end and len(current) >= _SPLIT_MIN_WORDS:
+            pieces.append(current)
+            current = []
+        elif span > _SPLIT_MAX_SECONDS or len(current) >= _SPLIT_MAX_WORDS:
+            # No sentence end in range: cut at the longest pause inside the run.
+            gaps = [
+                (current[i + 1].start - current[i].end, i)
+                for i in range(_SPLIT_MIN_WORDS - 1, len(current) - 1)
+            ]
+            cut = max(gaps)[1] + 1 if gaps else len(current)
+            pieces.append(current[:cut])
+            current = current[cut:]
+    if current:
+        if pieces and len(current) < _SPLIT_MIN_WORDS:
+            pieces[-1].extend(current)
+        else:
+            pieces.append(current)
+
+    result = []
+    for piece in pieces:
+        text = "".join(w.text for w in piece)
+        if not text.strip():
+            continue
+        result.append(
+            TranscriptSegment(
+                start=piece[0].start,
+                end=piece[-1].end,
+                text=text,
+                confidence=segment.confidence,
+                words=tuple(piece),
+            )
+        )
+    return result or [segment]
 
 
 class LocalWhisperTranscriber:
@@ -36,6 +163,7 @@ class LocalWhisperTranscriber:
         model_size: str = "large-v3",
         language: str | None = "en",
         gpu_config: GPUConfig | None = None,
+        batch_size: int | None = None,
     ) -> None:
         """
         Initialize local whisper transcriber.
@@ -44,6 +172,8 @@ class LocalWhisperTranscriber:
             model_size: Whisper model size
             language: ISO language code (None for auto-detection)
             gpu_config: Optional GPU configuration (auto-detected if None)
+            batch_size: GPU batched-decoding size; None picks one from the GPU tier
+                and free VRAM, 0 forces sequential decoding
         """
         self.model_size = model_size
         self.language = language
@@ -72,6 +202,9 @@ class LocalWhisperTranscriber:
             logger.info(f"  Beam size: {gpu_config.beam_size}")
             logger.info(f"  FP16: {gpu_config.use_fp16}")
 
+        self.requested_batch_size = batch_size
+        # Resolved when the model loads: 0 means sequential decoding.
+        self.batch_size = 0
         self.model: Any | None = None
         # The structured transcript from the most recent transcribe() call, so callers
         # (and the structured-output writers) can reuse the segments without re-parsing.
@@ -175,6 +308,13 @@ class LocalWhisperTranscriber:
                 device = "cuda"
                 compute_type = "float16" if self.gpu_config.use_fp16 else "float32"
                 num_workers = 8
+                free = warn_if_gpu_memory_contended(self.model_size)
+                requested = (
+                    self.gpu_config.batch_size
+                    if self.requested_batch_size is None
+                    else self.requested_batch_size
+                )
+                self.batch_size = choose_batch_size(self.model_size, requested, free)
             else:
                 device = "cpu"
                 compute_type = "int8"
@@ -311,8 +451,85 @@ class LocalWhisperTranscriber:
         estimated_time = (duration / expected_speed) if duration else 60
         return expected_speed, estimated_time
 
+    def _decode(
+        self,
+        model: Any,
+        audio_path: Path,
+        initial_prompt: str,
+        word_timestamps: bool,
+        batch_size: int,
+    ) -> tuple[list[TranscriptSegment], Any]:
+        """Decode the file, batched when ``batch_size`` > 0, and materialize segments.
+
+        Both paths use VAD, beam search at the tier's beam width, and greedy
+        temperature. The batched pipeline decodes VAD chunks in parallel on the GPU;
+        on a high-end card it is several times faster with equivalent accuracy.
+        """
+        if batch_size > 0:
+            from faster_whisper import BatchedInferencePipeline
+
+            logger.info(f"Batched GPU decoding (batch size {batch_size})")
+            segments_iter, info = BatchedInferencePipeline(model=model).transcribe(
+                str(audio_path),
+                language=self.language,
+                beam_size=self.gpu_config.beam_size,
+                temperature=0.0,
+                initial_prompt=initial_prompt,
+                word_timestamps=True,
+                vad_filter=True,
+                batch_size=batch_size,
+            )
+        else:
+            segments_iter, info = model.transcribe(
+                str(audio_path),
+                language=self.language,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 400},
+                beam_size=self.gpu_config.beam_size,
+                best_of=self.gpu_config.beam_size,
+                temperature=0.0,
+                condition_on_previous_text=False,
+                initial_prompt=initial_prompt,
+                word_timestamps=word_timestamps,
+            )
+
+        segments: list[TranscriptSegment] = []
+        for segment in segments_iter:
+            words_tuple = None
+            if getattr(segment, "words", None):
+                words_tuple = tuple(
+                    TranscriptWord(
+                        start=float(w.start),
+                        end=float(w.end),
+                        text=w.word,
+                        confidence=float(w.probability)
+                        if getattr(w, "probability", None) is not None
+                        else None,
+                    )
+                    for w in segment.words
+                    if w.start is not None and w.end is not None and w.end >= w.start
+                )
+            segments.append(
+                TranscriptSegment(
+                    start=segment.start,
+                    end=segment.end,
+                    text=segment.text,
+                    words=words_tuple,
+                )
+            )
+        if batch_size > 0:
+            segments = [piece for seg in segments for piece in split_long_segment(seg)]
+            if not word_timestamps:
+                segments = [replace(seg, words=None) for seg in segments]
+        return segments, info
+
     def _execute_transcription(
-        self, audio_path: Path, duration: float | None, initial_prompt: str
+        self,
+        audio_path: Path,
+        duration: float | None,
+        initial_prompt: str,
+        *,
+        word_timestamps: bool = False,
     ) -> Transcript:
         """Execute the actual transcription and return a structured Transcript."""
         if duration:
@@ -323,22 +540,20 @@ class LocalWhisperTranscriber:
         if model is None:
             raise TranscriptionError("Whisper model failed to load")
 
-        segments_iter, info = model.transcribe(
-            str(audio_path),
-            language=self.language,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 400},
-            beam_size=self.gpu_config.beam_size,
-            best_of=self.gpu_config.beam_size,
-            temperature=0.0,
-            condition_on_previous_text=False,
-            initial_prompt=initial_prompt,
-        )
+        if self.batch_size > 0:
+            try:
+                segments, info = self._decode(
+                    model, audio_path, initial_prompt, word_timestamps, self.batch_size
+                )
+            except (RuntimeError, MemoryError) as e:
+                # Typically CUDA out of memory because another process grew; the
+                # sequential path needs the least memory, so retry the file with it.
+                logger.warning(f"Batched GPU transcription failed ({e}); retrying sequentially")
+                clear_gpu_cache()
+                segments, info = self._decode(model, audio_path, initial_prompt, word_timestamps, 0)
+        else:
+            segments, info = self._decode(model, audio_path, initial_prompt, word_timestamps, 0)
 
-        segments = [
-            TranscriptSegment(start=segment.start, end=segment.end, text=segment.text)
-            for segment in segments_iter
-        ]
         return Transcript(
             segments=segments,
             language=getattr(info, "language", self.language),
@@ -391,11 +606,16 @@ class LocalWhisperTranscriber:
         start_time = time.time()
 
         try:
-            transcript = self._execute_transcription(audio_path, duration, prompt)
+            transcript = self._execute_transcription(
+                audio_path,
+                duration,
+                prompt,
+                word_timestamps=(diarizer is not None),
+            )
             if diarizer is not None:
                 # Label speakers before writing so the .txt and the structured
                 # outputs both carry them, and silence markers stay intact.
-                transcript = diarizer.apply(audio_path, transcript)
+                transcript = apply_diarizer_safely(diarizer, audio_path, transcript)
             self.last_transcript = transcript
             elapsed = time.time() - start_time
 
@@ -536,6 +756,21 @@ def write_clean_transcript(
 
         # Final flush
         f.flush()
+
+
+def apply_diarizer_safely(
+    diarizer: "SpeakerDiarizer", audio_path: Path, transcript: Transcript
+) -> Transcript:
+    """Apply speaker labels, keeping the unlabeled transcript if labeling fails.
+
+    Diarization is an enhancement: a model, alignment, or memory failure must never
+    discard a completed transcription.
+    """
+    try:
+        return diarizer.apply(audio_path, transcript)
+    except Exception as e:
+        logger.warning(f"Speaker labeling failed, keeping the unlabeled transcript: {e}")
+        return transcript
 
 
 def transcribe_with_local_whisper(

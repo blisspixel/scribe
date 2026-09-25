@@ -50,6 +50,24 @@ Run `scribe doctor` after changing any driver or native ML package. If diagnosti
 report a Torch or TorchAudio ABI mismatch, install a matching pair for the machine
 using the official PyTorch selector, then rerun diagnostics.
 
+On an NVIDIA GPU, faster-whisper decodes speech chunks in parallel batches with
+beam width 5. Scribe picks the batch size from the GPU tier and the VRAM that is
+free when the model loads, uses sequential decoding when too little is free, and
+retries a file sequentially if batched decoding runs out of memory. Long batched
+chunks are split back into sentence-sized segments using word timings. Batched
+decoding tends to omit some filler words such as "um". To force sequential
+decoding, or cap the batch size, set it in `~/.scribe/config.toml`:
+
+```toml
+[transcription]
+local_batch_size = 0   # 0 = sequential; unset = automatic
+```
+
+Other applications that keep models on the GPU, such as a local LLM server,
+reduce the memory available to Scribe. Scribe warns when free VRAM is below what
+the Whisper model needs; see
+[Troubleshooting](TROUBLESHOOTING.md#transcription-is-slow-on-a-capable-gpu).
+
 ### Apple Silicon
 
 The optional MLX backend is available through the `mlx` extra:
