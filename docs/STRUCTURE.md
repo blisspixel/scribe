@@ -1,6 +1,6 @@
 # Documentation Structure
 
-Status: Canonical documentation map for Scribe 2.9.3.
+Status: Canonical documentation map for Scribe 2.10.0.
 
 ---
 

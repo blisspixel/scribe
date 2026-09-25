@@ -6,7 +6,7 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.9.3 is the current GitHub release. The source repository is ready for
+Version 2.10.0 is the current GitHub release. The source repository is ready for
 public visibility. The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
@@ -18,6 +18,8 @@ The current product contract includes:
   detected media on incomplete or failed sessions.
 - Structured transcript and session evidence with complete, partial, failed, and
   instrumental outcomes.
+- Optional local speaker labels (token-free Nemotron by default) and opt-in
+  best-guess speaker names from a local or explicitly chosen cloud model.
 - Live-validated Windows resident voice.
 - Experimental macOS and Linux resident voice pending hardware evidence.
 - Python 3.12 and 3.13 support. New interpreter support requires the complete
@@ -51,17 +53,23 @@ The detailed version-sync and release workflow is in
 | 2.9.1 | Released | Windows recording hardening and optional OpenRouter transcription | None |
 | 2.9.2 | Released | Add the per-run OpenRouter spend control, correct explicit output routing, and establish the versioned release plan | 2.9.1 |
 | 2.9.3 | Released | Keep redirected Windows subcommand help ASCII-only and preserve complete option names | 2.9.2 |
-| 2.9.4 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.9.3 |
-| 2.10.0 | Planned | Validate and finish the cross-platform desktop experience and ship local speaker labels | 2.9.4 evidence gate |
-| 2.11.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.10.0 behavior contract |
-| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.11.0 boundaries and migration design |
+| 2.10.0 | Released | Local speaker labels and names, faster GPU transcription, and transcript quality fixes | 2.9.3 |
+| 2.10.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.10.0 |
+| 2.11.0 | Planned | Validate and finish the cross-platform desktop experience and local speech evidence | 2.10.1 evidence gate |
+| 2.12.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.11.0 behavior contract |
+| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.12.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
 
-Version numbers after 2.9.4 are planning targets. SemVer impact discovered during
+2.10.0 shipped local speaker labels, speaker naming, and transcription quality
+fixes ahead of the operational-proof patch at the maintainer's request. That proof
+moved from 2.9.4 to 2.10.1 with unchanged scope and evidence requirements, and
+later targets moved one minor version.
+
+Version numbers after 2.10.1 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.9.4 operational proof
+## Next release: 2.10.1 operational proof
 
 ### Objective
 
@@ -118,7 +126,7 @@ transcription within the configured spend policy.
 
 No broader package or binary distribution should start before this gate closes.
 
-## Planned release: 2.10.0 desktop validation
+## Planned release: 2.11.0 desktop validation
 
 ### Objective
 
@@ -149,10 +157,11 @@ voice, with tested fallbacks where an operating system cannot provide parity.
 - Unsupported compositor or desktop behavior is explicit and has a tested
   terminal or shortcut fallback where practical.
 
-### Local speech models (also 2.10.0)
+### Local speech models (also 2.11.0)
 
 The pluggable diarization layer, token-free Nemotron default, and OpenAI diarized
-output fix are implemented in `Unreleased`. Before 2.10.0 ships:
+output fix shipped in 2.10.0, along with speaker naming and batched GPU decoding.
+Remaining evidence and follow-up work for 2.11.0:
 
 1. Replace the pinned Transformers commit in `diarize-nemotron` with
    `transformers>=5.18.0` once that release is published, and relock.
@@ -161,7 +170,7 @@ output fix are implemented in `Unreleased`. Before 2.10.0 ships:
 3. Confirm the `--torch-backend auto` install path on each platform and that
    `scribe info` reports the diarization device correctly.
 4. Batched GPU decoding and beam width 5 are implemented from one RTX 4090
-   measurement. Before release, repeat the speed and quality comparison on a
+   measurement. Repeat the speed and quality comparison on a
    mid-range NVIDIA GPU and on a non-English recording, and record the results.
 5. Evaluate NVIDIA Parakeet TDT v3 as an optional local ASR backend. It leads
    Whisper large-v3 on English benchmarks and is much faster, but covers 25
@@ -172,7 +181,7 @@ Exit criteria: speaker labels never fail a transcription, the documented install
 commands work on every claimed platform, and default decoding changes are backed
 by measured speed and quality evidence.
 
-## Planned release: 2.11.0 maintainability and verification
+## Planned release: 2.12.0 maintainability and verification
 
 ### Objective
 

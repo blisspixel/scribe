@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.3
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.10.0
 uv tool update-shell
 scribe init
 scribe info
@@ -76,13 +76,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
 uv tool install --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.9.3"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
@@ -96,9 +96,6 @@ the default PyPI PyTorch wheel on Windows is CPU-only. Pass `--torch-backend aut
 to `uv tool install` so uv selects the PyTorch build that matches the installed
 driver, or the CPU build where there is no GPU. Without it, those features still
 work on the CPU, and `scribe info` reports the device in use.
-
-The `diarize-nemotron` and `diarize-mlx` extras are new after 2.9.3. Until the next
-release, install them from `@main` instead of the version tag.
 
 The `diarize-nemotron` extra pins a reviewed Transformers commit because Nemotron
 support is newer than the latest Transformers release. The pin becomes a normal

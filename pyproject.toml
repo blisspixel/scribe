@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.9.3"
+version = "2.10.0"
 description = "Local-first speech transcription, meeting notes, and recording tools"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

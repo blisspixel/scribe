@@ -18,7 +18,7 @@ Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpe
 OBS Studio is required only for recording.
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.9.3
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.10.0
 uv tool update-shell
 
 scribe init
@@ -141,7 +141,7 @@ diagnostic bundle for review before sharing.
 
 ## Project status
 
-Version 2.9.3 is the current GitHub release. It is not published on PyPI. CI
+Version 2.10.0 is the current GitHub release. It is not published on PyPI. CI
 enforces Ruff, strict mypy, an 81 percent combined
 statement-and-branch coverage floor, dependency and artifact audits, and native
 source checks. The dependency-ordered version plan and remaining platform
