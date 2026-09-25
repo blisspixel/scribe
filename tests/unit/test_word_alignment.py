@@ -99,16 +99,16 @@ def test_single_speaker_segment_keeps_original_text_and_timing() -> None:
 def test_split_text_has_no_spaces_injected_between_cjk_tokens() -> None:
     words = (
         TranscriptWord(start=0.0, end=0.4, text="你好"),
-        TranscriptWord(start=0.4, end=0.8, text="世界"),
+        TranscriptWord(start=0.4, end=0.8, text="世界。"),
         TranscriptWord(start=2.0, end=2.4, text="谢谢"),
     )
-    segment = TranscriptSegment(start=0.0, end=2.4, text="你好世界谢谢", words=words)
+    segment = TranscriptSegment(start=0.0, end=2.4, text="你好世界。谢谢", words=words)
     turns = (
         SpeakerTurn(start=0.0, end=1.0, speaker="SPEAKER_00"),
         SpeakerTurn(start=1.5, end=3.0, speaker="SPEAKER_01"),
     )
     first, second = resegment_by_words(segment, turns)
-    assert first.text == "你好世界"
+    assert first.text == "你好世界。"
     assert second.text == "谢谢"
 
 
@@ -225,3 +225,77 @@ def test_word_resegmentation_is_total_and_deterministic(
     # Determinism
     assert [s.speaker for s in resegmented1.segments] == [s.speaker for s in resegmented2.segments]
     assert [s.text for s in resegmented1.segments] == [s.text for s in resegmented2.segments]
+
+
+def _w(start: float, end: float, text: str, speaker: str | None) -> TranscriptWord:
+    return TranscriptWord(start=start, end=end, text=text, speaker=speaker)
+
+
+def test_short_sentence_split_between_speakers_takes_majority() -> None:
+    from scribe.core.diarization.alignment import smooth_word_speakers
+
+    words = [
+        _w(0.0, 0.4, " That", "B"),
+        _w(0.4, 0.7, " sounds", "B"),
+        _w(0.7, 0.9, " like", "B"),
+        _w(0.9, 1.0, " a", "A"),
+        _w(1.0, 1.4, " great", "A"),
+        _w(1.4, 2.4, " idea.", "A"),
+    ]
+    assert {w.speaker for w in smooth_word_speakers(words)} == {"A"}
+
+
+def test_island_inside_long_sentence_is_absorbed() -> None:
+    from scribe.core.diarization.alignment import smooth_word_speakers
+
+    words = [_w(i * 0.3, i * 0.3 + 0.25, f" w{i}", "A") for i in range(12)]
+    words[6] = _w(1.8, 2.05, " think", "B")
+    words[-1] = _w(3.3, 3.55, " done.", "A")
+    assert {w.speaker for w in smooth_word_speakers(words)} == {"A"}
+
+
+def test_real_turn_inside_long_sentence_is_kept() -> None:
+    from scribe.core.diarization.alignment import smooth_word_speakers
+
+    words = [_w(i * 0.3, i * 0.3 + 0.25, f" a{i}", "A") for i in range(8)]
+    words += [_w(2.4 + i * 0.3, 2.65 + i * 0.3, f" b{i}", "B") for i in range(8)]
+    smoothed = smooth_word_speakers(words)
+    assert [w.speaker for w in smoothed] == ["A"] * 8 + ["B"] * 8
+
+
+def test_one_word_backchannel_sentence_is_kept() -> None:
+    from scribe.core.diarization.alignment import smooth_word_speakers
+
+    words = [
+        _w(0.0, 0.3, " We", "A"),
+        _w(0.3, 0.6, " shipped", "A"),
+        _w(0.6, 1.0, " it.", "A"),
+        _w(1.1, 1.3, " Yeah.", "B"),
+        _w(1.4, 1.8, " Great.", "A"),
+    ]
+    assert [w.speaker for w in smooth_word_speakers(words)] == ["A", "A", "A", "B", "A"]
+
+
+def test_smoothing_crosses_segment_boundaries() -> None:
+    first = TranscriptSegment(
+        start=0.0, end=0.4, text=" Is", words=(TranscriptWord(start=0.0, end=0.4, text=" Is"),)
+    )
+    second = TranscriptSegment(
+        start=0.4,
+        end=1.6,
+        text=" he? Sure.",
+        words=(
+            TranscriptWord(start=0.4, end=0.8, text=" he?"),
+            TranscriptWord(start=1.2, end=1.6, text=" Sure."),
+        ),
+    )
+    turns = (
+        SpeakerTurn(start=0.0, end=0.42, speaker="A"),
+        SpeakerTurn(start=0.42, end=1.0, speaker="B"),
+        SpeakerTurn(start=1.1, end=1.7, speaker="A"),
+    )
+    result = resegment_transcript(Transcript(segments=[first, second]), turns)
+    words = [w for seg in result.segments for w in (seg.words or ())]
+    # "Is" and "he?" straddle a segment boundary but form one sentence: one speaker.
+    assert words[0].speaker == words[1].speaker
+    assert words[2].speaker == "A"

@@ -89,7 +89,8 @@ def write_vtt(transcript: Transcript, path: Path) -> Path:
         lines.append(
             f"{_clock(segment.start, millis_sep='.')} --> {_clock(segment.end, millis_sep='.')}"
         )
-        lines.append(f"<v {segment.speaker}>{text}" if segment.speaker else text)
+        speaker = transcript.speaker_name(segment.speaker)
+        lines.append(f"<v {speaker}>{text}" if speaker else text)
         lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
@@ -106,7 +107,8 @@ def write_srt(transcript: Transcript, path: Path) -> Path:
         lines.append(
             f"{_clock(segment.start, millis_sep=',')} --> {_clock(segment.end, millis_sep=',')}"
         )
-        lines.append(f"{segment.speaker}: {text}" if segment.speaker else text)
+        speaker = transcript.speaker_name(segment.speaker)
+        lines.append(f"{speaker}: {text}" if speaker else text)
         lines.append("")
         index += 1
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -152,7 +154,8 @@ def write_markdown(transcript: Transcript, path: Path, extra: dict[str, Any] | N
         text = " ".join(s.text.strip() for s in turn if s.text.strip())
         if not text:
             continue
-        lines.append(f"**{speaker}:** {text}" if speaker else text)
+        name = transcript.speaker_name(speaker)
+        lines.append(f"**{name}:** {text}" if name else text)
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

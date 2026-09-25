@@ -63,34 +63,56 @@ def test_nemotron_diarizer_graceful_on_error(tmp_path: Path) -> None:
         assert labeled.segments[0].speaker is None
 
 
+def _nemotron_with_logits(logits) -> NemotronDiarizer:
+    from types import SimpleNamespace
+
+    diarizer = NemotronDiarizer(device="cpu")
+    diarizer.model = MagicMock(device="cpu", dtype="float32")
+    diarizer.model.return_value = SimpleNamespace(logits=logits)
+    batch = MagicMock()
+    batch.to.return_value = {"input_features": MagicMock()}
+    processor = MagicMock(return_value=batch)
+    processor.feature_extractor = SimpleNamespace(hop_length=160, sampling_rate=16000)
+    diarizer.processor = processor
+    return diarizer
+
+
 def test_nemotron_diarizer_detects_eight_speaker_limit(tmp_path: Path) -> None:
-    diarizer = NemotronDiarizer()
-    with patch.object(diarizer, "_ensure_loaded"):
-        diarizer.model = MagicMock()
-        diarizer.model.device = "cpu"
-        diarizer.model.return_value = MagicMock(logits=MagicMock())
+    import numpy as np
+    import torch
 
-        # Mock audio loader
-        with patch("scribe.core.diarization.nemotron._load_audio_waveform") as mock_load:
-            import numpy as np
+    # Eight speakers, each clearly active (logit +6) for its own 3 s block.
+    logits = torch.full((1, 2400, 8), -6.0)
+    for speaker in range(8):
+        logits[0, speaker * 300 : (speaker + 1) * 300, speaker] = 6.0
+    diarizer = _nemotron_with_logits(logits)
+    with patch("scribe.core.diarization.nemotron._load_audio_waveform") as load:
+        load.return_value = (np.zeros(16000, dtype=np.float32), 16000)
+        res = diarizer.diarize(tmp_path / "test.wav")
+    assert res.speaker_count == 8
+    assert res.speaker_limit_reached is True
+    assert [t.speaker for t in res.turns] == [f"SPEAKER_{i:02d}" for i in range(8)]
+    assert res.metadata["postprocessing"]["onset"] == 0.6
 
-            mock_load.return_value = (np.zeros(16000, dtype=np.float32), 16000)
 
-            mock_processor = MagicMock()
-            # The processor returns a BatchFeature that is moved to the model device.
-            batch = MagicMock()
-            batch.to.return_value = {"input_features": MagicMock()}
-            mock_processor.return_value = batch
-            # 8 distinct speakers
-            mock_processor.extract_speaker_dict.return_value = [
-                [{"Start": float(i), "End": float(i + 0.8), "Speaker": i} for i in range(8)]
-            ]
-            diarizer.processor = mock_processor
+def test_nemotron_postprocessing_removes_flicker_and_phantom_speakers(tmp_path: Path) -> None:
+    import numpy as np
+    import torch
 
-            res = diarizer.diarize(tmp_path / "test.wav")
-            assert res.speaker_count == 8
-            assert res.speaker_limit_reached is True
-            assert len(res.turns) == 8
+    logits = torch.full((1, 1000, 8), -6.0)
+    logits[0, 0:500, 0] = 6.0  # speaker A for 5 s
+    logits[0, 250:252, 0] = -0.2  # 20 ms dip below offset: gap is filled
+    logits[0, 500:1000, 1] = 6.0  # speaker B for 5 s
+    logits[0, 700:720, 2] = 6.0  # 0.2 s blip on a third channel: removed
+    diarizer = _nemotron_with_logits(logits)
+    with patch("scribe.core.diarization.nemotron._load_audio_waveform") as load:
+        load.return_value = (np.zeros(16000, dtype=np.float32), 16000)
+        res = diarizer.diarize(tmp_path / "test.wav")
+    assert res.speaker_count == 2
+    assert [(t.speaker, round(t.start, 1), round(t.end, 1)) for t in res.turns] == [
+        ("SPEAKER_00", 0.0, 5.0),
+        ("SPEAKER_01", 4.9, 10.0),
+    ]
 
 
 def test_mlx_diarizer_availability_on_non_darwin() -> None:

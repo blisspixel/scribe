@@ -282,6 +282,14 @@ class ScribeConfig(BaseSettings):
         ),
     )
 
+    name_speakers: bool = Field(
+        default=False,
+        description=(
+            "Suggest real speaker names from the conversation with a language model "
+            "(local Ollama by default; SCRIBE_SPEAKERS_PROVIDER selects a cloud provider)"
+        ),
+    )
+
     pyannote_pipeline: str = Field(
         default="pyannote/speaker-diarization-community-1",
         description="Hugging Face pipeline ID for pyannote diarization.",

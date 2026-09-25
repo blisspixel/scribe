@@ -219,12 +219,23 @@ run on the CPU. Reinstall with `--torch-backend auto` to use the GPU. Labeling i
 local inference after the first model download from Hugging Face. A labeling
 failure keeps the unlabeled transcript and logs the reason.
 
+## Speaker names are missing or wrong
+
+Names appear only with `--name-speakers` and only when the conversation contains
+clear evidence, such as introductions or people addressing each other. A speaker
+stays `unidentified` rather than getting a guess. Check the log for the reason:
+no local model (start Ollama and pull a model, or set `SCRIBE_SPEAKERS_PROVIDER`
+to a cloud provider), a model reply that could not be parsed, or ambiguous
+evidence. Correct any name in the header and the text; the labels in the JSON
+output keep the original `SPEAKER_xx` identifiers.
+
 ## Transcription is slow on a capable GPU
 
 Another process can hold most of the GPU's memory; a local LLM loaded by Ollama
 is a common example. On Windows the driver then spills CUDA memory into system
 RAM, which makes transcription many times slower instead of failing. Scribe warns
-when free GPU memory is below what the Whisper model needs. Check and free it:
+when free GPU memory is below what the Whisper model needs, and switches from
+batched to sequential decoding when a batch will not fit. Check and free it:
 
 ```bash
 nvidia-smi

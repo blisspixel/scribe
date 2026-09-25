@@ -39,8 +39,9 @@ For setup variants, optional backends, upgrades, and recovery, see the
 - Processes batches and music collections with truthful partial-failure results.
 - Records through OBS without taking control of an existing recording.
 - Offers explicit OpenAI or OpenRouter cloud transcription when local processing is not desired.
-- Adds optional local speaker labels (token-free NVIDIA Nemotron on GPU or CPU) and
-  vocabulary correction.
+- Adds optional local speaker labels (token-free NVIDIA Nemotron on GPU or CPU),
+  best-guess speaker names from a local or chosen cloud model, and vocabulary
+  correction.
 - Generates opt-in notes, jokes, and memes with a selected local or cloud provider.
 - Provides optional speech-to-type, read-aloud, and resident voice hotkeys.
 - Searches structured transcript archives.

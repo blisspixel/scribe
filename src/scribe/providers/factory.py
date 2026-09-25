@@ -27,6 +27,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+#: OpenRouter's OpenAI-compatible chat completions endpoint.
+OPENROUTER_CHAT_BASE_URL = "https://openrouter.ai/api/v1"
+
 
 def _config_provider(feature: str) -> str | None:
     """Provider chosen in ~/.scribe/config.toml [providers] for a feature, if set.
@@ -78,6 +81,8 @@ def _resolve_api_key(provider_name: str, api_key: str | None) -> str:
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("SCRIBE_ANTHROPIC_API_KEY")
     elif provider_name == "gemini":
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("SCRIBE_GEMINI_API_KEY")
+    elif provider_name == "openrouter":
+        api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("SCRIBE_OPENROUTER_API_KEY")
     elif provider_name == "ollama":
         api_key = (
             os.getenv("OLLAMA_API_KEY")
@@ -222,12 +227,19 @@ def get_provider(
         provider_name=provider_name,
         api_key=api_key,
         model=model,
-        base_url=os.getenv("SCRIBE_OLLAMA_BASE_URL") if provider_name == "ollama" else None,
+        base_url=(
+            os.getenv("SCRIBE_OLLAMA_BASE_URL")
+            if provider_name == "ollama"
+            else OPENROUTER_CHAT_BASE_URL
+            if provider_name == "openrouter"
+            else None
+        ),
         timeout=timeout,
     )
 
     # Create provider
-    if provider_name == "openai":
+    if provider_name in ("openai", "openrouter"):
+        # OpenRouter serves an OpenAI-compatible chat API.
         return OpenAIProvider(config)
     elif provider_name == "xai":
         return XAIProvider(config)

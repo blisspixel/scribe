@@ -482,11 +482,16 @@ def _root(
 
 
 def _apply_diarization_options(
-    config: ScribeConfigType, diarize: bool | None, diarizer: str | None
+    config: ScribeConfigType,
+    diarize: bool | None,
+    diarizer: str | None,
+    name_speakers: bool | None = None,
 ) -> None:
-    """Apply --diarize/--diarizer to ``config``, rejecting unknown backend names."""
+    """Apply --diarize/--diarizer/--name-speakers, rejecting unknown backend names."""
     from scribe.core.diarization.registry import DIARIZER_CHOICES, NONE, normalize_diarizer
 
+    if name_speakers is not None:
+        config.name_speakers = name_speakers
     if diarize is not None:
         config.enable_speaker_diarization = diarize
     if diarizer is None:
@@ -576,6 +581,11 @@ def transcribe_command(
         "--diarizer",
         help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
     ),
+    name_speakers: bool | None = typer.Option(
+        None,
+        "--name-speakers/--no-name-speakers",
+        help="Suggest real speaker names with a language model (local Ollama by default)",
+    ),
 ) -> None:
     """
     Transcribe an audio or video file.
@@ -623,7 +633,7 @@ def transcribe_command(
                 raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
-        _apply_diarization_options(config, diarize, diarizer)
+        _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if output_dir is not None:
             config.output_folder = output_dir
 
@@ -1107,6 +1117,11 @@ def url_command(
         "--diarizer",
         help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
     ),
+    name_speakers: bool | None = typer.Option(
+        None,
+        "--name-speakers/--no-name-speakers",
+        help="Suggest real speaker names with a language model (local Ollama by default)",
+    ),
 ) -> None:
     """
     Download and transcribe audio/video from a URL.
@@ -1147,7 +1162,7 @@ def url_command(
         # Override config with CLI options
         if model:
             config.default_model = model
-        _apply_diarization_options(config, diarize, diarizer)
+        _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.exceptions import ValidationError
             from scribe.utils.validation import validate_language_code
@@ -2092,6 +2107,11 @@ def batch_transcribe(
         "--diarizer",
         help="Speaker diarization backend: auto, nemotron, pyannote, mlx, or none (implies --diarize unless none)",
     ),
+    name_speakers: bool | None = typer.Option(
+        None,
+        "--name-speakers/--no-name-speakers",
+        help="Suggest real speaker names with a language model (local Ollama by default)",
+    ),
 ) -> None:
     """
     Batch transcribe multiple audio/video files.
@@ -2119,7 +2139,7 @@ def batch_transcribe(
         # Override config with CLI options
         if model:
             config.default_model = model
-        _apply_diarization_options(config, diarize, diarizer)
+        _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.utils.validation import validate_language_code
 

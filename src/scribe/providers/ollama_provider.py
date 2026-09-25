@@ -166,13 +166,16 @@ class OllamaProvider(AIProvider):
             "model": self.config.model,
             "messages": messages,
             "stream": False,
-            "keep_alive": self.keep_alive,
+            "keep_alive": kwargs.get("keep_alive", self.keep_alive),
             "options": self._build_options(messages, max_tokens, temperature),
         }
         # `format` carries either "json" or a full JSON schema for constrained
         # decoding; callers pass it through kwargs (see chat_completion_with_json).
         if kwargs.get("format") is not None:
             payload["format"] = kwargs["format"]
+        # Ollama's top-level switch for reasoning models' thinking phase.
+        if kwargs.get("think") is not None:
+            payload["think"] = bool(kwargs["think"])
 
         data = self._post_chat(payload)
         message = data.get("message") or {}

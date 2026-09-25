@@ -85,6 +85,9 @@ def choose_batch_size(model_size: str, requested: int, free_gb: float | None) ->
     return batch if batch >= _MIN_BATCH_SIZE else 0
 
 
+#: Temperature fallback for sequential decoding (Whisper's standard schedule).
+_FALLBACK_TEMPERATURES = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+
 #: Batched decoding returns whole VAD chunks (often 25 to 35 seconds). These bounds
 #: split them back into readable, subtitle-sized segments using word timings.
 _SPLIT_MAX_SECONDS = 12.0
@@ -480,6 +483,12 @@ class LocalWhisperTranscriber:
                 batch_size=batch_size,
             )
         else:
+            # Whisper's standard decoding: each window is conditioned on the previous
+            # text, which keeps punctuation and casing consistent (without it, windows
+            # after the first lose the prompt and often come back lowercase and
+            # unpunctuated). Temperature fallback with compression-ratio and
+            # log-probability checks breaks the repetition loops that conditioning
+            # can otherwise cause, and resets the context when it does.
             segments_iter, info = model.transcribe(
                 str(audio_path),
                 language=self.language,
@@ -487,8 +496,12 @@ class LocalWhisperTranscriber:
                 vad_parameters={"min_silence_duration_ms": 400},
                 beam_size=self.gpu_config.beam_size,
                 best_of=self.gpu_config.beam_size,
-                temperature=0.0,
-                condition_on_previous_text=False,
+                temperature=_FALLBACK_TEMPERATURES,
+                compression_ratio_threshold=2.4,
+                log_prob_threshold=-1.0,
+                no_speech_threshold=0.6,
+                condition_on_previous_text=True,
+                prompt_reset_on_temperature=0.5,
                 initial_prompt=initial_prompt,
                 word_timestamps=word_timestamps,
             )
@@ -709,53 +722,108 @@ def write_clean_transcript(
         else:
             f.write("Duration: Unknown\n")
 
+        transcript.metadata["silence_periods"] = [[a, b] for a, b in silence_periods]
+        if transcript.speakers:
+            f.write("\n")
+            f.write(speaker_header(transcript))
+
         f.write("\n")
         f.write("─" * 80 + "\n")
         f.write("\n")
-        f.flush()
 
-        # Write transcript with silence markers
+        # Speaker-labeled transcripts group each speaker's consecutive segments into
+        # paragraphs; unlabeled transcripts keep one paragraph per segment as before.
+        paragraph: list[str] = []
+        paragraph_speaker: str | None = None
+        paragraph_words = 0
+
+        def flush_paragraph() -> None:
+            nonlocal paragraph, paragraph_words
+            if paragraph:
+                name = speaker_display_name(transcript, paragraph_speaker)
+                f.write(f"{name}: " + " ".join(paragraph) + "\n\n")
+            paragraph = []
+            paragraph_words = 0
+
         last_end = 0.0
-
         for segment in transcript.segments:
-            # Check for silence gaps
-            if silence_periods:
-                for silence_start, silence_end in silence_periods:
-                    if last_end < silence_start < segment.start:
-                        silence_duration = silence_end - silence_start
-                        if silence_duration > 120:  # 2+ minutes
-                            silence_mins = silence_duration / 60
-                            if silence_mins > 60:
-                                silence_hours = silence_mins / 60
-                                marker = (
-                                    f"[NO AUDIO FOR {silence_hours:.1f} HOURS - "
-                                    f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
-                                )
-                            else:
-                                marker = (
-                                    f"[NO AUDIO FOR {silence_mins:.0f} MINUTES - "
-                                    f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}]\n\n"
-                                )
-                            f.write(marker)
-                            f.flush()
-                            break
+            marker = _silence_marker(silence_periods, last_end, segment.start)
+            if marker:
+                flush_paragraph()
+                f.write(marker)
 
-            # Write segment (without timestamp). When a backend or local
-            # diarization labeled the speaker, prefix it; otherwise the line is
-            # unchanged, so non-diarized output stays byte-for-byte the same.
             text = segment.text.strip()
-
             if text:
                 if segment.speaker:
-                    f.write(f"{segment.speaker}: {text}\n\n")
+                    new_speaker = segment.speaker != paragraph_speaker
+                    too_long = paragraph_words >= _PARAGRAPH_WORDS and paragraph[-1].endswith(
+                        (".", "?", "!")
+                    )
+                    if new_speaker or too_long:
+                        flush_paragraph()
+                    paragraph_speaker = segment.speaker
+                    paragraph.append(text)
+                    paragraph_words += len(text.split())
                 else:
+                    flush_paragraph()
+                    paragraph_speaker = None
                     f.write(f"{text}\n\n")
-                f.flush()
 
             last_end = segment.end
 
-        # Final flush
-        f.flush()
+        flush_paragraph()
+
+
+#: Start a new paragraph for the same speaker after about this many words.
+_PARAGRAPH_WORDS = 150
+
+
+def _silence_marker(
+    silence_periods: list[tuple[float, float]], last_end: float, next_start: float
+) -> str | None:
+    """The "[NO AUDIO FOR ...]" marker for a 2+ minute silence before a segment."""
+    for silence_start, silence_end in silence_periods or ():
+        if last_end < silence_start < next_start:
+            silence_duration = silence_end - silence_start
+            if silence_duration <= 120:
+                return None
+            span = f"{format_timestamp(silence_start)} to {format_timestamp(silence_end)}"
+            silence_mins = silence_duration / 60
+            if silence_mins > 60:
+                return f"[NO AUDIO FOR {silence_mins / 60:.1f} HOURS - {span}]\n\n"
+            return f"[NO AUDIO FOR {silence_mins:.0f} MINUTES - {span}]\n\n"
+    return None
+
+
+def speaker_display_name(transcript: Transcript, label: str | None) -> str:
+    """The name to show for a speaker label: an identified name, else the label."""
+    return transcript.speaker_name(label) or ""
+
+
+def speaker_header(transcript: Transcript) -> str:
+    """Header block listing speakers, with best-guess names when they were identified."""
+    names = transcript.metadata.get("speaker_names") or {}
+    lines: list[str] = []
+    if names:
+        lines.append("Speakers (best guess from the conversation; fix names here and in the text):")
+        for label in transcript.speakers:
+            entry = names.get(label)
+            if isinstance(entry, dict) and entry.get("name"):
+                line = f"  {entry['name']} = {label}"
+                if entry.get("alternatives"):
+                    line += f" (possibly also: {', '.join(entry['alternatives'])})"
+                lines.append(line)
+            else:
+                lines.append(f"  {label} = unidentified")
+    else:
+        lines.append(f"Speakers: {', '.join(transcript.speakers)}")
+    return "\n".join(lines) + "\n"
+
+
+def rewrite_clean_transcript(transcript: Transcript, output_path: Path, audio_path: Path) -> None:
+    """Re-render a transcript's .txt, reusing the silence periods from the first write."""
+    periods = [(float(a), float(b)) for a, b in transcript.metadata.get("silence_periods") or []]
+    write_clean_transcript(transcript, output_path, audio_path, periods)
 
 
 def apply_diarizer_safely(

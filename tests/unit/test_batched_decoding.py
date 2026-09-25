@@ -81,7 +81,12 @@ def test_sequential_when_batch_size_zero(tmp_path: Path) -> None:
     with patch("faster_whisper.BatchedInferencePipeline") as pipeline:
         t._execute_transcription(tmp_path / "a.wav", 10.0, "")
     pipeline.assert_not_called()
-    assert t.model.transcribe.call_args.kwargs["beam_size"] == 5
+    kwargs = t.model.transcribe.call_args.kwargs
+    assert kwargs["beam_size"] == 5
+    # Conditioning keeps punctuation across windows; fallback guards against loops.
+    assert kwargs["condition_on_previous_text"] is True
+    assert kwargs["temperature"][0] == 0.0 and len(kwargs["temperature"]) > 1
+    assert kwargs["compression_ratio_threshold"] == 2.4
 
 
 def test_4090_tier_uses_beam_5() -> None:

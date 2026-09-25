@@ -14,6 +14,16 @@ milestones that predate this repository's Git history.
 
 ### Added
 
+- Added optional speaker naming (`--name-speakers`, `name_speakers` under
+  `[diarization]`). A language model proposes the names spoken in the meeting and
+  Scribe assigns them to speakers from evidence across every mention, so a name is
+  never given to the person who says it. Uses local Ollama by default (unloaded
+  after use), or a configured cloud provider including OpenRouter. The transcript
+  header lists best-guess names for easy correction.
+- Added a speaker list at the top of labeled transcripts and one paragraph per
+  speaker turn instead of a label on every sentence.
+- Added hysteresis, padding, and minimum-duration post-processing for Nemotron
+  diarization, and dropping of speakers with under 2 seconds of speech.
 - Added pluggable local speaker diarization under `scribe.core.diarization`, with
   word-level alignment that splits a Whisper segment at speaker changes.
 - Added token-free NVIDIA Nemotron-3 Diarization (`nvidia/Nemotron-3-Diarization`,
@@ -52,6 +62,14 @@ milestones that predate this repository's Git history.
 
 ### Fixed
 
+- Fixed local sequential transcription (CPU, low-VRAM GPUs, Apple and AMD
+  fallbacks, and the batched-decoding fallback) losing punctuation and casing
+  after the first 30 seconds: the prompt applied only to the first window. It now
+  uses Whisper's standard conditioned decoding with temperature fallback.
+- Fixed one-to-three-word speaker flips inside sentences ("Is" / "he?") by
+  smoothing speaker labels per sentence across segment boundaries.
+- Fixed a development Transformers build printing `[ERROR] ... not documented`
+  lines to the console while loading the diarization model.
 - Fixed silence markers ("[NO AUDIO FOR ...]") never appearing, and audio slicing,
   vocal detection, and vocal separation failing: they loaded audio through
   torchaudio, whose current releases need the separate torchcodec package. Scribe

@@ -96,6 +96,8 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["enable_speaker_diarization"] = diarization["enabled"]
     if "backend" in diarization:
         out["diarization_backend"] = diarization["backend"]
+    if "name_speakers" in diarization:
+        out["name_speakers"] = diarization["name_speakers"]
     if "pyannote_pipeline" in diarization:
         out["pyannote_pipeline"] = diarization["pyannote_pipeline"]
 

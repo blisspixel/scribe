@@ -469,12 +469,48 @@ class Transcriber:
             ValidationError: If file exceeds resource limits
         """
         try:
-            return self._transcribe(audio_path, method, session, custom_vocabulary, music_mode)
+            transcript_path = self._transcribe(
+                audio_path, method, session, custom_vocabulary, music_mode
+            )
         finally:
             # Free GPU memory as soon as this file is done, so a finished run never
             # holds the Whisper model while notes use a local LLM, while a shortcut
             # window waits for Enter, or across long-lived processes.
             self.release_resources()
+        if not music_mode:
+            self._name_speakers(transcript_path, audio_path)
+        return transcript_path
+
+    def _name_speakers(self, transcript_path: Path, audio_path: Path) -> None:
+        """Add best-guess speaker names and re-render the .txt, when enabled.
+
+        Runs after GPU memory is released so a local model has room. Applies only
+        to transcripts from the local writer; naming never fails a transcription.
+        """
+        transcript = self.last_transcript
+        if (
+            not getattr(self.config, "name_speakers", False)
+            or transcript is None
+            or not transcript.speakers
+            or "silence_periods" not in transcript.metadata
+        ):
+            return
+
+        from dataclasses import replace
+
+        from scribe.core.local_whisper import rewrite_clean_transcript
+        from scribe.core.speaker_naming import name_speakers
+
+        names = name_speakers(transcript)
+        if not names:
+            return
+        named = replace(transcript, metadata={**transcript.metadata, "speaker_names": names})
+        try:
+            rewrite_clean_transcript(named, transcript_path, audio_path)
+        except OSError as e:
+            logger.warning(f"Could not add speaker names to {transcript_path.name}: {e}")
+            return
+        self.last_transcript = named
 
     def release_resources(self) -> None:
         """Unload local models (Whisper and the diarizer) and release GPU memory.

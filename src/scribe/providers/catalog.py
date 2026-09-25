@@ -13,13 +13,24 @@ _DEFAULT_MODELS: dict[str, dict[str, str | None]] = {
         "meme": "gpt-5.5",
         "meme_image": "gpt-image-2",
         "notes": "gpt-5.5",
+        "speakers": "gpt-5.5",
         "transcribe": "whisper-1",
+    },
+    # OpenRouter's OpenAI-compatible chat endpoint; used for text features only.
+    "openrouter": {
+        "joke": None,
+        "meme": None,
+        "meme_image": None,
+        "notes": "google/gemini-3.8-flash",
+        "speakers": "google/gemini-3.8-flash",
+        "transcribe": None,
     },
     "xai": {
         "joke": "grok-4.3",
         "meme": "grok-4.3",
         "meme_image": "grok-imagine-image",
         "notes": "grok-4.3",
+        "speakers": "grok-4.3",
         "transcribe": None,
     },
     "anthropic": {
@@ -27,6 +38,7 @@ _DEFAULT_MODELS: dict[str, dict[str, str | None]] = {
         "meme": "claude-sonnet-5",
         "meme_image": None,
         "notes": "claude-sonnet-5",
+        "speakers": "claude-sonnet-5",
         "transcribe": None,
     },
     "gemini": {
@@ -34,6 +46,7 @@ _DEFAULT_MODELS: dict[str, dict[str, str | None]] = {
         "meme": "gemini-3.5-flash",
         "meme_image": "gemini-3.1-flash-image",
         "notes": "gemini-3.5-flash",
+        "speakers": "gemini-3.5-flash",
         "transcribe": None,
     },
     # Ollama models are machine-dependent. These values are last-resort
@@ -43,6 +56,7 @@ _DEFAULT_MODELS: dict[str, dict[str, str | None]] = {
         "meme": DEFAULT_OLLAMA_MODEL,
         "meme_image": None,
         "notes": DEFAULT_OLLAMA_MODEL,
+        "speakers": DEFAULT_OLLAMA_MODEL,
         "transcribe": None,
     },
 }

@@ -54,6 +54,41 @@ run and its device. The first run downloads the model from Hugging Face; later
 runs are offline. Speaker labels never fail a transcription: if labeling fails,
 the unlabeled transcript is kept and the reason is logged.
 
+Labeled transcripts list the speakers at the top and group each speaker's
+consecutive sentences into one paragraph. Short speaker flips inside a sentence,
+which are usually diarization jitter at a turn edge, are folded into the
+sentence's main speaker.
+
+### Speaker names
+
+`--name-speakers` (or `name_speakers = true` under `[diarization]` in
+`~/.scribe/config.toml`) suggests real names from the conversation, such as
+introductions and people addressing each other. A language model proposes the
+names that are spoken; Scribe then assigns each name to a speaker by counting
+evidence across every mention, and leaves a speaker unidentified when the
+evidence is not clear. The header shows the best guess for easy correction:
+
+```text
+Speakers (best guess from the conversation; fix names here and in the text):
+  Dana = SPEAKER_00
+  Priya = SPEAKER_01 (possibly also: Sam)
+  SPEAKER_02 = unidentified
+```
+
+"Possibly also" means one label collected two names, which often happens when
+diarization merges two similar voices. Naming uses a local Ollama model by
+default and unloads it when done. It sends the transcript to a cloud provider only
+when you choose one:
+
+```bash
+scribe transcribe meeting.mp4 --name-speakers
+SCRIBE_SPEAKERS_PROVIDER=openrouter scribe transcribe meeting.mp4 --name-speakers
+```
+
+Supported providers are `ollama`, `openai`, `openrouter`, `anthropic`, `gemini`,
+and `xai`; `SCRIBE_SPEAKERS_MODEL` overrides the model. Local-only mode always
+keeps naming local. If no local model is available, naming is skipped.
+
 ## Optional generated outputs
 
 Notes, jokes, and memes are disabled by default. A positive flag enables the

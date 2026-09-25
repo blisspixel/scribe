@@ -101,6 +101,79 @@ def _fill_unlabeled(words: Sequence[TranscriptWord]) -> tuple[TranscriptWord, ..
     return tuple(filled)
 
 
+#: A different-speaker run inside a sentence at or under these bounds is treated as
+#: diarization jitter at a turn edge and takes the sentence's majority speaker.
+_ISLAND_MAX_WORDS = 3
+_ISLAND_MAX_SECONDS = 1.0
+#: Sentences this short are attributed to a single speaker.
+_SHORT_SENTENCE_WORDS = 8
+#: A pause longer than this also ends a sentence (NeMo uses the same 1 s break).
+_SENTENCE_PAUSE = 1.0
+#: Longer unpunctuated runs are not treated as one sentence.
+_MAX_SENTENCE_WORDS = 60
+# Latin plus CJK full stop, question mark, and exclamation mark.
+_SENTENCE_END = (".", "?", "!", chr(0x3002), chr(0xFF1F), chr(0xFF01))
+
+
+def _sentences(words: Sequence[TranscriptWord]) -> list[range]:
+    """Index ranges of sentences: split at sentence punctuation or a pause over 1 s."""
+    ranges: list[range] = []
+    start = 0
+    for index, word in enumerate(words):
+        at_end = word.text.strip().endswith(_SENTENCE_END)
+        pause = index + 1 < len(words) and words[index + 1].start - word.end > _SENTENCE_PAUSE
+        if at_end or pause or index - start + 1 >= _MAX_SENTENCE_WORDS:
+            ranges.append(range(start, index + 1))
+            start = index + 1
+    if start < len(words):
+        ranges.append(range(start, len(words)))
+    return ranges
+
+
+def smooth_word_speakers(words: Sequence[TranscriptWord]) -> tuple[TranscriptWord, ...]:
+    """Remove speaker flips that are diarization jitter rather than real turns.
+
+    Diarizers are least certain at turn edges, so word-level assignment can hand
+    one to three words of a sentence to the wrong person ("Is" / "he?"). Within
+    each sentence, short sentences take their majority speaker (by speaking time)
+    and short minority runs in longer sentences are absorbed into the majority.
+    Sentences are never merged, so a one-word backchannel such as "Yeah." from
+    another participant is kept.
+    """
+    smoothed = list(words)
+    for sentence in _sentences(smoothed):
+        members = [smoothed[i] for i in sentence]
+        durations: dict[str, float] = {}
+        for word in members:
+            if word.speaker is not None:
+                durations[word.speaker] = durations.get(word.speaker, 0.0) + max(
+                    word.end - word.start, 0.01
+                )
+        if len(durations) < 2:
+            continue
+        majority = max(durations, key=lambda speaker: durations[speaker])
+        if len(members) <= _SHORT_SENTENCE_WORDS:
+            for i in sentence:
+                smoothed[i] = replace(smoothed[i], speaker=majority)
+            continue
+        # Absorb short minority runs into the sentence majority.
+        run_start = sentence.start
+        for i in range(sentence.start, sentence.stop + 1):
+            boundary = i == sentence.stop or smoothed[i].speaker != smoothed[run_start].speaker
+            if not boundary:
+                continue
+            run = range(run_start, i)
+            speaker = smoothed[run_start].speaker
+            seconds = smoothed[i - 1].end - smoothed[run_start].start
+            if speaker != majority and (
+                len(run) <= _ISLAND_MAX_WORDS or seconds <= _ISLAND_MAX_SECONDS
+            ):
+                for j in run:
+                    smoothed[j] = replace(smoothed[j], speaker=majority)
+            run_start = i
+    return tuple(smoothed)
+
+
 def _words_text(words: Sequence[TranscriptWord]) -> str:
     """Rebuild text from word tokens.
 
@@ -110,27 +183,18 @@ def _words_text(words: Sequence[TranscriptWord]) -> str:
     return "".join(w.text for w in words).strip()
 
 
-def resegment_by_words(
-    segment: TranscriptSegment, ordered_turns: Sequence[SpeakerTurn]
+def _split_by_speaker(
+    segment: TranscriptSegment, labeled_words: Sequence[TranscriptWord]
 ) -> list[TranscriptSegment]:
-    """Split a segment into speaker-homogeneous segments using word timestamps.
+    """Split a segment's labeled words into speaker-homogeneous segments.
 
-    Falls back to the segment's dominant speaker when it has no words. A segment
-    spoken entirely by one speaker keeps its original text and timing.
+    A segment spoken entirely by one speaker keeps its original text and timing.
     """
-    if not segment.words:
-        return [
-            replace(segment, speaker=dominant_speaker(segment.start, segment.end, ordered_turns))
-        ]
-
-    labeled_words = _fill_unlabeled(align_words(segment.words, ordered_turns))
     speakers = {w.speaker for w in labeled_words}
     if len(speakers) == 1:
         (only,) = speakers
-        speaker = only or dominant_speaker(segment.start, segment.end, ordered_turns)
-        return [replace(segment, speaker=speaker, words=labeled_words)]
+        return [replace(segment, speaker=only, words=tuple(labeled_words))]
 
-    # Group consecutive words sharing the same speaker into subsegments.
     groups: list[list[TranscriptWord]] = [[labeled_words[0]]]
     for word in labeled_words[1:]:
         if word.speaker == groups[-1][-1].speaker:
@@ -152,19 +216,43 @@ def resegment_by_words(
     ]
 
 
-def resegment_transcript(transcript: Transcript, turns: Sequence[SpeakerTurn]) -> Transcript:
-    """Return a transcript resegmented into speaker-homogeneous segments when words exist.
+def label_words(
+    words: Sequence[TranscriptWord], ordered_turns: Sequence[SpeakerTurn]
+) -> tuple[TranscriptWord, ...]:
+    """Label, gap-fill, and smooth a word sequence against sorted speaker turns."""
+    return smooth_word_speakers(_fill_unlabeled(align_words(words, ordered_turns)))
 
-    If segments contain word timestamps, turns are aligned at word boundaries,
-    splitting single segments where multiple speakers converse. If words are
-    absent, falls back cleanly to segment-level dominant speaker attribution.
+
+def resegment_by_words(
+    segment: TranscriptSegment, ordered_turns: Sequence[SpeakerTurn]
+) -> list[TranscriptSegment]:
+    """Split a segment into speaker-homogeneous segments using word timestamps.
+
+    Falls back to the segment's dominant speaker when it has no words.
+    """
+    if not segment.words:
+        return [
+            replace(segment, speaker=dominant_speaker(segment.start, segment.end, ordered_turns))
+        ]
+    return _split_by_speaker(segment, label_words(segment.words, ordered_turns))
+
+
+def resegment_transcript(transcript: Transcript, turns: Sequence[SpeakerTurn]) -> Transcript:
+    """Return a transcript resegmented into speaker-homogeneous segments.
+
+    Words from every segment are labeled and smoothed as one sequence, because
+    sentences (and the jitter around turn edges) often cross segment boundaries.
+    Segments without word timestamps fall back to segment-level attribution.
     """
     ordered = sorted(turns, key=lambda t: (t.start, t.end))
-    new_segments: list[TranscriptSegment] = []
+    all_words = [w for seg in transcript.segments for w in (seg.words or ())]
+    labeled = iter(label_words(all_words, ordered))
 
+    new_segments: list[TranscriptSegment] = []
     for seg in transcript.segments:
         if seg.words:
-            new_segments.extend(resegment_by_words(seg, ordered))
+            seg_words = [next(labeled) for _ in seg.words]
+            new_segments.extend(_split_by_speaker(seg, seg_words))
         else:
             new_segments.append(replace(seg, speaker=dominant_speaker(seg.start, seg.end, ordered)))
 

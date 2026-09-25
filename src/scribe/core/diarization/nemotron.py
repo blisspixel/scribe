@@ -12,18 +12,23 @@ The model is native to Transformers from 5.18 onward (the
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
+import io
 import os
+import sys
 import wave
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import numpy as np
 
 from scribe.core.diarization.alignment import align_diarization
-from scribe.core.diarization.base import DiarizationResult, SpeakerTurn, package_has_submodule
+from scribe.core.diarization.base import DiarizationResult, package_has_submodule
 from scribe.core.diarization.device import resolve_torch_device
+from scribe.core.diarization.postprocess import BinarizeParams, binarize
 from scribe.models.transcript import Transcript
 from scribe.utils.logging import get_logger
 
@@ -72,6 +77,36 @@ def _load_audio_waveform(
     return np.asarray(data, dtype=np.float32), int(sr)
 
 
+class _DocstringNoiseFilter(io.TextIOBase):
+    """Stdout proxy that drops the undocumented-argument lines some Transformers
+    builds print while importing, and forwards everything else unchanged."""
+
+    _MARKER = "but not documented. Make sure to add it to the docstring"
+
+    def __init__(self, target: TextIO) -> None:
+        self._target = target
+        self._dropped_line = False
+
+    def write(self, text: str) -> int:
+        if self._MARKER in text:
+            self._dropped_line = True
+            return len(text)
+        if self._dropped_line and text == "\n":
+            self._dropped_line = False
+            return len(text)
+        self._dropped_line = False
+        return self._target.write(text)
+
+    def flush(self) -> None:
+        self._target.flush()
+
+
+@contextlib.contextmanager
+def _suppress_transformers_docstring_noise() -> Iterator[None]:
+    with contextlib.redirect_stdout(_DocstringNoiseFilter(sys.stdout)):
+        yield
+
+
 class NemotronDiarizer:
     """Runs NVIDIA Nemotron-3 Diarization via Transformers."""
 
@@ -84,9 +119,11 @@ class NemotronDiarizer:
         *,
         device: str | None = None,
         model_id: str | None = None,
+        params: BinarizeParams | None = None,
     ) -> None:
         self.device = resolve_torch_device(device)
         self.model_id = model_id or self.MODEL_ID
+        self.params = params or BinarizeParams()
         self.processor: Any = None
         self.model: Any = None
 
@@ -110,20 +147,19 @@ class NemotronDiarizer:
 
         # Quiet Transformers before its first import; it logs at import time.
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
-        # Imported as Any so type checking is identical with or without the extra.
-        transformers: Any = importlib.import_module("transformers")
-
-        # Keep Transformers' weight-loading progress bars out of Scribe's console.
-        transformers.utils.logging.disable_progress_bar()
-        transformers.utils.logging.set_verbosity_error()
-
         logger.info(
             f"Loading Nemotron diarization model ({self.model_id}, {self.device}); "
             "the first run downloads it from Hugging Face"
         )
-        self.processor = transformers.AutoProcessor.from_pretrained(self.model_id)
-        # Load then move, rather than device_map, which would also require accelerate.
-        model = transformers.AutoModelForAudioFrameClassification.from_pretrained(self.model_id)
+        with _suppress_transformers_docstring_noise():
+            # Imported as Any so type checking is identical with or without the extra.
+            transformers: Any = importlib.import_module("transformers")
+            # Keep Transformers' weight-loading progress bars out of Scribe's console.
+            transformers.utils.logging.disable_progress_bar()
+            transformers.utils.logging.set_verbosity_error()
+            self.processor = transformers.AutoProcessor.from_pretrained(self.model_id)
+            # Load then move, rather than device_map, which would also require accelerate.
+            model = transformers.AutoModelForAudioFrameClassification.from_pretrained(self.model_id)
         self.model = model.to(self.device).eval()
 
     def diarize(self, audio_path: Path) -> DiarizationResult:
@@ -139,24 +175,18 @@ class NemotronDiarizer:
             with torch.inference_mode():
                 logits = self.model(**inputs).logits
 
-            # One list per batch item of {"Start": s, "End": s, "Speaker": index}.
-            speaker_dicts = self.processor.extract_speaker_dict(
-                logits, inputs.get("attention_mask")
-            )
-            raw_turns = speaker_dicts[0] if speaker_dicts else []
-
-            turns = tuple(
-                SpeakerTurn(
-                    start=float(item["Start"]),
-                    end=float(item["End"]),
-                    speaker=f"SPEAKER_{int(item['Speaker']):02d}",
-                )
-                for item in raw_turns
-                if float(item["End"]) > float(item["Start"])
-            )
+            # Per-frame speaker probabilities, trimmed to the valid (unpadded) frames.
+            probs = logits[0].float().sigmoid().cpu().numpy()
+            mask = inputs.get("attention_mask")
+            if mask is not None:
+                probs = probs[: int(mask[0].sum().item())]
+            extractor = self.processor.feature_extractor
+            frame_seconds = extractor.hop_length / extractor.sampling_rate
+            raw_channels = int((probs > self.params.onset).any(axis=0).sum())
+            turns = tuple(binarize(probs, frame_seconds, self.params))
 
             speaker_count = len({t.speaker for t in turns})
-            limit_reached = speaker_count >= self.MAX_SPEAKERS
+            limit_reached = raw_channels >= self.MAX_SPEAKERS
             if limit_reached:
                 logger.warning(
                     f"{speaker_count} speakers detected, which is Nemotron's limit. If the "
@@ -172,7 +202,11 @@ class NemotronDiarizer:
                 frame_resolution_ms=10,
                 supports_overlap=True,
                 speaker_limit_reached=limit_reached,
-                metadata={"model_max_speakers": self.MAX_SPEAKERS, "device": self.device},
+                metadata={
+                    "model_max_speakers": self.MAX_SPEAKERS,
+                    "device": self.device,
+                    "postprocessing": self.params.as_dict(),
+                },
             )
         except Exception as e:
             logger.warning(f"Nemotron diarization failed, leaving transcript unlabeled: {e}")

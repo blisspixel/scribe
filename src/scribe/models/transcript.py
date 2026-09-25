@@ -85,6 +85,18 @@ class Transcript:
     model: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def speaker_name(self, label: str | None) -> str | None:
+        """Display name for a speaker label: an identified name, else the label itself.
+
+        Names come from ``metadata["speaker_names"]`` (label -> {"name": ...}), which
+        speaker naming fills in; labels without an accepted name are shown as-is.
+        """
+        names = self.metadata.get("speaker_names") or {}
+        entry = names.get(label) if label else None
+        if isinstance(entry, dict) and entry.get("name"):
+            return str(entry["name"])
+        return label
+
     @property
     def speakers(self) -> list[str]:
         """Distinct speaker labels, in first-appearance order."""
