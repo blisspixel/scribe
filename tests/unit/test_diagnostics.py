@@ -162,8 +162,8 @@ class TestPythonPackagesCheck:
         """A native ABI mismatch must not be misreported as a healthy install."""
 
         def import_for_check(name, *_args, **_kwargs):
-            if name == "torchaudio":
-                raise RuntimeError("Torch and TorchAudio use different CUDA versions")
+            if name == "torch":
+                raise OSError("DLL load failed while importing torch")
             return Mock()
 
         diagnostics = SystemDiagnostics()
@@ -173,8 +173,8 @@ class TestPythonPackagesCheck:
         assert result.status == "fail"
         assert result.message == "1 critical package(s) unavailable"
         assert result.details is not None
-        assert "Broken: torchaudio" in result.details
-        assert "same PyTorch backend" in (result.fix_suggestion or "")
+        assert "Broken: torch" in result.details
+        assert "--torch-backend auto" in (result.fix_suggestion or "")
 
 
 class TestCUDACheck:

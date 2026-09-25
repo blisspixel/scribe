@@ -28,7 +28,6 @@ classifiers = [
 
 dependencies = [
     "torch>=2.13.0",
-    "torchaudio>=2.11.0",
     "faster-whisper>=0.10.0",
     "openai>=1.0.0",
     "pydub>=0.25.1",
@@ -270,7 +269,6 @@ module = [
     "faster_whisper.*",
     "pydub.*",
     "obsws_python.*",
-    "torchaudio.*",
     "anthropic.*",
     "google.*",
     "google.genai.*",

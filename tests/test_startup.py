@@ -45,7 +45,6 @@ def check_imports():
         ("colorama", "colorama"),
         ("torch", "torch"),
         ("whisper", "whisper"),
-        ("torchaudio", "torchaudio"),
         ("dotenv", "dotenv"),
         ("numpy", "numpy"),
         ("scipy", "scipy"),

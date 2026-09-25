@@ -68,7 +68,7 @@ SEPARATION PIPELINE:
 ────────────────────
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 1. AUDIO LOADING                                                            │
-│    ├─ Load audio file with torchaudio                                      │
+│    ├─ Load audio file (audio_io)                                           │
 │    ├─ Resample to 44.1kHz (Demucs native sample rate)                     │
 │    └─ Convert to stereo if mono (Demucs expects stereo)                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -300,23 +300,15 @@ class VocalSeparator:
             import sys
 
             import torch
-            import torchaudio
             from demucs.apply import apply_model
+
+            from scribe.utils.audio_io import load_audio, save_wav
 
             logger.info(f"Separating vocals from: {audio_path.name}")
 
-            # Load audio
-            wav, sr = torchaudio.load(str(audio_path))
-
-            # Resample if needed (Demucs expects 44.1kHz)
-            if sr != 44100:
-                resampler = torchaudio.transforms.Resample(sr, 44100)
-                wav = resampler(wav)
-                sr = 44100
-
-            # Ensure stereo
-            if wav.shape[0] == 1:
-                wav = wav.repeat(2, 1)
+            # Demucs expects 44.1 kHz stereo.
+            samples, sr = load_audio(audio_path, sample_rate=44100, channels=2)
+            wav = torch.from_numpy(samples)
 
             # Move to device
             wav = wav.to(self.device)
@@ -352,7 +344,7 @@ class VocalSeparator:
             vocals = sources[3].cpu()
 
             # Save vocals
-            torchaudio.save(str(vocals_path), vocals, sr)
+            save_wav(vocals_path, vocals.numpy(), sr)
 
             logger.info(f"Vocals saved to: {vocals_path.name}")
             return vocals_path

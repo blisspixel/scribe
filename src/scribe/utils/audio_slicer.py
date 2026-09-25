@@ -45,7 +45,7 @@ This module implements Stage 2: converting timestamps into audio files.
 
 SLICING ALGORITHM:
 ──────────────────
-1. Load audio file with torchaudio
+1. Load audio file with scribe.utils.audio_io
 2. Get sample rate and total samples
 3. For each segment (start, end):
    a. Convert timestamps to sample indices
@@ -54,7 +54,7 @@ SLICING ALGORITHM:
 4. Return list of segment file paths
 
 Key implementation details:
-- Uses torchaudio for efficient audio I/O
+- Uses the standard-library WAV reader, with FFmpeg for other formats
 - Preserves original sample rate (no resampling)
 - Saves as WAV (lossless, fast)
 - Sequential numbering for easy reassembly
@@ -84,7 +84,7 @@ WHAT THIS MODULE ACTUALLY DOES (HONEST ASSESSMENT):
 ────────────────────────────────────────────────────
 This is a SIMPLE utility - not complex or innovative. It:
 
-1. Loads entire audio file into memory (torchaudio.load)
+1. Loads entire audio file into memory (scribe.utils.audio_io.load_audio)
 2. For each segment, extracts samples: waveform[:, start:end]
 3. Saves each segment as a separate WAV file
 4. Returns list of file paths
@@ -202,7 +202,7 @@ def slice_audio_by_segments(
         List of paths to sliced audio files
     """
     try:
-        import torchaudio
+        from scribe.utils.audio_io import load_audio, save_wav
 
         if output_dir is None:
             output_dir_path = Path(tempfile.mkdtemp(prefix="audio_slices_"))
@@ -213,7 +213,7 @@ def slice_audio_by_segments(
         logger.info(f"Slicing audio into {len(segments)} segments")
 
         # Load full audio
-        waveform, sample_rate = torchaudio.load(str(audio_path))
+        waveform, sample_rate = load_audio(audio_path, channels=None)
 
         sliced_paths = []
         total_samples = waveform.shape[1]
@@ -235,7 +235,7 @@ def slice_audio_by_segments(
 
             # Save segment
             segment_path = output_dir_path / f"segment_{i:04d}.wav"
-            torchaudio.save(str(segment_path), segment_waveform, sample_rate)
+            save_wav(segment_path, segment_waveform, sample_rate)
 
             sliced_paths.append(segment_path)
             logger.debug(

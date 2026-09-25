@@ -151,7 +151,10 @@ def test_security_compatibility_bounds_and_zero_exception_audit_are_explicit() -
     runtime_dependencies = set(configuration["project"]["dependencies"])
     whisperx_dependencies = set(configuration["project"]["optional-dependencies"]["whisperx"])
     assert "torch>=2.13.0" in runtime_dependencies
-    assert "torchaudio>=2.11.0" in runtime_dependencies
+    # torchaudio is not a runtime dependency: its CUDA builds can disagree with the
+    # installed PyTorch build, which breaks Transformers imports. Scribe reads audio
+    # through scribe.utils.audio_io instead.
+    assert not any(dep.startswith("torchaudio") for dep in runtime_dependencies)
     assert "whisperx>=3.7.2,<3.8" in whisperx_dependencies
 
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

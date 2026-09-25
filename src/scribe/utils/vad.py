@@ -252,24 +252,15 @@ class VocalActivityDetector:
             raise RuntimeError("Silero VAD model failed to load")
 
         try:
-            import torchaudio
+            import torch
+
+            from scribe.utils.audio_io import load_audio
 
             logger.info(f"Detecting vocal segments in: {audio_path.name}")
 
-            # Load audio
-            wav, sr = torchaudio.load(str(audio_path))
-
-            # Convert to mono if stereo
-            if wav.shape[0] > 1:
-                wav = wav.mean(dim=0, keepdim=True)
-
-            # Resample if needed
-            if sr != sample_rate:
-                resampler = torchaudio.transforms.Resample(sr, sample_rate)
-                wav = resampler(wav)
-
-            # Flatten to 1D
-            wav = wav.squeeze()
+            # Load as mono at the VAD sample rate, as a 1D tensor.
+            samples, _ = load_audio(audio_path, sample_rate=sample_rate, channels=1)
+            wav = torch.from_numpy(samples[0])
 
             # Get timestamps using Silero VAD
             get_speech_timestamps, _, _, _, _ = utils

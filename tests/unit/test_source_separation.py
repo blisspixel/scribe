@@ -30,6 +30,9 @@ class FakeSource:
     def cpu(self):
         return self
 
+    def numpy(self):
+        return self
+
 
 class FakeNoGrad:
     def __enter__(self):
@@ -85,31 +88,33 @@ def test_separate_vocals_returns_cached_output_and_runs_full_pipeline(tmp_path):
     demucs_module = ModuleType("demucs")
     demucs_module.apply = apply_module
 
-    def resample(_in_sr, _out_sr):
-        return lambda wav: wav
-
     def save_audio(path, _vocals, sr):
         Path(path).write_text(f"{sr}", encoding="utf-8")
 
-    fake_torchaudio = SimpleNamespace(
-        load=lambda _path: (FakeWaveform(channels=1), 16000),
-        transforms=SimpleNamespace(Resample=resample),
-        save=save_audio,
+    loaded = []
+
+    def load_audio(_path, *, sample_rate=None, channels=1):
+        loaded.append((sample_rate, channels))
+        return "samples", 44100
+
+    fake_torch = SimpleNamespace(
+        no_grad=lambda: FakeNoGrad(), from_numpy=lambda _data: FakeWaveform(channels=2)
     )
-    fake_torch = SimpleNamespace(no_grad=lambda: FakeNoGrad())
     apply_module.apply_model = apply_model
     output_dir = tmp_path / "fresh"
 
-    with patch.dict(
-        sys.modules,
-        {
-            "demucs": demucs_module,
-            "demucs.apply": apply_module,
-            "torchaudio": fake_torchaudio,
-            "torch": fake_torch,
-        },
+    with (
+        patch.dict(
+            sys.modules,
+            {"demucs": demucs_module, "demucs.apply": apply_module, "torch": fake_torch},
+        ),
+        patch("scribe.utils.audio_io.load_audio", side_effect=load_audio),
+        patch("scribe.utils.audio_io.save_wav", side_effect=save_audio),
     ):
         result = separator.separate_vocals(tmp_path / "song.wav", output_dir=output_dir)
+
+    # Demucs needs 44.1 kHz stereo, requested from the loader.
+    assert loaded == [(44100, 2)]
 
     assert result == output_dir / "song_vocals.wav"
     assert result.read_text(encoding="utf-8") == "44100"
@@ -123,9 +128,6 @@ def test_separate_vocals_raises_when_model_missing_or_processing_fails(tmp_path)
             separator.separate_vocals(tmp_path / "song.wav")
 
     separator.model = Mock()
-    fake_torchaudio = SimpleNamespace(
-        load=lambda _path: (_ for _ in ()).throw(RuntimeError("decode failed"))
-    )
     fake_torch = SimpleNamespace(no_grad=lambda: FakeNoGrad())
     apply_module = ModuleType("demucs.apply")
 
@@ -136,14 +138,12 @@ def test_separate_vocals_raises_when_model_missing_or_processing_fails(tmp_path)
     demucs_module = ModuleType("demucs")
     demucs_module.apply = apply_module
 
-    with patch.dict(
-        sys.modules,
-        {
-            "demucs": demucs_module,
-            "demucs.apply": apply_module,
-            "torchaudio": fake_torchaudio,
-            "torch": fake_torch,
-        },
+    with (
+        patch.dict(
+            sys.modules,
+            {"demucs": demucs_module, "demucs.apply": apply_module, "torch": fake_torch},
+        ),
+        patch("scribe.utils.audio_io.load_audio", side_effect=RuntimeError("decode failed")),
     ):
         with pytest.raises(RuntimeError, match="decode failed"):
             separator.separate_vocals(tmp_path / "song.wav", output_dir=tmp_path / "out")

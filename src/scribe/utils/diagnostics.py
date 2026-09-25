@@ -954,7 +954,6 @@ class SystemDiagnostics:
 
         critical_packages = (
             "torch",
-            "torchaudio",
             "faster_whisper",
             "openai",
             "typer",
@@ -986,8 +985,8 @@ class SystemDiagnostics:
                 details="\n".join(detail_parts),
                 fix_suggestion=(
                     "Reinstall Scribe from its original package source; "
-                    "checkout users can run: uv sync --locked. Install Torch and "
-                    "TorchAudio from the same PyTorch backend."
+                    "checkout users can run: uv sync --locked. For a GPU build of Torch, "
+                    "reinstall with uv's --torch-backend auto."
                 ),
             )
         else:

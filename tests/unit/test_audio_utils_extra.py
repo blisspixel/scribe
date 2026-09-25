@@ -1,5 +1,4 @@
 import logging
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -80,19 +79,15 @@ def test_validate_audio_file_logs_large_files_and_accepts_valid_inputs(tmp_path)
     mock_warning.assert_called_once()
 
 
-def test_detect_silence_periods_and_format_helpers():
-    waveform = np.zeros((2, 100), dtype=float)
-    fake_torch = SimpleNamespace(
-        mean=lambda arr, dim=0, keepdim=True: np.mean(arr, axis=dim, keepdims=keepdim),
-        sqrt=np.sqrt,
-        log10=np.log10,
-    )
-    fake_torchaudio = SimpleNamespace(load=lambda _path: (waveform, 10))
+def test_detect_silence_periods_and_format_helpers(tmp_path):
+    from scribe.utils.audio_io import save_wav
 
-    with patch.dict(sys.modules, {"torch": fake_torch, "torchaudio": fake_torchaudio}):
-        silence_periods = detect_silence_periods(
-            Path("song.wav"), silence_threshold=-20.0, min_silence_duration=1.0
-        )
+    song = tmp_path / "song.wav"
+    save_wav(song, np.zeros((2, 100), dtype=np.float32), 10)
+
+    silence_periods = detect_silence_periods(
+        song, silence_threshold=-20.0, min_silence_duration=1.0
+    )
 
     assert silence_periods == [(0.0, 10.0)]
     assert format_timestamp(3661) == "01:01:01"
@@ -105,12 +100,25 @@ def test_detect_silence_periods_and_format_helpers():
 
 
 def test_detect_silence_periods_returns_empty_on_processing_failures():
-    broken_torchaudio = SimpleNamespace(
-        load=lambda _path: (_ for _ in ()).throw(RuntimeError("decode error"))
-    )
-
-    with patch.dict(sys.modules, {"torchaudio": broken_torchaudio}):
+    with patch("scribe.utils.audio_io.load_audio", side_effect=RuntimeError("decode error")):
         assert detect_silence_periods(Path("broken.wav")) == []
+
+
+def test_detect_silence_periods_finds_quiet_gap_between_tones(tmp_path):
+    from scribe.utils.audio_io import save_wav
+
+    rate = 1000
+    tone = 0.5 * np.sin(np.linspace(0, 200 * np.pi, 5 * rate, dtype=np.float32))
+    audio = np.concatenate([tone, np.zeros(40 * rate, dtype=np.float32), tone])
+    path = tmp_path / "gap.wav"
+    save_wav(path, audio, rate)
+
+    periods = detect_silence_periods(path, silence_threshold=-40.0, min_silence_duration=30.0)
+
+    assert len(periods) == 1
+    start, end = periods[0]
+    assert 4.5 <= start <= 5.5
+    assert 44.0 <= end <= 45.5
 
 
 def test_get_audio_info_reports_missing_and_available_metadata(tmp_path):
@@ -118,15 +126,12 @@ def test_get_audio_info_reports_missing_and_available_metadata(tmp_path):
     assert missing_info["exists"] is False
     assert missing_info["format"] is None
 
-    audio_path = tmp_path / "song.wav"
-    audio_path.write_bytes(b"x" * 200)
-    fake_audio_info = SimpleNamespace(sample_rate=44100, num_channels=2)
-    fake_torchaudio = SimpleNamespace(info=lambda _path: fake_audio_info)
+    from scribe.utils.audio_io import save_wav
 
-    with (
-        patch("scribe.utils.audio.get_audio_duration", return_value=125.0),
-        patch.dict(sys.modules, {"torchaudio": fake_torchaudio}),
-    ):
+    audio_path = tmp_path / "song.wav"
+    save_wav(audio_path, np.zeros((2, 441), dtype=np.float32), 44100)
+
+    with patch("scribe.utils.audio.get_audio_duration", return_value=125.0):
         info = get_audio_info(audio_path)
 
     assert info["exists"] is True

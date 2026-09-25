@@ -7,11 +7,8 @@ Tests the get_audio_duration function and its fallback mechanisms.
 import wave
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
-
 from scribe.utils.audio import (
     _get_duration_ffprobe,
-    _get_duration_torchaudio,
     _get_duration_wave,
     get_audio_duration,
 )
@@ -156,44 +153,6 @@ class TestWavDurationMethod:
             assert duration is None
 
 
-class TestTorchaudioDurationMethod:
-    """Test torchaudio duration detection."""
-
-    def test_torchaudio_method_gets_duration(self, tmp_path):
-        """Test _get_duration_torchaudio extracts duration."""
-        try:
-            import torchaudio as _torchaudio
-        except ImportError:
-            pytest.skip("torchaudio not available")
-
-        assert _torchaudio is not None
-        wav_path = tmp_path / "test.wav"
-        sample_rate = 16000
-        duration_seconds = 5.0
-        num_frames = int(sample_rate * duration_seconds)
-
-        with wave.open(str(wav_path), "wb") as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(sample_rate)
-            wav.writeframes(b"\x00" * (num_frames * 2))
-
-        duration = _get_duration_torchaudio(wav_path)
-
-        # May return None if torchaudio can't read the file
-        if duration is not None:
-            assert abs(duration - duration_seconds) < 0.01
-
-    def test_torchaudio_method_returns_none_when_not_available(self, tmp_path):
-        """Test _get_duration_torchaudio returns None when torchaudio unavailable."""
-        wav_path = tmp_path / "test.wav"
-
-        with patch.dict("sys.modules", {"torchaudio": None}):
-            duration = _get_duration_torchaudio(wav_path)
-
-            assert duration is None
-
-
 class TestFFprobeDurationMethod:
     """Test ffprobe duration detection."""
 
@@ -271,9 +230,8 @@ class TestDurationValidation:
         mp4_path.write_bytes(b"fake mp4")
 
         with patch("scribe.utils.audio._get_duration_wave", side_effect=[64801.6, None]):
-            with patch("scribe.utils.audio._get_duration_torchaudio", side_effect=[None, 1800.0]):
-                with patch("scribe.utils.audio._get_duration_ffprobe", return_value=None):
-                    duration = get_audio_duration(wav_path)
+            with patch("scribe.utils.audio._get_duration_ffprobe", side_effect=[None, 1800.0]):
+                duration = get_audio_duration(wav_path)
 
         assert duration == 1800.0
 
@@ -291,9 +249,8 @@ class TestDurationValidation:
         mp4_path.write_bytes(b"fake mp4")
 
         with patch("scribe.utils.audio._get_duration_wave", side_effect=[64801.6, None]):
-            with patch("scribe.utils.audio._get_duration_torchaudio", side_effect=[None, 1800.0]):
-                with patch("scribe.utils.audio._get_duration_ffprobe", return_value=None):
-                    duration = validate_audio_duration(wav_path, max_duration_hours=12.0)
+            with patch("scribe.utils.audio._get_duration_ffprobe", side_effect=[None, 1800.0]):
+                duration = validate_audio_duration(wav_path, max_duration_hours=12.0)
 
         assert duration == 1800.0
 
@@ -309,51 +266,28 @@ class TestDurationValidation:
 
         with patch("scribe.utils.audio._get_duration_wave", return_value=2.0) as mock_wave:
             with patch(
-                "scribe.utils.audio._get_duration_torchaudio", return_value=3.0
-            ) as mock_torch:
-                with patch(
-                    "scribe.utils.audio._get_duration_ffprobe", return_value=4.0
-                ) as mock_ffprobe:
-                    duration = get_audio_duration(wav_path)
+                "scribe.utils.audio._get_duration_ffprobe", return_value=4.0
+            ) as mock_ffprobe:
+                duration = get_audio_duration(wav_path)
 
-                    # Should use WAV method
-                    assert duration == 2.0
-                    mock_wave.assert_called_once()
-                    mock_torch.assert_not_called()
-                    mock_ffprobe.assert_not_called()
-
-    def test_falls_back_to_torchaudio_when_wav_fails(self, tmp_path):
-        """Test fallback to torchaudio when WAV method fails."""
-        wav_path = tmp_path / "test.wav"
-
-        with patch("scribe.utils.audio._get_duration_wave", return_value=None):
-            with patch(
-                "scribe.utils.audio._get_duration_torchaudio", return_value=5.0
-            ) as mock_torch:
-                with patch(
-                    "scribe.utils.audio._get_duration_ffprobe", return_value=6.0
-                ) as mock_ffprobe:
-                    duration = get_audio_duration(wav_path)
-
-                    # Should use torchaudio method
-                    assert duration == 5.0
-                    mock_torch.assert_called_once()
-                    mock_ffprobe.assert_not_called()
+                # Should use WAV method
+                assert duration == 2.0
+                mock_wave.assert_called_once()
+                mock_ffprobe.assert_not_called()
 
     def test_falls_back_to_ffprobe_when_others_fail(self, tmp_path):
         """Test fallback to ffprobe when other methods fail."""
         wav_path = tmp_path / "test.wav"
 
         with patch("scribe.utils.audio._get_duration_wave", return_value=None):
-            with patch("scribe.utils.audio._get_duration_torchaudio", return_value=None):
-                with patch(
-                    "scribe.utils.audio._get_duration_ffprobe", return_value=7.0
-                ) as mock_ffprobe:
-                    duration = get_audio_duration(wav_path)
+            with patch(
+                "scribe.utils.audio._get_duration_ffprobe", return_value=7.0
+            ) as mock_ffprobe:
+                duration = get_audio_duration(wav_path)
 
-                    # Should use ffprobe method
-                    assert duration == 7.0
-                    mock_ffprobe.assert_called_once()
+                # Should use ffprobe method
+                assert duration == 7.0
+                mock_ffprobe.assert_called_once()
 
 
 class TestEdgeCases:

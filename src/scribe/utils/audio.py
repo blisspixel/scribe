@@ -14,7 +14,7 @@ Simple approach: "Just use one library to read audio files"
 
 Problems:
 1. **Format incompatibility**: Library doesn't support all formats
-2. **Missing dependencies**: FFmpeg not installed, torchaudio missing
+2. **Missing dependencies**: FFmpeg not installed
 3. **Corrupted files**: Partial downloads, encoding errors
 4. **Platform differences**: Windows vs Linux vs macOS paths/tools
 5. **Performance**: Some methods slow for simple metadata
@@ -32,7 +32,7 @@ We implement a fallback chain with increasing complexity:
    -> ~1ms for typical file
 
 2. **Torchaudio metadata** (handles multiple formats)
-   -> Uses torchaudio.info() (no audio loading)
+   -> Uses ffprobe (no audio loading)
    -> Supports WAV, MP3, FLAC, OGG, etc.
    -> ~10ms for typical file
 
@@ -56,7 +56,7 @@ def get_audio_duration(path: Path) -> Optional[float]:
         return duration
 
     # Try medium method
-    duration = _get_duration_torchaudio(path)
+    duration = _get_duration_ffprobe(path)
     if duration is not None:
         return duration
 
@@ -161,7 +161,7 @@ valid_extensions = {
 
 **Why these formats?**
 - Covers 95%+ of real-world use cases
-- Supported by Whisper/torchaudio
+- Supported by Whisper and FFmpeg
 - Common in transcription workflows
 
 **What's NOT supported:**
@@ -201,7 +201,7 @@ A: Empirically chosen - quiet room level. Could be configurable.
 A: Shorter periods aren't useful for navigation, reduces noise
 
 **Q: Why not use librosa or pydub?**
-A: Additional dependencies, torchaudio already required for Whisper
+A: Additional dependencies; the wave module and ffprobe are enough
 
 LIMITATIONS (HONEST):
 ─────────────────────
@@ -213,7 +213,7 @@ LIMITATIONS (HONEST):
 
 EDGE CASES HANDLED:
 ───────────────────
-1. **Missing dependencies**: Graceful fallback (wave -> torchaudio -> ffprobe)
+1. **Missing dependencies**: Graceful fallback (wave -> ffprobe)
 2. **Corrupted files**: Caught in validation, clear error messages
 3. **Very large files**: Warning issued (> 2GB)
 4. **Empty files**: Detected in validation
@@ -289,12 +289,7 @@ def get_audio_duration(path: Path) -> float | None:
     if duration is not None:
         return _correct_suspicious_wav_duration(path, duration)
 
-    # Method 2: Torchaudio metadata
-    duration = _get_duration_torchaudio(path)
-    if duration is not None:
-        return duration
-
-    # Method 3: FFprobe subprocess
+    # Method 2: FFprobe subprocess
     duration = _get_duration_ffprobe(path)
     return duration
 
@@ -322,19 +317,14 @@ def _correct_suspicious_wav_duration(path: Path, duration: float) -> float:
 
     candidates: list[tuple[str, float]] = []
 
-    for source_name, candidate in (
-        ("torchaudio", _get_duration_torchaudio(path)),
-        ("ffprobe", _get_duration_ffprobe(path)),
-    ):
+    for source_name, candidate in (("ffprobe", _get_duration_ffprobe(path)),):
         if candidate is not None and 0 < candidate < duration:
             candidates.append((source_name, candidate))
 
     original_path = _find_original_media_path(path)
     if original_path is not None:
-        original_duration = (
-            _get_duration_wave(original_path)
-            or _get_duration_torchaudio(original_path)
-            or _get_duration_ffprobe(original_path)
+        original_duration = _get_duration_wave(original_path) or _get_duration_ffprobe(
+            original_path
         )
         if original_duration is not None and 0 < original_duration < duration:
             candidates.append((f"original:{original_path.name}", original_duration))
@@ -392,26 +382,6 @@ def _get_duration_wave(path: Path) -> float | None:
 
         logger = get_logger(__name__)
         logger.debug(f"Failed to read WAV duration: {e}")
-        pass
-
-    return None
-
-
-def _get_duration_torchaudio(path: Path) -> float | None:
-    """Get duration using torchaudio metadata."""
-    try:
-        import warnings
-
-        import torchaudio
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=UserWarning)
-            info = torchaudio.info(str(path))
-
-        if hasattr(info, "sample_rate") and hasattr(info, "num_frames"):
-            if info.sample_rate > 0 and info.num_frames > 0:
-                return float(info.num_frames) / float(info.sample_rate)
-    except Exception:
         pass
 
     return None
@@ -480,48 +450,39 @@ def detect_silence_periods(
         List of (start_time, end_time) tuples in seconds
     """
     try:
-        import torch
-        import torchaudio
+        import numpy as np
 
-        waveform, sample_rate = torchaudio.load(str(audio_path))
+        from scribe.utils.audio_io import load_audio
 
-        # Convert to mono if stereo
-        if waveform.shape[0] > 1:
-            waveform = torch.mean(waveform, dim=0, keepdim=True)
+        waveform, sample_rate = load_audio(audio_path, channels=1)
+        samples = waveform[0].astype(np.float64)
 
-        # Calculate RMS energy in sliding windows
-        window_size = int(sample_rate * 0.5)  # 0.5 second windows
-        hop_size = int(sample_rate * 0.1)  # 0.1 second hops
+        # RMS energy in 0.5 s windows every 0.1 s, via a running sum of squares.
+        window_size = int(sample_rate * 0.5)
+        hop_size = int(sample_rate * 0.1)
+        starts = np.arange(0, len(samples) - window_size, hop_size)
+        if len(starts) == 0:
+            return []
+        energy = np.concatenate(([0.0], np.cumsum(samples * samples)))
+        rms = np.sqrt((energy[starts + window_size] - energy[starts]) / window_size)
+        silent = 20 * np.log10(rms + 1e-10) < silence_threshold
 
-        silence_periods = []
-        current_silence_start = None
-
-        for i in range(0, waveform.shape[1] - window_size, hop_size):
-            window = waveform[0, i : i + window_size]
-
-            # Calculate RMS and convert to dB
-            rms = torch.sqrt(torch.mean(window**2))
-            db = 20 * torch.log10(rms + 1e-10)  # Add small value to avoid log(0)
-
-            current_time = i / sample_rate
-
-            if db < silence_threshold:
-                # Start of silence period
+        silence_periods: list[tuple[float, float]] = []
+        current_silence_start: float | None = None
+        for start, is_silent in zip(starts, silent, strict=True):
+            current_time = float(start) / sample_rate
+            if is_silent:
                 if current_silence_start is None:
                     current_silence_start = current_time
-            else:
-                # End of silence period
-                if current_silence_start is not None:
-                    silence_duration = current_time - current_silence_start
-                    if silence_duration >= min_silence_duration:
-                        silence_periods.append((current_silence_start, current_time))
-                    current_silence_start = None
+            elif current_silence_start is not None:
+                if current_time - current_silence_start >= min_silence_duration:
+                    silence_periods.append((current_silence_start, current_time))
+                current_silence_start = None
 
         # Handle silence that extends to end of file
         if current_silence_start is not None:
-            total_duration = waveform.shape[1] / sample_rate
-            silence_duration = total_duration - current_silence_start
-            if silence_duration >= min_silence_duration:
+            total_duration = len(samples) / sample_rate
+            if total_duration - current_silence_start >= min_silence_duration:
                 silence_periods.append((current_silence_start, total_duration))
 
         return silence_periods
@@ -664,13 +625,11 @@ def get_audio_info(path: Path) -> dict[str, Any]:
 
     # Try to get sample rate and channels
     try:
-        import torchaudio
+        import wave
 
-        audio_info = torchaudio.info(str(path))
-        if hasattr(audio_info, "sample_rate"):
-            info["sample_rate"] = audio_info.sample_rate
-        if hasattr(audio_info, "num_channels"):
-            info["channels"] = audio_info.num_channels
+        with wave.open(str(path), "rb") as wf:
+            info["sample_rate"] = wf.getframerate()
+            info["channels"] = wf.getnchannels()
     except Exception:
         pass
 

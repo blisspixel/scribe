@@ -33,6 +33,8 @@ milestones that predate this repository's Git history.
 
 ### Changed
 
+- torchaudio is no longer a base dependency. Extras that need it (pyannote and
+  WhisperX) still install it.
 - Local NVIDIA transcription now uses faster-whisper's batched pipeline with a
   batch size chosen from the GPU tier and free VRAM, falling back to sequential
   decoding when memory is short or a batched run fails. Long batched chunks are
@@ -50,6 +52,13 @@ milestones that predate this repository's Git history.
 
 ### Fixed
 
+- Fixed silence markers ("[NO AUDIO FOR ...]") never appearing, and audio slicing,
+  vocal detection, and vocal separation failing: they loaded audio through
+  torchaudio, whose current releases need the separate torchcodec package. Scribe
+  now reads audio with the standard-library WAV reader and FFmpeg.
+- Fixed speaker labels failing on GPU installs where uv selected a PyTorch CUDA
+  build with no matching torchaudio build (for example CUDA 13.2), which broke
+  Transformers imports.
 - Fixed OpenAI `gpt-4o-transcribe-diarize` transcription returning no speaker
   labels. Scribe now requests `diarized_json`, stops sending the unsupported
   `timestamp_granularities` parameter, and merges fragments into speaker turns.
