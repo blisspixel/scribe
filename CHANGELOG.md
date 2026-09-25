@@ -55,6 +55,8 @@ milestones that predate this repository's Git history.
   `timestamp_granularities` parameter, and merges fragments into speaker turns.
 - Fixed pyannote diarization failing on pyannote.audio 4.x, which renamed the
   token argument and changed the pipeline output type.
+- Locked `lightning` 2.6.6 for the optional pyannote extras to fix a high-severity
+  checkpoint code-execution advisory.
 - A speaker-labeling failure now keeps the unlabeled transcript instead of
   failing the transcription.
 - Fixed finished transcriptions keeping the Whisper model (about 4 GB on a
