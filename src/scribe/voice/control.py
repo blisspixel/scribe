@@ -68,7 +68,10 @@ def restrict_private(path: Path) -> None:
         if path.parent.exists():
             os.chmod(path.parent, 0o700)
     with suppress(OSError):
-        os.chmod(path, 0o600)
+        if path.is_dir():
+            os.chmod(path, 0o700)
+        elif path.exists():
+            os.chmod(path, 0o600)
 
 
 def tokens_match(provided: str, expected: str) -> bool:

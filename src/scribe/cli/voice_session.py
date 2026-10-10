@@ -35,13 +35,16 @@ def _spawn_owner() -> None:
     """Start one detached owner. The resident lock rejects a second process."""
     command = [sys.executable, "-m", "scribe", "voice", "serve"]
     if os.name == "nt":
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+        )
         subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=True,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=creationflags,
         )
         return
     subprocess.Popen(
