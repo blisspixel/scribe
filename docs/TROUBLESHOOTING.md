@@ -20,7 +20,7 @@ Install the current GitHub release as a tool:
 
 ```bash
 uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.10.0
+  git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 ```
 
@@ -30,11 +30,25 @@ run `uv tool list` and follow the path guidance printed by uv.
 No package named `scribe` has been published for this project. Do not use a bare
 `pip install scribe`, which can install an unrelated package.
 
+On Omarchy and Arch, `/usr/bin/python` is 3.14. `scribe doctor` fails that
+interpreter on purpose. Install `uv` with `omarchy pkg add uv` or
+`sudo pacman -S uv`, then reinstall with `--python 3.12`. FFmpeg is preinstalled
+on Omarchy. If `scribe doctor` still reports it missing, run
+`sudo pacman -S ffmpeg`. Do not use `apt` on Arch.
+
+Experimental Omarchy voice is `scribe voice`, not the tray hotkeys. If the
+microphone state is unclear, read `~/.scribe/voice-status.txt`: it contains
+`MICROPHONE ON` or `MICROPHONE OFF`. `scribe voice check` does not open the
+microphone, and a zero exit is not a tested Omarchy installation. Removal is
+`scribe voice omarchy-remove` or `bash packaging/linux/omarchy/uninstall.sh`.
+That leaves `~/.scribe` in place. Confirm chords with Super+K, then
+`hyprctl reload` and `hyprctl configerrors`.
+
 If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
 uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.10.0
+  git+https://github.com/blisspixel/scribe.git@v2.11.0
 ```
 
 For a development checkout:
@@ -127,10 +141,10 @@ Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -205,7 +219,7 @@ install the token-free Nemotron extra:
 
 ```bash
 uv tool install --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 scribe info
 ```
 
@@ -249,7 +263,7 @@ Install the tray extra and run its check without starting the resident process:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 scribe tray --check
 ```
 
@@ -293,4 +307,4 @@ Python version, command shape with private values replaced, exit code, and the
 smallest relevant sanitized error excerpt. Never attach a real recording unless
 all necessary permissions and an approved transfer method are in place.
 
-Version baseline: Scribe 2.10.0.
+Version baseline: Scribe 2.11.0.

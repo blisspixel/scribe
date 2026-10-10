@@ -331,6 +331,8 @@ class TestWebSocketConnection:
         assert result.message == "OBS WebSocket port mismatch"
         assert result.fix_suggestion is not None
         assert "SCRIBE_OBS_PORT=4456" in result.fix_suggestion
+        assert "export SCRIBE_OBS_PORT=4456" in result.fix_suggestion
+        assert "set SCRIBE_OBS_PORT=4456" in result.fix_suggestion
         port_check.assert_not_called()
         mock_obs_reqs.ReqClient.assert_not_called()
 
@@ -2599,15 +2601,19 @@ class TestLaunchObs:
     def test_windows_runs_exe_with_flags(self, recorder, monkeypatch):
         monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "windows")
         calls: list[list[str]] = []
+        kwargs_seen: list[dict[str, object]] = []
 
         def fake_popen(args, **kwargs):
             calls.append(args)
+            kwargs_seen.append(kwargs)
             return MagicMock()
 
+        exe = Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe")
         monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
-        recorder._launch_obs(Path(r"C:\Program Files\obs-studio\bin\64bit\obs64.exe"))
+        recorder._launch_obs(exe)
         assert "--minimize-to-tray" in calls[0]
         assert "--disable-shutdown-check" in calls[0]
+        assert kwargs_seen[0]["cwd"] == str(exe.parent)
 
     def test_windows_recovery_launch_uses_supported_flags(self, recorder, monkeypatch):
         """Windows recovery starts a separate capture without stopping another OBS."""
@@ -2631,10 +2637,14 @@ class TestLaunchObs:
         """Linux recovery uses the same OBS capture contract without tray flags."""
         monkeypatch.setattr("scribe.utils.platform.get_platform", lambda: "linux")
         calls: list[list[str]] = []
-        monkeypatch.setattr(
-            "scribe.core.recorder.subprocess.Popen",
-            lambda args, **_kwargs: calls.append(args) or MagicMock(),
-        )
+        kwargs_seen: list[dict[str, object]] = []
+
+        def fake_popen(args, **kwargs):
+            calls.append(args)
+            kwargs_seen.append(kwargs)
+            return MagicMock()
+
+        monkeypatch.setattr("scribe.core.recorder.subprocess.Popen", fake_popen)
 
         recorder._launch_obs(
             Path("/usr/bin/obs"),
@@ -2645,3 +2655,4 @@ class TestLaunchObs:
         assert "--multi" in calls[0]
         assert "--startrecording" in calls[0]
         assert "--minimize-to-tray" not in calls[0]
+        assert "cwd" not in kwargs_seen[0]

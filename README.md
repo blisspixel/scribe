@@ -18,7 +18,7 @@ Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpe
 OBS Studio is required only for recording.
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.10.0
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 
 scribe init
@@ -29,7 +29,49 @@ scribe meeting.mp4
 Open a new terminal after `uv tool update-shell`. This project is not published
 on PyPI, where an unrelated package uses the same name.
 
-For setup variants, optional backends, upgrades, and recovery, see the
+### Omarchy
+
+Omarchy is the Linux desktop this project is set up for: Arch, Hyprland,
+Quickshell, PipeWire, and a preinstalled OBS Studio. Its `python` is 3.14, which
+Scribe does not run. Install uv, then pin the tool to Python 3.12:
+
+```bash
+omarchy pkg add uv
+uv tool install --python 3.12 --force \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+uv tool update-shell
+scribe init
+scribe doctor
+scribe voice check
+scribe voice omarchy-install
+```
+
+A git checkout can run `bash packaging/linux/omarchy/install.sh` instead. That
+script installs the same extra and the Hyprland markers. Removal is
+`bash packaging/linux/omarchy/uninstall.sh`: it drops the markers and the uv
+tool, and it leaves `~/.scribe` in place. Upgrade by running the install script
+again. These helpers are not a package-index submission and they are not a
+tested Omarchy installation.
+
+FFmpeg, yt-dlp, and OBS are already on a standard Omarchy install. `scribe rec`
+records through OBS. That is separate from Omarchy's Alt+Print Screen capture.
+Desktop dictation stays with Omarchy (F9, Super+Ctrl+X, and Right Alt when a
+dictation backend is installed). Scribe's chords are Super+Alt+D, Super+Alt+Shift+D,
+Super+Alt+Y, Super+Alt+I, Super+Alt+A, and Super+Alt+O. Confirm them with
+Super+K before relying on them.
+
+`scribe voice` reuses the resident voice owner. It does not open a second
+microphone or load a second model. The microphone stays off until dictate, and
+recording is marked MICROPHONE ON in the terminal overlay, in
+`~/.scribe/voice-status.txt`, and in a critical notification. Copy, insert, and
+read run only when asked. Insert pastes through Hyprland, not `wtype`. Cloud
+transcription is not available on this command. `scribe voice check` does not
+open the microphone. A successful check is not a tested Omarchy installation:
+microphone selection, focus changes, correct-target insertion, cancellation,
+device loss, and recovery have not been demonstrated on Omarchy hardware. The
+[deployment guide](docs/DEPLOYMENT.md#omarchy) has the install and removal steps.
+
+For other setup variants, optional backends, upgrades, and recovery, see the
 [deployment guide](docs/DEPLOYMENT.md).
 
 ## What Scribe does
@@ -112,9 +154,12 @@ scribe tray
 ```
 
 The full Python tray is live-validated on Windows. macOS and Linux remain
-experimental until their hardware validation records are complete. Installation,
-hotkeys, permissions, single-instance ownership, and recovery are in the
-[resident voice guide](docs/VOICE.md).
+experimental until their hardware validation records are complete. On Omarchy,
+`scribe voice` is the compositor path: Hyprland owns the shortcuts and a
+terminal overlay shows recording state. That path is experimental and was not
+demonstrated on Omarchy hardware. The tray does not take F9, Super+Ctrl+X, or
+Right Alt. Installation, hotkeys, permissions, single-instance ownership, and
+recovery are in the [resident voice guide](docs/VOICE.md).
 
 ## Reliable outcomes
 
@@ -141,7 +186,9 @@ diagnostic bundle for review before sharing.
 
 ## Project status
 
-Version 2.10.0 is the current GitHub release. It is not published on PyPI. CI
+Version 2.11.0 is the current GitHub release. It is not published on PyPI.
+Linux compositor voice is experimental and is not a tested Omarchy installation.
+CI
 enforces Ruff, strict mypy, an 81 percent combined
 statement-and-branch coverage floor, dependency and artifact audits, and native
 source checks. The dependency-ordered version plan and remaining platform

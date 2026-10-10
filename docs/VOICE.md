@@ -128,8 +128,83 @@ complete.
 | Windows | Run `scribe tray --check`; verify microphone, hotkeys, tray, and startup |
 | macOS | Grant Input Monitoring and Microphone to the launching binary; typed injection also needs Accessibility; fully quit and relaunch after permission changes |
 | Linux X11 | Use a graphical `DISPLAY`; ensure the desktop has an AppIndicator or StatusNotifier host, or use `--no-tray` |
-| Linux Wayland | Global hooks vary by compositor; prefer desktop shortcuts or an X11 session when hooks are unreliable |
+| Linux Wayland | pynput does not register compositor bindings. Portal GlobalShortcuts support varies by desktop |
+| Omarchy | `scribe voice` is the experimental compositor path. Leave F9, Super+Ctrl+X, and Right Alt push-to-talk to Omarchy dictation. A check exit is not hardware validation |
 | Headless or SSH | Tray icons and global desktop hotkeys are unsupported |
+
+## Omarchy
+
+Omarchy already has a dictation path. When a backend such as Voxtype or
+Superwhisper is installed, F9 is push-to-talk, Super+Ctrl+X toggles dictation,
+and holding Right Alt starts it. Scribe must not take those keys.
+
+`scribe voice` is the experimental local path for this desktop. It talks to the
+one resident `VoiceTrayService`. It does not open a second microphone and it
+does not load a second model. Cloud transcription is not a command on this
+path. The microphone stays off until `scribe voice dictate` or Super+Alt+D.
+Recording state is visible in three places: a red `MICROPHONE ON` banner in
+`scribe voice overlay`, the exact text `MICROPHONE ON` in
+`~/.scribe/voice-status.txt`, and a critical notification. Processing, reading,
+and errors say the microphone is off.
+
+Install the tray extra, then add only the marked user blocks:
+
+```bash
+uv tool install --force --python 3.12 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+scribe voice check
+scribe voice omarchy-install
+```
+
+From a checkout, `bash packaging/linux/omarchy/install.sh` does both steps.
+`bash packaging/linux/omarchy/uninstall.sh` runs `scribe voice omarchy-remove`
+and `uv tool uninstall scribe`. `~/.scribe` is left in place. Upgrade by running
+the install script again. The scripts are not a package-index submission and
+they are not a tested Omarchy installation.
+
+The installed chords, which you must confirm with Super+K, are:
+
+| Chord | Action |
+|---|---|
+| Super+Alt+D | Start or finish dictation |
+| Super+Alt+Shift+D | Cancel and discard |
+| Super+Alt+Y | Copy the last transcript without keystrokes |
+| Super+Alt+I | Insert the last transcript into the focused window |
+| Super+Alt+A | Read the last transcript with the local voice |
+| Super+Alt+O | Open the terminal overlay |
+
+The overlay launcher is `omarchy-launch-tui scribe voice overlay`. Inside the
+overlay, `d`, `x`, `y`, `i`, `a`, and `q` dictate, cancel, copy, insert, read,
+and close the panel. Closing the panel does not stop the owner. `scribe voice
+stop` does. A second `scribe voice serve` exits without loading another model.
+
+Insert copies the transcript, then asks Hyprland to paste with
+`hl.dsp.send_key_state` down and up. Terminals such as Foot use Ctrl+Shift+V.
+The transcript is never placed in the dispatcher string. `wtype` is not used.
+If Hyprland does not confirm the paste, the command fails even when the
+clipboard holds the text.
+
+`scribe voice check` prints Python, sounddevice, and whether the marker blocks
+are present. It does not open the microphone. `hardware_validated` stays false.
+Exit 0 is not a tested Omarchy installation. Microphone selection, focus
+changes, correct-target insertion, cancellation, device loss, and recovery are
+still required before this path leaves experimental.
+
+The resident tray still cannot see Hyprland keypresses. `scribe tray --startup
+install` writes an XDG autostart file only. That file does not add a binding,
+and Quickshell is not assumed to show a tray icon. `scribe voice serve` is the
+autostart line the marker block adds to `~/.config/hypr/autostart.lua`.
+
+Use `scribe` in Foot for file transcription and `scribe rec` for OBS recording.
+A personal recording bind, if you want one, stays separate from the voice chords:
+
+```lua
+o.bind("SUPER + ALT + R", "Check Scribe recording", "scribe rec --check")
+```
+
+Confirm that chord is free with Super+K as well. Do not edit the packaged files
+under `/usr/share/omarchy`; an update replaces them. After saving
+`~/.config/hypr/bindings.lua`, run `hyprctl reload` and `hyprctl configerrors`.
 
 Record live macOS and Linux results in the
 [validation matrix](features/VOICE_TRAY_MAC_LINUX_VALIDATION.md). The original

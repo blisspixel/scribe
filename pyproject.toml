@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.10.0"
+version = "2.11.0"
 description = "Local-first speech transcription, meeting notes, and recording tools"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -232,8 +232,10 @@ allowed-confusables = ["×"]
 "src/scribe/core/openai_api.py" = ["S311"]  # jitter only
 "src/scribe/cli/main.py" = ["S324"]  # md5 for stable non-crypto machine ID (two sites)
 "src/scribe/cli/shortcut.py" = ["S603", "S607"]  # launches trusted local tools (powershell, update-desktop-database) to create OS launchers
+"src/scribe/cli/voice_session.py" = ["S603", "S607"]  # launches trusted local tools (omarchy-notification-send, notify-send, hyprctl)
 "src/scribe/voice/startup.py" = ["S603", "S607"]  # launches trusted local tools (launchctl) to install the login autostart entry
 "src/scribe/voice/tray.py" = ["S603"]  # launches only a user-selected, unverified local Go prototype
+
 
 [tool.ruff.format]
 quote-style = "double"

@@ -4,6 +4,8 @@
 
 Accepted (2026-06), amended (2026-09) to supersede the pyannote-only architecture
 with pluggable backends, word-level timestamp reconciliation, and NVIDIA Nemotron-3.
+Amended (2026-10) to make local labeling experimental and disabled by default
+after a reported four-participant call produced only two labels.
 
 ## Context
 
@@ -42,7 +44,11 @@ functional, it exhibited architectural limitations:
    - Preference order: Apple Silicon prefers MLX, then Nemotron, then pyannote. Every
      other vendor, including plain CPU, prefers Nemotron, then pyannote. Nemotron
      (`nvidia/Nemotron-3-Diarization`, ungated, openmdw-1.1) needs no Hugging Face
-     token and runs well on CPU, so it is the default everywhere.
+     token and runs on CPU, so it is preferred when labeling is explicitly enabled.
+   - Local labeling is disabled by default, including when extras are installed.
+     Explicit CLI or configuration opt-ins enable it. The two-second speaker
+     filter and sentence smoothing can hide participants; four-or-more-speaker
+     quality evidence is required before reconsidering automatic labeling.
    - `resolve_diarizer` tries an explicit backend first, then the preference order,
      and skips any backend whose extra or credentials are missing. pyannote without
      a token is skipped rather than chosen and then abandoned.

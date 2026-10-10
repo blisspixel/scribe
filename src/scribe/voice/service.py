@@ -146,8 +146,9 @@ def tray_platform_matrix(system: str) -> TrayPlatformMatrix:
         return TrayPlatformMatrix(
             system,
             "experimental",
-            "Linux tray is experimental: live hardware matrix not yet recorded; "
-            "requires a graphical session (X11 preferred; Wayland hotkeys unreliable)",
+            "Linux tray is experimental: live hardware matrix not yet recorded. "
+            "Wayland sessions such as Omarchy do not get pynput global hotkeys. "
+            "`scribe voice` is a separate experimental compositor path",
         )
     return TrayPlatformMatrix(
         system,
@@ -255,10 +256,12 @@ def resident_voice_advisories(
             advisories.append(
                 ReadinessAdvisory(
                     "warning",
-                    "Linux/Wayland detected: global hotkeys via pynput are "
-                    "unreliable here (portal GlobalShortcuts support varies by DE). "
-                    "Prefer `scribe tray --no-tray` with desktop shortcuts to "
-                    "`scribe listen` / `scribe say --selection`, or an X11 session.",
+                    "Linux/Wayland detected: pynput cannot register Hyprland bindings, "
+                    "and portal GlobalShortcuts support varies by desktop. On Omarchy, "
+                    "leave F9 and Super+Ctrl+X for Omarchy dictation. `scribe voice` "
+                    "adds experimental compositor chords and a terminal overlay; a "
+                    "check does not validate hardware. Use the terminal for "
+                    "transcription and OBS recording.",
                 )
             )
         elif is_graphical:
@@ -275,8 +278,11 @@ def resident_voice_advisories(
         advisories.append(
             ReadinessAdvisory(
                 "info",
-                "Linux run-at-login uses XDG autostart "
-                "(`~/.config/autostart` via `scribe tray --startup install`).",
+                "Linux run-at-login writes an XDG autostart entry "
+                "(`~/.config/autostart` via `scribe tray --startup install`). "
+                "On Omarchy that entry does not create a Hyprland binding; personal "
+                "binds belong in `~/.config/hypr/bindings.lua`, not under "
+                "`/usr/share/omarchy`.",
             )
         )
 
@@ -374,7 +380,9 @@ class HotkeyState:
 class VoiceTrayService:
     """Resident voice service used by the tray icon and no-tray fallback."""
 
-    def __init__(self, settings: TraySettings, console: Console) -> None:
+    def __init__(
+        self, settings: TraySettings, console: Console, *, explicit_insert: bool = False
+    ) -> None:
         self.settings = settings
         self.console = console
         self.hotkeys = HotkeyState(settings.dictate_spec, settings.read_spec)
@@ -446,6 +454,13 @@ class VoiceTrayService:
         self._ipc_ready = threading.Event()
         self._ipc_quit_requested = threading.Event()
         self._ipc_disconnected = threading.Event()
+        # Windows tray injection stays the default. The Omarchy owner sets
+        # explicit_insert so a finished dictation is stored, not pasted.
+        self.explicit_insert = explicit_insert
+        self.last_transcript = ""
+        self._cancel_requested = False
+        self._mic_announcer: Callable[[bool], None] | None = None
+        self._text_inserter: Callable[[str], str] | None = None
 
     @property
     def status_text(self) -> str:
@@ -481,6 +496,69 @@ class VoiceTrayService:
     def set_notifier(self, notifier: Callable[[str, str], None] | None) -> None:
         """Set a user-facing notifier (title, message), e.g. tray notifications."""
         self._notifier = notifier
+
+    def set_mic_announcer(self, announcer: Callable[[bool], None] | None) -> None:
+        """Report microphone open and closed. The Windows tray leaves this unset."""
+        self._mic_announcer = announcer
+
+    def set_text_inserter(self, inserter: Callable[[str], str] | None) -> None:
+        """Replace pynput paste for an explicit insert. The callback returns a status."""
+        self._text_inserter = inserter
+
+    def _announce_mic(self, active: bool) -> None:
+        announcer = self._mic_announcer
+        if announcer is None:
+            return
+        try:
+            announcer(active)
+        except Exception:
+            logger.warning("Microphone announcer failed", exc_info=True)
+
+    def snapshot(self) -> dict[str, object]:
+        """Return a JSON-ready view of resident voice. It does not open the microphone."""
+        with self._state_lock:
+            return {
+                "state": self.state,
+                "status": self.status_text,
+                "recording": self.state == "recording",
+                "paused": self.paused,
+                "transcript": self.last_transcript,
+                "error": self.error_message,
+                "model_loading": self.model_loading,
+                "explicit_insert": self.explicit_insert,
+            }
+
+    def run_exclusive(self, action: Callable[[], str], *, timeout: float = 8.0) -> str:
+        """Run one resident action on the dispatcher and wait for its status string."""
+        dispatcher = self._dispatcher
+        if (
+            dispatcher is None
+            or not dispatcher.is_alive()
+            or dispatcher is threading.current_thread()
+        ):
+            return action()
+
+        done = threading.Event()
+        box: list[object] = []
+
+        def wrapped() -> None:
+            try:
+                box.append(action())
+            except Exception as error:
+                box.append(error)
+            finally:
+                done.set()
+
+        if not self._queue_action(wrapped):
+            return "busy"
+        if not done.wait(timeout):
+            return "timeout"
+        if not box:
+            return "timeout"
+        result = box[0]
+        if isinstance(result, Exception):
+            raise result
+        return str(result)
 
     def set_speed(self, speed: float) -> None:
         """Set the read-aloud speed multiplier for subsequent reads (live)."""
@@ -651,6 +729,47 @@ class VoiceTrayService:
             self.start_model_preload()
 
         return int(port)
+
+    def start_session(self, *, preload_model: bool = False) -> bool:
+        """Start the resident owner without a pynput global hook.
+
+        Compositor clients use the separate control socket. This does not open
+        the microphone and it does not replace the native-tray TCP server.
+        """
+        missing = [
+            package
+            for package in missing_dependency_packages(include_tray=False)
+            if package != "pynput"
+        ]
+        if "sounddevice" in missing:
+            logger.error("Resident voice dependencies are missing: %s", ", ".join(missing))
+            self.console.print(VOICE_INSTALL_HINT, markup=False)
+            self.console.print(f"Missing packages: {', '.join(missing)}")
+            return False
+        optional = [package for package in missing if package != "sounddevice"]
+        if optional:
+            self.console.print(
+                f"[yellow]Optional voice packages missing:[/yellow] {', '.join(optional)}"
+            )
+
+        try:
+            self._actions = queue.Queue(maxsize=MAX_PENDING_ACTIONS)
+            self._action_overflow.clear()
+            self.running = True
+            self._shutdown_warning_emitted = False
+            self._watchdog_error_message = None
+            self._start_runtime_threads(watch_hotkeys=False)
+        except Exception as error:
+            self.stop()
+            message = f"resident voice threads unavailable: {error}"
+            self._set_state("error", message)
+            self._emit("Scribe Voice error", message)
+            return False
+
+        self._set_state("idle")
+        if preload_model:
+            self.start_model_preload()
+        return True
 
     def _start_runtime_threads(self, *, watch_hotkeys: bool) -> None:
         """Start action dispatch and hotkey recovery as one managed lifecycle."""
@@ -883,6 +1002,7 @@ class VoiceTrayService:
             self._dictating = False
             self.hotkeys.reset()
         self._watchdog_stop.set()
+        self._announce_mic(False)
         with suppress(queue.Full):
             self._actions.put_nowait(None)  # wake the dispatcher when capacity remains
         # If the queue is full, ``running`` is already false and the dispatcher's
@@ -1375,6 +1495,7 @@ class VoiceTrayService:
             self._audio_bytes = 0
             self._capture_limit_queued = False
             self._audio_status_warning_queued = False
+            self._cancel_requested = False
         stream: Any | None = None
         started = False
         try:
@@ -1448,8 +1569,16 @@ class VoiceTrayService:
             return
 
         self._notify()
-        verb = "tap to insert" if self.settings.activation == "toggle" else "release to insert"
-        self._emit("Scribe Voice", f"Recording... speak, then {verb}")
+        if self.explicit_insert:
+            cue = (
+                "MICROPHONE ON. Speak, then finish dictation to transcribe. "
+                "Text stays in Scribe until you copy, insert, or read it."
+            )
+        else:
+            verb = "tap to insert" if self.settings.activation == "toggle" else "release to insert"
+            cue = f"Recording... speak, then {verb}"
+        self._emit("Scribe Voice", cue)
+        self._announce_mic(True)
 
     def _audio_callback(
         self,
@@ -1497,6 +1626,7 @@ class VoiceTrayService:
 
     def _finish_recording(self) -> None:  # pragma: no cover
         stream_stopped = self._stop_stream()
+        self._announce_mic(False)
         with self._state_lock:
             # Finishing when we are not actually recording (a stale/duplicate
             # action after a mic error or stop) must not clobber that state.
@@ -1661,11 +1791,180 @@ class VoiceTrayService:
         if not self._is_running():
             return
 
-        if text:
-            self._inject_text(text)
-            self._emit("Inserted", text if len(text) <= 120 else text[:117] + "...")
-        else:
+        self.deliver_transcript(text)
+        self._return_to_idle()
+
+    def deliver_transcript(self, text: str) -> str:
+        """Store or insert one finished transcript without loading a model.
+
+        Returns ``cancelled``, ``empty``, ``stored``, or ``inserted``. Explicit
+        insert, used by the Omarchy owner, never calls ``_inject_text``.
+        """
+        cleaned = clean_spoken_text(text)
+        with self._state_lock:
+            cancelled = self._cancel_requested
+            if cancelled:
+                self._cancel_requested = False
+        if not self._is_running():
+            return "stopped"
+        if cancelled:
+            self._emit("Scribe Voice", "Dictation cancelled")
+            return "cancelled"
+        if not cleaned:
             self._emit("Scribe Voice", "No speech detected")
+            return "empty"
+
+        preview = cleaned if len(cleaned) <= 120 else cleaned[:117] + "..."
+        with self._state_lock:
+            self.last_transcript = cleaned
+        if self.explicit_insert:
+            self._emit("Transcript ready", preview)
+            return "stored"
+
+        self._inject_text(cleaned)
+        self._emit("Inserted", preview)
+        return "inserted"
+
+    def request_dictation(self) -> str:
+        """Queue a dictate toggle on the existing capture path."""
+        if not self.running:
+            return "stopped"
+        if self.paused:
+            self._emit("Scribe Voice", "Voice is paused")
+            return "paused"
+        if self.state in {"transcribing", "speaking"}:
+            self._emit("Scribe Voice", "Busy - finish the current action first")
+            return "busy"
+        stopping = self._dictating or self.state == "recording"
+        action = self._finish_recording if stopping else self._begin_recording
+        if not self._queue_action(action):
+            return "busy"
+        self._dictating = not stopping
+        return "stopping" if stopping else "starting"
+
+    def cancel_capture(self) -> str:
+        """Drop the current capture or mark an in-flight transcription as cancelled."""
+        self.stop_speaking()
+        with self._state_lock:
+            state = self.state
+            self._dictating = False
+            if state == "transcribing":
+                self._cancel_requested = True
+                pending = "cancel_requested"
+            elif state == "recording":
+                pending = "recording"
+            elif state == "speaking":
+                pending = "speaking"
+            else:
+                pending = "idle"
+        if pending == "cancel_requested":
+            self._emit("Scribe Voice", "Cancelling transcription")
+            return "cancel_requested"
+        if pending == "speaking":
+            self._emit("Scribe Voice", "Stopped read-aloud")
+            return "stopped_speaking"
+        if pending != "recording":
+            return "idle"
+
+        stopped = self._stop_stream()
+        with self._state_lock:
+            self._audio_buffer = []
+            self._audio_bytes = 0
+            self._capture_limit_queued = False
+            self._audio_status_warning_queued = False
+            self._cancel_requested = False
+        self._announce_mic(False)
+        if not stopped:
+            message = "microphone stream could not be closed safely while cancelling"
+            if self._set_state_if_running("error", message):
+                self._emit("Scribe Voice error", message)
+            return "error"
+        self._return_to_idle()
+        self._emit("Scribe Voice", "Recording cancelled. Microphone off.")
+        return "cancelled"
+
+    def copy_last_transcript(self) -> bool:
+        """Copy the stored transcript. This does not send keystrokes."""
+        from scribe.cli.voice import clipboard_copy
+
+        with self._state_lock:
+            text = self.last_transcript
+        if not text.strip():
+            self._emit("Scribe Voice", "No transcript to copy")
+            return False
+        if not clipboard_copy(text):
+            self._emit("Scribe Voice error", "Could not copy the transcript")
+            return False
+        preview = text if len(text) <= 120 else text[:117] + "..."
+        self._emit("Copied", preview)
+        return True
+
+    def insert_last_transcript(self) -> str:
+        """Insert the stored transcript only because a client asked for it."""
+        with self._state_lock:
+            text = self.last_transcript
+        if not text.strip():
+            self._emit("Scribe Voice", "No transcript to insert")
+            return "empty"
+        preview = text if len(text) <= 120 else text[:117] + "..."
+        inserter = self._text_inserter
+        if inserter is not None:
+            try:
+                outcome = inserter(text)
+            except Exception as error:
+                logger.warning("Text inserter failed: %s", error)
+                self._emit("Scribe Voice error", f"Could not insert text: {error}")
+                return "failed"
+            if outcome == "inserted":
+                self._emit("Inserted", preview)
+            elif outcome == "copied":
+                self._emit(
+                    "Scribe Voice",
+                    "Transcript is on the clipboard. Compositor paste was not confirmed.",
+                )
+            else:
+                self._emit("Scribe Voice error", "Could not copy the transcript")
+            return outcome
+        try:
+            self._inject_text(text)
+        except Exception as error:
+            logger.warning("Text insertion failed: %s", error)
+            self._emit("Scribe Voice error", f"Could not insert text: {error}")
+            return "failed"
+        self._emit("Inserted", preview)
+        return "inserted"
+
+    def read_last_transcript(self) -> str:
+        """Speak the stored transcript locally. This does not capture a selection."""
+        with self._state_lock:
+            text = self.last_transcript
+            state = self.state
+            running = self.running
+        if not running:
+            return "stopped"
+        if state == "speaking":
+            self.stop_speaking()
+            self._emit("Scribe Voice", "Stopped read-aloud")
+            return "stopped"
+        if not text.strip():
+            self._emit("Scribe Voice", "No transcript to read")
+            return "empty"
+        if not self._start_worker(self._speak_stored_transcript):
+            self._emit("Scribe Voice", "Busy - finish the current action first")
+            return "busy"
+        return "accepted"
+
+    def _speak_stored_transcript(self) -> None:
+        if not self._set_state_if_running("speaking"):
+            return
+        with self._state_lock:
+            text = self.last_transcript
+        if text and self.running:
+            preview = text if len(text) <= 120 else text[:117] + "..."
+            self._emit("Reading transcript", preview)
+            self._speak_text(text)
+        else:
+            self._emit("Scribe Voice", "No transcript to read")
         self._return_to_idle()
 
     def _load_model(self, *, quiet: bool = False) -> Any:  # pragma: no cover

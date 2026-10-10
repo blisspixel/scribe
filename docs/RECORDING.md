@@ -119,6 +119,17 @@ Ensure `obs` is on `PATH` and run it in the active graphical session. Confirm th
 the desktop audio stack, portal or display permissions, and selected OBS sources
 work in a direct OBS test before using Scribe.
 
+On Omarchy, OBS is preinstalled at `/usr/bin/obs`. Add PipeWire sources in OBS
+before the first `scribe rec`: an audio input for the microphone, an audio
+output monitor for system sound, and a screen or window capture. The window
+picker comes from `xdg-desktop-portal-hyprland`. Enable the built-in WebSocket
+server and use the same password Scribe has. Make one short recording inside
+OBS and confirm the file contains the microphone and the system audio you
+expect.
+
+`scribe rec` is separate from Omarchy's Alt+Print Screen capture. Do not run
+both at once. Scribe will not stop or adopt a capture it did not start.
+
 ## If confirmation fails
 
 Do not immediately kill OBS or delete its configuration. First inspect the OBS

@@ -30,7 +30,7 @@ from openai import AuthenticationError, OpenAI
 
 from scribe.models.gpu import GPUConfig
 from scribe.utils.obs_config import read_obs_websocket_config
-from scribe.utils.platform import get_platform, is_windows
+from scribe.utils.platform import ffmpeg_install_command
 
 
 def _obs_process_running() -> bool:
@@ -127,7 +127,7 @@ def assess_local_readiness() -> LocalReadiness:
         transcribe_detail = f"{backend} ({vendor}) ready, but ffmpeg is missing"
         transcribe_fix = (
             "Install ffmpeg: winget install FFmpeg.FFmpeg / brew install ffmpeg / "
-            "apt install ffmpeg."
+            "sudo pacman -S ffmpeg / sudo apt install ffmpeg."
         )
     else:
         accelerated = backend != "cpu"
@@ -295,7 +295,11 @@ class SystemDiagnostics:
                     "The native transcription dependency graph is validated only on "
                     "Python 3.12 and 3.13."
                 ),
-                fix_suggestion="Install Scribe with Python 3.12 or 3.13",
+                fix_suggestion=(
+                    "Install with `uv tool install --python 3.12` (or 3.13). "
+                    "Arch and Omarchy ship Python 3.14 as `python`; do not install "
+                    "Scribe onto that interpreter."
+                ),
             )
         elif version.major == 3 and version.minor >= 10:
             result = DiagnosticResult(
@@ -345,20 +349,12 @@ class SystemDiagnostics:
                     fix_suggestion="Reinstall FFmpeg",
                 )
         else:
-            platform = get_platform()
-            if is_windows():
-                fix = "Install: winget install FFmpeg.FFmpeg"
-            elif platform == "macos":
-                fix = "Install: brew install ffmpeg"
-            else:
-                fix = "Install: sudo apt install ffmpeg"
-
             result = DiagnosticResult(
                 name="FFmpeg",
                 status="fail",
                 message="Not found",
                 details="FFmpeg is required for audio/video conversion",
-                fix_suggestion=fix,
+                fix_suggestion=f"Install: {ffmpeg_install_command()}",
             )
 
         self.results.append(result)
@@ -498,7 +494,8 @@ class SystemDiagnostics:
                 fix_suggestion=(
                     f"Run `scribe init --force` and set OBS port {server_port}, "
                     f"or set CMD `set SCRIBE_OBS_PORT={server_port}` "
-                    f"or PowerShell `$env:SCRIBE_OBS_PORT='{server_port}'`."
+                    f"or PowerShell `$env:SCRIBE_OBS_PORT='{server_port}'`. "
+                    f"On a Linux shell, `export SCRIBE_OBS_PORT={server_port}`."
                 ),
             )
         elif auth_required and not config.obs_password:
@@ -510,7 +507,8 @@ class SystemDiagnostics:
                 fix_suggestion=(
                     "Run `scribe init --force` and configure OBS, or set CMD "
                     "`set SCRIBE_OBS_PASSWORD=<password>` or PowerShell "
-                    "`$env:SCRIBE_OBS_PASSWORD='<password>'`. Persistent config: "
+                    "`$env:SCRIBE_OBS_PASSWORD='<password>'`. On a Linux shell, "
+                    "`export SCRIBE_OBS_PASSWORD=<password>`. Persistent config: "
                     "add [obs].password to ~/.scribe/config.toml."
                 ),
             )

@@ -34,7 +34,7 @@ from scribe.utils.logging import (
     get_logger,
     is_terminal_output_error,
 )
-from scribe.utils.platform import get_ffmpeg_path
+from scribe.utils.platform import ffmpeg_install_command, get_ffmpeg_path
 from scribe.utils.terminal_ui import get_terminal_ui_config
 
 logger = get_logger(__name__)
@@ -85,13 +85,7 @@ class Converter:
         """Initialize converter and validate ffmpeg availability."""
         self.ffmpeg_path = get_ffmpeg_path()
         if not self.ffmpeg_path:
-            import platform
-
-            install = {
-                "Windows": "winget install FFmpeg.FFmpeg",
-                "Darwin": "brew install ffmpeg",
-                "Linux": "sudo apt install ffmpeg",
-            }.get(platform.system(), "install ffmpeg from https://ffmpeg.org/download.html")
+            install = ffmpeg_install_command()
             raise ProcessError(
                 f"ffmpeg not found. Install it with: {install}\n"
                 "Then re-run, or run `scribe doctor` to verify.",

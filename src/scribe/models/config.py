@@ -270,8 +270,8 @@ class ScribeConfig(BaseSettings):
     )
 
     enable_speaker_diarization: bool = Field(
-        default=True,
-        description=("Label speakers on local transcripts when a diarization backend is installed"),
+        default=False,
+        description="Opt in to local speaker labels with an installed diarization backend",
     )
 
     diarization_backend: str = Field(

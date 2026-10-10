@@ -3,3 +3,4 @@
 cmd/scribe-tray/*.go text eol=lf
 cmd/scribe-tray/go.mod text eol=lf
 cmd/scribe-tray/go.sum text eol=lf
+packaging/linux/omarchy/*.sh text eol=lf

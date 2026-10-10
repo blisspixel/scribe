@@ -66,7 +66,9 @@ class TestPythonVersionCheck:
 
         assert result.status == "fail"
         assert "not supported" in result.message
-        assert result.fix_suggestion == "Install Scribe with Python 3.12 or 3.13"
+        assert result.fix_suggestion is not None
+        assert "uv tool install --python 3.12" in result.fix_suggestion
+        assert "Omarchy" in result.fix_suggestion
 
     def test_python_310_or_311(self):
         """Test Python 3.10-3.11 warns (below the 3.12 floor)."""
@@ -693,6 +695,7 @@ class TestOBSWebSocketCheck:
         assert "scribe init --force" in fix
         assert "set SCRIBE_OBS_PORT=4456" in fix
         assert "$env:SCRIBE_OBS_PORT='4456'" in fix
+        assert "export SCRIBE_OBS_PORT=4456" in fix
 
 
 class TestDependencySecurityCheck:

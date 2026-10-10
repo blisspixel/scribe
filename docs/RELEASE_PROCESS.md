@@ -14,6 +14,9 @@ estimates.
   and must agree.
 - The versioned README and deployment examples identify the current installable
   GitHub release.
+- `packaging/linux/omarchy/` installs and removes that GitHub tool on Linux. It
+  is not a PyPI, AUR, or Flathub submission. A zero exit from `scribe voice
+  check` is not the live Omarchy evidence gate.
 - GitHub required CI on the exact commit is the release gate. A local result from
   another commit is supporting evidence, not a substitute.
 

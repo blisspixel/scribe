@@ -6,7 +6,7 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.10.0 is the current GitHub release. The source repository is ready for
+Version 2.11.0 is the current GitHub release. The source repository is ready for
 public visibility. The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
@@ -22,6 +22,11 @@ The current product contract includes:
   best-guess speaker names from a local or explicitly chosen cloud model.
 - Live-validated Windows resident voice.
 - Experimental macOS and Linux resident voice pending hardware evidence.
+- Omarchy (Arch, Hyprland, Quickshell, and PipeWire) is the Linux desktop
+  reference. The distro Python is 3.14 and is not a supported interpreter.
+- Experimental Omarchy compositor voice (`scribe voice`) reuses that resident
+  owner. A GitHub release does not validate microphone selection, focus changes,
+  correct-target insertion, cancellation, device loss, or recovery.
 - Python 3.12 and 3.13 support. New interpreter support requires the complete
   dependency, CI, and platform matrix in
   [ADR-001](docs/adr/ADR-001-python-312-baseline.md).
@@ -54,10 +59,11 @@ The detailed version-sync and release workflow is in
 | 2.9.2 | Released | Add the per-run OpenRouter spend control, correct explicit output routing, and establish the versioned release plan | 2.9.1 |
 | 2.9.3 | Released | Keep redirected Windows subcommand help ASCII-only and preserve complete option names | 2.9.2 |
 | 2.10.0 | Released | Local speaker labels and names, faster GPU transcription, and transcript quality fixes | 2.9.3 |
-| 2.10.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.10.0 |
-| 2.11.0 | Planned | Validate and finish the cross-platform desktop experience and local speech evidence | 2.10.1 evidence gate |
-| 2.12.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.11.0 behavior contract |
-| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.12.0 boundaries and migration design |
+| 2.11.0 | Released | Experimental Omarchy compositor voice, install and removal packaging, and Linux OBS launch fixes | 2.10.0 |
+| 2.11.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.11.0 |
+| 2.12.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.11.1 evidence gate |
+| 2.13.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.12.0 behavior contract |
+| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.13.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
 
 2.10.0 shipped local speaker labels, speaker naming, and transcription quality
@@ -65,11 +71,19 @@ fixes ahead of the operational-proof patch at the maintainer's request. That pro
 moved from 2.9.4 to 2.10.1 with unchanged scope and evidence requirements, and
 later targets moved one minor version.
 
-Version numbers after 2.10.1 are planning targets. SemVer impact discovered during
+2.11.0 then shipped the experimental Omarchy compositor voice path, the
+install and removal scripts, and the Linux OBS launch fixes before that proof
+existed. The proof moved from 2.10.1 to 2.11.1 with the same evidence
+requirements. The live desktop record, including Omarchy microphone selection,
+focus changes, correct-target insertion, cancellation, device loss, and
+recovery, moved to 2.12.0. Linux voice stays experimental. A green CI run and
+this GitHub release are not that record.
+
+Version numbers after 2.11.1 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.10.1 operational proof
+## Next release: 2.11.1 operational proof
 
 ### Objective
 
@@ -82,10 +96,17 @@ transcription within the configured spend policy.
 1. Define a sanitized evidence record for the exact candidate commit, operating
    system, Python version, install command, detected backend, command exit status,
    and produced artifact types.
-2. Run a clean install on Windows, macOS, and Linux, followed by `scribe init`,
-   `scribe doctor`, and `scribe rec --check`.
+2. Run a clean install on Windows, macOS, and Omarchy, followed by `scribe init`,
+   `scribe doctor`, and `scribe rec --check`. On Omarchy, install `uv` first and
+   pass `--python 3.12`. Confirm the preinstalled FFmpeg, yt-dlp, and
+   `/usr/bin/obs` before treating a missing tool as a Scribe defect. Another
+   Linux distribution may be recorded as well, and it does not replace the
+   Omarchy record.
 3. Exercise the normal OBS WebSocket path and confirm both advancing OBS output
-   counters and independent file growth.
+   counters and independent file growth. On Omarchy, use OBS PipeWire sources
+   for the microphone, the output monitor, and a screen or window chosen through
+   `xdg-desktop-portal-hyprland`. Do not run Omarchy's Alt+Print Screen capture
+   at the same time, and do not stop or adopt that other capture.
 4. Exercise the emergency path with an unreachable, non-recording OBS process and
    confirm positive file-growth detection without interrupting another capture.
 5. Stop and finalize through every available safe control path. Confirm that an
@@ -107,7 +128,12 @@ transcription within the configured spend policy.
 ### Exit criteria
 
 - Clean installation and upgrade work from the documented versioned GitHub
-  source on each claimed core platform.
+  source on each claimed core platform. The Omarchy install uses uv-managed
+  Python 3.12 or 3.13 and does not use the distro Python 3.14.
+- Omarchy OBS evidence includes a Hyprland PipeWire capture, and the docs keep
+  that path distinct from Omarchy's own screen recorder.
+- The Omarchy proof does not use the resident tray or F9. Those keys stay with
+  Omarchy dictation when a dictation backend is installed.
 - Real OBS normal and emergency paths have positive startup, monitoring, stop,
   finalization, and recovery evidence.
 - Scribe never reports capture success from process launch alone.
@@ -126,19 +152,30 @@ transcription within the configured spend policy.
 
 No broader package or binary distribution should start before this gate closes.
 
-## Planned release: 2.11.0 desktop validation
+## Planned release: 2.12.0 desktop validation
 
 ### Objective
 
 Make the desktop support statement evidence-based across recording and resident
 voice, with tested fallbacks where an operating system cannot provide parity.
+2.11.0 added the experimental `scribe voice` control plane. This release is the
+live record that can promote or further limit that path. Source, CI, and a
+GitHub release do not close it.
 
 ### Order of operations
 
-1. Complete the macOS, Linux X11, and representative Linux Wayland records in
+1. Complete the macOS, Linux X11, and Omarchy Wayland records in
    [VOICE_TRAY_MAC_LINUX_VALIDATION.md](docs/features/VOICE_TRAY_MAC_LINUX_VALIDATION.md).
+   The Omarchy record is Hyprland plus Quickshell. A different compositor does
+   not replace it.
 2. Fix platform defects found by live permission, audio-device, hotkey, tray,
-   startup, injection, read-aloud, and shutdown tests.
+   startup, injection, read-aloud, and shutdown tests. On Omarchy, do not bind
+   F9, Super+Ctrl+X, or the Right Alt push-to-talk chord. Do not claim pynput
+   global hotkeys. Do not use `wtype` while Super is held: Omarchy injects
+   clipboard shortcuts through Hyprland `send_key_state` because a virtual
+   keyboard merges with that held modifier. Quickshell is not assumed to host a
+   tray icon. Personal binds go in `~/.config/hypr/bindings.lua`, not under
+   `/usr/share/omarchy`. An XDG autostart entry is not a Hyprland binding.
 3. Document a tested fallback for every unavailable core capability instead of
    making a parity claim.
 4. Validate install, update, run-at-login, diagnostic, and removal paths on each
@@ -156,12 +193,18 @@ voice, with tested fallbacks where an operating system cannot provide parity.
   matrix agree.
 - Unsupported compositor or desktop behavior is explicit and has a tested
   terminal or shortcut fallback where practical.
+- The Omarchy record names the dictation keys it left alone, the terminal
+  fallback it tested, and whether a tray icon was actually visible.
+- The Omarchy voice record shows microphone selection, a focus change,
+  correct-target insertion, cancellation, device loss, and recovery on the
+  `scribe voice` path, or it documents the tested fallback and keeps that path
+  experimental.
 
-### Local speech models (also 2.11.0)
+### Local speech models (also 2.12.0)
 
 The pluggable diarization layer, token-free Nemotron default, and OpenAI diarized
 output fix shipped in 2.10.0, along with speaker naming and batched GPU decoding.
-Remaining evidence and follow-up work for 2.11.0:
+Remaining evidence and follow-up work for 2.12.0:
 
 1. Replace the pinned Transformers commit in `diarize-nemotron` with
    `transformers>=5.18.0` once that release is published, and relock.
@@ -181,7 +224,7 @@ Exit criteria: speaker labels never fail a transcription, the documented install
 commands work on every claimed platform, and default decoding changes are backed
 by measured speed and quality evidence.
 
-## Planned release: 2.12.0 maintainability and verification
+## Planned release: 2.13.0 maintainability and verification
 
 ### Objective
 

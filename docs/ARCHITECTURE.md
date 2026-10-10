@@ -64,8 +64,10 @@ still growing.
 
 `src/scribe/core/transcriber.py` selects the method and coordinates artifacts.
 The local backend registry in `src/scribe/core/backends/` separates hardware
-detection from faster-whisper, MLX, and whisper.cpp adapters. Optional diarization
-uses `diarizer.py` and requires its extra plus a Hugging Face token.
+detection from faster-whisper, MLX, and whisper.cpp adapters. Experimental local
+diarization is off by default and uses `core/diarization/` when explicitly enabled.
+Nemotron requires its extra but no token; pyannote requires its extra and a
+Hugging Face token. `diarizer.py` preserves the legacy interface.
 
 OpenAI transcription is implemented in `openai_api.py`. Large files can use
 provider-side chunking or temporary local preparation, depending on the active

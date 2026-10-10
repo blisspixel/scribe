@@ -36,11 +36,13 @@ is intentional. OpenRouter setup and partial-chunk recovery are in the
 [Cloud Transcription Guide](CLOUD_TRANSCRIPTION.md).
 
 Local speaker labels ("who said what") need one diarization extra. The
-recommended `diarize-nemotron` extra runs NVIDIA Nemotron-3 Diarization, which
+token-free `diarize-nemotron` extra runs NVIDIA Nemotron-3 Diarization, which
 needs no Hugging Face token, handles up to eight speakers, and runs on CUDA or CPU.
 The `diarize` extra runs pyannote and needs an `HF_TOKEN` with the pyannote model
-terms accepted. When an extra is installed, labels are on by default for local
-transcription; `--no-diarize` turns them off for one run.
+terms accepted. Labels are experimental and off by default, including when an
+extra is installed. Use `--diarize` or `--diarizer BACKEND` to opt in for a run;
+`--no-diarize` overrides an enabled setting. Ordinary local transcription uses
+Whisper, preferring `large-v3` when hardware permits.
 
 ```bash
 scribe transcribe meeting.mp4 --diarize
@@ -59,10 +61,24 @@ consecutive sentences into one paragraph. Short speaker flips inside a sentence,
 which are usually diarization jitter at a turn edge, are folded into the
 sentence's main speaker.
 
+These heuristics can hide brief participants or merge similar voices. Do not
+assume that the detected speaker count equals the number of people on a call.
+To disable labels persistently, set this in `~/.scribe/config.toml`:
+
+```toml
+[diarization]
+enabled = false
+```
+
+`SCRIBE_ENABLE_SPEAKER_DIARIZATION=false` also disables labels. Existing explicit
+opt-ins in configuration remain effective after an upgrade.
+
 ### Speaker names
 
-`--name-speakers` (or `name_speakers = true` under `[diarization]` in
-`~/.scribe/config.toml`) suggests real names from the conversation, such as
+`--name-speakers` also enables local labeling unless `--no-diarize` or
+`--diarizer none` is supplied. To enable naming persistently, set both
+`enabled = true` and `name_speakers = true` under `[diarization]` in
+`~/.scribe/config.toml`. Names are suggested from the conversation, such as
 introductions and people addressing each other. A language model proposes the
 names that are spoken; Scribe then assigns each name to a speaker by counting
 evidence across every mention, and leaves a speaker unidentified when the

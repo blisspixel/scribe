@@ -4,7 +4,7 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.10.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.11.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
@@ -12,7 +12,43 @@ milestones that predate this repository's Git history.
 
 ## Unreleased
 
-No changes yet.
+## [2.11.0] - 2026-10-09
+
+### Added
+
+- Added experimental `scribe voice` for Omarchy. Hyprland owns the shortcuts and
+  a Rich terminal overlay shows dictation, processing, cancellation, transcript
+  preview, copy, explicit insert, and explicit local read-aloud. The commands
+  reuse the existing resident voice owner and do not start a second microphone
+  or a second model. Cloud transcription is not available on this path.
+- Added `scribe voice omarchy-install` and `scribe voice omarchy-remove`, plus
+  `packaging/linux/omarchy/install.sh` and `uninstall.sh`. Install and upgrade
+  use `uv tool install --python 3.12`. Removal strips only the marked Hyprland
+  blocks and leaves `~/.scribe` in place.
+- Recording state is visible as `MICROPHONE ON` in the overlay, in
+  `~/.scribe/voice-status.txt`, and in a critical notification. The microphone
+  stays off until a dictate command.
+
+### Changed
+
+- Documented Omarchy as the Linux desktop reference. The install path pins
+  Python 3.12 because Arch and Omarchy ship Python 3.14. Recording stays on
+  preinstalled OBS and stays separate from Omarchy screen capture. Scribe does
+  not take Omarchy's F9, Super+Ctrl+X, or Right Alt dictation chords.
+- Linux FFmpeg recovery text now includes `pacman` as well as `apt`. `scribe
+  doctor` tells a Python 3.14 user to reinstall with `uv tool install --python 3.12`.
+- Linux OBS launch no longer uses `/usr/bin` as its working directory, and OBS
+  discovery can use `obs` from `PATH` after the fixed candidates.
+- Linux voice stays experimental. `scribe voice check` does not open the
+  microphone and cannot report the path as hardware-validated. Microphone
+  selection, focus changes, correct-target insertion, cancellation, device
+  loss, and recovery were not demonstrated on Omarchy.
+
+### Security
+
+- Refreshed the locked urllib3, virtualenv, and python-discovery dependencies
+  to patched releases so the blocking dependency audit passes without advisory
+  exceptions.
 
 ## [2.10.0] - 2026-09-25
 

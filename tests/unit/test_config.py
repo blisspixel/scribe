@@ -251,10 +251,11 @@ class TestFeatureFlags:
 
     def test_feature_flags_defaults(self):
         """Test default feature flag values."""
-        config = ScribeConfig()
+        with patch("scribe.config_file.load_config_file", return_value={}):
+            config = ScribeConfig(_env_file=None)
 
         assert config.enable_silence_detection is True
-        assert config.enable_speaker_diarization is True
+        assert config.enable_speaker_diarization is False
         assert config.keep_intermediate_files is False
 
     def test_feature_flags_custom(self):

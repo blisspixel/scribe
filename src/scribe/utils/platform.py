@@ -297,6 +297,22 @@ def is_linux() -> bool:
     return get_platform() == "linux"
 
 
+def ffmpeg_install_command(platform_name: str | None = None) -> str:
+    """Return the FFmpeg install command for an error or doctor message.
+
+    Linux includes both pacman and apt. Omarchy and Arch have no apt, and
+    Debian-family machines have no pacman.
+    """
+    resolved = platform_name if platform_name is not None else get_platform()
+    if resolved == "windows":
+        return "winget install FFmpeg.FFmpeg"
+    if resolved == "macos":
+        return "brew install ffmpeg"
+    if resolved == "linux":
+        return "sudo pacman -S ffmpeg  or  sudo apt install ffmpeg"
+    return "install ffmpeg from https://ffmpeg.org/download.html"
+
+
 def _is_executable_file(path: Path) -> bool:
     """True if ``path`` is a regular file that can be executed.
 
@@ -425,6 +441,13 @@ def get_obs_executable_path() -> Path | None:
     for candidate in candidates:
         if _is_executable_file(candidate):
             return candidate
+
+    if not is_windows() and not is_macos():
+        discovered = shutil.which("obs")
+        if discovered:
+            discovered_path = Path(discovered)
+            if _is_executable_file(discovered_path):
+                return discovered_path
 
     return None
 

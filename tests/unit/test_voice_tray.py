@@ -1787,7 +1787,9 @@ def test_resident_voice_advisories_linux_wayland_warns() -> None:
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_display)
     assert any(a.level == "warning" and "Wayland" in a.message for a in by_both)
     assert any("GlobalShortcuts" in a.message for a in by_display)
+    assert any("Omarchy" in a.message and "F9" in a.message for a in by_display)
     assert any(a.level == "info" and "autostart" in a.message for a in by_display)
+    assert any("bindings.lua" in a.message for a in by_display)
 
 
 def test_resident_voice_advisories_linux_x11_includes_matrix_and_session_notes() -> None:
@@ -3127,6 +3129,8 @@ def test_run_tray_startup_install_linux_mentions_wayland_caveat(
     text = console.export_text()
     assert "XDG autostart" in text
     assert "Wayland" in text
+    assert "Omarchy" in text
+    assert "F9" in text
 
 
 def test_run_tray_startup_remove_reports_filesystem_failure(

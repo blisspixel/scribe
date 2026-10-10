@@ -33,6 +33,7 @@ from scribe.cli.dependencies import (
     txt_to_docx,
 )
 from scribe.cli.errors import exit_on_cli_error
+from scribe.cli.voice_session import voice_app
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.options import ModelSize, TranscriptionMethod
 from scribe.utils.branding import brand_header_markup
@@ -460,6 +461,8 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
+app.add_typer(voice_app, name="voice")
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -494,6 +497,8 @@ def _apply_diarization_options(
         config.name_speakers = name_speakers
     if diarize is not None:
         config.enable_speaker_diarization = diarize
+    elif name_speakers is True:
+        config.enable_speaker_diarization = True
     if diarizer is None:
         return
     name = normalize_diarizer(diarizer)
@@ -4022,6 +4027,10 @@ def main() -> None:
             if cmd.callback is not None:
                 known_commands.add(cmd.callback.__name__)
                 known_commands.add(cmd.callback.__name__.replace("_", "-"))
+        for group in getattr(app, "registered_groups", ()):
+            group_name = getattr(group, "name", None)
+            if group_name:
+                known_commands.add(group_name)
         if first_arg not in known_commands and not first_arg.startswith("-"):
             # Check if it looks like a file path
             if (

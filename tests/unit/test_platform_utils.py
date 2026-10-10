@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from scribe.utils.platform import (
     check_disk_space,
+    ffmpeg_install_command,
     get_default_output_directory,
     get_ffmpeg_path,
     get_ffprobe_path,
@@ -18,6 +19,30 @@ from scribe.utils.platform import (
     normalize_path,
     open_file_with_default_app,
 )
+
+
+def test_linux_obs_discovery_uses_path_after_fixed_candidates(tmp_path: Path) -> None:
+    observed = tmp_path / "obs"
+    observed.write_text("obs", encoding="utf-8")
+    with (
+        patch("scribe.utils.platform.os.environ", {}),
+        patch("scribe.utils.platform.is_windows", return_value=False),
+        patch("scribe.utils.platform.is_macos", return_value=False),
+        patch(
+            "scribe.utils.platform._is_executable_file", side_effect=lambda path: path == observed
+        ),
+        patch("scribe.utils.platform.shutil.which", return_value=str(observed)),
+    ):
+        assert get_obs_executable_path() == observed
+
+
+def test_ffmpeg_install_command_covers_arch_and_debian() -> None:
+    assert ffmpeg_install_command("windows") == "winget install FFmpeg.FFmpeg"
+    assert ffmpeg_install_command("macos") == "brew install ffmpeg"
+    linux = ffmpeg_install_command("linux")
+    assert "pacman -S ffmpeg" in linux
+    assert "apt install ffmpeg" in linux
+    assert "ffmpeg.org" in ffmpeg_install_command("unknown")
 
 
 def test_get_platform_and_output_directories_cover_all_platforms(tmp_path):

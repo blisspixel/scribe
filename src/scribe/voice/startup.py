@@ -282,9 +282,10 @@ def run_tray_startup(console: Console, action: str) -> int:
         )
     else:
         console.print(
-            "[dim]Linux: XDG autostart entry written. Needs a graphical session; "
-            "Wayland global hotkeys remain unreliable - prefer desktop shortcuts "
-            "or `scribe tray --no-tray` if hooks fail.[/dim]"
+            "[dim]Linux: XDG autostart entry written. On Wayland, including Omarchy, "
+            "this does not register global hotkeys. Leave F9 to Omarchy dictation "
+            "when that backend is installed. `scribe voice` is the experimental "
+            "compositor path and is not validated by this startup entry.[/dim]"
         )
     console.print("[dim]Disable anytime with `scribe tray --startup remove`.[/dim]")
     return 0

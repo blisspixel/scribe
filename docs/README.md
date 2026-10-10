@@ -9,7 +9,7 @@ Documentation for Scribe, a local-first transcription and recording CLI.
 - [Recording Guide](RECORDING.md) - OBS setup, startup proof, defensive control, safe stop, and recovery
 - [CLI Guide](CLI.md) - User workflows, flags, exit behavior, and failure evidence
 - [Cloud Transcription](CLOUD_TRANSCRIPTION.md) - OpenAI and OpenRouter setup, privacy boundaries, chunk recovery, and diagnostics
-- [Resident Voice Guide](VOICE.md) - Tray setup, ownership, platforms, diagnostics, and recovery
+- [Resident Voice Guide](VOICE.md) - Tray setup, experimental Omarchy compositor voice, ownership, diagnostics, and recovery
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
 - [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) - Recording consent, sensitive data, cloud sharing, accuracy, and legal limits
 - [Support](../SUPPORT.md) - Safe diagnostics and issue-reporting guidance
@@ -30,7 +30,7 @@ Documentation for Scribe, a local-first transcription and recording CLI.
 - [EVALUATION.md](EVALUATION.md) - Reproducible WER and real-time-factor evaluation
 
 ### Operations
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Local install, self-managed operation, and backup guidance
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Local install, Omarchy setup, self-managed operation, and backup guidance
 - [PERFORMANCE_TUNING.md](PERFORMANCE_TUNING.md) - Optimization and benchmarking
 - [SBOM Compliance](features/SBOM_COMPLIANCE.md) - Generate a local CycloneDX software bill of materials
 - [Security Policy](../SECURITY.md) - Reporting guidance and documented trust boundaries

@@ -767,7 +767,8 @@ class OBSRecorder:
         return (
             f"Run `scribe init --force` and set OBS port {obs_port}, or set CMD "
             f"`set SCRIBE_OBS_PORT={obs_port}` or PowerShell "
-            f"`$env:SCRIBE_OBS_PORT='{obs_port}'`."
+            f"`$env:SCRIBE_OBS_PORT='{obs_port}'`. On a Linux shell, "
+            f"`export SCRIBE_OBS_PORT={obs_port}`."
         )
 
     @staticmethod
@@ -942,11 +943,20 @@ class OBSRecorder:
 
         if is_windows():
             flags.insert(0, "--minimize-to-tray")
+            # Windows OBS finds its DLLs beside the executable.
+            subprocess.Popen(
+                [str(obs_exe), *flags],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=str(obs_exe.parent),
+            )
+            return
+
+        # On Linux, `/usr/bin` is the wrong working directory for OBS.
         subprocess.Popen(
             [str(obs_exe), *flags],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            cwd=str(obs_exe.parent),
         )
 
     def _try_connect_to_running_obs(self, hosts: list[str], ports: list[int]) -> Any | None:

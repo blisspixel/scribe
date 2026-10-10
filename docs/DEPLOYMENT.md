@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.10.0
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 scribe init
 scribe info
@@ -48,12 +48,91 @@ uv run scribe init
 uv run scribe doctor
 ```
 
+## Omarchy
+
+Omarchy 4 is the Linux desktop reference: Arch Linux, Hyprland on Wayland,
+Quickshell, PipeWire with WirePlumber, and `uwsm`. A standard install already
+includes FFmpeg, yt-dlp, OBS Studio (`/usr/bin/obs`), `wl-clipboard`, `wtype`,
+and the Hyprland screen-sharing portal. It does not include uv. Its `python`
+is 3.14, which is outside Scribe's `>=3.12,<3.14` range.
+
+```bash
+omarchy pkg add uv
+uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
+uv tool update-shell
+scribe init
+scribe doctor
+```
+
+`sudo pacman -S uv` is the same install. Pass `--python 3.12` even though uv
+can select a compatible interpreter on its own. Do not install Scribe onto
+`/usr/bin/python` or a Mise-selected 3.14.
+
+Open a new terminal after `uv tool update-shell`. Foot is the default terminal.
+`scribe doctor` should find FFmpeg without an extra package. If a machine is
+missing it, install it with `sudo pacman -S ffmpeg`.
+
+Hardware:
+
+- CPU transcription works on the AMD and Intel GPUs Omarchy supports. `scribe
+  doctor` names the backend. An optional `whispercpp` extra is the portable
+  acceleration path for those GPUs.
+- NVIDIA machines can use the default CUDA backend. Speaker labels that need
+  PyTorch still want `uv tool install --torch-backend auto`.
+- Scribe picks a smaller Whisper model when the machine cannot run the
+  `large-v3` preference. `scribe info` shows the model that will run.
+
+Recording uses OBS, not Omarchy's Alt+Print Screen capture. See the
+[recording guide](RECORDING.md#linux). Leave F9, Super+Ctrl+X, and the Right Alt
+push-to-talk chord to Omarchy dictation when that backend is installed. The
+resident tray does not register Hyprland bindings.
+
+### Experimental Omarchy voice
+
+`scribe voice` is a local control plane for the existing resident owner. It does
+not open a second microphone and it does not load a second model. Cloud
+transcription is not a `scribe voice` option. Linux voice stays experimental:
+this release was not demonstrated on Omarchy hardware.
+
+```bash
+uv tool install --force --python 3.12 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+scribe voice check
+scribe voice omarchy-install
+```
+
+A checkout can use the helpers instead:
+
+```bash
+bash packaging/linux/omarchy/install.sh
+bash packaging/linux/omarchy/uninstall.sh
+```
+
+`install.sh` installs `scribe[tray]` with Python 3.12 and runs `scribe voice
+omarchy-install`. `uninstall.sh` runs `scribe voice omarchy-remove` and
+`uv tool uninstall scribe`. It leaves `~/.scribe` in place. Upgrade by running
+`install.sh` again. These scripts are not a PyPI, AUR, or Flathub submission,
+and they are not a tested Omarchy installation.
+
+Confirm Super+Alt+D, Super+Alt+Shift+D, Super+Alt+Y, Super+Alt+I, Super+Alt+A,
+and Super+Alt+O with Super+K. Then run `hyprctl reload` and `hyprctl configerrors`.
+The overlay command is `omarchy-launch-tui scribe voice overlay`. Personal binds
+stay in `~/.config/hypr/bindings.lua`, and the serve autostart stays in
+`~/.config/hypr/autostart.lua`. Packaged files under `/usr/share/omarchy` are
+not edited.
+
+`scribe voice check` does not open the microphone. Exit 0 means the interpreter
+is 3.12 or 3.13 and `sounddevice` imports. It does not validate hardware. See
+the [voice guide](VOICE.md#omarchy).
+
 ## Workstation Requirements
 
 Required:
 - Python 3.12 or 3.13. Python 3.12 remains the recommended GPU baseline. Python
   3.14 and 3.15 are not yet in the supported runtime matrix; see
   [ADR-001](adr/ADR-001-python-312-baseline.md) for current probe evidence.
+  Arch and Omarchy ship Python 3.14 as `python`. Use uv's 3.12, as in
+  [Omarchy](#omarchy).
 - uv.
 - FFmpeg.
 - Disk space for local media, converted audio, transcripts, logs, and model caches.
@@ -76,13 +155,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 uv tool install --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.10.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
