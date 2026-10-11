@@ -5,12 +5,13 @@ import math
 import re
 import unicodedata
 from difflib import SequenceMatcher
+from hashlib import file_digest
 from pathlib import Path
 
 from scribe.models.transcript import Transcript
 from scribe.models.transcription_review import AcousticPass, ReviewReceipt, ReviewSpan
 from scribe.utils.review_timeline import TimedTextIndex
-from scribe.utils.safe_write import atomic_write
+from scribe.utils.safe_write import atomic_write, safe_copy
 from scribe.utils.transcript_writers import transcript_to_dict
 
 
@@ -252,10 +253,25 @@ def render_review(receipt: ReviewReceipt) -> str:
 
 
 def publish_review(
-    folder: Path, receipt: ReviewReceipt, primary: Transcript | None, secondary: Transcript | None
+    folder: Path,
+    receipt: ReviewReceipt,
+    primary: Transcript | None,
+    secondary: Transcript | None,
+    *,
+    primary_text_path: Path | None = None,
 ) -> list[Path]:
     """Write individual files atomically; publish the governing receipt last."""
     artifacts = []
+    if primary_text_path is not None:
+        snapshot = safe_copy(primary_text_path, folder / "primary-text.txt")
+        with snapshot.open("rb") as stream:
+            snapshot_sha256 = file_digest(stream, "sha256").hexdigest()
+        receipt.primary_options.update(
+            original_primary_text_path=str(primary_text_path.resolve()),
+            primary_text_path=str(snapshot.resolve()),
+            primary_text_sha256=snapshot_sha256,
+        )
+        artifacts.append(snapshot)
     for name, transcript in (("primary-acoustic.json", primary), ("secondary.json", secondary)):
         if transcript is not None:
             path = folder / name

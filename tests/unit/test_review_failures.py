@@ -104,7 +104,14 @@ def test_music_capability_gap_has_receipt_without_secondary_load(tmp_path, polic
         assert receipt["source_path"] == str(source.resolve())
         assert receipt["source_sha256"] == source_hash(source)
         assert receipt["source_retention"] == "required_for_review"
-        assert receipt["primary_options"]["primary_text_path"] == str(primary_path.resolve())
+        snapshot = next(path for path in session.files_created if path.name == "primary-text.txt")
+        assert snapshot.read_bytes() == primary_path.read_bytes()
+        assert receipt["primary_options"]["primary_text_path"] == str(snapshot.resolve())
+        assert receipt["primary_options"]["original_primary_text_path"] == str(
+            primary_path.resolve()
+        )
+        assert receipt["primary_options"]["primary_text_sha256"] == source_hash(snapshot)
+        assert str(snapshot) in receipt["artifacts"]
         assert not any(p.name == "secondary.json" for p in session.files_created)
 
 

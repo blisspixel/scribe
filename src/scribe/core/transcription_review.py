@@ -33,7 +33,7 @@ def unavailable_review(
     )
     receipt.primary_options = {
         **(primary.metadata if primary else {}),
-        "primary_text_path": str(primary_path.resolve()),
+        "original_primary_text_path": str(primary_path.resolve()),
         "timed_primary_available": primary is not None,
     }
     paths: list[Path] = []
@@ -41,7 +41,7 @@ def unavailable_review(
         receipt.source_sha256 = source_hash(source)
         folder = config.output_folder / f"{source.stem}_review_{uuid4().hex[:10]}"
         folder.mkdir(parents=True)
-        paths = publish_review(folder, receipt, primary, None)
+        paths = publish_review(folder, receipt, primary, None, primary_text_path=primary_path)
     except Exception as error:
         receipt.error = (
             f"{receipt.error} Review evidence could not be saved ({type(error).__name__}: {error})."
