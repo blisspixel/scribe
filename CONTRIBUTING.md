@@ -51,6 +51,7 @@ uv run ruff check src tests
 uv run mypy --strict src/scribe
 uv run pytest --cov=scribe --cov-report=term-missing --cov-fail-under=81 -m "not gpu and not slow and not requires_openai and not requires_whisperx and not requires_pillow"
 uv run pip-audit --local --progress-spinner off --desc on
+uv run python scripts/audit_lock.py
 uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
@@ -63,6 +64,11 @@ pwsh -File scripts/check_native_tray.ps1
 
 Rust changes must pass formatting, Clippy with warnings denied, and tests from
 `crates/scribe-audio-core`.
+
+The lock audit checks every registry version across optional extras, development
+dependencies, platforms, and Python branches without installing those packages.
+It lists editable and Git sources separately because the advisory service cannot
+audit them as registry releases. Those sources still require source review.
 
 ## Pull requests
 

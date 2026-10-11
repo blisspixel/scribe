@@ -33,7 +33,6 @@ justifies expanding the base install. The current extras are:
 | `diarize` | pyannote.audio | Local speaker diarization with pyannote (needs an HF token) |
 | `diarize-nemotron` | Transformers (pinned commit) and librosa | Token-free NVIDIA Nemotron-3 speaker diarization |
 | `diarize-mlx` | mlx-audio (arm64 macOS only) | Apple Silicon Metal speaker diarization |
-| `whisperx` | WhisperX and pyannote | Word-aligned diarization |
 | `providers` | Anthropic and Gemini SDKs | Optional cloud text providers |
 | `voice` | Audio, hotkey, clipboard, and system TTS packages | Direct dictation and read-aloud |
 | `tray` | Voice plus tray dependencies | Resident voice surface |
@@ -42,6 +41,10 @@ justifies expanding the base install. The current extras are:
 Optional paths must check availability at the command boundary and report the
 applicable `scribe[...]` extra. The repository install URL must be included in
 user installation docs while the project is not published on PyPI.
+
+The unused `whisperx` extra was retired in October 2026 to remove its unpatched
+NLTK dependency. Faster-whisper, including Whisper large models, remains in the
+base installation; the existing pyannote backend remains available via `diarize`.
 
 The long-term portable-core redesign will be proposed as a separate major-release
 decision. It must preserve CPU behavior, produce real clean-install evidence, and

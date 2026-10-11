@@ -12,6 +12,19 @@ milestones that predate this repository's Git history.
 
 ## Unreleased
 
+### Security
+
+- Updated Mako, multidict, and pytorch-lightning to patched versions and added
+  security floors to the pyannote-bearing extras for unlocked installs, including
+  both the lightning and pytorch-lightning distributions.
+- Added a blocking audit of every registry version in the universal lock,
+  including optional extras and platform branches. Git and workspace sources
+  remain outside registry advisory coverage.
+- Retired the unused `whisperx` extra and its NLTK dependency, which has no patched
+  release for the advisory tracked in #31. Standard faster-whisper transcription,
+  including Whisper large models, is unchanged. Use the base install for
+  transcription and `diarize` for the existing pyannote speaker-label backend.
+
 ## [2.11.0] - 2026-10-09
 
 ### Added

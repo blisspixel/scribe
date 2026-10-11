@@ -74,6 +74,12 @@ device loss, and recovery have not been demonstrated on Omarchy hardware. The
 For other setup variants, optional backends, upgrades, and recovery, see the
 [deployment guide](docs/DEPLOYMENT.md).
 
+The unused `whisperx` extra has been retired. Remove `[whisperx]` from old install
+commands: the base install already supports faster-whisper, including Whisper
+large models. Add `[diarize]` only for the existing pyannote speaker-label backend.
+Reinstall into a fresh tool environment to remove dependencies left by an older
+WhisperX installation. No Whisper model or transcription backend was removed.
+
 ## What Scribe does
 
 - Transcribes local audio and video into TXT, JSON, DOCX, Markdown, VTT, and SRT.
