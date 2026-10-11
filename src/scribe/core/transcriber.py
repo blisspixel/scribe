@@ -912,7 +912,11 @@ class Transcriber:
     def _write_bounded_primary(
         self, audio_path: Path, transcript: Transcript, diarizer: "SpeakerDiarizer | None"
     ) -> Path:
-        from scribe.core.local_whisper import apply_diarizer_safely, write_clean_transcript
+        from scribe.core.local_whisper import (
+            apply_diarizer_safely,
+            detect_silence_if_needed,
+            write_clean_transcript,
+        )
 
         if diarizer is not None:
             transcript = apply_diarizer_safely(
@@ -922,7 +926,11 @@ class Transcriber:
         for suffix in ("_16k_mono", "_standardized", "_converted"):
             clean_stem = clean_stem.replace(suffix, "")
         output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
-        write_clean_transcript(transcript, output_path, self._review_source or audio_path, [])
+        source = self._review_source or audio_path
+        silence_periods = detect_silence_if_needed(
+            source, transcript.duration, self.config.enable_silence_detection
+        )
+        write_clean_transcript(transcript, output_path, source, silence_periods)
         self.last_transcript = transcript
         return output_path
 

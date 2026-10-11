@@ -22,6 +22,32 @@ from scribe.utils.model_selection import local_resource_guidance
 logger = get_logger(__name__)
 
 
+def detect_silence_if_needed(
+    audio_path: Path, duration: float | None, detect_silence: bool
+) -> list[tuple[float, float]]:
+    """Detect long silence for any local writer without constructing an ASR model."""
+    if not detect_silence or not duration or duration <= 300:
+        return []
+
+    logger.info("Analyzing audio for silence periods...")
+    try:
+        silence_periods = detect_silence_periods(
+            audio_path, silence_threshold=-45.0, min_silence_duration=60.0
+        )
+        if silence_periods:
+            logger.info(f"Found {len(silence_periods)} silence periods")
+            for i, (start, end) in enumerate(silence_periods, 1):
+                duration_mins = (end - start) / 60
+                logger.debug(
+                    f"  Silence {i}: {format_timestamp(start)} - "
+                    f"{format_timestamp(end)} ({duration_mins:.1f}min)"
+                )
+        return silence_periods
+    except (RuntimeError, ValueError, OSError) as e:
+        logger.warning(f"Silence detection failed: {e}")
+        return []
+
+
 #: Approximate VRAM (GB) a float16 Whisper model needs to run without spilling.
 _MODEL_VRAM_GB = {"tiny": 1.5, "base": 1.5, "small": 2.5, "medium": 4.0}
 _LARGE_MODEL_VRAM_GB = 5.0
@@ -474,27 +500,8 @@ class LocalWhisperTranscriber:
     def _detect_silence_if_needed(
         self, audio_path: Path, duration: float | None, detect_silence: bool
     ) -> list[tuple[float, float]]:
-        """Detect silence periods if enabled and audio is long enough."""
-        if not detect_silence or not duration or duration <= 300:
-            return []
-
-        logger.info("Analyzing audio for silence periods...")
-        try:
-            silence_periods = detect_silence_periods(
-                audio_path, silence_threshold=-45.0, min_silence_duration=60.0
-            )
-            if silence_periods:
-                logger.info(f"Found {len(silence_periods)} silence periods")
-                for i, (start, end) in enumerate(silence_periods, 1):
-                    duration_mins = (end - start) / 60
-                    logger.debug(
-                        f"  Silence {i}: {format_timestamp(start)} - "
-                        f"{format_timestamp(end)} ({duration_mins:.1f}min)"
-                    )
-            return silence_periods
-        except (RuntimeError, ValueError, OSError) as e:
-            logger.warning(f"Silence detection failed: {e}")
-            return []
+        """Preserve the legacy owner hook for the shared model-free detector."""
+        return detect_silence_if_needed(audio_path, duration, detect_silence)
 
     def _prepare_initial_prompt(self, initial_prompt: str | None, music_mode: bool) -> str:
         """Prepare initial prompt for transcription."""
