@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are applied to `main` and the latest 2.9.x GitHub release. Earlier
+Security fixes are applied to `main` and the latest 2.11.x GitHub release. Earlier
 release lines are not supported.
 
 ## Reporting a vulnerability

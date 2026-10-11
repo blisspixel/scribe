@@ -14,6 +14,7 @@ milestones that predate this repository's Git history.
 
 ### Security
 
+- Updated the supported-release policy to the current 2.11.x GitHub release line.
 - Updated Mako, multidict, and pytorch-lightning to patched versions and added
   security floors to the pyannote-bearing extras for unlocked installs, including
   both the lightning and pytorch-lightning distributions.
