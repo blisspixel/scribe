@@ -312,8 +312,10 @@ The following work can produce a patch release at any point:
 
 - Recording data-loss risks or false success reports.
 - Credential exposure, unsafe URL handling, or cloud-boundary regressions.
-- Actionable dependency advisories, including the tracked optional WhisperX NLTK
-  advisory in [issue 31](https://github.com/blisspixel/scribe/issues/31).
+- Actionable dependency advisories. The unused WhisperX extra is retired to
+  remove the unpatched NLTK dependency tracked in
+  [issue 31](https://github.com/blisspixel/scribe/issues/31); faster-whisper and
+  Whisper large model support remain part of the base installation.
 - Supported-platform installation failures.
 - Incorrect session evidence, partial-result loss, or cleanup of user-owned data.
 - Documentation that overstates support or disagrees with released behavior.

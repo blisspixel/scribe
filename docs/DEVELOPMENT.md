@@ -73,12 +73,18 @@ Run repository, dependency, and artifact checks:
 ```bash
 uv run pre-commit run --all-files
 uv run pip-audit --local --progress-spinner off --desc on
+uv run python scripts/audit_lock.py
 uv build --clear --package scribe --out-dir .agent/build
 uv run python scripts/check_release_artifact.py .agent/build
 ```
 
 The complete command output and the current CI workflow are authoritative. Do not
 copy a test count into documentation because the count changes as coverage grows.
+
+`scripts/audit_lock.py` audits every registry name/version in the universal lock,
+including optional extras and platform branches, without installing the ML
+stacks. Editable workspace and pinned Git sources are listed as outside registry
+advisory coverage and still require source review. There are no advisory ignores.
 
 ## Native source checks
 
