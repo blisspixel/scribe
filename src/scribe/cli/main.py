@@ -86,8 +86,10 @@ def _place_transcript_in_output_dir(
     output_dir: Path,
     session: TranscriptionSessionType | None,
 ) -> Path:
-    """Atomically place an explicitly redirected transcript in its output directory."""
-    from scribe.utils.safe_write import backup_file, safe_copy
+    """Atomically archive a transcript in the resolved output directory."""
+    from uuid import uuid4
+
+    from scribe.utils.safe_write import safe_copy
 
     source = transcript_path.resolve()
     resolved_output = output_dir.resolve()
@@ -97,12 +99,34 @@ def _place_transcript_in_output_dir(
     if source == target:
         return transcript_path
 
-    if target.exists() and backup_file(target, suffix=".previous") is None:
-        raise TranscriptionError(
-            f"Could not preserve existing transcript before replacement: {target}"
-        )
+    resolved_output.mkdir(parents=True, exist_ok=True)
+    # Reserve the whole artifact stem. Existing sidecars also make a stem busy,
+    # and exclusive creation prevents concurrent runs claiming the same name.
+    while True:
+        stem = target.stem
+        if any(
+            path.name.startswith((f"{stem}.", f"{stem}_")) for path in resolved_output.iterdir()
+        ):
+            target = (
+                resolved_output
+                / f"{transcript_path.stem}_{uuid4().hex[:8]}{transcript_path.suffix}"
+            )
+            continue
+        try:
+            with target.open("xb"):
+                pass
+            break
+        except FileExistsError:
+            target = (
+                resolved_output
+                / f"{transcript_path.stem}_{uuid4().hex[:8]}{transcript_path.suffix}"
+            )
 
-    safe_copy(source, target)
+    try:
+        safe_copy(source, target)
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
     try:
         source.unlink()
         if session is not None:
@@ -640,7 +664,7 @@ def transcribe_command(
             config.keep_intermediate_files = True
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if output_dir is not None:
-            config.output_folder = output_dir
+            config.output_folder = output_dir.expanduser().resolve()
 
         # Fail fast on an explicit OpenAI request with no key, before the banner,
         # conversion, and progress all start and the error surfaces deep in the run.
@@ -864,10 +888,9 @@ def transcribe_command(
         if transcript_path.stat().st_size < 10:
             raise TranscriptionError("Transcription output file is empty")
 
-        if output_dir is not None:
-            transcript_path = _place_transcript_in_output_dir(
-                transcript_path, config.output_folder, session
-            )
+        transcript_path = _place_transcript_in_output_dir(
+            transcript_path, config.output_folder, session
+        )
 
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
         _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
@@ -1049,6 +1072,9 @@ def url_command(
     source_url: str = typer.Argument(
         ..., help="URL to download and transcribe (YouTube, Vimeo, direct links, etc.)"
     ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", "-o", help="Output directory (overrides configuration)"
+    ),
     method: TranscriptionMethod = typer.Option(
         "auto",
         "--method",
@@ -1151,6 +1177,7 @@ def url_command(
     config = None
     session: TranscriptionSessionType | None = None
     summary_saved = False
+    archive_pending = False
     try:
         from scribe.core.downloader import URLDownloader
         from scribe.utils.network import safe_url_for_logs
@@ -1163,6 +1190,9 @@ def url_command(
 
         # Load configuration
         config = _load_transcription_config(openrouter_max_spend)
+
+        if output_dir is not None:
+            config.output_folder = output_dir.expanduser().resolve()
 
         # Override config with CLI options
         if model:
@@ -1219,7 +1249,7 @@ def url_command(
         console.print()
 
         # Download the media
-        output_dir = config.download_folder
+        download_dir = config.download_folder
         cookies_browser = cookies or config.cookies_from_browser
         # Cookie extraction reads the browser's full cookie jar, so only accept a known
         # browser keyword and tell the user what it does.
@@ -1246,7 +1276,7 @@ def url_command(
                 f"(grants the site access to that browser's session).[/{ScribeTheme.TEXT_MUTED}]"
             )
         downloader = URLDownloader(
-            output_dir=output_dir,
+            output_dir=download_dir,
             audio_only=config.download_audio_only,
             timeout=config.download_timeout,
             max_file_size_gb=config.max_file_size_gb,
@@ -1422,6 +1452,12 @@ def url_command(
         if transcript_path.stat().st_size < 10:
             raise TranscriptionError("Transcription output file is empty")
 
+        archive_pending = True
+        transcript_path = _place_transcript_in_output_dir(
+            transcript_path, config.output_folder, session
+        )
+        archive_pending = False
+
         # Write structured outputs (JSON/VTT/SRT/Markdown) alongside the .txt.
         _write_structured_outputs(transcriber, transcript_path, config, output_format, session)
 
@@ -1586,7 +1622,12 @@ def url_command(
         if unified_progress is not None:
             unified_progress.stop()
         # Cleanup downloaded file unless user wants to keep it
-        if config is not None and not config.keep_downloads:
+        if archive_pending:
+            console.print(
+                "[yellow]Archive copy failed; downloaded media and the transcript "
+                "were retained beside the download.[/yellow]"
+            )
+        elif config is not None and not config.keep_downloads:
             try:
                 if downloaded_file and downloaded_file.exists():
                     downloaded_file.unlink()
@@ -2055,6 +2096,12 @@ def record(
 @app.command(name="batch")
 def batch_transcribe(
     input_files: list[Path] = typer.Argument(..., help="Audio/video files to transcribe"),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", "-o", help="Output directory (overrides configuration)"
+    ),
+    output_format: str | None = typer.Option(
+        None, "--format", help="Additional output formats: json,vtt,srt,md (comma-separated)"
+    ),
     method: TranscriptionMethod = typer.Option(
         "auto",
         "--method",
@@ -2142,6 +2189,8 @@ def batch_transcribe(
         config = _load_transcription_config(openrouter_max_spend)
 
         # Override config with CLI options
+        if output_dir is not None:
+            config.output_folder = output_dir.expanduser().resolve()
         if model:
             config.default_model = model
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
@@ -2263,8 +2312,18 @@ def batch_transcribe(
                     custom_vocabulary=custom_vocab,
                 )
 
+                if not transcript_path or not transcript_path.exists():
+                    raise TranscriptionError("Transcription produced no output file")
+                if transcript_path.stat().st_size < 10:
+                    raise TranscriptionError("Transcription output file is empty")
+                transcript_path = _place_transcript_in_output_dir(
+                    transcript_path, config.output_folder, session
+                )
+
                 # Structured sidecars (json/vtt/srt/md) so `scribe query` finds batch output
-                _write_structured_outputs(transcriber, transcript_path, config, None, session)
+                _write_structured_outputs(
+                    transcriber, transcript_path, config, output_format, session
+                )
 
                 # Generate DOCX
                 if not no_docx:

@@ -24,6 +24,7 @@ scribe meeting.mp4 --method openrouter --max-spend 5
 # Multiple inputs
 scribe batch *.mp4
 scribe batch first.wav second.wav
+scribe batch *.mp4 -o ./archive --format json,md
 
 # Music and lyrics
 scribe music song.mp3

@@ -798,12 +798,13 @@ def test_explicit_output_dir_places_transcript_atomically_and_updates_session(tm
 
     result = _place_transcript_in_output_dir(transcript, output_dir, session)
 
-    assert result == existing
-    assert existing.read_text(encoding="utf-8") == "new complete transcript"
-    assert existing.with_suffix(".txt.previous").read_text(encoding="utf-8") == ("prior transcript")
+    assert result != existing
+    assert result.parent == output_dir
+    assert result.read_text(encoding="utf-8") == "new complete transcript"
+    assert existing.read_text(encoding="utf-8") == "prior transcript"
     assert not transcript.exists()
-    assert session.transcript_file == existing
-    assert existing in session.files_created
+    assert session.transcript_file == result
+    assert result in session.files_created
     assert transcript not in session.files_created
     assert transcript.resolve() in session.files_cleaned
 
