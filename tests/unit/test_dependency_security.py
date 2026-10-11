@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SECURITY_RELEASES = {
     "mako": ("1.4.1", "1.4.2"),
     "multidict": ("6.9.0", "6.9.1"),
+    "lightning": ("2.6.5", "2.6.6"),
     "pytorch-lightning": ("2.6.5", "2.6.6"),
 }
 

@@ -75,6 +75,7 @@ diarize = [
     # Keep these floors in package metadata as well as the universal lock.
     "Mako>=1.4.2",
     "multidict>=6.9.1,<7",
+    "lightning>=2.6.6",
     "pytorch-lightning>=2.6.6",
 ]
 

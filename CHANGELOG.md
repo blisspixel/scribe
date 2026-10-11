@@ -15,7 +15,8 @@ milestones that predate this repository's Git history.
 ### Security
 
 - Updated Mako, multidict, and pytorch-lightning to patched versions and added
-  security floors to the pyannote-bearing extras for unlocked installs.
+  security floors to the pyannote-bearing extras for unlocked installs, including
+  both the lightning and pytorch-lightning distributions.
 - Added a blocking audit of every registry version in the universal lock,
   including optional extras and platform branches. Git and workspace sources
   remain outside registry advisory coverage.
