@@ -4,6 +4,12 @@
 
 Accepted (2026-06).
 
+Updated 2026-10-11: hardware chooses the engine and resource limits, not file
+model capacity. The shared file policy defaults to full large-v3 with conditioned
+sequential faster-whisper decoding. Balanced (turbo) and fast (small) are opt-in;
+explicit model, batch and faster-whisper precision settings win. The resident
+voice policy remains separate. See [performance tuning](../PERFORMANCE_TUNING.md).
+
 ## Context
 
 Local transcription was CUDA-only. `LocalWhisperTranscriber` hardcoded
@@ -55,9 +61,10 @@ base install, so selection is total: every machine gets a working engine.
 
 - The base install is unchanged (NVIDIA/CPU + API). New engines are opt-in extras, so
   no heavy or platform-specific wheels enter the default dependency set.
-- NVIDIA users see no behavioral change: their path still runs through
-  `LocalWhisperTranscriber` with the same model load, VAD, beam width, and silence
-  pre-pass, verified by the unchanged local-whisper tests.
+- NVIDIA and CPU users still run through `LocalWhisperTranscriber`. Current file
+  defaults preserve full large-v3 across tiers and prefer sequential decoding;
+  optional batches retain same-model sequential recovery. These policy changes
+  are tested without claiming a new measured WER improvement.
 - `select_backend` and `detect_hardware` are unit-tested across the full hardware and
   availability matrix, including a property test asserting totality and determinism.
   The mlx and whisper.cpp result-to-Transcript mappings are tested with fake modules.
@@ -67,3 +74,11 @@ base install, so selection is total: every machine gets a working engine.
   target hardware (a copy-paste Mac recipe is in the README) rather than claimed here.
 - `scribe info` now reports the detected vendor, the selected backend, and which
   optional engines are installed.
+- Linux physical display hardware can be identified through PCI sysfs without a
+  CUDA/ROCm runtime. Physical identity and import availability are not evidence
+  that whisper.cpp actually uses an accelerator; native build/device provenance
+  remains explicitly unverified. MLX does not support beam search; whisper.cpp
+  now forwards the requested beam width and vocabulary prompt.
+- The registry remains a pure total selector. The runtime rejects an unavailable
+  explicit engine override instead of silently picking another engine, and an
+  explicit CPU selection forces faster-whisper onto CPU even on NVIDIA hardware.

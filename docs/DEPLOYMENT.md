@@ -38,6 +38,15 @@ This project has not published a PyPI package. Install the versioned GitHub
 release from this repository; a bare `pip install scribe` installs an unrelated
 project.
 
+Budget disk space before the install. One Linux report measured a CPU tool
+environment around 1.2 GB and a CUDA environment around 5.7 GB; these are
+observations, not promises for other versions or extras. Downloads, uv's cache,
+temporary installation space, and model weights add separate costs in disk and
+time. `--torch-backend auto` avoids CUDA wheels when no supported NVIDIA driver
+is detected; see [uv's backend selection](https://docs.astral.sh/uv/guides/integration/pytorch/#automatic-backend-selection).
+Installing a CPU build does not lower the file model: the default remains full
+large-v3. Check `scribe info` before a long first transcription.
+
 The versioned release needs `--with "av<19"`: faster-whisper 1.2.1 calls
 `av.open(metadata_errors=...)`, which PyAV 19 removed. Current source metadata
 enforces `av>=11,<19`, including installations that do not use `uv.lock`.

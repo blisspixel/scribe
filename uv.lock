@@ -6134,7 +6134,7 @@ requires-dist = [
     { name = "pytorch-lightning", marker = "extra == 'diarize'", specifier = ">=2.6.6" },
     { name = "pyttsx3", marker = "extra == 'tray'", specifier = ">=2.90" },
     { name = "pyttsx3", marker = "extra == 'voice'", specifier = ">=2.90" },
-    { name = "pywhispercpp", marker = "extra == 'whispercpp'", specifier = ">=1.2.0" },
+    { name = "pywhispercpp", marker = "extra == 'whispercpp'", specifier = ">=1.5.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "sounddevice", marker = "extra == 'kokoro'", specifier = ">=0.4.6" },
     { name = "sounddevice", marker = "extra == 'tray'", specifier = ">=0.4.6" },

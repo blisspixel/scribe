@@ -197,8 +197,11 @@ class TestCUDACheck:
         assert result.status == "pass"
         assert "CUDA 12.4" in result.message
 
+    @patch(
+        "scribe.utils.diagnostics.detect_hardware", return_value=SimpleNamespace(vendor="nvidia")
+    )
     @patch("scribe.utils.diagnostics.GPUConfig.detect")
-    def test_cuda_not_available(self, mock_detect):
+    def test_cuda_not_available(self, mock_detect, _hardware):
         """Test CUDA not available."""
         mock_gpu = Mock()
         mock_gpu.has_gpu = False
@@ -237,8 +240,12 @@ class TestGPUCheck:
         assert "RTX 4090" in result.message
         assert "24.0 GB" in result.details
 
+    @patch(
+        "scribe.utils.diagnostics.detect_hardware",
+        return_value=SimpleNamespace(vendor="cpu", accelerator_name=None),
+    )
     @patch("scribe.utils.diagnostics.GPUConfig.detect")
-    def test_no_gpu(self, mock_detect):
+    def test_no_gpu(self, mock_detect, _hardware):
         """Test no GPU detected."""
         mock_gpu = Mock()
         mock_gpu.has_gpu = False
@@ -248,8 +255,8 @@ class TestGPUCheck:
         diagnostics = SystemDiagnostics()
         result = diagnostics.check_gpu()
 
-        assert result.status == "warn"
-        assert "No GPU" in result.message
+        assert result.status == "pass"
+        assert "CPU supported" in result.message
 
 
 class TestAPIKeyCheck:
@@ -1018,3 +1025,34 @@ class TestLocalReadiness:
         assert names.get("Local Transcription ($0)") == "pass"
         assert names.get("Local Notes ($0)") == "warn"
         assert result.status == "pass"
+
+
+@pytest.mark.parametrize("vendor", ["amd", "intel", "cpu", "apple"])
+def test_non_nvidia_cuda_checks_are_not_applicable(vendor):
+    from scribe.core.backends.hardware import HardwareInfo
+    from scribe.models.gpu import GPUConfig
+
+    with (
+        patch("scribe.utils.diagnostics.GPUConfig.detect", return_value=GPUConfig(has_gpu=False)),
+        patch(
+            "scribe.utils.diagnostics.detect_hardware",
+            return_value=HardwareInfo(
+                vendor=vendor, accelerator_name=vendor + " GPU" if vendor != "cpu" else None
+            ),
+        ),
+        patch("scribe.utils.diagnostics.subprocess.run") as command,
+    ):
+        diagnostics = SystemDiagnostics()
+        results = [
+            diagnostics.check_cuda(),
+            diagnostics.check_cuda_driver(),
+            diagnostics.check_gpu_memory(),
+        ]
+        gpu = diagnostics.check_gpu()
+    assert all(result.status == "pass" and "N/A" in result.message for result in results)
+    command.assert_not_called()
+    assert gpu.status == "pass"
+    assert "API" not in (gpu.fix_suggestion or "")
+    if vendor in ("amd", "intel"):
+        assert "Vulkan" in gpu.fix_suggestion
+        assert "alone does not establish" in gpu.fix_suggestion

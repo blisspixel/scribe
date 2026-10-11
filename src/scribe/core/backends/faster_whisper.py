@@ -35,7 +35,12 @@ class FasterWhisperBackend(TranscriptionBackend):
         # call, so beam/VAD/compute behavior cannot drift from the main path. The
         # beam width is taken from the engine's GPUConfig, matching that path.
         from scribe.core.local_whisper import LocalWhisperTranscriber
+        from scribe.models.gpu import GPUConfig
 
-        transcriber = LocalWhisperTranscriber(model_size=model_size, language=language)
+        gpu = GPUConfig.detect()
+        gpu.beam_size = beam_size
+        transcriber = LocalWhisperTranscriber(
+            model_size=model_size, language=language, gpu_config=gpu, batch_size=0
+        )
         transcriber._load_model()
         return transcriber._execute_transcription(audio_path, None, initial_prompt or "")

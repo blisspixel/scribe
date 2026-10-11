@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from scribe.core.backends.hardware import HardwareInfo, detect_hardware
 
 
@@ -46,6 +48,7 @@ def test_detect_falls_back_to_cpu():
         patch("scribe.core.backends.hardware._detect_amd", return_value=None),
         patch("scribe.core.backends.hardware._detect_nvidia", return_value=None),
         patch("scribe.core.backends.hardware._detect_apple", return_value=None),
+        patch("scribe.core.backends.hardware._detect_linux_gpu", return_value=None),
     ):
         result = detect_hardware()
     assert result.vendor == "cpu"
@@ -58,3 +61,33 @@ def test_detect_hardware_real_call_is_well_formed():
     info = detect_hardware()
     assert info.vendor in {"nvidia", "apple", "amd", "intel", "cpu"}
     assert info.memory_gb >= 0.0
+
+
+@pytest.mark.parametrize(
+    ("vendor_id", "vendor"), [("0x1002", "amd"), ("0x8086", "intel"), ("0x10de", "nvidia")]
+)
+def test_linux_physical_gpu_without_ml_driver(tmp_path, vendor_id, vendor):
+    from scribe.core.backends.hardware import _detect_linux_gpu
+
+    device = tmp_path / "0000:04:00.0"
+    device.mkdir()
+    (device / "class").write_text("0x030000\n")
+    (device / "vendor").write_text(vendor_id + "\n")
+    (device / "device").write_text("0x15bf\n")
+    with patch("scribe.core.backends.hardware.platform.system", return_value="Linux"):
+        detected = _detect_linux_gpu(tmp_path)
+    assert detected.vendor == vendor
+    assert detected.memory_gb == 0  # shared RAM is not dedicated VRAM
+    assert "0x15bf" in detected.accelerator_name
+
+
+def test_linux_does_not_treat_amd_cpu_as_gpu(tmp_path):
+    from scribe.core.backends.hardware import _detect_linux_gpu
+
+    device = tmp_path / "0000:04:00.0"
+    device.mkdir()
+    (device / "class").write_text("0x060000\n")
+    (device / "vendor").write_text("0x1002\n")
+    with patch("scribe.core.backends.hardware.platform.system", return_value="Linux"):
+        assert _detect_linux_gpu(tmp_path) is None
+        assert _detect_linux_gpu(tmp_path / "missing") is None

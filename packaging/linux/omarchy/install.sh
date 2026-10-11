@@ -11,6 +11,13 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
+cat <<'EOF'
+Scribe installs a local ML runtime. Allow roughly 1-2 GB for a CPU tool environment
+or several GB more for CUDA, plus download/cache space; versions and extras vary.
+uv selects the PyTorch backend automatically from available drivers.
+File model weights download separately on first use; voice keeps its own profile.
+EOF
+
 if [[ -f "${ROOT}/pyproject.toml" ]] && grep -q 'name = "scribe"' "${ROOT}/pyproject.toml"; then
   uv tool install --python 3.12 --force --torch-backend auto "scribe[tray] @ ${ROOT}"
 else

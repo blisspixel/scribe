@@ -55,6 +55,8 @@ def test_batched_path_used_when_batch_size_positive(tmp_path: Path) -> None:
         transcript = t._execute_transcription(tmp_path / "a.wav", 10.0, "")
     assert [s.text for s in transcript.segments] == [" hi"]
     assert pipeline.return_value.transcribe.call_args.kwargs["batch_size"] == 8
+    assert transcript.metadata["batch_size"] == 8
+    assert transcript.metadata["decoding"] == "batched"
     t.model.transcribe.assert_not_called()
 
 
@@ -72,6 +74,10 @@ def test_batched_failure_retries_sequentially(tmp_path: Path) -> None:
         transcript = t._execute_transcription(tmp_path / "a.wav", 10.0, "")
     assert [s.text for s in transcript.segments] == [" seq"]
     clear.assert_called_once()
+    assert transcript.model == "large-v3"
+    assert transcript.metadata["batch_size"] == 0
+    assert transcript.metadata["decoding"] == "conditioned sequential"
+    assert transcript.metadata["compute_type"] == "float16"
 
 
 def test_sequential_when_batch_size_zero(tmp_path: Path) -> None:

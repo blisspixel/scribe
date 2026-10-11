@@ -61,8 +61,10 @@ Current signature:
 ```python
 LocalWhisperTranscriber(
     model_size: str = "large-v3",
-    language: str | None = "en",
+    language: str | None = None,
     gpu_config: GPUConfig | None = None,
+    batch_size: int | None = None,
+    compute_type: str | None = None,
 )
 LocalWhisperTranscriber.transcribe(
     audio_path: Path,

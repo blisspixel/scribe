@@ -29,6 +29,7 @@ from typing import Any, cast
 import httpx
 from openai import AuthenticationError, OpenAI
 
+from scribe.core.backends.hardware import detect_hardware
 from scribe.models.gpu import GPUConfig
 from scribe.utils.obs_config import read_obs_websocket_config
 from scribe.utils.platform import ffmpeg_install_command
@@ -114,7 +115,7 @@ def assess_local_readiness() -> LocalReadiness:
         vendor = hardware.vendor
         availability = backend_availability()
         backend = select_backend(hardware, available=availability)
-        backend_ok = any(availability.values())
+        backend_ok = availability.get(backend, False)
     except Exception:
         backend_ok = False
 
@@ -131,15 +132,23 @@ def assess_local_readiness() -> LocalReadiness:
             "sudo pacman -S ffmpeg / sudo apt install ffmpeg."
         )
     else:
-        accelerated = backend != "cpu"
-        speed = "GPU-accelerated" if accelerated else "CPU int8 (slower, still $0)"
-        transcribe_detail = f"{backend} on {vendor} - {speed}"
+        if backend == "whispercpp":
+            execution = "native device depends on the build; GPU acceleration not verified"
+        elif backend == "mlx":
+            execution = "Metal via MLX"
+        elif backend == "faster-whisper":
+            execution = "CUDA if the runtime is usable; otherwise CPU int8"
+        else:
+            execution = "CPU int8 (runtime depends on model and file, still $0)"
+        transcribe_detail = f"{backend} on {vendor} - {execution}"
         # Nudge Apple/AMD/Intel users off the CPU floor toward their fast backend.
         if backend == "cpu" and vendor == "apple":
             transcribe_fix = 'For Metal acceleration, install Scribe with its "mlx" extra.'
         elif backend == "cpu" and vendor in ("amd", "intel"):
             transcribe_fix = (
-                'For optional native acceleration, install Scribe with its "whispercpp" extra.'
+                "Optional AMD/Intel acceleration needs a Vulkan/ROCm-enabled pywhispercpp build "
+                'and compatible drivers; an importable "whispercpp" extra alone does not prove GPU use. '
+                "See https://github.com/absadiki/pywhispercpp#installation"
             )
 
     # --- Notes: a local Ollama server with at least one installed model ---
@@ -551,6 +560,27 @@ class SystemDiagnostics:
                 ),
                 details=gpu_config.reason,
             )
+        elif detect_hardware().vendor != "nvidia":
+            details = "CUDA is NVIDIA-specific. Local CPU transcription remains available at $0."
+            fix = None
+            try:
+                import torch
+
+                if torch.version.cuda:
+                    details += " This PyTorch build includes CUDA despite no detected NVIDIA GPU."
+                    fix = (
+                        "To remove unused CUDA packages, reinstall Scribe using uv tool install "
+                        "--force --python 3.12 --torch-backend auto with the original Scribe source."
+                    )
+            except ImportError:
+                pass
+            result = DiagnosticResult(
+                name="CUDA",
+                status="pass",
+                message="N/A (no NVIDIA GPU detected)",
+                details=details,
+                fix_suggestion=fix,
+            )
         else:
             result = DiagnosticResult(
                 name="CUDA",
@@ -558,8 +588,8 @@ class SystemDiagnostics:
                 message="Not available",
                 details=gpu_config.reason,
                 fix_suggestion=(
-                    "Install matching Torch and TorchAudio builds using the current command from "
-                    "https://pytorch.org/get-started/locally/"
+                    "Check the NVIDIA driver and CTranslate2 CUDA requirements, or keep using "
+                    "local CPU transcription. See https://opennmt.net/CTranslate2/installation.html"
                 ),
             )
 
@@ -570,6 +600,15 @@ class SystemDiagnostics:
         """Check CUDA driver version and age."""
         import subprocess
 
+        if not GPUConfig.detect().has_gpu and detect_hardware().vendor != "nvidia":
+            skipped = DiagnosticResult(
+                name="CUDA Driver",
+                status="pass",
+                message="N/A (no NVIDIA GPU detected)",
+                details="An NVIDIA driver is not required for local CPU, MLX or Vulkan transcription.",
+            )
+            self.results.append(skipped)
+            return skipped
         try:
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
@@ -636,12 +675,26 @@ class SystemDiagnostics:
                 details=f"VRAM: {gpu_config.gpu_memory_gb:.1f} GB\n{gpu_config.reason}",
             )
         else:
+            hardware = detect_hardware()
+            hint = None
+            if hardware.vendor in ("amd", "intel"):
+                hint = (
+                    "CPU transcription works at $0. Optional whisper.cpp acceleration requires "
+                    "a Vulkan/ROCm-enabled build and compatible drivers; installing the extra "
+                    "alone does not establish acceleration. See "
+                    "https://github.com/absadiki/pywhispercpp#installation"
+                )
+            elif hardware.vendor == "apple":
+                hint = 'For optional Metal acceleration, install Scribe with its "mlx" extra.'
             result = DiagnosticResult(
                 name="GPU",
-                status="warn",
-                message="No GPU detected",
-                details=gpu_config.reason,
-                fix_suggestion="GPU is optional - API mode works great",
+                status="pass",
+                message=hardware.accelerator_name or "CPU supported (no GPU detected)",
+                details=(
+                    f"Physical hardware: {hardware.vendor}. Presence does not verify backend acceleration. "
+                    f"{gpu_config.reason}"
+                ),
+                fix_suggestion=hint,
             )
 
         self.results.append(result)
@@ -1074,56 +1127,42 @@ class SystemDiagnostics:
         return result
 
     def check_gpu_memory(self) -> DiagnosticResult:
-        """Check GPU memory and recommend optimal settings."""
-        gpu_config = GPUConfig.detect()
-
-        if gpu_config.has_gpu and gpu_config.gpu_memory_gb > 0:
-            vram_gb = gpu_config.gpu_memory_gb
-
-            if vram_gb >= 24:
-                recommendation = "large-v3, batched GPU decoding (optimal)"
-                status = "pass"
-            elif vram_gb >= 16:
-                recommendation = "large-v3, batched GPU decoding (good)"
-                status = "pass"
-            elif vram_gb >= 12:
-                recommendation = "large-v3 (adequate)"
-                status = "warn"
-            elif vram_gb >= 8:
-                recommendation = "large-v2 or medium (recommended)"
-                status = "warn"
-            else:
-                recommendation = "Use a smaller local model or the CPU backend"
-                status = "warn"
-
+        """Report CUDA memory without changing the selected quality/model policy."""
+        gpu = GPUConfig.detect()
+        if gpu.has_gpu and gpu.gpu_memory_gb > 0:
+            free = GPUConfig.query_free_memory_gb()
+            free_note = f"{free:.1f} GB currently free" if free is not None else "free VRAM unknown"
             result = DiagnosticResult(
                 name="GPU Memory",
-                status=status,
-                message=f"{vram_gb:.1f} GB VRAM",
-                details=f"Recommendation: {recommendation}",
+                status="pass" if free is not None and free >= 5 else "warn",
+                message=f"{gpu.gpu_memory_gb:.1f} GB VRAM ({free_note})",
+                details=(
+                    "Full large-v3 CUDA float16 sequential decoding needs roughly 5 GB free VRAM; "
+                    "batching and speaker labels need more. This is planning guidance, not a fit guarantee. "
+                    "Hardware never silently selects a smaller model."
+                ),
                 fix_suggestion=(
                     None
-                    if status == "pass"
-                    else "Select a smaller local model; paid cloud transcription remains optional"
+                    if free is not None and free >= 5
+                    else "Free GPU memory, explicitly select SCRIBE_LOCAL_BACKEND=cpu, or choose "
+                    "--quality balanced/fast or --model if willing to trade model capacity for resources."
                 ),
             )
-        elif gpu_config.has_gpu:
+        elif gpu.has_gpu:
             result = DiagnosticResult(
                 name="GPU Memory",
                 status="warn",
-                message="GPU detected",
-                details="Could not determine VRAM amount automatically",
-                fix_suggestion="Run nvidia-smi to confirm available VRAM",
+                message="GPU detected; VRAM unknown",
+                details="Unknown memory does not establish that the selected model fits.",
+                fix_suggestion="Run nvidia-smi to inspect current free VRAM.",
             )
         else:
             result = DiagnosticResult(
                 name="GPU Memory",
-                status="warn",
-                message="No GPU detected",
-                details="GPU memory check skipped",
-                fix_suggestion=None,
+                status="pass",
+                message="N/A (no CUDA transcription runtime)",
+                details="CPU uses system RAM. MLX and whisper.cpp manage their own memory.",
             )
-
         self.results.append(result)
         return result
 

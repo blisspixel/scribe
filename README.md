@@ -34,6 +34,11 @@ uses a PyAV argument removed in version 19. New source installs carry this bound
 in package metadata. `--torch-backend auto` selects a matching PyTorch build,
 including CPU wheels when no supported NVIDIA driver is found.
 
+Allow disk space before installing: a reported Linux install used about 1.2 GB
+for the CPU tool environment and 5.7 GB with CUDA packages. These are observations,
+not fixed sizes; platform, selected extras and cached wheels change the download
+and installed footprint. Model weights are a separate download on first use.
+
 ### Omarchy
 
 Omarchy is the Linux desktop this project is set up for: Arch, Hyprland,
@@ -151,6 +156,39 @@ require an API key. Cloud transcription requires `--method openai` or
 disabled by default and require positive flags.
 `SCRIBE_LOCAL_ONLY=1` adds a strict cloud-provider guard. `scribe doctor` is local;
 `scribe doctor --live` is the explicit provider-connectivity check.
+
+File transcription defaults to the `accurate` profile: full Whisper large-v3,
+including on CPU, with conditioned sequential faster-whisper decoding. It can
+take longer than the recording on a CPU and needs several GB of free memory.
+Scribe reports the selected model and resource guidance with `scribe info`;
+hardware or a failed run never silently selects a smaller model or a paid API.
+An explicit model setting wins over the profile. Faster profiles are opt-in:
+
+```bash
+scribe transcribe meeting.mp4 --quality balanced  # turbo
+scribe transcribe meeting.mp4 --quality fast      # small
+scribe transcribe meeting.mp4 --model medium     # explicit override
+```
+
+Set `[transcription] quality = "balanced"` in `~/.scribe/config.toml`, or
+`SCRIBE_TRANSCRIPTION_QUALITY=balanced`, to persist a different file profile.
+Resident voice retains its separate latency profiles. See the
+[model, backend and memory guide](docs/PERFORMANCE_TUNING.md).
+
+File speech language is detected automatically. `--language es` or another
+explicit language forces that language; `--language auto` restores detection for
+one run. A primary language is a manual preset, not an English bias in detection:
+
+```toml
+[transcription]
+auto_detect_language = true
+primary_language = "en"  # used only when detection is disabled and no language is forced
+```
+
+Set the primary to your usual language and disable detection when you deliberately
+want that preset. Existing explicit `language = "en"` settings remain forced;
+remove that setting or use `--language auto` to enable detection. No legacy user
+preference is silently rewritten.
 
 OpenRouter is fully optional and uses its dedicated speech-to-text endpoint with
 bounded local chunking, price-prioritized routing, a $5 per-transcription

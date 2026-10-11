@@ -36,7 +36,7 @@ from scribe.cli.errors import exit_on_cli_error
 from scribe.cli.notes_progress import notes_progress
 from scribe.cli.voice_session import voice_app
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
-from scribe.models.options import ModelSize, TranscriptionMethod
+from scribe.models.options import FileQuality, ModelSize, TranscriptionMethod
 from scribe.utils.branding import brand_header_markup
 from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
 from scribe.utils.safe_write import atomic_write
@@ -562,11 +562,16 @@ def transcribe_command(
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
     ),
+    quality: FileQuality | None = typer.Option(
+        None,
+        "--quality",
+        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+    ),
     language: str | None = typer.Option(
         None,
         "--language",
         "-l",
-        help="Language (english, spanish, french, german, japanese, chinese, or ISO code)",
+        help="Language (auto detects; a name or ISO code forces that language)",
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX document generation"),
     notes: bool | None = typer.Option(
@@ -647,14 +652,20 @@ def transcribe_command(
         # Override config with CLI options
         if model:
             config.default_model = model
+        if quality is not None:
+            config.transcription_quality = quality
         if language:
             # Validate language code
             from scribe.exceptions import ValidationError
             from scribe.utils.validation import validate_language_code
 
             try:
-                validated_lang = validate_language_code(language)
+                validated_lang = (
+                    None if language.strip().lower() == "auto" else validate_language_code(language)
+                )
                 config.default_language = validated_lang
+                if validated_lang is None:
+                    config.auto_detect_language = True
             except ValidationError as e:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 console.print(
@@ -1097,11 +1108,16 @@ def url_command(
     model: ModelSize | None = typer.Option(
         None, "--model", help="Whisper model size (overrides config default)"
     ),
+    quality: FileQuality | None = typer.Option(
+        None,
+        "--quality",
+        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+    ),
     language: str | None = typer.Option(
         None,
         "--language",
         "-l",
-        help="Language (english, spanish, french, german, japanese, chinese, or ISO code)",
+        help="Language (auto detects; a name or ISO code forces that language)",
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX document generation"),
     notes: bool | None = typer.Option(
@@ -1203,14 +1219,20 @@ def url_command(
         # Override config with CLI options
         if model:
             config.default_model = model
+        if quality is not None:
+            config.transcription_quality = quality
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.exceptions import ValidationError
             from scribe.utils.validation import validate_language_code
 
             try:
-                validated_lang = validate_language_code(language)
+                validated_lang = (
+                    None if language.strip().lower() == "auto" else validate_language_code(language)
+                )
                 config.default_language = validated_lang
+                if validated_lang is None:
+                    config.auto_detect_language = True
             except ValidationError as e:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 console.print(
@@ -2130,8 +2152,16 @@ def batch_transcribe(
         help=_OPENROUTER_MAX_SPEND_HELP,
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
+    quality: FileQuality | None = typer.Option(
+        None,
+        "--quality",
+        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+    ),
     language: str | None = typer.Option(
-        None, "--language", "-l", help="Language (english, spanish, etc. or ISO code)"
+        None,
+        "--language",
+        "-l",
+        help="Language (auto detects; a name or ISO code forces that language)",
     ),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip DOCX generation"),
     notes: bool | None = typer.Option(
@@ -2207,13 +2237,19 @@ def batch_transcribe(
             config.output_folder = output_dir.expanduser().resolve()
         if model:
             config.default_model = model
+        if quality is not None:
+            config.transcription_quality = quality
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.utils.validation import validate_language_code
 
             try:
-                validated_lang = validate_language_code(language)
+                validated_lang = (
+                    None if language.strip().lower() == "auto" else validate_language_code(language)
+                )
                 config.default_language = validated_lang
+                if validated_lang is None:
+                    config.auto_detect_language = True
             except Exception:
                 console.print(f"[red]Invalid language code: {escape(language)}[/red]")
                 raise typer.Exit(1)
@@ -2499,8 +2535,16 @@ def music_transcribe(
         help=_OPENROUTER_MAX_SPEND_HELP,
     ),
     model: ModelSize | None = typer.Option(None, "--model", help="Whisper model size"),
+    quality: FileQuality | None = typer.Option(
+        None,
+        "--quality",
+        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+    ),
     language: str | None = typer.Option(
-        None, "--language", "-l", help="Language (english, spanish, etc. or ISO code)"
+        None,
+        "--language",
+        "-l",
+        help="Language (auto detects; a name or ISO code forces that language)",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -2541,19 +2585,21 @@ def music_transcribe(
         # Override config with CLI options
         if model:
             config.default_model = model
+        if quality is not None:
+            config.transcription_quality = quality
         if language:
             from scribe.utils.validation import validate_language_code
 
             try:
-                validated_lang = validate_language_code(language)
+                validated_lang = (
+                    None if language.strip().lower() == "auto" else validate_language_code(language)
+                )
                 config.default_language = validated_lang
+                if validated_lang is None:
+                    config.auto_detect_language = True
             except Exception:
                 console.print(f"[red]Invalid language code: {language}[/red]")
                 raise typer.Exit(1)
-        else:
-            # For music mode, enable auto-detection by default
-            # Language will be detected per-segment after vocal separation
-            config.default_language = None
 
         # Collect all audio files to process
         results: list[MusicResult] = []

@@ -62,7 +62,8 @@ mlx = [
 # Portable whisper.cpp engine (Metal / Vulkan / ROCm / CPU) via pywhispercpp, for
 # Apple, AMD, and Intel machines that are not served by faster-whisper's CUDA path.
 whispercpp = [
-    "pywhispercpp>=1.2.0",
+    # 1.5 preserves constructor beam settings and exposes public language detection.
+    "pywhispercpp>=1.5.0",
 ]
 
 # Optional SDKs for non-OpenAI cloud intelligence providers.

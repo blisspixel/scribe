@@ -531,8 +531,14 @@ class TestInfoCommand:
         mock_config.output_folder = Path("/test/output")
         mock_config.default_model = "large-v3"
         # Pydantic tracks explicitly-set fields here; empty means "left at default",
-        # which is what lets `info` report the hardware-tuned model.
+        # which is what lets the file quality profile choose the model.
         mock_config.model_fields_set = set()
+        mock_config.transcription_quality = "accurate"
+        mock_config.local_compute_type = None
+        mock_config.auto_detect_language = True
+        mock_config.primary_language = "en"
+        mock_config.local_batch_size = None
+        mock_config.local_backend = "auto"
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
         mock_config.openrouter_model = "openai/whisper-large-v3"
@@ -571,8 +577,14 @@ class TestInfoCommand:
         mock_config.output_folder = Path("/test")
         mock_config.default_model = "large-v3"
         # Pydantic tracks explicitly-set fields here; empty means "left at default",
-        # which is what lets `info` report the hardware-tuned model.
+        # which is what lets the file quality profile choose the model.
         mock_config.model_fields_set = set()
+        mock_config.transcription_quality = "accurate"
+        mock_config.local_compute_type = None
+        mock_config.auto_detect_language = True
+        mock_config.primary_language = "en"
+        mock_config.local_batch_size = None
+        mock_config.local_backend = "auto"
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
         mock_config.openrouter_model = "openai/whisper-large-v3"
@@ -612,8 +624,14 @@ class TestInfoCommand:
         mock_config.output_folder = Path("/test/output")
         mock_config.default_model = "large-v3"
         # Pydantic tracks explicitly-set fields here; empty means "left at default",
-        # which is what lets `info` report the hardware-tuned model.
+        # which is what lets the file quality profile choose the model.
         mock_config.model_fields_set = set()
+        mock_config.transcription_quality = "accurate"
+        mock_config.local_compute_type = None
+        mock_config.auto_detect_language = True
+        mock_config.primary_language = "en"
+        mock_config.local_batch_size = None
+        mock_config.local_backend = "auto"
         mock_config.default_language = "en"
         mock_config.openai_api_key = "sk-test"
         mock_config.openrouter_model = "openai/whisper-large-v3"
@@ -743,8 +761,14 @@ class TestOutputFormatting:
         mock_config.output_folder = Path("/test")
         mock_config.default_model = "large-v3"
         # Pydantic tracks explicitly-set fields here; empty means "left at default",
-        # which is what lets `info` report the hardware-tuned model.
+        # which is what lets the file quality profile choose the model.
         mock_config.model_fields_set = set()
+        mock_config.transcription_quality = "accurate"
+        mock_config.local_compute_type = None
+        mock_config.auto_detect_language = True
+        mock_config.primary_language = "en"
+        mock_config.local_batch_size = None
+        mock_config.local_backend = "auto"
         mock_config.default_language = "en"
         mock_config.openai_api_key = None
         mock_config.openrouter_model = "openai/whisper-large-v3"

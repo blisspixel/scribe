@@ -13,7 +13,7 @@ from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from scribe.exceptions import ValidationError
-from scribe.models.options import ModelSize, TranscriptionMethod
+from scribe.models.options import FileQuality, LocalComputeType, ModelSize, TranscriptionMethod
 
 
 class _ScribeUserConfigSource(PydanticBaseSettingsSource):
@@ -115,11 +115,33 @@ class ScribeConfig(BaseSettings):
     # Transcription settings
     default_model: ModelSize = Field(
         default="large-v3",
-        description="Default Whisper model size (large-v3 = best quality, large-v3-turbo = faster)",
+        description="Explicit Whisper model override; otherwise the file quality profile applies",
+    )
+
+    transcription_quality: FileQuality = Field(
+        default="accurate",
+        description=(
+            "File profile: accurate (full large-v3), balanced (turbo), fast (small). "
+            "An explicit model wins. Resident voice profiles are separate. "
+            "Env: SCRIBE_TRANSCRIPTION_QUALITY."
+        ),
     )
 
     default_language: str | None = Field(
-        default="en", description="Default language code (ISO 639-1)"
+        default=None, description="Explicit forced file language; unset/auto detects speech"
+    )
+
+    auto_detect_language: bool = Field(
+        default=True,
+        description="Detect file speech language when no explicit language is set",
+    )
+
+    primary_language: str = Field(
+        default="en",
+        description=(
+            "Manual language preset used only when auto detection is disabled and no "
+            "explicit language is set. Does not bias or constrain automatic detection."
+        ),
     )
 
     default_method: TranscriptionMethod = Field(
@@ -148,6 +170,15 @@ class ScribeConfig(BaseSettings):
         description=(
             "Batched GPU decoding size for local Whisper: unset picks one from the GPU "
             "and free VRAM, 0 forces sequential decoding. Env: SCRIBE_LOCAL_BATCH_SIZE."
+        ),
+    )
+
+    local_compute_type: LocalComputeType | None = Field(
+        default=None,
+        description=(
+            "Optional faster-whisper precision override. Unset uses CPU int8 or CUDA "
+            "float16/float32. Other engines reject this setting rather than ignore it. "
+            "Env: SCRIBE_LOCAL_COMPUTE_TYPE."
         ),
     )
 
@@ -487,14 +518,24 @@ class ScribeConfig(BaseSettings):
             return None
 
         v = v.strip().lower()
+        if v == "auto":
+            return None
 
-        if len(v) != 2:
+        if len(v) != 2 or not v.isascii() or not v.isalpha():
             raise ValidationError(
                 "Language code must be 2-letter ISO 639-1 format (e.g., 'en', 'es', 'fr')",
                 context={"provided": v},
             )
 
         return v
+
+    @field_validator("primary_language")
+    @classmethod
+    def validate_primary_language(cls, v: str) -> str:
+        language = cls.validate_language_code(v)
+        if language is None:
+            raise ValidationError("primary_language must be a manual ISO language code, not auto")
+        return language
 
     @field_validator("diarization_backend", mode="before")
     @classmethod

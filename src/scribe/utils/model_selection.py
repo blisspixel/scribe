@@ -1,37 +1,52 @@
-"""
-Effective local Whisper model resolution.
+"""Shared file-transcription policy, independent of hardware and voice profiles."""
 
-The configured `default_model` is a preference, not a promise: when the user has
-not pinned a model, Scribe auto-tunes it to the detected hardware, so a CPU-only
-machine runs a smaller model than the `large-v3` default.
+from scribe.models.options import FileQuality, ModelSize
 
-This module exists so the transcription pipeline and `scribe info` answer
-"which model will actually run?" the same way. Reporting the configured value
-where the effective value differs tells a CPU user their run will use a model it
-will not use.
-"""
+_PROFILE_MODELS: dict[FileQuality, ModelSize] = {
+    "accurate": "large-v3",
+    "balanced": "large-v3-turbo",
+    "fast": "small",
+}
 
 
-def resolve_local_model[ModelT](
-    configured_model: ModelT,
+def resolve_local_model(
+    configured_model: ModelSize,
     configured_fields: set[str],
-    recommended_model: ModelT,
-) -> tuple[ModelT, bool]:
-    """
-    Resolve the local Whisper model that will actually be used.
+    quality: FileQuality = "accurate",
+) -> tuple[ModelSize, bool]:
+    """An explicit model wins; otherwise use the requested file quality profile.
 
-    An explicitly pinned model always wins; hardware auto-tuning applies only to
-    the untouched default.
-
-    Args:
-        configured_model: The model currently set on the config.
-        configured_fields: Names the user explicitly set (Pydantic's
-            ``model_fields_set``), used to tell an explicit choice from a default.
-        recommended_model: The model the detected hardware suggests.
-
-    Returns:
-        Tuple of (effective model, whether hardware overrode the default).
+    Hardware controls the engine and memory use, never the model's identity.
+    The boolean indicates whether the profile changed the configured default.
     """
     if "default_model" in configured_fields:
         return configured_model, False
-    return recommended_model, recommended_model != configured_model
+    model = _PROFILE_MODELS[quality]
+    return model, model != configured_model
+
+
+def resolve_local_batch_size(quality: FileQuality, configured: int | None) -> int | None:
+    """Prefer conditioned sequential decoding for accuracy unless explicitly set."""
+    if configured is not None:
+        return configured
+    return 0 if quality == "accurate" else None
+
+
+def resolve_local_language(
+    forced_language: str | None, auto_detect: bool, primary_language: str
+) -> str | None:
+    """Explicit language wins; primary is a manual preset, never an auto prior."""
+    if forced_language is not None:
+        return forced_language
+    return None if auto_detect else primary_language
+
+
+def local_resource_guidance(model: str) -> str:
+    """Describe planning estimates, not a fit guarantee or an invented runtime."""
+    if model.startswith("large") or model == "turbo":
+        return (
+            "Plan for several GB of free RAM; full large-v3 CPU int8 weights alone are "
+            "about 1.6 GB. CUDA float16 sequential decoding typically needs about 5 GB "
+            "free VRAM, with more for batching and speaker labels. Native builds differ."
+        )
+    return "Memory use depends on model, engine, audio length and speaker labels."

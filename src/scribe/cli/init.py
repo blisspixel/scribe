@@ -150,7 +150,11 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         )
         safe_defaults: dict[str, Any] = {
             "output": {"folder": _default_output_folder()},
-            "transcription": {"method": "auto"},
+            "transcription": {
+                "method": "auto",
+                "auto_detect_language": True,
+                "primary_language": "en",
+            },
             # Paid AI extras stay off in non-interactive safe defaults (cost safety);
             # the user can opt in later via the wizard, env vars, or per-run flags.
             "features": {
@@ -282,7 +286,7 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
 
     data: dict[str, Any] = {
         "output": {"folder": output_folder},
-        "transcription": {"method": method},
+        "transcription": {"method": method, "auto_detect_language": True, "primary_language": "en"},
         "features": {
             "generate_notes": generate_notes,
             "generate_joke": generate_joke,

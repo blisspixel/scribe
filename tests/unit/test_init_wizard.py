@@ -175,6 +175,9 @@ def test_run_wizard_defaults_to_local_first_auto(
 
     saved_data = save_config.call_args.args[0]
     assert saved_data["transcription"]["method"] == "auto"
+    assert saved_data["transcription"]["auto_detect_language"] is True
+    assert saved_data["transcription"]["primary_language"] == "en"
+    assert "language" not in saved_data["transcription"]
     assert ("[bold]Transcription method[/bold]", "auto") in prompt_defaults
     assert "No AI vendor keys detected" not in console.file.getvalue()
 
@@ -283,3 +286,27 @@ def test_maybe_prompt_first_run_runs_wizard_when_accepted(tmp_path, monkeypatch)
         assert init_wizard.maybe_prompt_first_run(console=_console()) is True
 
     run_wizard.assert_called_once()
+
+
+def test_noninteractive_new_config_keeps_auto_detection_and_existing_language(
+    tmp_path, monkeypatch
+):
+    from scribe import config_file
+    from scribe.models.config import ScribeConfig
+
+    path = tmp_path / ".scribe" / "config.toml"
+    monkeypatch.setattr(config_file, "CONFIG_DIR", path.parent)
+    monkeypatch.setattr(config_file, "CONFIG_PATH", path)
+    monkeypatch.setattr(init_wizard, "CONFIG_PATH", path)
+    monkeypatch.delenv("SCRIBE_DEFAULT_LANGUAGE", raising=False)
+    with patch("scribe.cli.init.sys.stdin.isatty", return_value=False):
+        init_wizard.run_wizard(console=_console())
+        config = ScribeConfig(_env_file=None)
+        assert config.default_language is None
+        assert config.auto_detect_language is True
+        assert config.primary_language == "en"
+        original = '[transcription]\nlanguage = "es"\n'
+        path.write_text(original, encoding="utf-8")
+        init_wizard.run_wizard(console=_console())
+    assert path.read_text(encoding="utf-8") == original
+    assert ScribeConfig(_env_file=None).default_language == "es"
