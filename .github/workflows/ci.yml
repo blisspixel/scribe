@@ -318,6 +318,40 @@ jobs:
           ../.venv/bin/scribe --version
 
   # ---------------------------------------------------------------------------
+  # Fresh Tool Install
+  # Resolve published dependency metadata without uv.lock, as end users do.
+  # Exercise the actual upstream decoder without downloading a model.
+  # ---------------------------------------------------------------------------
+  fresh-tool-install:
+    name: Fresh Tool Install (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Isolate the installed tool
+        run: |
+          echo "UV_TOOL_DIR=$RUNNER_TEMP/scribe-tools" >> "$GITHUB_ENV"
+          echo "UV_TOOL_BIN_DIR=$RUNNER_TEMP/scribe-bin" >> "$GITHUB_ENV"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.33"
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Install from the checkout without the project lock
+        run: uv tool install --python 3.12 --torch-backend auto .
+
+      - name: Exercise the installed entry point and decoder
+        run: |
+          "$UV_TOOL_BIN_DIR/scribe" --version
+          "$UV_TOOL_DIR/scribe/bin/python" scripts/check_local_decode.py
+
+  # ---------------------------------------------------------------------------
   # Native Tray Source Contract
   # Verifies the explicit-only Windows Go prototype without publishing it.
   # ---------------------------------------------------------------------------
@@ -422,7 +456,7 @@ jobs:
     name: CI
     runs-on: ubuntu-latest
     needs:
-      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, native-tray, native-audio]
+      [lint-and-types, toolchain-check, test, platform-smoke, coverage, security, package, fresh-tool-install, native-tray, native-audio]
     if: always()
 
     steps:
@@ -437,6 +471,7 @@ jobs:
           echo "  coverage:       ${{ needs.coverage.result }}"
           echo "  security:       ${{ needs.security.result }}"
           echo "  package:        ${{ needs.package.result }}"
+          echo "  fresh-install:  ${{ needs.fresh-tool-install.result }}"
           echo "  native-tray:    ${{ needs.native-tray.result }}"
           echo "  native-audio:   ${{ needs.native-audio.result }}"
 
@@ -448,6 +483,7 @@ jobs:
                         "${{ needs.coverage.result }}" \
                         "${{ needs.security.result }}" \
                         "${{ needs.package.result }}" \
+                        "${{ needs.fresh-tool-install.result }}" \
                         "${{ needs.native-tray.result }}" \
                         "${{ needs.native-audio.result }}"; do
             if [[ "$result" != "success" ]]; then

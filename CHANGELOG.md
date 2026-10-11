@@ -25,6 +25,14 @@ milestones that predate this repository's Git history.
   including Whisper large models, is unchanged. Use the base install for
   transcription and `diarize` for the existing pyannote speaker-label backend.
 
+### Fixed
+
+- Bound PyAV below 19 for faster-whisper's current decoder, including fresh
+  tool and wheel installations that do not use the project lock. A required CI
+  gate installs from package metadata and decodes synthetic audio without a
+  model or API. Versioned install examples include the compatibility override
+  and select the appropriate PyTorch backend. Refs #32, #33.
+
 ## [2.11.0] - 2026-10-09
 
 ### Added

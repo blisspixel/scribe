@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
+uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 scribe init
 scribe info
@@ -37,6 +37,13 @@ scribe info
 This project has not published a PyPI package. Install the versioned GitHub
 release from this repository; a bare `pip install scribe` installs an unrelated
 project.
+
+The versioned release needs `--with "av<19"`: faster-whisper 1.2.1 calls
+`av.open(metadata_errors=...)`, which PyAV 19 removed. Current source metadata
+enforces `av>=11,<19`, including installations that do not use `uv.lock`.
+The required fresh-install CI job resolves the package metadata independently
+and decodes synthetic audio through the installed faster-whisper/PyAV stack.
+It does not download a model or call a transcription API.
 
 Use a project-local install when developing Scribe:
 
@@ -58,7 +65,7 @@ is 3.14, which is outside Scribe's `>=3.12,<3.14` range.
 
 ```bash
 omarchy pkg add uv
-uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
+uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 scribe init
 scribe doctor
@@ -95,7 +102,7 @@ transcription is not a `scribe voice` option. Linux voice stays experimental:
 this release was not demonstrated on Omarchy hardware.
 
 ```bash
-uv tool install --force --python 3.12 \
+uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
   "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 scribe voice check
 scribe voice omarchy-install
@@ -154,13 +161,13 @@ Optional:
 Install tool extras from the Git repository, for example:
 
 ```bash
-uv tool install --force --python 3.12 \
+uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
   "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
-uv tool install --force --python 3.12 \
+uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
   "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
-uv tool install --force --python 3.12 --torch-backend auto \
+uv tool install --with "av<19" --force --python 3.12 --torch-backend auto \
   "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
-uv tool install --force --python 3.12 \
+uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
   "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
 ```
 
