@@ -103,6 +103,9 @@ written atomically; the receipt is published last. The report records original
 source location and SHA-256, model/backend/actual precision, language windows,
 comparison policy and elapsed review time. Session and structured transcript
 metadata point to these artifacts. A report can be incomplete if storage fails.
+Capability-gap reports also retain an exact `primary-text.txt` snapshot with its
+own SHA-256, so their text evidence remains available after the working transcript
+is archived. The receipt labels the original text location separately.
 
 Disagreements, numeric differences, speech coverage gaps, language uncertainty
 and weak decoding diagnostics set `requires_review`. They do not replace primary
