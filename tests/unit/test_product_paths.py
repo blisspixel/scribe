@@ -94,6 +94,7 @@ def test_absolute_xdg_overrides_and_real_state_consumers(
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     assert paths.config_dir() == tmp_path / "cfg/scribe"
     assert paths.vocabulary_dirs()[0] == tmp_path / "data/scribe/vocab"
+    assert ScribeConfig(_env_file=None).log_folder == tmp_path / "state/scribe/logs"
     assert resident_log_path() == tmp_path / "state/scribe/logs/resident-voice.log"
     tracker = PerformanceTracker("synthetic-machine")
     tracker.record_phase("preparing", 30.0, 1.0)
@@ -135,13 +136,24 @@ def _legacy_config(text: str) -> Path:
     return path
 
 
-def test_legacy_config_read_and_first_run_do_not_migrate_or_overwrite() -> None:
-    legacy = _legacy_config('[output]\nfolder = "/synthetic/output"\n[unknown]\nkeep = true\n')
+def test_legacy_config_read_and_first_run_do_not_migrate_or_overwrite(tmp_path: Path) -> None:
+    output_folder = tmp_path / "output"
+    legacy = _legacy_config(
+        f'[output]\nfolder = "{output_folder.as_posix()}"\n'
+        '[transcription]\nquality = "balanced"\nauto_detect_language = false\n'
+        'primary_language = "ja"\nlocal_compute_type = "int8"\n'
+        "[unknown]\nkeep = true\n"
+    )
     original = legacy.read_bytes()
     assert config_file.config_exists()
     assert config_file.config_read_path() == legacy
     assert config_file.load_config_file_strict()["unknown"] == {"keep": True}
-    assert init_wizard._default_output_folder() == "/synthetic/output"
+    settings = ScribeConfig(_env_file=None)
+    assert settings.transcription_quality == "balanced"
+    assert settings.auto_detect_language is False
+    assert settings.primary_language == "ja"
+    assert settings.local_compute_type == "int8"
+    assert init_wizard._default_output_folder() == str(output_folder)
     assert init_wizard.maybe_prompt_first_run() is False
     result = init_wizard.run_wizard(Console(file=io.StringIO()))
     assert result == legacy
@@ -517,7 +529,6 @@ def test_fresh_process_config_constants_follow_xdg_environment(
     import subprocess
 
     environment = os.environ.copy()
-    environment["HOME"] = str(tmp_path)
     environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
     value = (
         str(tmp_path / "cfg")
@@ -533,7 +544,14 @@ def test_fresh_process_config_constants_follow_xdg_environment(
         [
             sys.executable,
             "-c",
-            "import json; from scribe.config_file import CONFIG_PATH; from scribe.paths import data_dir, state_dir; print(json.dumps([str(CONFIG_PATH), str(data_dir()), str(state_dir())]))",
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "from unittest.mock import patch\n"
+            "with patch.object(Path, 'home', return_value=Path(sys.argv[1])):\n"
+            "    from scribe.config_file import CONFIG_PATH\n"
+            "    from scribe.paths import data_dir, state_dir\n"
+            "    print(json.dumps([str(CONFIG_PATH), str(data_dir()), str(state_dir())]))\n",
+            str(tmp_path),
         ],
         env=environment,
         check=True,
