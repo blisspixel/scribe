@@ -1,5 +1,6 @@
 """Own conversion files for one CLI input without touching neighboring media."""
 
+import os
 from contextlib import suppress
 from pathlib import Path
 from tempfile import mkdtemp
@@ -53,8 +54,14 @@ class AudioWorkspace:
 
         if self.keep:
             target = source.with_name(f"{source.stem}{suffix}")
-            if target.exists() or target.is_symlink():
-                target = source.with_name(f"{source.stem}_{uuid4().hex[:8]}{suffix}")
+            while True:
+                try:
+                    descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                except FileExistsError:
+                    target = source.with_name(f"{source.stem}_{uuid4().hex[:8]}{suffix}")
+                else:
+                    os.close(descriptor)
+                    break
         else:
             if self.directory is None:
                 self.directory = Path(mkdtemp(prefix="scribe-audio-"))

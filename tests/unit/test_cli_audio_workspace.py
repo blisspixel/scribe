@@ -27,6 +27,24 @@ from scribe.utils.diagnostics import SystemDiagnostics
 from scribe.utils.unified_progress import UnifiedProgress
 
 
+def test_keep_all_reserves_paths_before_conversion_starts(tmp_path: Path) -> None:
+    source = tmp_path / "clip.wav"
+    source.write_bytes(b"original synthetic recording")
+    first = AudioWorkspace(keep=True)
+    second = AudioWorkspace(keep=True)
+    first_path = first.output_for(source, "_16k_mono.wav")
+    second_path = second.output_for(source, "_16k_mono.wav")
+    assert first_path != second_path
+    assert first_path.is_file() and second_path.is_file()
+    first_path.write_bytes(b"first owned conversion")
+    second_path.write_bytes(b"second owned conversion")
+    first.finish(None, None)
+    second.finish(None, None)
+    assert first_path.read_bytes() == b"first owned conversion"
+    assert second_path.read_bytes() == b"second owned conversion"
+    assert source.read_bytes() == b"original synthetic recording"
+
+
 def test_download_cleanup_preserves_outputs_and_uninspectable_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
