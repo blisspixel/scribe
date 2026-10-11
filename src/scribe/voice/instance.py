@@ -44,8 +44,9 @@ class TrayInstanceOwner:
 
 def tray_instance_lock_path(home: Path | None = None) -> Path:
     """Return the per-user lock shared by all resident voice entry points."""
-    base = Path.home() if home is None else home
-    return base / ".scribe" / LOCK_FILE_NAME
+    from scribe.paths import runtime_dir
+
+    return runtime_dir(home) / LOCK_FILE_NAME
 
 
 class TrayInstanceLock:
@@ -76,6 +77,9 @@ class TrayInstanceLock:
 
         if self.path.is_symlink():
             raise OSError(f"resident voice lock path must not be a symbolic link: {self.path}")
+        from scribe.paths import validate_runtime_file
+
+        validate_runtime_file(self.path)
         open_flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(self.path, open_flags, 0o600)
         try:

@@ -88,7 +88,8 @@ Wayland global hooks are not assumed to work. Record:
   - cancellation that discards audio or an in-flight transcript
   - device loss and recovery
   - the overlay showing `MICROPHONE ON` only while the microphone is open, and
-    `~/.scribe/voice-status.txt` matching that state
+    `$XDG_STATE_HOME/scribe/voice-status.txt` (default
+`~/.local/state/scribe/voice-status.txt`) matching that state
 - Whether Super+K showed a collision with Super+Alt+D, Super+Alt+Shift+D,
   Super+Alt+Y, Super+Alt+I, Super+Alt+A, or Super+Alt+O.
 - Copy without keystrokes, explicit insert, and explicit local read-aloud of the

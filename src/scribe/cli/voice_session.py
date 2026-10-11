@@ -62,7 +62,7 @@ def _transact(command: str, *, autostart: bool) -> dict[str, object]:
 
     try:
         return transact(command, spawn=_spawn_owner if autostart else None)
-    except ControlError as error:
+    except (ControlError, OSError) as error:
         console.print(f"[red]{error}[/red]")
         raise typer.Exit(1) from error
 
@@ -204,8 +204,8 @@ def run_serve(console: Console, *, preload: bool) -> int:
     from scribe.voice.tray import _configure_resident_logging
 
     printer = console
-    instance_lock = TrayInstanceLock()
     try:
+        instance_lock = TrayInstanceLock()
         acquired = instance_lock.acquire()
     except OSError as error:
         printer.print(f"[red]Could not protect resident voice from duplicates:[/red] {error}")
@@ -309,14 +309,16 @@ def run_omarchy_remove(console: Console, *, force: bool) -> int:
     bindings, autostart = remove_voice_files(_hypr_config_dir())
     console.print(f"[green]Removed Scribe voice markers from[/green] {bindings}")
     console.print(f"[green]Removed Scribe voice markers from[/green] {autostart}")
-    console.print("[dim]~/.scribe user data was left in place.[/dim]")
+    console.print(
+        "[dim]XDG Scribe config, data and state, and legacy ~/.scribe were left in place.[/dim]"
+    )
     return 0
 
 
 def _hypr_config_dir() -> Path:
-    config_home = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(config_home) if config_home else Path.home() / ".config"
-    return base / "hypr"
+    from scribe.paths import config_home
+
+    return config_home() / "hypr"
 
 
 def _read_if_file(path: Path) -> str:
@@ -326,9 +328,10 @@ def _read_if_file(path: Path) -> str:
 
 
 def _announce_microphone(active: bool) -> None:
+    from scribe.paths import state_dir
     from scribe.voice.control import restrict_private
 
-    path = Path.home() / ".scribe" / "voice-status.txt"
+    path = state_dir() / "voice-status.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("MICROPHONE ON\n" if active else "MICROPHONE OFF\n", encoding="utf-8")
     restrict_private(path)

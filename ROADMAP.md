@@ -333,7 +333,10 @@ The following work can produce a patch release at any point:
   remove the unpatched NLTK dependency tracked in
   [issue 31](https://github.com/blisspixel/scribe/issues/31); faster-whisper and
   Whisper large model support remain part of the base installation.
-- Supported-platform installation failures.
+- Supported-platform installation failures and standard user-storage layout.
+  Linux uses XDG config/data/state/runtime and localized Videos paths, with
+  legacy config and vocabulary compatibility (issue #38). Clean-machine and
+  upgrade proof must include both layouts and unsafe runtime failure.
 - Incorrect session evidence, partial-result loss, or cleanup of user-owned data.
 - Documentation that overstates support or disagrees with released behavior.
 

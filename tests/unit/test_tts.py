@@ -29,6 +29,11 @@ from scribe.voice.tts import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_voice_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+
 def test_resolve_tts_speed_clamps_and_defaults() -> None:
     assert resolve_tts_speed(None) == 1.0
     assert resolve_tts_speed("") == 1.0
@@ -133,9 +138,13 @@ def test_kokoro_lang_for_voice_by_prefix() -> None:
     assert kokoro_lang_for_voice("zz_unknown") == "en-us"  # default
 
 
-def test_kokoro_asset_paths_use_given_home(tmp_path: Path) -> None:
+def test_kokoro_asset_paths_use_given_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     directory = kokoro_dir(tmp_path)
-    assert directory == tmp_path / ".scribe" / "voices" / "kokoro"
+    root = tmp_path / ".local/share/scribe" if sys.platform == "linux" else tmp_path / ".scribe"
+    assert directory == root / "voices" / "kokoro"
     model_path, voices_path = kokoro_asset_paths(tmp_path)
     assert model_path.name == KOKORO_MODEL_FILE
     assert voices_path.name == KOKORO_VOICES_FILE

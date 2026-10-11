@@ -3871,7 +3871,7 @@ def init_command(
     """
     Run the first-run setup wizard.
 
-    Writes ~/.scribe/config.toml with your output folder, transcription method,
+    Writes the user config file with your output folder, transcription method,
     default features (notes/joke/meme), and AI vendor preference. Env vars and
     CLI flags continue to override these values.
     """
@@ -3945,7 +3945,7 @@ def vocab_command(
 
     Glossaries bias transcription toward your domain terms and rewrite known
     misrecognitions to the canonical form. Use one with `--vocab <name>` on
-    transcribe/url/batch. Add your own under ~/.scribe/vocab/.
+    transcribe/url/batch. User vocabulary follows XDG data paths on Linux.
     """
     from scribe.utils.theme import ScribeTheme
     from scribe.utils.vocabulary import CustomVocabulary, _bundled_glossary_dir
@@ -3974,10 +3974,10 @@ def vocab_command(
 
     console.print(f"[bold {ScribeTheme.SECONDARY}]glossaries[/bold {ScribeTheme.SECONDARY}]")
     found = False
-    sources = [
-        ("user", Path.home() / ".scribe" / "vocab"),
-        ("bundled", _bundled_glossary_dir()),
-    ]
+    from scribe.paths import vocabulary_dirs
+
+    sources = [("user", root) for root in vocabulary_dirs()]
+    sources.append(("bundled", _bundled_glossary_dir()))
     for label, root in sources:
         if not root.exists():
             continue
@@ -3990,7 +3990,7 @@ def vocab_command(
     if not found:
         console.print(
             f"  [{ScribeTheme.TEXT_MUTED}]none; add .txt/.json files under "
-            f"~/.scribe/vocab/[/{ScribeTheme.TEXT_MUTED}]"
+            f"{vocabulary_dirs()[0]}/[/{ScribeTheme.TEXT_MUTED}]"
         )
 
 
@@ -4221,7 +4221,7 @@ def main() -> None:
                 # Insert 'transcribe' command
                 sys.argv.insert(1, "transcribe")
 
-    # First-run setup: prompt to create ~/.scribe/config.toml if missing.
+    # First-run setup: prompt to create the platform user config if missing.
     # Skipped for init/version/help/banner and when stdin is not a TTY.
     skip_for = {"init", "shortcut", "version", "--help", "-h", "--version", "--banner", "help"}
     if len(sys.argv) <= 1 or sys.argv[1] not in skip_for:

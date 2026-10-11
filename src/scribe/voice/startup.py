@@ -125,8 +125,9 @@ def _install_macos() -> Path:  # pragma: no cover - launchctl I/O
 
 
 def _linux_autostart_path() -> Path:
-    config_home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(config_home) / "autostart" / LINUX_AUTOSTART_ID
+    from scribe.paths import config_home
+
+    return config_home() / "autostart" / LINUX_AUTOSTART_ID
 
 
 def _desktop_exec_arg(value: str) -> str:

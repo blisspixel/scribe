@@ -18,8 +18,10 @@ fi
 
 cat <<'EOF'
 Scribe's Hyprland voice markers are removed when the command can run.
-~/.scribe was left in place.
-Recordings, transcripts, and config under that directory stay on disk.
+XDG Scribe config, data, and state directories and legacy ~/.scribe were left in place.
+Defaults: ~/.config/scribe, ~/.local/share/scribe, ~/.local/state/scribe.
+Absolute XDG_CONFIG_HOME, XDG_DATA_HOME, and XDG_STATE_HOME overrides are preserved too.
+Recordings and transcripts in all selected output folders stay on disk.
 Reload Hyprland with: hyprctl reload
 Upgrade by running install.sh again.
 EOF

@@ -64,7 +64,7 @@ sentence's main speaker.
 
 These heuristics can hide brief participants or merge similar voices. Do not
 assume that the detected speaker count equals the number of people on a call.
-To disable labels persistently, set this in `~/.scribe/config.toml`:
+To disable labels persistently, set this in the [user config file](STORAGE.md):
 
 ```toml
 [diarization]
@@ -79,7 +79,7 @@ opt-ins in configuration remain effective after an upgrade.
 `--name-speakers` also enables local labeling unless `--no-diarize` or
 `--diarizer none` is supplied. To enable naming persistently, set both
 `enabled = true` and `name_speakers = true` under `[diarization]` in
-`~/.scribe/config.toml`. Names are suggested from the conversation, such as
+the [user config file](STORAGE.md). Names are suggested from the conversation, such as
 introductions and people addressing each other. A language model proposes the
 names that are spoken; Scribe then assigns each name to a speaker by counting
 evidence across every mention, and leaves a speaker unidentified when the
@@ -284,7 +284,7 @@ Precedence, highest first:
 
 1. CLI flags.
 2. Environment variables and `.env`.
-3. `~/.scribe/config.toml`.
+3. The [user config file](STORAGE.md).
 
 Run `scribe init` for the guided configuration flow. See the
 [Deployment Guide](DEPLOYMENT.md) for supported installs and settings.

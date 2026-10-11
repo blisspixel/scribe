@@ -38,6 +38,11 @@ milestones that predate this repository's Git history.
   voice command and readable examples. Private-source install guidance documents
   Git authentication. Refs #37.
 
+- Linux user files now follow XDG config, data, state, and private runtime
+  directories, and default transcript output follows the localized Videos
+  directory. Legacy config and vocabulary remain readable; explicit paths keep
+  precedence. Unsafe runtime overrides fail with guidance, and removal preserves
+  both layouts. Refs #38.
 - File, URL, and batch transcripts and sidecars now use the configured output
   folder. All three commands accept `-o` to override it, batch accepts `--format`,
   and `doctor` checks the same resolved folder and disk. Same-name runs preserve

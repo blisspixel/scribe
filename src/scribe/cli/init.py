@@ -1,5 +1,5 @@
 """
-First-run config wizard. Writes ~/.scribe/config.toml.
+First-run config wizard. Writes the platform user configuration file.
 
 Triggered automatically on first run when no config file exists, or manually
 via `scribe init`. Existing SCRIBE_* env vars and CLI flags continue to
@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from scribe.config_file import CONFIG_PATH, save_config_file
+from scribe.config_file import CONFIG_PATH, config_read_path, save_config_file
 
 
 def _detect_gpu_summary() -> tuple[bool, str]:
@@ -78,8 +78,8 @@ def _default_output_folder() -> str:
         return env_output
 
     with suppress(Exception):
-        if CONFIG_PATH.is_file():
-            data = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if config_read_path(CONFIG_PATH).is_file():
+            data = tomllib.loads(config_read_path(CONFIG_PATH).read_text(encoding="utf-8"))
             configured = data.get("output", {}).get("folder")
             if configured:
                 return str(configured)
@@ -100,8 +100,8 @@ def _default_obs_settings() -> dict[str, str]:
     password = os.getenv("SCRIBE_OBS_PASSWORD")
 
     with suppress(Exception):
-        if CONFIG_PATH.is_file():
-            data = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if config_read_path(CONFIG_PATH).is_file():
+            data = tomllib.loads(config_read_path(CONFIG_PATH).read_text(encoding="utf-8"))
             obs = data.get("obs", {})
             host = host or obs.get("host")
             port = port or str(obs.get("port") or "")
@@ -139,11 +139,11 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
     # Defensive: non-interactive runs should not hang on Prompts/Confirms.
     # Use defaults and write a minimal usable config (or refuse unless --force + explicit).
     if not sys.stdin.isatty() and not force:
-        if CONFIG_PATH.is_file():
+        if config_read_path(CONFIG_PATH).is_file():
             console.print(
                 "[dim]Non-interactive and config exists; leaving as-is (use --force to overwrite).[/dim]"
             )
-            return CONFIG_PATH
+            return config_read_path(CONFIG_PATH)
         console.print("[yellow]Non-interactive terminal detected.[/yellow]")
         console.print(
             "[dim]Writing safe defaults. Re-run interactively or with `scribe init --force` for full wizard.[/dim]"
@@ -179,14 +179,14 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
                 "`uv tool install --editable .` or plain `uv tool install`.[/dim]"
             )
 
-    if CONFIG_PATH.is_file() and not force:
+    if config_read_path(CONFIG_PATH).is_file() and not force:
         if not Confirm.ask(
-            f"[yellow]Config already exists at {CONFIG_PATH}.[/yellow] Overwrite?",
+            f"[yellow]Config already exists at {config_read_path(CONFIG_PATH)}.[/yellow] Overwrite?",
             default=False,
             console=console,
         ):
             console.print("[dim]Keeping existing config.[/dim]")
-            return CONFIG_PATH
+            return config_read_path(CONFIG_PATH)
 
     console.print(
         Panel.fit(
@@ -357,6 +357,15 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         console.print("[yellow]Setup cancelled. Nothing written.[/yellow]")
         return CONFIG_PATH
 
+    existing_path = config_read_path(CONFIG_PATH)
+    if existing_path.is_file():
+        existing = tomllib.loads(existing_path.read_text(encoding="utf-8"))
+        for section, values in data.items():
+            if isinstance(values, dict) and isinstance(existing.get(section), dict):
+                existing[section].update(values)
+            else:
+                existing[section] = values
+        data = existing
     path = save_config_file(data)
     console.print(f"\n[green]+ Saved to[/green] [cyan]{path}[/cyan]")
 
@@ -538,7 +547,7 @@ def maybe_prompt_first_run(console: Console | None = None) -> bool:
     Returns True if the wizard ran and wrote a config; False otherwise.
     Skipped when SCRIBE_SKIP_INIT=1 is set or stdin is not a TTY.
     """
-    if CONFIG_PATH.is_file():
+    if config_read_path(CONFIG_PATH).is_file():
         return False
     if os.getenv("SCRIBE_SKIP_INIT", "").lower() in ("1", "true", "yes"):
         return False

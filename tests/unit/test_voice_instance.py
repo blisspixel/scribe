@@ -20,8 +20,18 @@ from scribe.voice.instance import (
 )
 
 
-def test_tray_instance_lock_path_is_stable_per_user(tmp_path: Path) -> None:
+def test_tray_instance_lock_path_is_stable_per_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
     assert tray_instance_lock_path(tmp_path) == tmp_path / ".scribe" / "resident-voice.lock"
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
 
 
 def test_owner_description_uses_available_identity() -> None:

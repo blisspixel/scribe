@@ -1,5 +1,5 @@
 """
-User-level config file (~/.scribe/config.toml).
+User-level config file (XDG config on Linux, legacy ~/.scribe elsewhere).
 
 Loaded as a layer between built-in defaults and environment variables: env vars
 override the file, and CLI flags override env vars. Existing SCRIBE_* env vars
@@ -17,13 +17,26 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
-CONFIG_DIR = Path.home() / ".scribe"
+from scribe.paths import config_dir, legacy_dir
+
+CONFIG_DIR = config_dir()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
+LEGACY_CONFIG_PATH = legacy_dir() / "config.toml"
 _BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def config_read_path(preferred: Path | None = None) -> Path:
+    """Prefer the current config; read the legacy file only when it is absent."""
+    import sys
+
+    path = CONFIG_PATH if preferred is None else preferred
+    if sys.platform == "linux" and not path.exists() and LEGACY_CONFIG_PATH.is_file():
+        return LEGACY_CONFIG_PATH
+    return path
+
+
 def config_exists() -> bool:
-    return CONFIG_PATH.is_file()
+    return config_read_path().is_file()
 
 
 def load_config_file() -> dict[str, Any]:
@@ -37,7 +50,7 @@ def load_config_file() -> dict[str, Any]:
 def load_config_file_strict() -> dict[str, Any]:
     """Read config for mutation, preserving parse and filesystem failures."""
     try:
-        with CONFIG_PATH.open("rb") as f:
+        with config_read_path().open("rb") as f:
             return tomllib.load(f)
     except FileNotFoundError:
         return {}
@@ -121,7 +134,7 @@ def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
 def save_config_file(data: dict[str, Any]) -> Path:
     """Write the complete TOML config without dropping unknown user tables."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    # Keep ~/.scribe owner-only so it is locked down before any sensitive value
+    # Keep the user config directory owner-only before any sensitive value
     # could ever be written there (no-op on platforms without POSIX modes).
     with contextlib.suppress(OSError):
         os.chmod(CONFIG_DIR, 0o700)

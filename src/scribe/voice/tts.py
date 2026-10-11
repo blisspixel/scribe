@@ -112,8 +112,13 @@ def resolve_tts_speed(value: float | str | None) -> float:
 
 def kokoro_dir(home: Path | None = None) -> Path:
     """Directory holding the downloaded Kokoro model and voice files."""
-    base = home if home is not None else Path.home()
-    return base / ".scribe" / "voices" / "kokoro"
+    from scribe.paths import data_dir, legacy_dir
+
+    directory = data_dir(home) / "voices" / "kokoro"
+    legacy = legacy_dir(home) / "voices" / "kokoro"
+    if not _kokoro_directory_ready(directory) and _kokoro_directory_ready(legacy):
+        return legacy
+    return directory
 
 
 def kokoro_asset_paths(home: Path | None = None) -> tuple[Path, Path]:
@@ -131,9 +136,12 @@ def _file_ready(path: Path, min_bytes: int) -> bool:
 
 def kokoro_assets_ready(home: Path | None = None) -> bool:
     """True when both Kokoro asset files are present and look complete."""
-    model_path, voices_path = kokoro_asset_paths(home)
-    return _file_ready(model_path, _KOKORO_MODEL_MIN_BYTES) and _file_ready(
-        voices_path, _KOKORO_VOICES_MIN_BYTES
+    return _kokoro_directory_ready(kokoro_dir(home))
+
+
+def _kokoro_directory_ready(directory: Path) -> bool:
+    return _file_ready(directory / KOKORO_MODEL_FILE, _KOKORO_MODEL_MIN_BYTES) and _file_ready(
+        directory / KOKORO_VOICES_FILE, _KOKORO_VOICES_MIN_BYTES
     )
 
 

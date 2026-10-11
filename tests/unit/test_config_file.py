@@ -14,6 +14,7 @@ def _use_temp_config(monkeypatch, tmp_path: Path) -> Path:
     config_path = config_dir / "config.toml"
     monkeypatch.setattr(config_file, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config_file, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_file, "LEGACY_CONFIG_PATH", tmp_path / "legacy/config.toml")
     return config_path
 
 
