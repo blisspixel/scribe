@@ -326,13 +326,15 @@ jobs:
     name: Fresh Tool Install (Python 3.12)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      UV_TOOL_DIR: ${{ runner.temp }}/scribe-tools
-      UV_TOOL_BIN_DIR: ${{ runner.temp }}/scribe-bin
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Isolate the installed tool
+        run: |
+          echo "UV_TOOL_DIR=$RUNNER_TEMP/scribe-tools" >> "$GITHUB_ENV"
+          echo "UV_TOOL_BIN_DIR=$RUNNER_TEMP/scribe-bin" >> "$GITHUB_ENV"
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
