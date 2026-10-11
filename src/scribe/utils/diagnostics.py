@@ -1061,6 +1061,17 @@ class SystemDiagnostics:
         """Scan installed packages for known vulnerabilities (pip-audit)."""
         import importlib.util
 
+        checkout = Path(__file__).resolve().parents[3]
+        if not ((checkout / ".git").exists() and (checkout / "uv.lock").is_file()):
+            result = DiagnosticResult(
+                name="Dependency Security",
+                status="pass",
+                message="Not applicable to an installed tool",
+                details="The developer dependency audit runs from a source checkout in CI.",
+            )
+            self.results.append(result)
+            return result
+
         if importlib.util.find_spec("pip_audit") is None:
             result = DiagnosticResult(
                 name="Dependency Security",

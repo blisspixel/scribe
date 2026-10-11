@@ -1248,7 +1248,9 @@ def test_record_configured_joke_no_result_and_meme_error_are_partial(tmp_path: P
     )
 
 
-def test_record_cleanup_failure_preserves_outputs_and_is_partial(tmp_path: Path) -> None:
+def test_record_cleanup_boundary_failure_preserves_outputs_and_is_partial(tmp_path: Path) -> None:
+    from scribe.cli.audio_workspace import AudioWorkspace
+
     runner = CliRunner()
     recording_path = tmp_path / "meeting.mp4"
     recording_path.write_text("video")
@@ -1259,7 +1261,14 @@ def test_record_cleanup_failure_preserves_outputs_and_is_partial(tmp_path: Path)
     transcriber = Mock()
     transcriber.choose_method.return_value = "openai"
     transcriber.transcribe.return_value = transcript_path
-    transcriber.cleanup_intermediate_files.side_effect = OSError("locked intermediate")
+    original_finish = AudioWorkspace.finish
+
+    def finish_with_failure(
+        workspace: AudioWorkspace, session: TranscriptionSession | None, output_dir: Path | None
+    ) -> None:
+        if output_dir is None:
+            raise OSError("locked intermediate")
+        original_finish(workspace, session, output_dir)
 
     with (
         patch("scribe.cli.main.ScribeConfig", return_value=config),
@@ -1268,6 +1277,7 @@ def test_record_cleanup_failure_preserves_outputs_and_is_partial(tmp_path: Path)
         patch("scribe.cli.main.OBSRecorder", return_value=recorder),
         patch("scribe.cli.main.Transcriber", return_value=transcriber),
         patch("scribe.cli.main.txt_to_docx", return_value=tmp_path / "meeting.docx"),
+        patch.object(AudioWorkspace, "finish", finish_with_failure),
     ):
         result = runner.invoke(
             app,
@@ -1289,6 +1299,9 @@ def test_record_cleanup_failure_preserves_outputs_and_is_partial(tmp_path: Path)
     assert data["error_message"] == "Intermediate cleanup failed: locked intermediate"
     assert data["source_file"] == str(recording_path)
     assert data["transcript_file"] == str(transcript_path)
+    assert data["outcome"] == "partial"
+    assert recording_path.read_text() == "video"
+    assert transcript_path.read_text() == "transcript text"
 
 
 def test_music_instrumental_persists_terminal_session(tmp_path: Path) -> None:

@@ -355,7 +355,7 @@ class UnifiedProgress:
         if self.current_phase is not None:
             self.update_phase(self.current_phase, 0.0)
 
-    def complete(self) -> None:
+    def complete(self, *, partial: bool = False) -> None:
         """Mark workflow as complete."""
         from scribe.utils.theme import ScribeTheme
 
@@ -364,14 +364,13 @@ class UnifiedProgress:
             minutes = int(elapsed // 60)
             seconds = int(elapsed % 60)
 
+            label = "Partial" if partial else "Complete"
+            color = "yellow" if partial else ScribeTheme.SUCCESS
             try:
                 self.progress.update(
                     self.task,
                     completed=100,
-                    description=(
-                        f"[{ScribeTheme.SUCCESS}]Complete ({minutes}m {seconds}s)"
-                        f"[/{ScribeTheme.SUCCESS}]"
-                    ),
+                    description=f"[{color}]{label} ({minutes}m {seconds}s)[/{color}]",
                 )
                 self.progress.refresh()
             except TERMINAL_OUTPUT_ERRORS as error:
@@ -380,6 +379,21 @@ class UnifiedProgress:
                 self._disable_after_terminal_failure(error)
                 return
             self.stop()
+
+    def fail(self) -> None:
+        """Leave a terminal failed state instead of an unfinished percentage."""
+        if self.progress is not None and self.task is not None:
+            try:
+                self.progress.update(self.task, visible=False)
+                self.progress.refresh()
+                self.stop()
+                elapsed = max(0, int(time.time() - self.start_time))
+                console.print(f"[red]Failed[/red] ({elapsed // 60}m {elapsed % 60}s)")
+            except TERMINAL_OUTPUT_ERRORS as error:
+                if not is_terminal_output_error(error):
+                    raise
+                self._disable_after_terminal_failure(error)
+        self.stop()
 
     def stop(self) -> None:
         """Stop progress display."""

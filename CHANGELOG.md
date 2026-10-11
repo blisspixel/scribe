@@ -27,6 +27,17 @@ milestones that predate this repository's Git history.
 
 ### Fixed
 
+- CLI conversion files now live in an owned temporary workspace and are removed
+  after success or failure without scanning neighboring recordings. `--keep-all`
+  retains conversions beside the input without replacing an existing copy.
+  Failed URL runs preserve recorded partial transcripts. Session summaries
+  distinguish original inputs, created artifacts, deleted conversions, and moved
+  transcripts; failed progress leaves a terminal failure instead of 99%.
+  Logs default to the user's Scribe directory, installed-tool diagnostics skip
+  the checkout-only developer audit, and root/query help includes the missing
+  voice command and readable examples. Private-source install guidance documents
+  Git authentication. Refs #37.
+
 - File, URL, and batch transcripts and sidecars now use the configured output
   folder. All three commands accept `-o` to override it, batch accepts `--format`,
   and `doctor` checks the same resolved folder and disk. Same-name runs preserve

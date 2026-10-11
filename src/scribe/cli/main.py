@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from scribe import __version__
+from scribe.cli.audio_workspace import AudioWorkspace
 from scribe.cli.dependencies import (
     GPUConfig,
     OBSRecorder,
@@ -131,7 +132,7 @@ def _place_transcript_in_output_dir(
     try:
         source.unlink()
         if session is not None:
-            session.add_cleaned_file(source)
+            session.add_moved_file(source, target)
     except OSError as exc:
         logger.warning("Copied transcript to output directory but could not remove source: %s", exc)
 
@@ -450,6 +451,7 @@ class CleanGroup(typer.core.TyperGroup):
             ("vocab            ", "domain glossaries"),
             ("listen           ", "dictate (speech to type)"),
             ("tray             ", "resident voice hotkeys"),
+            ("voice            ", "experimental local voice controls"),
             ("say FILE         ", "read a file aloud"),
             ("clean FILE       ", "remove silence / trim"),
             ("compare          ", "compare AI providers"),
@@ -643,6 +645,7 @@ def transcribe_command(
     config: ScribeConfigType | None = None
     session: TranscriptionSessionType | None = None
     summary_saved = False
+    workspace = AudioWorkspace()
     try:
         from scribe.utils.vocabulary import CustomVocabulary
 
@@ -674,6 +677,7 @@ def transcribe_command(
                 raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
+        workspace.keep = config.keep_intermediate_files
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if output_dir is not None:
             config.output_folder = output_dir.expanduser().resolve()
@@ -775,6 +779,7 @@ def transcribe_command(
 
         # Determine transcription method (local GPU vs OpenAI API)
         transcriber = Transcriber(config)
+        workspace.bind(transcriber)
         # Honor a configured default (SCRIBE_DEFAULT_METHOD / config.toml) when the
         # caller did not pass --method. An explicit --method always wins.
         effective_method = config.default_method if method == "auto" else method
@@ -801,6 +806,7 @@ def transcribe_command(
                 # Pass callback to update unified progress during conversion
                 audio_file = converter.convert_to_wav(
                     audio_path,
+                    output_file=workspace.output_for(audio_path, "_16k_mono.wav"),
                     show_progress=False,
                     progress_callback=lambda p: unified_progress.update_phase("preparing", p),
                 )
@@ -835,7 +841,11 @@ def transcribe_command(
 
                     # Convert with timeout protection
                     # Uses 48kbps bitrate for good quality at small size
-                    audio_file = converter.convert_to_mp3(audio_path, bitrate=48)
+                    audio_file = converter.convert_to_mp3(
+                        audio_path,
+                        output_file=workspace.output_for(audio_path, "_converted.mp3"),
+                        bitrate=48,
+                    )
 
                     # Verify the compressed file is under the limit
                     compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
@@ -1000,11 +1010,10 @@ def transcribe_command(
         # Cleanup
         if not keep_all:
             unified_progress.update_phase("finishing", 0.95, "Cleaning up")
-            transcriber.cleanup_intermediate_files(audio_path.parent)
+            workspace.finish(session, None)
 
         # Complete unified progress
         unified_progress.update_phase("finishing", 1.0)
-        unified_progress.complete()
 
         # Complete session
         error_message = "; ".join(artifact_errors) or None
@@ -1015,6 +1024,7 @@ def transcribe_command(
         )
         session.save_summary(config.output_folder)
         summary_saved = True
+        unified_progress.complete(partial=bool(artifact_errors))
         console.print()
 
         # Display joke if generated
@@ -1081,7 +1091,11 @@ def transcribe_command(
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
-            unified_progress.stop()
+            if session is None or session.outcome in {"in_progress", "failed"}:
+                unified_progress.fail()
+            else:
+                unified_progress.stop()
+        workspace.finish(session, config.output_folder if config else None)
 
 
 @app.command(name="url")
@@ -1199,6 +1213,7 @@ def url_command(
     config = None
     session: TranscriptionSessionType | None = None
     summary_saved = False
+    workspace = AudioWorkspace()
     archive_pending = False
     try:
         from scribe.core.downloader import URLDownloader
@@ -1241,6 +1256,7 @@ def url_command(
                 raise typer.Exit(1) from e
         if keep_all:
             config.keep_intermediate_files = True
+        workspace.keep = config.keep_intermediate_files
 
         # Override keep_downloads from CLI flag
         if keep_download:
@@ -1385,9 +1401,11 @@ def url_command(
         session = TranscriptionSession.create(meeting_name)
         session.log_file = get_current_log_file()
         session.add_file(audio_path, "source")
+        session.add_file(audio_path, "download")
 
         # Determine transcription method
         transcriber = Transcriber(config)
+        workspace.bind(transcriber)
         effective_method = config.default_method if method == "auto" else method
         chosen_method = transcriber.choose_method(effective_method)
 
@@ -1400,6 +1418,7 @@ def url_command(
                 converter = Converter()
                 audio_file = converter.convert_to_wav(
                     audio_path,
+                    output_file=workspace.output_for(audio_path, "_16k_mono.wav"),
                     show_progress=False,
                     progress_callback=lambda p: unified_progress.update_phase("preparing", p),
                 )
@@ -1426,7 +1445,11 @@ def url_command(
                     from scribe.core.converter import Converter
 
                     converter = Converter()
-                    audio_file = converter.convert_to_mp3(audio_path, bitrate=48)
+                    audio_file = converter.convert_to_mp3(
+                        audio_path,
+                        output_file=workspace.output_for(audio_path, "_converted.mp3"),
+                        bitrate=48,
+                    )
                     compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
                     if compressed_size_mb > 24:
                         raise TranscriptionError(
@@ -1575,10 +1598,9 @@ def url_command(
         # Cleanup intermediate transcription files
         if not keep_all:
             unified_progress.update_phase("finishing", 0.95, "Cleaning up")
-            transcriber.cleanup_intermediate_files(audio_path.parent)
+            workspace.finish(session, None)
 
         unified_progress.update_phase("finishing", 1.0)
-        unified_progress.complete()
 
         error_message = "; ".join(artifact_errors) or None
         session.complete(
@@ -1588,6 +1610,7 @@ def url_command(
         )
         session.save_summary(config.output_folder)
         summary_saved = True
+        unified_progress.complete(partial=bool(artifact_errors))
         console.print()
 
         if hasattr(session, "joke_data") and session.joke_data:
@@ -1653,12 +1676,19 @@ def url_command(
         exit_on_cli_error(e)
     finally:
         if unified_progress is not None:
-            unified_progress.stop()
+            if session is None or session.outcome in {"in_progress", "failed"}:
+                unified_progress.fail()
+            else:
+                unified_progress.stop()
+        workspace.finish(session, config.output_folder if config else None)
         # Cleanup downloaded file unless user wants to keep it
-        if archive_pending:
+        from scribe.cli.audio_workspace import preserve_download_outputs
+
+        recoverable_download_output = preserve_download_outputs(session, downloaded_file)
+        if archive_pending or recoverable_download_output:
             console.print(
-                "[yellow]Archive copy failed; downloaded media and the transcript "
-                "were retained beside the download.[/yellow]"
+                "[yellow]Downloaded media and recoverable transcription outputs were retained. "
+                "See the session summary for their paths.[/yellow]"
             )
         elif config is not None and not config.keep_downloads:
             try:
@@ -1777,10 +1807,12 @@ def record(
     session_output_dir: Path | None = None
     summary_saved = False
     incomplete_run = False
+    workspace = AudioWorkspace()
     try:
         # Load configuration
         config = _load_transcription_config(openrouter_max_spend)
         session_output_dir = config.output_folder
+        workspace.keep = config.keep_intermediate_files
 
         # Display header first
         _show_command_banner(console)
@@ -1833,6 +1865,7 @@ def record(
         recorder = OBSRecorder(config)
         recording_path = recorder.record(name)
         session.add_file(recording_path, "source")
+        session.add_file(recording_path, "recording")
 
         console.print("\n[bold green]Media capture complete[/bold green]")
         console.print(f"File: {recording_path}\n")
@@ -1860,6 +1893,7 @@ def record(
 
             # Determine method and convert
             transcriber = Transcriber(config)
+            workspace.bind(transcriber)
             effective_method = config.default_method if method == "auto" else method
             chosen_method = transcriber.choose_method(effective_method)
 
@@ -1873,7 +1907,10 @@ def record(
 
                     # Convert with timeout protection (won't hang indefinitely)
                     # Uses dynaudnorm for proper audio normalization
-                    audio_file = converter.convert_to_wav(recording_path)
+                    audio_file = converter.convert_to_wav(
+                        recording_path,
+                        output_file=workspace.output_for(recording_path, "_16k_mono.wav"),
+                    )
 
                     console.print()
                     console.print("[cyan]Transcribing with local NVIDIA GPU...[/cyan]")
@@ -1904,7 +1941,11 @@ def record(
 
                         # Convert with timeout protection
                         # Uses 48kbps bitrate for good quality at small size
-                        audio_file = converter.convert_to_mp3(recording_path, bitrate=48)
+                        audio_file = converter.convert_to_mp3(
+                            recording_path,
+                            output_file=workspace.output_for(recording_path, "_converted.mp3"),
+                            bitrate=48,
+                        )
 
                         # Verify the compressed file is under the limit
                         compressed_size_mb = audio_file.stat().st_size / (1024 * 1024)
@@ -1946,6 +1987,9 @@ def record(
                 raise TranscriptionError("Recording transcription produced no output file")
             if session.transcript_file != transcript_path:
                 session.add_file(transcript_path, "transcript")
+            transcript_path = _place_transcript_in_output_dir(
+                transcript_path, config.output_folder, session
+            )
 
             # Structured sidecars (json/vtt/srt/md) so `scribe query` can find these too
             _write_structured_outputs(transcriber, transcript_path, config, None, session)
@@ -1989,11 +2033,7 @@ def record(
 
             # Cleanup
             try:
-                deleted = transcriber.cleanup_intermediate_files(recording_path.parent)
-                if deleted:
-                    logger.debug(f"Cleaned up {len(deleted)} intermediate files")
-                    for deleted_file in deleted:
-                        session.add_cleaned_file(Path(deleted_file))
+                workspace.finish(session, None)
             except Exception as e:
                 reason = f"Intermediate cleanup failed: {e}"
                 artifact_errors.append(reason)
@@ -2125,6 +2165,8 @@ def record(
     except Exception as e:
         _persist_terminal_session_error(session, session_output_dir, e, summary_saved=summary_saved)
         exit_on_cli_error(e)
+    finally:
+        workspace.finish(session, session_output_dir)
     if incomplete_run:
         raise typer.Exit(1)
 
@@ -2308,6 +2350,7 @@ def batch_transcribe(
             # logger if validation fails before per-file setup_logging runs.
             logger = get_logger(__name__)
             session: TranscriptionSessionType | None = None
+            workspace = AudioWorkspace(keep=config.keep_intermediate_files)
             console.print(
                 f"[bold cyan]File {idx}/{len(valid_files)}:[/bold cyan] {escape(audio_file.name)}"
             )
@@ -2329,6 +2372,7 @@ def batch_transcribe(
 
                 # Transcribe
                 transcriber = Transcriber(config)
+                workspace.bind(transcriber)
                 effective_method = config.default_method if method == "auto" else method
                 chosen_method = transcriber.choose_method(effective_method)
 
@@ -2337,7 +2381,11 @@ def batch_transcribe(
                     from scribe.core.converter import Converter
 
                     converter = Converter()
-                    audio_file_converted = converter.convert_to_wav(audio_path, show_progress=True)
+                    audio_file_converted = converter.convert_to_wav(
+                        audio_path,
+                        output_file=workspace.output_for(audio_path, "_16k_mono.wav"),
+                        show_progress=True,
+                    )
                 elif chosen_method == "openai":
                     # Check file size for OpenAI API
                     file_size_mb = audio_path.stat().st_size / (1024 * 1024)
@@ -2348,7 +2396,11 @@ def batch_transcribe(
                         from scribe.core.converter import Converter
 
                         converter = Converter()
-                        audio_file_converted = converter.convert_to_mp3(audio_path, bitrate=48)
+                        audio_file_converted = converter.convert_to_mp3(
+                            audio_path,
+                            output_file=workspace.output_for(audio_path, "_converted.mp3"),
+                            bitrate=48,
+                        )
                     else:
                         audio_file_converted = audio_path
                 else:
@@ -2434,7 +2486,7 @@ def batch_transcribe(
                         artifact_errors.append(f"Meme generation failed: {e}")
 
                 # Cleanup
-                transcriber.cleanup_intermediate_files(audio_path.parent)
+                workspace.finish(session, None)
 
                 # A usable transcript with a missing requested artifact is partial,
                 # not successful. Persist the reason with the session summary.
@@ -2479,6 +2531,8 @@ def batch_transcribe(
 
                 if not continue_on_error:
                     break
+            finally:
+                workspace.finish(session, config.output_folder)
 
         # Summary
         console.print("-" * 60)
@@ -3869,6 +3923,7 @@ def query_command(
 
     Examples:
 
+    \b
       scribe query "budget"
       scribe query "action item" --speaker SPEAKER_01
     """

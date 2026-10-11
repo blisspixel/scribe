@@ -105,7 +105,10 @@ class ScribeConfig(BaseSettings):
         description="Output directory for transcriptions and recordings",
     )
 
-    log_folder: Path = Field(default=Path("logs"), description="Directory for log files")
+    log_folder: Path = Field(
+        default_factory=lambda: Path.home() / ".scribe" / "logs",
+        description="Directory for log files",
+    )
 
     # Audio settings
     expected_audio_output: str | None = Field(

@@ -75,6 +75,7 @@ class TranscriptionSession:
     # File tracking
     files_created: list[Path] = field(default_factory=list)
     files_cleaned: list[Path] = field(default_factory=list)
+    files_moved: list[dict[str, str]] = field(default_factory=list)
 
     # Additional metadata
     audio_duration_seconds: float | None = None
@@ -129,7 +130,11 @@ class TranscriptionSession:
             file_path: Path to the file
             file_type: Type of file (source, audio, transcript, docx, meme)
         """
-        self.files_created.append(file_path)
+        # An input reference is not a file created by Scribe. The audio may be
+        # the unchanged original on cloud routes or for existing WAV input.
+        if file_type != "source" and not (file_type == "audio" and file_path == self.source_file):
+            if file_path not in self.files_created:
+                self.files_created.append(file_path)
 
         if file_type == "source":
             self.source_file = file_path
@@ -149,7 +154,12 @@ class TranscriptionSession:
         Args:
             file_path: Path to the cleaned file
         """
-        self.files_cleaned.append(file_path)
+        if file_path not in self.files_cleaned:
+            self.files_cleaned.append(file_path)
+
+    def add_moved_file(self, source: Path, destination: Path) -> None:
+        """Record archiving separately from disposal of intermediate files."""
+        self.files_moved.append({"source": str(source), "destination": str(destination)})
 
     def to_dict(self) -> dict[str, Any]:
         """

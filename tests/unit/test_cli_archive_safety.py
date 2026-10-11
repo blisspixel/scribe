@@ -161,7 +161,7 @@ def test_url_owned_download_retained_only_when_archiving_fails(
         assert downloader.output_dir.is_dir()
         assert media.read_bytes() == downloaded_bytes[0]
         assert "ArchiveFixture preserves" in source_transcript.read_text(encoding="utf-8")
-        assert "were retained beside the download" in " ".join(result.output.split())
+        assert "recoverable transcription outputs were retained" in " ".join(result.output.split())
         assert summary["outcome"] == "failed"
         assert summary["transcript_file"] == str(source_transcript)
         assert str(source_transcript) in summary["files_created"]
@@ -171,11 +171,15 @@ def test_url_owned_download_retained_only_when_archiving_fails(
     else:
         assert result.exit_code == 0, result.output
         assert not downloader.output_dir.exists()
-        assert "were retained beside the download" not in result.output
+        assert "recoverable transcription outputs were retained" not in result.output
         assert summary["outcome"] == "success"
         assert summary["transcript_file"] == str(archive / "clip_transcription.txt")
         assert str(media) in summary["files_cleaned"]
-        assert str(source_transcript) in summary["files_cleaned"]
+        assert str(source_transcript) not in summary["files_cleaned"]
+        assert {
+            "source": str(source_transcript),
+            "destination": str(archive / source_transcript.name),
+        } in summary["files_moved"]
         for suffix in ("txt", "json", "md", "docx"):
             assert (archive / f"clip_transcription.{suffix}").is_file()
         assert (archive / "clip_transcription_notes.md").is_file()
@@ -233,7 +237,11 @@ def test_batch_same_named_recordings_keep_both_complete_archives(
         expected_artifacts.add(notes)
         assert expected_artifacts <= {Path(path) for path in summary["files_created"]}
         assert summary["docx_file"] == str(docx)
-        assert str(source.with_name("clip_transcription.txt")) in summary["files_cleaned"]
+        assert str(source.with_name("clip_transcription.txt")) not in summary["files_cleaned"]
+        assert {
+            "source": str(source.with_name("clip_transcription.txt")),
+            "destination": str(transcript),
+        } in summary["files_moved"]
         assert not list(source.parent.glob("clip_transcription*"))
         assert source.read_bytes() == original_media[source]
         query = runner.invoke(app, ["query", expected.split()[0]])
@@ -267,7 +275,8 @@ def test_sidecar_without_transcript_reserves_its_artifact_stem(
     assert not (archive / "clip_transcription.txt").exists()
     assert session.transcript_file == target
     assert session.files_created == [target]
-    assert session.files_cleaned == [source]
+    assert session.files_cleaned == []
+    assert session.files_moved == [{"source": str(source), "destination": str(target)}]
     assert set(archive.iterdir()) == {previous, target}
 
 
