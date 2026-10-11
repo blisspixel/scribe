@@ -59,3 +59,25 @@ def test_small_models_need_less_memory() -> None:
     ):
         warn_if_gpu_memory_contended("base")
     assert not log.warning.called
+
+
+@pytest.mark.parametrize(
+    ("model", "free", "bytes_per_weight"),
+    [("large-v3", 1.0, 1), ("large-v3", 2.0, 2), ("small", 0.1, 1)],
+)
+def test_known_memory_below_weights_stops_without_model_downgrade(model, free, bytes_per_weight):
+    from scribe.core.local_whisper import check_model_memory
+    from scribe.exceptions import TranscriptionError
+
+    with pytest.raises(
+        TranscriptionError, match="No smaller model or cloud service was selected"
+    ) as error:
+        check_model_memory(model, free, device="CPU", bytes_per_weight=bytes_per_weight)
+    assert error.value.context["model"] == model
+
+
+@pytest.mark.parametrize("free", [None, 16.0])
+def test_unknown_memory_is_not_a_fit_guarantee_or_a_reason_to_shrink(free):
+    from scribe.core.local_whisper import check_model_memory
+
+    check_model_memory("large-v3", free, device="CPU", bytes_per_weight=1)

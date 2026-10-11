@@ -209,8 +209,8 @@ The pluggable diarization layer, token-free Nemotron default, and OpenAI diarize
 output fix shipped in 2.10.0, along with speaker naming and batched GPU decoding.
 Remaining evidence and follow-up work for 2.12.0:
 
-1. Replace the pinned Transformers commit in `diarize-nemotron` with
-   `transformers>=5.18.0` once that release is published, and relock.
+1. Replace the pinned Transformers commit in `diarize-nemotron` with a validated
+   released version after the diarization compatibility checks, and relock.
 2. Record Nemotron speaker-label evidence on Windows NVIDIA, Linux NVIDIA, CPU-only,
    and Apple Silicon (MLX with a released mlx-audio that includes the model).
 3. Confirm the `--torch-backend auto` install path on each platform and that
@@ -218,14 +218,28 @@ Remaining evidence and follow-up work for 2.12.0:
 4. Batched GPU decoding and beam width 5 are implemented from one RTX 4090
    measurement. Repeat the speed and quality comparison on a
    mid-range NVIDIA GPU and on a non-English recording, and record the results.
-5. Evaluate NVIDIA Parakeet TDT v3 as an optional local ASR backend. It leads
-   Whisper large-v3 on English benchmarks and is much faster, but covers 25
-   European languages and takes no vocabulary prompt, so it must stay opt-in until
-   quality, timestamps, long-audio handling, and language fallback are verified.
+5. Evaluate current local ASR challengers against the full large-v3 file default
+   before adding a dependency or promoting a model. Candidates include
+   [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-1.7B),
+   [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3),
+   [Nemotron 3.5 ASR](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)
+   and [Cohere Transcribe](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026).
+   Language coverage, task, access/license, vocabulary prompts, timestamps and
+   offline behavior differ; English leaderboard rank is not a product-wide quality
+   guarantee. No new ASR backend is selected automatically from these candidates.
+6. Use the [evaluation protocol](docs/EVALUATION.md) on licensed human references
+   and consented/synthetic controls: English plus target-language slices including
+   Spanish and Japanese, noisy/overlapping speech, names/numbers/negation, silence,
+   omissions, repetition and long recordings. Record WER/CER by language, task
+   errors, failures, model revision and actual decoding/precision, peak memory,
+   and cold/warm time. Do not compare unsupported languages as if they were covered,
+   download a whole corpus for a small check, or add cloud cost to the local baseline.
 
 Exit criteria: speaker labels never fail a transcription, the documented install
-commands work on every claimed platform, and default decoding changes are backed
-by measured speed and quality evidence.
+commands work on every claimed platform, and new model/backend promotions are
+backed by measured multilingual quality and resource evidence. Current file
+profiles express an accuracy/resource preference; hermetic policy tests alone do
+not demonstrate a WER improvement on a laptop or across languages.
 
 ## Planned release: 2.13.0 maintainability and verification
 

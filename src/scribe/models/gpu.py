@@ -49,8 +49,8 @@ class GPUConfig:
     enable_tensor_cores: bool = False
 
     # Recommendation
-    recommendation: Literal["local", "openai"] = "openai"
-    reason: str = "No GPU detected"
+    recommendation: Literal["local", "openai"] = "local"
+    reason: str = "Local transcription is available on CPU"
 
     @classmethod
     def detect(cls) -> "GPUConfig":
@@ -73,7 +73,8 @@ class GPUConfig:
         try:
             import torch
 
-            if torch.cuda.is_available():
+            # CTranslate2 uses NVIDIA CUDA, not PyTorch's ROCm-compatible API.
+            if torch.cuda.is_available() and not getattr(torch.version, "hip", None):
                 config.has_gpu = True
                 config.cuda_available = True
                 config.cuda_version = torch.version.cuda
@@ -130,7 +131,10 @@ class GPUConfig:
         except Exception as e:
             ctranslate2_reason = f"CTranslate2 GPU detection error: {e}"
 
-        config.reason = f"No local CUDA backend detected ({torch_reason}; {ctranslate2_reason})"
+        config.reason = (
+            "Local CPU transcription is available; no NVIDIA CUDA runtime detected "
+            f"({torch_reason}; {ctranslate2_reason})"
+        )
 
         return config
 
@@ -293,11 +297,13 @@ class GPUConfig:
             self.batch_size = 2
             self.use_fp16 = False
             self.enable_tensor_cores = False
-            self.recommendation = "local" if self.has_gpu else "openai"
+            self.recommendation = "local"
             if self.has_gpu:
-                self.reason = f"Very low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - using smallest local model"
+                self.reason = f"Very low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - full large-v3 may not fit; CPU remains available"
             else:
-                self.reason = f"Insufficient VRAM ({vram:.1f}GB) - OpenAI API recommended"
+                self.reason = (
+                    f"Insufficient VRAM ({vram:.1f}GB) - local CPU transcription remains available"
+                )
 
     def to_dict(self) -> dict[str, Any]:
         """

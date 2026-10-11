@@ -132,11 +132,9 @@ def test_detect_silence_if_needed_returns_empty_on_skip_or_failure(tmp_path: Pat
 def test_prepare_initial_prompt_respects_modes() -> None:
     transcriber = LocalWhisperTranscriber(gpu_config=_gpu_config())
 
-    assert "Meeting recording" in transcriber._prepare_initial_prompt(None, music_mode=False)
+    assert transcriber._prepare_initial_prompt(None, music_mode=False) == ""
     assert transcriber._prepare_initial_prompt("Song lyrics.", music_mode=True) == "Song lyrics."
-    assert "Key terms: alpha, beta" in transcriber._prepare_initial_prompt(
-        "alpha, beta", music_mode=False
-    )
+    assert transcriber._prepare_initial_prompt("alpha, beta", music_mode=False) == "alpha, beta"
 
 
 def test_execute_transcription_returns_transcript(tmp_path: Path) -> None:

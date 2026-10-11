@@ -81,36 +81,107 @@ def test_mlx_backend_transcribe_uses_fake_module(tmp_path):
     captured = {}
 
     def fake_transcribe(path, *, path_or_hf_repo, language, initial_prompt):
-        captured["repo"] = path_or_hf_repo
+        captured.update(repo=path_or_hf_repo, language=language, prompt=initial_prompt)
         return {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "hi"}]}
 
     fake_mod = SimpleNamespace(transcribe=fake_transcribe)
     with patch.dict(sys.modules, {"mlx_whisper": fake_mod}):
         transcript = MLXWhisperBackend().transcribe(
-            audio, language="en", model_size="small", beam_size=5, initial_prompt=None
+            audio, language="en", model_size="small", beam_size=5, initial_prompt="Cedar, Tamsin"
         )
     assert transcript.backend == "mlx-whisper"
     assert transcript.text() == "hi"
-    assert captured["repo"] == "mlx-community/whisper-small-mlx"
+    assert captured == {
+        "repo": "mlx-community/whisper-small-mlx",
+        "language": "en",
+        "prompt": "Cedar, Tamsin",
+    }
+    assert transcript.metadata["beam_size"] is None
+    assert transcript.metadata["requested_beam_size"] == 5
+    assert "unsupported" in transcript.metadata["decoding"]
+    assert transcript.metadata["initial_prompt_applied"] is True
 
 
 def test_whispercpp_backend_transcribe_uses_fake_module(tmp_path):
     audio = tmp_path / "a.wav"
     audio.write_text("x")
 
-    class FakeModel:
-        def __init__(self, name):
-            self.name = name
+    captured = {}
 
-        def transcribe(self, path, language=""):
+    class FakeModel:
+        def __init__(self, name, **kwargs):
+            captured.update(model=name, constructor=kwargs)
+
+        def auto_detect_language(self, path):
+            return ("ja", 0.91), {"ja": 0.91, "en": 0.01}
+
+        def transcribe(self, path, **kwargs):
+            captured["decode"] = kwargs
             return [SimpleNamespace(t0=0, t1=100, text="hi")]
 
     fake_model_mod = SimpleNamespace(Model=FakeModel)
     fake_pkg = SimpleNamespace(model=fake_model_mod)
     with patch.dict(sys.modules, {"pywhispercpp": fake_pkg, "pywhispercpp.model": fake_model_mod}):
         transcript = WhisperCppBackend().transcribe(
-            audio, language="en", model_size="large-v3", beam_size=5, initial_prompt=None
+            audio, language=None, model_size="large-v3", beam_size=5, initial_prompt="Cedar, Tamsin"
         )
     assert transcript.backend == "whisper.cpp"
     assert transcript.text() == "hi"
     assert transcript.duration == 1.0
+
+    assert captured == {
+        "model": "large-v3",
+        "constructor": {
+            "params_sampling_strategy": 1,
+            "beam_search": {"beam_size": 5, "patience": -1.0},
+        },
+        "decode": {"language": "ja", "initial_prompt": "Cedar, Tamsin"},
+    }
+    assert transcript.metadata["beam_size"] == 5
+    assert transcript.language == "ja"
+    assert transcript.metadata["language_probability"] == 0.91
+    assert transcript.metadata["initial_prompt_applied"] is True
+    assert "not verified" in transcript.metadata["device"]
+
+
+def test_faster_whisper_wrapper_honors_requested_beam(tmp_path):
+    from scribe.models.gpu import GPUConfig
+
+    engine = SimpleNamespace(
+        _load_model=lambda: None, _execute_transcription=lambda *_args: Transcript(segments=[])
+    )
+    with (
+        patch("scribe.models.gpu.GPUConfig.detect", return_value=GPUConfig(has_gpu=False)),
+        patch(
+            "scribe.core.local_whisper.LocalWhisperTranscriber", return_value=engine
+        ) as constructor,
+    ):
+        FasterWhisperBackend().transcribe(
+            tmp_path / "audio.wav",
+            language="en",
+            model_size="large-v3",
+            beam_size=3,
+            initial_prompt="Cedar",
+        )
+    assert constructor.call_args.kwargs["gpu_config"].beam_size == 3
+    assert constructor.call_args.kwargs["batch_size"] == 0
+
+
+def test_optional_backends_reject_unmapped_model_instead_of_mislabeling(tmp_path):
+    import pytest
+
+    from scribe.exceptions import TranscriptionError
+
+    with patch.dict(
+        sys.modules,
+        {"mlx_whisper": SimpleNamespace(), "pywhispercpp.model": SimpleNamespace(Model=object)},
+    ):
+        for backend in (MLXWhisperBackend(), WhisperCppBackend()):
+            with pytest.raises(TranscriptionError, match="Unsupported"):
+                backend.transcribe(
+                    tmp_path / "audio.wav",
+                    language="en",
+                    model_size="unknown-model",
+                    beam_size=5,
+                    initial_prompt=None,
+                )

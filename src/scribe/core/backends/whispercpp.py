@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from scribe.core.backends.base import TranscriptionBackend
+from scribe.exceptions import TranscriptionError
 from scribe.models.transcript import Transcript, TranscriptSegment
 
 # Whisper size -> GGML model name that pywhispercpp downloads.
@@ -31,7 +32,6 @@ _MODEL_NAMES = {
     "large-v3-turbo": "large-v3-turbo",
     "turbo": "large-v3-turbo",
 }
-_DEFAULT_MODEL = "large-v3"
 
 
 def _segments_to_transcript(
@@ -79,6 +79,35 @@ class WhisperCppBackend(TranscriptionBackend):
     ) -> Transcript:
         from pywhispercpp.model import Model
 
-        model = Model(_MODEL_NAMES.get(model_size, _DEFAULT_MODEL))
-        raw_segments = model.transcribe(str(audio_path), language=language or "")
-        return _segments_to_transcript(raw_segments, model_size, language)
+        if model_size not in _MODEL_NAMES:
+            raise TranscriptionError(f"Unsupported whisper.cpp model: {model_size}")
+        model = Model(
+            _MODEL_NAMES[model_size],
+            params_sampling_strategy=1 if beam_size > 1 else 0,
+            beam_search={"beam_size": beam_size, "patience": -1.0},
+        )
+        detected_language = None
+        probability = None
+        if language is None:
+            (detected_language, raw_probability), _ = model.auto_detect_language(str(audio_path))
+            probability = float(raw_probability)
+        raw_segments = model.transcribe(
+            str(audio_path),
+            language=language or detected_language,
+            initial_prompt=initial_prompt or "",
+        )
+        transcript = _segments_to_transcript(
+            raw_segments, model_size, language or detected_language
+        )
+        transcript.metadata.update(
+            model_id=_MODEL_NAMES[model_size],
+            device="native build dependent (CPU/Metal/Vulkan/ROCm); not verified",
+            decoding="beam search" if beam_size > 1 else "greedy",
+            beam_size=beam_size,
+            initial_prompt_applied=bool(initial_prompt),
+            language_mode="automatic" if language is None else "forced",
+            requested_language=language,
+            detected_language=detected_language,
+            language_probability=probability,
+        )
+        return transcript

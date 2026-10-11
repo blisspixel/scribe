@@ -38,6 +38,22 @@ milestones that predate this repository's Git history.
   phase and elapsed time, omit undiscussed sections, and exclude generated
   transcript header dates from model evidence. Grounding prompts cover readings
   and other nonmeeting transcripts without inventing business discussions. Refs #35.
+- File transcription now keeps full Whisper large-v3 on CPU and all GPU tiers
+  unless a model or faster file profile is explicitly selected. The accurate
+  profile uses conditioned sequential decoding; explicit batch and precision
+  settings remain available. Reports include actual device, compute and decoding
+  provenance, with known-memory lower bounds and actionable failures instead of
+  silent quality downgrades. Resident voice profiles remain separate. Refs #36.
+- Untouched file settings now detect speech language automatically. A primary
+  language is a manual preset when detection is disabled; explicit legacy and
+  per-run language choices remain forced, and `--language auto` restores detection.
+  Backend language/confidence capabilities are reported without invented scores.
+  Explicit OpenAI language choices now reach direct and chunked requests.
+- Linux diagnostics identify AMD/Intel display hardware independently of CUDA,
+  treat NVIDIA-only checks as not applicable elsewhere, and explain optional
+  native build requirements. Installation guidance warns about runtime footprint
+  before download. Portable Whisper forwards vocabulary and beam settings; MLX
+  explains its unsupported beam search. Refs #33, #36.
 - Bound PyAV below 19 for faster-whisper's current decoder, including fresh
   tool and wheel installations that do not use the project lock. A required CI
   gate installs from package metadata and decodes synthetic audio without a

@@ -142,7 +142,11 @@ from scribe.models.session import TranscriptionSession
 from scribe.models.transcript import Transcript
 from scribe.utils.files import cleanup_files
 from scribe.utils.logging import get_logger
-from scribe.utils.model_selection import resolve_local_model
+from scribe.utils.model_selection import (
+    resolve_local_batch_size,
+    resolve_local_language,
+    resolve_local_model,
+)
 from scribe.utils.resource_limits import validate_audio_file
 
 logger = get_logger(__name__)
@@ -283,18 +287,7 @@ class Transcriber:
             return "local"
 
         if preference == "local":
-            if not self.gpu_config.has_gpu:
-                logger.warning(
-                    "No GPU detected - transcribing on the CPU. This works and stays free, "
-                    "but is substantially slower than a GPU. Scribe selects a "
-                    "CPU-appropriate model automatically unless --model or "
-                    "SCRIBE_DEFAULT_MODEL overrides it."
-                )
-            else:
-                logger.info(
-                    f"Local transcription selected - GPU: {self.gpu_config.gpu_name}, "
-                    f"Model: {self.config.default_model}"
-                )
+            logger.debug("Local transcription selected")
             return "local"
 
         elif preference == "openai":
@@ -323,14 +316,7 @@ class Transcriber:
             # $0-first: local transcription runs on any machine (GPU when present,
             # CPU int8 as the universal floor), so "auto" never silently spends on
             # a paid API. Users opt in explicitly with --method openai or openrouter.
-            if self.gpu_config.recommendation == "local":
-                logger.info(f"Auto-selected local transcription - {self.gpu_config.reason}")
-            else:
-                logger.info(
-                    "Auto-selected free local transcription (%s). Local runs on CPU "
-                    "here, which is slower; select a cloud method explicitly if needed.",
-                    self.gpu_config.reason,
-                )
+            logger.debug("Auto-selected local transcription")
             return "local"
 
     def _prepare_audio_for_method(self, audio_path: Path, method: TranscriptionMethod) -> Path:
@@ -362,17 +348,13 @@ class Transcriber:
             logger.info("OpenRouter will normalize audio into bounded upload chunks")
             return audio_path
 
-    def _detect_language_for_music(self, audio_file: Path) -> str | None:
-        """Detect language for music mode transcription."""
-        from scribe.core.local_whisper import LocalWhisperTranscriber
+    def _detect_language_for_music(
+        self, audio_file: Path, detector: LocalWhisperTranscriber
+    ) -> tuple[str | None, float]:
+        """Use the selected faster-whisper decoder for its music speech pre-pass."""
         from scribe.utils.logging import console
 
         console.print("  [dim]Detecting language...[/dim]", end="")
-        model_size = self._get_effective_local_model()
-
-        detector = LocalWhisperTranscriber(
-            model_size=model_size, language=None, gpu_config=self.gpu_config
-        )
         detected_lang, confidence, has_speech = detector.detect_language(audio_file)
 
         if not has_speech:
@@ -384,26 +366,26 @@ class Transcriber:
         if detected_lang:
             logger.info(f"Using detected language: {detected_lang} ({confidence:.1%} confidence)")
             console.print(f" [green]{detected_lang.upper()}[/green] [dim]({confidence:.0%})[/dim]")
-            return detected_lang
+            return detected_lang, confidence
         else:
             logger.info("Speech detected but uncertain language, using auto-detect")
             console.print(" [green]auto-detect[/green]")
-            return None
+            return None, confidence
 
     def _get_effective_local_model(self) -> ModelSize:
-        """Resolve the local Whisper model, auto-tuning only when user did not override it."""
+        """Resolve file quality without silently downgrading for hardware."""
         configured_model = self.config.default_model
         configured_fields: set[str] = cast(
             set[str], getattr(self.config, "model_fields_set", set())
         )
-        effective_model, hardware_adjusted = resolve_local_model(
-            configured_model, configured_fields, self.gpu_config.model_size
+        effective_model, profile_adjusted = resolve_local_model(
+            configured_model, configured_fields, self.config.transcription_quality
         )
-        if hardware_adjusted:
+        if profile_adjusted:
             logger.info(
-                "Auto-adjusting local Whisper model from %s to %s based on detected hardware",
-                configured_model,
+                "File quality profile selects local Whisper model %s instead of %s",
                 effective_model,
+                configured_model,
             )
         return effective_model
 
@@ -557,17 +539,9 @@ class Transcriber:
         # Choose method and prepare audio
         chosen_method = self.choose_method(method)
         audio_file = self._prepare_audio_for_method(audio_path, chosen_method)
-        local_language_override: str | None = None
 
         if session:
             session.add_file(audio_file, "audio")
-
-        # Detect language for music mode if needed
-        default_language = self.config.default_language
-        if music_mode and chosen_method == "local" and default_language is None:
-            detected_lang = self._detect_language_for_music(audio_file)
-            if detected_lang:
-                local_language_override = detected_lang
 
         # Try primary method
         try:
@@ -577,7 +551,6 @@ class Transcriber:
                     session,
                     custom_vocabulary,
                     music_mode,
-                    local_language_override,
                 )
             elif chosen_method == "openai":
                 transcript_path = self._transcribe_openai(audio_file, session, custom_vocabulary)
@@ -623,7 +596,6 @@ class Transcriber:
                     custom_vocabulary,
                     music_mode,
                     e,
-                    local_language_override,
                 )
                 self._apply_term_normalization(transcript_path, custom_vocabulary)
                 return transcript_path
@@ -685,7 +657,9 @@ class Transcriber:
         )
 
         language = (
-            language_override if language_override is not None else self.config.default_language
+            language_override
+            if language_override is not None
+            else self._get_effective_file_language()
         )
         model_size = self._get_effective_local_model()
 
@@ -702,6 +676,13 @@ class Transcriber:
         backend_name = select_backend(
             hardware, override=getattr(self.config, "local_backend", "auto")
         )
+        override = self.config.local_backend.strip().lower()
+        if override not in ("", "auto", "default") and backend_name != override:
+            raise TranscriptionError(
+                f"Requested local backend {override!r} is unknown or unavailable. "
+                "Install its optional extra or explicitly select another local backend.",
+                context={"backend": override, "model": model_size},
+            )
         logger.info(
             f"Local backend: {backend_name} "
             f"(hardware: {hardware.vendor}, {hardware.accelerator_name or 'cpu'})"
@@ -717,9 +698,25 @@ class Transcriber:
         # shared writer.
         if backend_name in (FASTER_WHISPER, CPU):
             transcript_path = self._transcribe_faster_whisper(
-                audio_path, model_size, language, initial_prompt, diarizer
+                audio_path,
+                model_size,
+                language,
+                initial_prompt,
+                diarizer,
+                force_cpu=backend_name == CPU,
+                music_mode=music_mode,
             )
         else:
+            if self.config.local_compute_type is not None:
+                raise TranscriptionError(
+                    f"local_compute_type is a faster-whisper setting; {backend_name} does not "
+                    "support this override. Unset it or explicitly select cpu/faster-whisper."
+                )
+            if self.config.local_batch_size not in (None, 0):
+                raise TranscriptionError(
+                    f"local_batch_size is a faster-whisper setting; {backend_name} does not "
+                    "support batching. Unset it or explicitly select cpu/faster-whisper."
+                )
             transcript_path = self._transcribe_alt_backend(
                 build_backend(backend_name),
                 audio_path,
@@ -742,6 +739,14 @@ class Transcriber:
             session.gpu_info = self.gpu_config.to_dict()
 
         return transcript_path
+
+    def _get_effective_file_language(self) -> str | None:
+        """Resolve explicit/manual/automatic language selection in one place."""
+        return resolve_local_language(
+            self.config.default_language,
+            self.config.auto_detect_language,
+            self.config.primary_language,
+        )
 
     def _build_diarizer(self) -> "SpeakerDiarizer | None":
         """Build a local diarizer when enabled, or None when disabled or nothing can run.
@@ -771,21 +776,47 @@ class Transcriber:
         language: str | None,
         initial_prompt: str | None,
         diarizer: "SpeakerDiarizer | None" = None,
+        *,
+        force_cpu: bool = False,
+        music_mode: bool = False,
     ) -> Path:
         """Run the production faster-whisper engine (CUDA or CPU int8)."""
+        from dataclasses import replace
+
+        gpu_config = (
+            replace(self.gpu_config, has_gpu=False, cuda_available=False)
+            if force_cpu
+            else self.gpu_config
+        )
         transcriber = LocalWhisperTranscriber(
             model_size=model_size,
             language=language,
-            gpu_config=self.gpu_config,
-            batch_size=getattr(self.config, "local_batch_size", None),
+            gpu_config=gpu_config,
+            batch_size=resolve_local_batch_size(
+                self.config.transcription_quality, self.config.local_batch_size
+            ),
+            compute_type=self.config.local_compute_type,
         )
+        language_detection = None
+        if music_mode and language is None:
+            language_detection = self._detect_language_for_music(audio_path, transcriber)
+            transcriber.language = language_detection[0]
         transcript_path = transcriber.transcribe(
             audio_path,
             detect_silence=self.config.enable_silence_detection,
             initial_prompt=initial_prompt,
+            music_mode=music_mode,
             diarizer=diarizer,
         )
         self.last_transcript = transcriber.last_transcript
+        if language_detection and language_detection[0] and self.last_transcript is not None:
+            self.last_transcript.metadata.update(
+                language_mode="automatic (music pre-pass)",
+                requested_language=None,
+                detected_language=language_detection[0],
+                language_probability=language_detection[1],
+                language_detection_backend="faster-whisper",
+            )
         return transcript_path
 
     def _transcribe_alt_backend(
@@ -864,7 +895,9 @@ class Transcriber:
             raise ValidationError("OpenAI API key not configured")
 
         transcriber = OpenAITranscriber(
-            api_key=self.config.openai_api_key, model=self.config.openai_model
+            api_key=self.config.openai_api_key,
+            model=self.config.openai_model,
+            language=self._get_effective_file_language(),
         )
 
         # Convert vocabulary to Whisper prompt format
@@ -905,7 +938,7 @@ class Transcriber:
         transcriber = OpenRouterTranscriber(
             api_key=self.config.openrouter_api_key,
             model=self.config.openrouter_model,
-            language=self.config.default_language,
+            language=self._get_effective_file_language(),
             max_attempts=self.config.max_retries,
             timeout_seconds=self.config.openrouter_timeout_seconds,
             max_spend_usd=self.config.openrouter_max_spend_usd,

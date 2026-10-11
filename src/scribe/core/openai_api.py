@@ -97,7 +97,12 @@ class OpenAITranscriber:
     """
 
     def __init__(
-        self, api_key: str, model: str = "gpt-4o-transcribe", use_server_chunking: bool = True
+        self,
+        api_key: str,
+        model: str = "gpt-4o-transcribe",
+        use_server_chunking: bool = True,
+        *,
+        language: str | None = None,
     ):
         """
         Initialize OpenAI transcriber.
@@ -110,6 +115,7 @@ class OpenAITranscriber:
         self.api_key = api_key
         self.model = model
         self.use_server_chunking = use_server_chunking
+        self.language = language
         self.client = OpenAI(api_key=api_key)
         # Structured transcript from the most recent transcription, for reuse by the
         # structured-output writers without re-parsing the rendered text.
@@ -145,6 +151,9 @@ class OpenAITranscriber:
                     "model": self.model,
                     "file": audio_file,
                 }
+
+                if self.language is not None:
+                    params["language"] = self.language
 
                 # Configure response format based on model
                 if "diarize" in self.model:
@@ -290,13 +299,28 @@ class OpenAITranscriber:
         if isinstance(raw_duration, int | float):
             duration = float(raw_duration)
 
+        returned_language = getattr(response, "language", None)
+        language = returned_language if isinstance(returned_language, str) else self.language
+        language_metadata = {
+            "language_mode": "forced" if self.language is not None else "provider automatic",
+            "requested_language": self.language,
+            "detected_language": language if self.language is None else None,
+            "language_probability": None,
+            "language_confidence_support": "not exposed by this response format",
+        }
+
         segments: list[TranscriptSegment] = []
         if isinstance(response, str):
             text = response.strip()
             if text:
                 segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
             return Transcript(
-                segments=segments, duration=duration, backend="openai", model=self.model
+                segments=segments,
+                duration=duration,
+                backend="openai",
+                model=self.model,
+                language=language,
+                metadata=language_metadata,
             )
 
         # Try the diarized/segmented shape, falling back to a plain text blob the same
@@ -309,7 +333,14 @@ class OpenAITranscriber:
             if text:
                 segments.append(TranscriptSegment(start=0.0, end=duration or 0.0, text=text))
 
-        return Transcript(segments=segments, duration=duration, backend="openai", model=self.model)
+        return Transcript(
+            segments=segments,
+            duration=duration,
+            backend="openai",
+            model=self.model,
+            language=language,
+            metadata=language_metadata,
+        )
 
     #: Consecutive same-speaker fragments closer than this merge into one turn.
     _MERGE_GAP_SECONDS = 2.0
@@ -604,6 +635,8 @@ class OpenAITranscriber:
                 with open(chunk_path, "rb") as f:
                     kwargs = {"model": self.model, "file": f, "response_format": "text"}
 
+                    if self.language is not None:
+                        kwargs["language"] = self.language
                     if prompt:
                         kwargs["prompt"] = prompt
 

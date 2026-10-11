@@ -21,7 +21,7 @@ class TestConfigDefaults:
         config = ScribeConfig()
 
         assert config.default_model == "large-v3"
-        assert config.default_language == "en"
+        assert config.default_language is None
 
         # default_method Field default is "auto". Real instances may pick up "local"
         # (or other) from the user's ~/.scribe/config.toml via the custom settings source.
@@ -470,7 +470,7 @@ class TestConfigIntegration:
 
         # Should work with all defaults
         assert config.default_model == "large-v3"
-        assert config.default_language == "en"
+        assert config.default_language is None
         assert config.output_folder.exists()
         assert config.log_folder.exists()
 

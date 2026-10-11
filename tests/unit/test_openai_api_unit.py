@@ -361,3 +361,30 @@ class TestOpenAITranscriber:
         result = transcribe_with_openai(Path("test.wav"), api_key="sk-test")
         assert result == Path("output.txt")
         mock_transcribe.assert_called_once()
+
+
+@pytest.mark.parametrize("language", [None, "es", "ja"])
+@pytest.mark.parametrize("model", ["gpt-4o-transcribe", "gpt-4o-transcribe-diarize"])
+def test_explicit_language_reaches_server_and_client_chunks(language, model, tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"audio")
+    with (
+        patch("scribe.core.openai_api.OpenAI") as client_class,
+        patch("scribe.core.openai_api.get_audio_duration", return_value=10.0),
+        patch("scribe.core.openai_api.verify_file_content"),
+        patch("scribe.core.openai_api.ensure_api_circuit_closed"),
+        patch("scribe.core.openai_api.record_api_success"),
+    ):
+        client_class.return_value.audio.transcriptions.create.return_value = "recognized speech"
+        transcriber = OpenAITranscriber(api_key="sk-test", model=model, language=language)
+        transcriber.transcribe_with_server_chunking(audio, tmp_path / "out.txt")
+        assert transcriber.transcribe_chunk(audio, retries=1) == (True, "recognized speech")
+    requests = client_class.return_value.audio.transcriptions.create.call_args_list
+    assert len(requests) == 2
+    for request in requests:
+        if language is None:
+            assert "language" not in request.kwargs
+        else:
+            assert request.kwargs["language"] == language
+    assert transcriber.last_transcript.language == language
+    assert transcriber.last_transcript.metadata["language_probability"] is None

@@ -60,12 +60,20 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["default_method"] = transcription["method"]
     if "model" in transcription:
         out["default_model"] = transcription["model"]
+    if "quality" in transcription:
+        out["transcription_quality"] = transcription["quality"]
     if "language" in transcription:
         out["default_language"] = transcription["language"]
+    if "auto_detect_language" in transcription:
+        out["auto_detect_language"] = transcription["auto_detect_language"]
+    if "primary_language" in transcription:
+        out["primary_language"] = transcription["primary_language"]
     if "local_backend" in transcription:
         out["local_backend"] = transcription["local_backend"]
     if "local_batch_size" in transcription:
         out["local_batch_size"] = transcription["local_batch_size"]
+    if "local_compute_type" in transcription:
+        out["local_compute_type"] = transcription["local_compute_type"]
     if "local_only" in transcription:
         out["local_only"] = transcription["local_only"]
     if "openrouter_model" in transcription:

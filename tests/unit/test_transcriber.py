@@ -279,14 +279,14 @@ class TestTranscriptionMethods:
         )
 
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
-    def test_transcribe_local_uses_gpu_recommended_model_by_default(
+    def test_transcribe_local_keeps_full_large_v3_by_default(
         self,
         mock_local_class,
         temp_config: ScribeConfig,
         sample_audio: Path,
         mock_gpu,
     ):
-        """Auto/local should use the best-fit local model when user did not override it."""
+        """Hardware suggestions cannot silently shrink the accurate file model."""
         transcriber = Transcriber(temp_config)
         transcriber.gpu_config.model_size = "medium"
         transcriber.gpu_config.recommendation = "local"
@@ -298,7 +298,8 @@ class TestTranscriptionMethods:
         transcriber._transcribe_local(sample_audio, None, None, False)
 
         mock_local_class.assert_called_once()
-        assert mock_local_class.call_args.kwargs["model_size"] == "medium"
+        assert mock_local_class.call_args.kwargs["model_size"] == "large-v3"
+        assert mock_local_class.call_args.kwargs["batch_size"] == 0
 
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
     def test_transcribe_local_respects_explicit_model_override(
@@ -388,10 +389,16 @@ class TestFallbackLogic:
         mock_api.assert_called_once()
         mock_local.assert_called_once()
 
+    @patch.object(Transcriber, "_detect_language_for_music", return_value=(None, 0.0))
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
     @patch("scribe.core.transcriber.OpenAITranscriber")
     def test_no_fallback_in_music_mode(
-        self, mock_api_class, mock_local_class, temp_config: ScribeConfig, sample_audio: Path
+        self,
+        mock_api_class,
+        mock_local_class,
+        _detect_language,
+        temp_config: ScribeConfig,
+        sample_audio: Path,
     ):
         """Test no fallback attempted in music mode."""
         transcriber = Transcriber(temp_config)
@@ -544,9 +551,10 @@ class TestCustomVocabulary:
 class TestMusicMode:
     """Test music mode transcription."""
 
+    @patch.object(Transcriber, "_detect_language_for_music", return_value=(None, 0.0))
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
     def test_music_mode_enabled(
-        self, mock_local_class, temp_config: ScribeConfig, sample_audio: Path
+        self, mock_local_class, _detect_language, temp_config: ScribeConfig, sample_audio: Path
     ):
         """Test music mode is passed to transcriber."""
         transcriber = Transcriber(temp_config)
@@ -568,7 +576,7 @@ class TestMusicMode:
     ):
         """Detected music language should not mutate global config defaults."""
         temp_config.default_language = None
-        mock_detect_language.return_value = "es"
+        mock_detect_language.return_value = ("es", 0.91)
         transcriber = Transcriber(temp_config)
 
         mock_local = Mock()
@@ -579,7 +587,9 @@ class TestMusicMode:
 
         assert temp_config.default_language is None
         assert mock_local_class.call_args is not None
-        assert mock_local_class.call_args.kwargs["language"] == "es"
+        assert mock_local_class.call_args.kwargs["language"] is None
+        assert mock_local.language == "es"
+        mock_detect_language.assert_called_once_with(sample_audio, mock_local)
 
 
 class TestTermNormalization:

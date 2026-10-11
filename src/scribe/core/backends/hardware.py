@@ -16,6 +16,7 @@ from __future__ import annotations
 import platform
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from scribe.models.gpu import GPUConfig
@@ -25,7 +26,7 @@ Vendor = Literal["nvidia", "apple", "amd", "intel", "cpu"]
 
 @dataclass(frozen=True)
 class HardwareInfo:
-    """The detected local accelerator: its vendor, memory, and display name."""
+    """Physical GPU identity; presence does not prove an engine can accelerate it."""
 
     vendor: Vendor
     memory_gb: float = 0.0
@@ -33,7 +34,7 @@ class HardwareInfo:
 
     @property
     def has_accelerator(self) -> bool:
-        """True for anything other than a plain CPU."""
+        """Whether GPU hardware was identified, independent of runtime support."""
         return self.vendor != "cpu"
 
 
@@ -46,7 +47,7 @@ def _detect_amd() -> HardwareInfo | None:
     try:
         import torch
 
-        if not getattr(torch.version, "hip", None):
+        if not getattr(torch.version, "hip", None) or not torch.cuda.is_available():
             return None
 
         memory_gb = 0.0
@@ -104,13 +105,49 @@ def _detect_apple() -> HardwareInfo | None:
     )
 
 
+def _detect_linux_gpu(pci_root: Path = Path("/sys/bus/pci/devices")) -> HardwareInfo | None:
+    """Identify Linux display hardware without requiring a driver or ML runtime.
+
+    Prefer NVIDIA on hybrid systems when no runtime probe succeeded. Device IDs
+    are useful identity evidence even when a marketing name is unavailable.
+    Shared/integrated GPU memory is deliberately not reported as dedicated VRAM.
+    """
+    if platform.system() != "Linux":
+        return None
+    vendors: dict[str, tuple[Vendor, str]] = {
+        "0x10de": ("nvidia", "NVIDIA"),
+        "0x1002": ("amd", "AMD"),
+        "0x8086": ("intel", "Intel"),
+    }
+    found: dict[Vendor, HardwareInfo] = {}
+    try:
+        for device in sorted(pci_root.iterdir()):
+            try:
+                if not (device / "class").read_text().strip().lower().startswith("0x03"):
+                    continue
+                identity = vendors.get((device / "vendor").read_text().strip().lower())
+                if identity is None:
+                    continue
+                vendor, label = identity
+                device_id = (device / "device").read_text().strip()
+                found.setdefault(
+                    vendor,
+                    HardwareInfo(vendor=vendor, accelerator_name=f"{label} GPU (PCI {device_id})"),
+                )
+            except OSError:
+                continue
+    except OSError:
+        return None
+    return next((found[vendor] for vendor in ("nvidia", "amd", "intel") if vendor in found), None)
+
+
 def detect_hardware() -> HardwareInfo:
     """Best-effort detection of the local accelerator vendor and memory.
 
     Order matters: AMD (ROCm) before NVIDIA because ROCm masquerades as CUDA, then
-    Apple Silicon, then a plain-CPU floor.
+    Apple Silicon, then Linux physical display hardware and a plain-CPU floor.
     """
-    for probe in (_detect_amd, _detect_nvidia, _detect_apple):
+    for probe in (_detect_amd, _detect_nvidia, _detect_apple, _detect_linux_gpu):
         info = probe()
         if info is not None:
             return info

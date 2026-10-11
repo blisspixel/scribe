@@ -19,7 +19,12 @@ from rich.table import Table
 
 from scribe.exceptions import ScribeError
 from scribe.utils.branding import brand_header_markup
-from scribe.utils.model_selection import resolve_local_model
+from scribe.utils.model_selection import (
+    local_resource_guidance,
+    resolve_local_batch_size,
+    resolve_local_language,
+    resolve_local_model,
+)
 from scribe.utils.theme import ScribeTheme
 
 if TYPE_CHECKING:
@@ -42,6 +47,9 @@ def show_info(
     from scribe.utils.terminal_ui import get_terminal_ui_config
 
     ui_config = get_terminal_ui_config()
+    from scribe.core.backends import backend_availability, detect_hardware, select_backend
+
+    hardware = detect_hardware()
 
     console.print()
     console.print(
@@ -63,20 +71,18 @@ def show_info(
         )
         console.print(
             f"  [{ScribeTheme.TEXT_MUTED}]{escape(cuda_status)} | "
-            f"{escape(str(gpu_config.model_size))} | beam={gpu_config.beam_size} | "
-            f"{escape(gpu_config.get_expected_speed())}[/{ScribeTheme.TEXT_MUTED}]"
+            f"beam={gpu_config.beam_size}[/{ScribeTheme.TEXT_MUTED}]"
         )
     else:
         console.print(
-            f"  [{ScribeTheme.WARNING}]not detected[/{ScribeTheme.WARNING}] "
+            f"  [{ScribeTheme.TEXT_PRIMARY}]"
+            f"{escape(hardware.accelerator_name or 'CPU supported (no GPU detected)')}"
+            f"[/{ScribeTheme.TEXT_PRIMARY}] "
             f"[{ScribeTheme.TEXT_MUTED}]"
             f"{escape(str(gpu_config.reason))}[/{ScribeTheme.TEXT_MUTED}]"
         )
     console.print()
 
-    from scribe.core.backends import backend_availability, detect_hardware, select_backend
-
-    hardware = detect_hardware()
     availability = backend_availability()
     chosen_backend = select_backend(hardware, override=config.local_backend, available=availability)
     installed = ", ".join(sorted(name for name, ok in availability.items() if ok)) or "none"
@@ -88,6 +94,37 @@ def show_info(
         f"[{ScribeTheme.TEXT_MUTED}]| vendor "
         f"{escape(hardware.vendor)}[/{ScribeTheme.TEXT_MUTED}]"
     )
+    if chosen_backend == "whispercpp":
+        execution = "Native device depends on the build; CPU/Metal/Vulkan/ROCm use is not verified."
+    elif chosen_backend == "mlx":
+        execution = (
+            "Metal via MLX; beam search unsupported, greedy decoding with temperature fallback."
+        )
+    else:
+        execution = (
+            "CUDA "
+            + (config.local_compute_type or ("float16" if gpu_config.use_fp16 else "float32"))
+            if gpu_config.has_gpu and chosen_backend != "cpu"
+            else f"CPU {config.local_compute_type or 'int8'}; physical GPU presence does not establish acceleration."
+        )
+    console.print(f"  {escape(execution)}")
+    if chosen_backend in ("mlx", "whispercpp") and config.local_compute_type is not None:
+        console.print(
+            f"  [{ScribeTheme.WARNING}]local_compute_type is unsupported by this backend; "
+            f"unset it or select faster-whisper/cpu.[/{ScribeTheme.WARNING}]"
+        )
+    if chosen_backend in ("mlx", "whispercpp") and config.local_batch_size not in (None, 0):
+        console.print(
+            f"  [{ScribeTheme.WARNING}]local_batch_size is unsupported by this backend; "
+            f"unset it or select faster-whisper/cpu.[/{ScribeTheme.WARNING}]"
+        )
+    override = config.local_backend.strip().lower()
+    if override not in ("", "auto", "default") and override != chosen_backend:
+        console.print(
+            f"  [{ScribeTheme.WARNING}]Requested backend {escape(override)} is unavailable; "
+            "transcription will fail until it is installed or explicitly changed."
+            f"[/{ScribeTheme.WARNING}]"
+        )
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]installed[/{ScribeTheme.TEXT_PRIMARY}] "
         f"[{ScribeTheme.TEXT_MUTED}]{escape(installed)}[/{ScribeTheme.TEXT_MUTED}]"
@@ -142,17 +179,15 @@ def show_info(
         f"[{ScribeTheme.TEXT_MUTED}]"
         f"{escape(str(config.output_folder))}[/{ScribeTheme.TEXT_MUTED}]"
     )
-    # Report the model that will actually run, not the configured preference:
-    # on a machine without a GPU the default is auto-tuned down (ADR-006).
-    effective_model, hardware_adjusted = resolve_local_model(
+    effective_model, profile_adjusted = resolve_local_model(
         config.default_model,
         config.model_fields_set,
-        gpu_config.model_size,
+        config.transcription_quality,
     )
     model_note = (
-        f" [{ScribeTheme.TEXT_MUTED}](auto for this hardware; "
-        f"{escape(str(config.default_model))} configured)[/{ScribeTheme.TEXT_MUTED}]"
-        if hardware_adjusted
+        f" [{ScribeTheme.TEXT_MUTED}](from {config.transcription_quality} file profile)"
+        f"[/{ScribeTheme.TEXT_MUTED}]"
+        if profile_adjusted
         else ""
     )
     console.print(
@@ -160,10 +195,41 @@ def show_info(
         f"[{ScribeTheme.TEXT_MUTED}]"
         f"{escape(str(effective_model))}[/{ScribeTheme.TEXT_MUTED}]{model_note}"
     )
-    language = config.default_language or "auto"
+    pinned = (
+        "explicit model wins" if "default_model" in config.model_fields_set else "profile model"
+    )
+    batch = resolve_local_batch_size(config.transcription_quality, config.local_batch_size)
+    mode = (
+        "sequential"
+        if batch == 0
+        else f"batch cap {batch}"
+        if batch is not None
+        else "automatic batching"
+    )
+    console.print(
+        f"  file quality {config.transcription_quality} ({pinned}); faster-whisper {mode}"
+    )
+    console.print(f"  {escape(local_resource_guidance(effective_model))}")
+    import psutil  # type: ignore[import-untyped]
+
+    memory = psutil.virtual_memory()
+    console.print(
+        f"  RAM {memory.total / (1024**3):.1f} GB total, {memory.available / (1024**3):.1f} GB available. "
+        "No fixed runtime estimate; benchmark a representative file. "
+        "A long recording on CPU can take longer than its duration."
+    )
+    language = (
+        resolve_local_language(
+            config.default_language, config.auto_detect_language, config.primary_language
+        )
+        or "auto"
+    )
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]language[/{ScribeTheme.TEXT_PRIMARY}]  "
         f"[{ScribeTheme.TEXT_MUTED}]{escape(language)}[/{ScribeTheme.TEXT_MUTED}]"
+    )
+    console.print(
+        f"  primary {escape(config.primary_language)} (manual preset only; no automatic-language bias)"
     )
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]openrouter[/{ScribeTheme.TEXT_PRIMARY}] "

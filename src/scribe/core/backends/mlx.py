@@ -17,7 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from scribe.core.backends.base import TranscriptionBackend
+from scribe.exceptions import TranscriptionError
 from scribe.models.transcript import Transcript, TranscriptSegment
+from scribe.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Whisper size -> mlx-community model repo on Hugging Face. mlx-whisper downloads
 # and caches the converted weights on first use.
@@ -32,7 +36,6 @@ _MODEL_REPOS = {
     "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
     "turbo": "mlx-community/whisper-large-v3-turbo",
 }
-_DEFAULT_REPO = "mlx-community/whisper-large-v3-mlx"
 
 
 def _result_to_transcript(result: dict[str, Any], model_size: str) -> Transcript:
@@ -72,10 +75,31 @@ class MLXWhisperBackend(TranscriptionBackend):
     ) -> Transcript:
         import mlx_whisper
 
+        if model_size not in _MODEL_REPOS:
+            raise TranscriptionError(f"Unsupported MLX Whisper model: {model_size}")
+        if beam_size > 1:
+            logger.warning(
+                "mlx-whisper does not support beam search; using its greedy decoding "
+                "with temperature fallback. Vocabulary prompts are supported."
+            )
         result = mlx_whisper.transcribe(
             str(audio_path),
-            path_or_hf_repo=_MODEL_REPOS.get(model_size, _DEFAULT_REPO),
+            path_or_hf_repo=_MODEL_REPOS[model_size],
             language=language,
             initial_prompt=initial_prompt,
         )
-        return _result_to_transcript(dict(result), model_size)
+        transcript = _result_to_transcript(dict(result), model_size)
+        transcript.metadata.update(
+            model_id=_MODEL_REPOS[model_size],
+            device="Metal (MLX)",
+            decoding="greedy with temperature fallback (beam search unsupported)",
+            requested_beam_size=beam_size,
+            beam_size=None,
+            initial_prompt_applied=bool(initial_prompt),
+            language_mode="automatic" if language is None else "forced",
+            requested_language=language,
+            detected_language=transcript.language if language is None else None,
+            language_probability=None,
+            language_confidence_support="not exposed by mlx_whisper.transcribe",
+        )
+        return transcript

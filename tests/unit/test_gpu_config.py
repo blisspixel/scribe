@@ -49,8 +49,8 @@ class TestGPUConfigDetection:
         config = GPUConfig.detect()
 
         assert config.has_gpu is False
-        assert config.recommendation == "openai"
-        assert "No local CUDA backend detected" in config.reason
+        assert config.recommendation == "local"
+        assert "Local CPU transcription is available" in config.reason
 
     def test_low_vram_gpu_uses_best_fit_local_model(self):
         """Older NVIDIA GPUs should still get the best-fitting local model by default."""
@@ -185,3 +185,14 @@ class TestGPUConfigDetection:
         assert high_end.is_high_end() is True
         assert high_end.to_dict()["gpu_name"] == "NVIDIA A100"
         assert GPUConfig(has_gpu=True, gpu_name=None, gpu_memory_gb=0.0).is_high_end() is False
+
+
+def test_rocm_cuda_api_does_not_authorize_ctranslate2_cuda():
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.version.hip", "6.4"),
+        patch("ctranslate2.get_cuda_device_count", return_value=0),
+    ):
+        config = GPUConfig.detect()
+    assert config.has_gpu is False
+    assert config.recommendation == "local"

@@ -17,6 +17,7 @@ from scribe.utils.files import extract_date_from_filename, format_date, format_d
 from scribe.utils.gpu import clear_gpu_cache, set_gpu_optimizations
 from scribe.utils.gpu_manager import get_gpu_manager
 from scribe.utils.logging import get_logger
+from scribe.utils.model_selection import local_resource_guidance
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,27 @@ logger = get_logger(__name__)
 #: Approximate VRAM (GB) a float16 Whisper model needs to run without spilling.
 _MODEL_VRAM_GB = {"tiny": 1.5, "base": 1.5, "small": 2.5, "medium": 4.0}
 _LARGE_MODEL_VRAM_GB = 5.0
+
+# Parameter counts provide a lower bound, not a peak-memory fit prediction.
+_MODEL_PARAMETERS_M = {"tiny": 39, "base": 74, "small": 244, "medium": 769, "turbo": 809}
+
+
+def check_model_memory(
+    model_size: str, free_gb: float | None, *, device: str, bytes_per_weight: int
+) -> None:
+    """Reject known memory below the weights alone; leave unknown/peak use honest."""
+    parameters = _MODEL_PARAMETERS_M.get(model_size, 1550)
+    if model_size == "large-v3-turbo":
+        parameters = 809
+    weights_gb = parameters * 1_000_000 * bytes_per_weight / (1024**3)
+    if free_gb is not None and free_gb < weights_gb:
+        raise TranscriptionError(
+            f"Whisper {model_size} cannot fit its weights in the known free {device} memory "
+            f"({free_gb:.1f} GB free; at least {weights_gb:.1f} GB for weights alone). "
+            "Free memory or explicitly choose --quality balanced, --quality fast, or --model. "
+            "No smaller model or cloud service was selected.",
+            context={"model": model_size, "device": device, "free_gb": free_gb},
+        )
 
 
 def _vram_key(model_size: str) -> str:
@@ -68,7 +90,9 @@ _MIN_BATCH_SIZE = 4
 _VRAM_MARGIN_GB = 1.0
 
 
-def choose_batch_size(model_size: str, requested: int, free_gb: float | None) -> int:
+def choose_batch_size(
+    model_size: str, requested: int, free_gb: float | None, *, memory_scale: float = 1.0
+) -> int:
     """Largest batch size up to ``requested`` that fits in free VRAM; 0 means sequential.
 
     With unknown free memory the requested (tier-based) size is trusted. Too little
@@ -80,6 +104,8 @@ def choose_batch_size(model_size: str, requested: int, free_gb: float | None) ->
     if free_gb is None:
         return requested
     fixed, per_item = _BATCHED_VRAM_GB.get(_vram_key(model_size), _BATCHED_VRAM_GB["large"])
+    fixed *= memory_scale
+    per_item *= memory_scale
     fits = int((free_gb - _VRAM_MARGIN_GB - fixed) / per_item)
     batch = min(requested, fits)
     return batch if batch >= _MIN_BATCH_SIZE else 0
@@ -164,9 +190,10 @@ class LocalWhisperTranscriber:
     def __init__(
         self,
         model_size: str = "large-v3",
-        language: str | None = "en",
+        language: str | None = None,
         gpu_config: GPUConfig | None = None,
         batch_size: int | None = None,
+        compute_type: str | None = None,
     ) -> None:
         """
         Initialize local whisper transcriber.
@@ -187,10 +214,6 @@ class LocalWhisperTranscriber:
 
         self.gpu_config = gpu_config
 
-        # Validate GPU availability
-        if not gpu_config.has_gpu:
-            logger.warning("No GPU detected, will use CPU (significantly slower)")
-
         # Set GPU optimizations
         if gpu_config.has_gpu and gpu_config.enable_tensor_cores:
             set_gpu_optimizations(enable_tensor_cores=True)
@@ -206,8 +229,13 @@ class LocalWhisperTranscriber:
             logger.info(f"  FP16: {gpu_config.use_fp16}")
 
         self.requested_batch_size = batch_size
+        self.requested_compute_type = compute_type
         # Resolved when the model loads: 0 means sequential decoding.
         self.batch_size = 0
+        self.device = "cuda" if gpu_config.has_gpu else "cpu"
+        self.compute_type = compute_type or (
+            ("float16" if gpu_config.use_fp16 else "float32") if gpu_config.has_gpu else "int8"
+        )
         self.model: Any | None = None
         # The structured transcript from the most recent transcribe() call, so callers
         # (and the structured-output writers) can reuse the segments without re-parsing.
@@ -307,21 +335,53 @@ class LocalWhisperTranscriber:
 
             logger.info(f"Loading {self.model_size} model...")
 
+            device = "cuda" if self.gpu_config.has_gpu else "cpu"
+            compute_type = self.requested_compute_type or (
+                ("float16" if self.gpu_config.use_fp16 else "float32")
+                if self.gpu_config.has_gpu
+                else "int8"
+            )
+            if self.requested_compute_type is not None:
+                import ctranslate2  # type: ignore[import-untyped]
+
+                supported = ctranslate2.get_supported_compute_types(device, device_index=0)
+                if compute_type not in supported:
+                    raise TranscriptionError(
+                        f"Requested compute type {compute_type} is unsupported on {device}; "
+                        f"supported: {', '.join(sorted(supported))}. No precision fallback was selected."
+                    )
+            bytes_per_weight = (
+                1 if compute_type.startswith("int8") else 2 if compute_type == "float16" else 4
+            )
+
             if self.gpu_config.has_gpu:
-                device = "cuda"
-                compute_type = "float16" if self.gpu_config.use_fp16 else "float32"
                 num_workers = 8
                 free = warn_if_gpu_memory_contended(self.model_size)
+                check_model_memory(
+                    self.model_size,
+                    free,
+                    device="GPU",
+                    bytes_per_weight=bytes_per_weight,
+                )
                 requested = (
                     self.gpu_config.batch_size
                     if self.requested_batch_size is None
                     else self.requested_batch_size
                 )
-                self.batch_size = choose_batch_size(self.model_size, requested, free)
+                self.batch_size = choose_batch_size(
+                    self.model_size,
+                    requested,
+                    free,
+                    memory_scale=2.0 if compute_type == "float32" else 1.0,
+                )
             else:
-                device = "cpu"
-                compute_type = "int8"
                 num_workers = 4
+                import psutil  # type: ignore[import-untyped]
+
+                free_ram = psutil.virtual_memory().available / (1024**3)
+                check_model_memory(
+                    self.model_size, free_ram, device="CPU", bytes_per_weight=bytes_per_weight
+                )
 
             # Acquire GPU resource lock to prevent concurrent model loading
             gpu_manager = get_gpu_manager()
@@ -346,6 +406,11 @@ class LocalWhisperTranscriber:
                 compute_type=compute_type,
                 num_workers=num_workers,
             )
+            self.device = device
+            actual_compute_type = getattr(getattr(self.model, "model", None), "compute_type", None)
+            self.compute_type = (
+                actual_compute_type if isinstance(actual_compute_type, str) else compute_type
+            )
 
             # Register model with GPU manager
             gpu_manager._current_model = model_id
@@ -358,9 +423,11 @@ class LocalWhisperTranscriber:
                 "faster-whisper not installed. Reinstall Scribe from its source.",
                 context={"error": str(e)},
             )
-        except (RuntimeError, ValueError, OSError) as e:
+        except (RuntimeError, MemoryError, ValueError, OSError) as e:
             raise TranscriptionError(
-                f"Failed to load Whisper model: {e}",
+                f"Failed to load Whisper {self.model_size}: {e}. "
+                "Free memory or explicitly choose a faster quality profile, smaller --model, "
+                "or SCRIBE_LOCAL_BACKEND=cpu. The selected model was not downgraded.",
                 context={"model": self.model_size, "error": str(e)},
             )
 
@@ -431,13 +498,9 @@ class LocalWhisperTranscriber:
 
     def _prepare_initial_prompt(self, initial_prompt: str | None, music_mode: bool) -> str:
         """Prepare initial prompt for transcription."""
-        if not initial_prompt:
-            return "Meeting recording. High-quality transcription with proper punctuation and capitalization."
-        elif initial_prompt == "Song lyrics.":
-            return initial_prompt  # Music mode - use as-is
-        else:
-            # Custom vocabulary - combine with meeting context
-            return f"Meeting recording. High-quality transcription with proper punctuation and capitalization. Key terms: {initial_prompt}"
+        # English boilerplate can steer automatically detected non-English speech.
+        # Forward only the vocabulary/context that the caller deliberately supplied.
+        return initial_prompt or ""
 
     def _estimate_transcription_time(self, duration: float | None) -> tuple[float, float]:
         """Estimate transcription time from the detected accelerator tier."""
@@ -466,7 +529,7 @@ class LocalWhisperTranscriber:
 
         Both paths use VAD, beam search at the tier's beam width, and greedy
         temperature. The batched pipeline decodes VAD chunks in parallel on the GPU;
-        on a high-end card it is several times faster with equivalent accuracy.
+        quality differs from conditioned sequential decoding; compare on your audio.
         """
         if batch_size > 0:
             from faster_whisper import BatchedInferencePipeline
@@ -553,6 +616,7 @@ class LocalWhisperTranscriber:
         if model is None:
             raise TranscriptionError("Whisper model failed to load")
 
+        actual_batch_size = self.batch_size
         if self.batch_size > 0:
             try:
                 segments, info = self._decode(
@@ -563,6 +627,7 @@ class LocalWhisperTranscriber:
                 # sequential path needs the least memory, so retry the file with it.
                 logger.warning(f"Batched GPU transcription failed ({e}); retrying sequentially")
                 clear_gpu_cache()
+                actual_batch_size = 0
                 segments, info = self._decode(model, audio_path, initial_prompt, word_timestamps, 0)
         else:
             segments, info = self._decode(model, audio_path, initial_prompt, word_timestamps, 0)
@@ -573,6 +638,22 @@ class LocalWhisperTranscriber:
             duration=duration,
             backend="faster-whisper",
             model=self.model_size,
+            metadata={
+                "device": self.device,
+                "compute_type": self.compute_type,
+                "beam_size": self.gpu_config.beam_size,
+                "batch_size": actual_batch_size,
+                "decoding": "batched" if actual_batch_size else "conditioned sequential",
+                "initial_prompt_applied": bool(initial_prompt),
+                "language_mode": "automatic" if self.language is None else "forced",
+                "requested_language": self.language,
+                "detected_language": getattr(info, "language", None)
+                if self.language is None
+                else None,
+                "language_probability": getattr(info, "language_probability", None)
+                if self.language is None
+                else None,
+            },
         )
 
     def transcribe(
@@ -612,6 +693,11 @@ class LocalWhisperTranscriber:
 
         # Load model and prepare prompt
         self._load_model()
+        if self.device == "cpu":
+            logger.info(
+                f"CPU {self.compute_type}: a long recording may take longer than its duration. "
+                f"{local_resource_guidance(self.model_size)}"
+            )
         prompt = self._prepare_initial_prompt(initial_prompt, music_mode)
 
         # Execute transcription
@@ -664,10 +750,12 @@ class LocalWhisperTranscriber:
 
         except TranscriptionError:
             raise
-        except (RuntimeError, ValueError, OSError) as e:
+        except (RuntimeError, MemoryError, ValueError, OSError) as e:
             raise TranscriptionError(
-                f"Transcription failed: {e}",
-                context={"audio_path": str(audio_path), "error": str(e)},
+                f"Transcription with Whisper {self.model_size} failed: {e}. "
+                "Free memory or explicitly choose another local backend, quality profile or model. "
+                "No smaller model or cloud service was selected.",
+                context={"audio_path": str(audio_path), "model": self.model_size, "error": str(e)},
             )
         finally:
             if self.gpu_config.has_gpu:
@@ -844,7 +932,7 @@ def apply_diarizer_safely(
 def transcribe_with_local_whisper(
     audio_path: Path,
     model_size: str = "large-v3",
-    language: str | None = "en",
+    language: str | None = None,
     **kwargs: Any,
 ) -> Path:
     """
