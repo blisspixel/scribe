@@ -95,7 +95,10 @@ WhisperX installation. No Whisper model or transcription backend was removed.
 - Adds optional local speaker labels (token-free NVIDIA Nemotron on GPU or CPU),
   best-guess speaker names from a local or chosen cloud model, and vocabulary
   correction.
-- Generates opt-in notes, jokes, and memes with a selected local or cloud provider.
+- Generates opt-in transcript notes with local Ollama by default and cloud notes
+  only by explicit provider choice. Notes show prose and relevant sections;
+  generated claims still need source review. Jokes and memes use their selected
+  local or cloud provider. See [generated outputs](docs/CLI.md#optional-generated-outputs).
 - Provides optional speech-to-type, read-aloud, and resident voice hotkeys.
 - Searches structured transcript archives.
 

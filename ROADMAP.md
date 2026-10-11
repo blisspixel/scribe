@@ -20,6 +20,9 @@ The current product contract includes:
   instrumental outcomes.
 - Optional local speaker labels (token-free Nemotron by default) and opt-in
   best-guess speaker names from a local or explicitly chosen cloud model.
+- Optional transcript notes default to local Ollama, preserve explicit provider
+  choices, and require source review. Broader note-quality claims need measured
+  evidence across transcript genres and local models.
 - Live-validated Windows resident voice.
 - Experimental macOS and Linux resident voice pending hardware evidence.
 - Omarchy (Arch, Hyprland, Quickshell, and PipeWire) is the Linux desktop

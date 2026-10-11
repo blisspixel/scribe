@@ -109,6 +109,9 @@ def _handle_unhealthy_provider(feature: str, provider_name: str, api_key: str) -
         return None
 
     logger.warning(f"Provider {provider_name} failed health check: {status.error_message}")
+    if feature == "notes" and provider_name == "ollama":
+        logger.warning("Keeping notes local; select a cloud provider explicitly to use it.")
+        return None
     fallback = _get_fallback_provider(feature, provider_name, api_key)
     if fallback:
         logger.warning(
