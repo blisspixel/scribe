@@ -75,6 +75,10 @@ def test_get_platform_and_output_directories_cover_all_platforms(tmp_path):
         patch("scribe.utils.platform.get_home_directory", return_value=tmp_path),
         patch("scribe.utils.platform.is_windows", return_value=False),
         patch("scribe.utils.platform.is_macos", return_value=False),
+        # The delegated XDG resolver also observes the operating system. Pin
+        # that boundary and its config root when exercising Linux on macOS.
+        patch("scribe.paths.sys.platform", "linux"),
+        patch.dict(os.environ, {"XDG_CONFIG_HOME": str(tmp_path / "config")}),
     ):
         assert get_default_output_directory() == tmp_path / "Videos" / "Transcriptions"
 
