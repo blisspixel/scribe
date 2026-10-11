@@ -43,7 +43,9 @@ The `diarize` extra runs pyannote and needs an `HF_TOKEN` with the pyannote mode
 terms accepted. Labels are experimental and off by default, including when an
 extra is installed. Use `--diarize` or `--diarizer BACKEND` to opt in for a run;
 `--no-diarize` overrides an enabled setting. Ordinary local transcription uses
-Whisper, preferring `large-v3` when hardware permits.
+full Whisper large-v3 unless a model or faster profile is explicitly selected.
+The default `max` profile requires cached local acoustic review; `--quality
+accurate` selects one pass. See [setup and review limits](ACOUSTIC_REVIEW.md).
 
 ```bash
 scribe transcribe meeting.mp4 --diarize
@@ -230,6 +232,9 @@ network calls when a provider key is configured.
 | `--method auto\|local\|openai\|openrouter` | Local automatic, forced local, or an explicit cloud provider |
 | `--max-spend USD` | Per-file OpenRouter reported-cost guard; default $5, with a provider key limit required for an absolute cap |
 | `--model MODEL` | Whisper model selection |
+| `--quality max\|accurate\|balanced\|fast` | Full-model review default, full-model one pass, or explicit faster model profiles |
+| `--verification required\|best-effort\|off` | Override the profile review policy |
+| `--verification-model MODEL` | Already cached local secondary checkpoint |
 | `--language CODE` | ISO 639-1 language code |
 | `--vocab NAME_OR_FILE` | Bundled glossary or custom TXT/JSON vocabulary |
 | `--format json,vtt,srt,md` | Structured sidecars in addition to TXT |

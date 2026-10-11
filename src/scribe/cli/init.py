@@ -135,6 +135,12 @@ def run_wizard(console: Console | None = None, *, force: bool = False) -> Path:
         force: Overwrite an existing config without confirmation.
     """
     console = console or Console()
+    console.print(
+        "[dim]File default: max, full large-v3 plus required local acoustic review. "
+        "The secondary turbo checkpoint must already be cached; it never downloads silently. "
+        "Use --quality accurate for one-pass full large-v3, or set transcription quality in config. "
+        "Agreement is not proof of accuracy; listen to the source audio.[/dim]"
+    )
 
     # Defensive: non-interactive runs should not hang on Prompts/Confirms.
     # Use defaults and write a minimal usable config (or refuse unless --force + explicit).

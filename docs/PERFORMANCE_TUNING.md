@@ -24,7 +24,7 @@ For reproducible quality and timing evidence, use the process in
 
 ## Model choice
 
-The default file profile is `accurate`: full Whisper large-v3 on every hardware
+The default file profile is `max`: full Whisper large-v3 on every hardware
 tier. CPU capability, an importable accelerator package, or an out-of-memory
 error never authorizes silently selecting a smaller model or uploading audio.
 The same model can be slow on a laptop, including longer than the audio duration.
@@ -37,7 +37,8 @@ transcripts rather than assuming that model size alone predicts error rate.
 
 | File profile | Model when unpinned | faster-whisper decoding |
 | --- | --- | --- |
-| `accurate` (default) | full `large-v3` | conditioned sequential, beam 5, temperature fallback |
+| `max` (default) | full `large-v3` | bounded regional sequential plus cached local acoustic review |
+| `accurate` | full `large-v3` | conditioned sequential, beam 5, temperature fallback |
 | `balanced` | `large-v3-turbo` | automatic GPU batching; sequential on CPU |
 | `fast` | `small` | automatic GPU batching; sequential on CPU |
 
@@ -48,11 +49,17 @@ scribe transcribe sample.wav --quality fast
 scribe transcribe sample.wav --model medium
 ```
 
-`--quality` is available on `transcribe`, `url`, `batch` and `music`. Persist it as
-`quality = "accurate"` under `[transcription]` in `~/.scribe/config.toml`, or use
+`--quality` is available on `transcribe`, `url`, `batch`, `music`, `record` and `rec`. Persist it as
+`quality = "max"` under `[transcription]` in `~/.scribe/config.toml`, or use
 `SCRIBE_TRANSCRIPTION_QUALITY`. An explicit `--model`, `SCRIBE_DEFAULT_MODEL`, or
 `[transcription] model` wins over any profile. Remove a pinned model to let a
 profile select it. File profiles do not change resident voice settings.
+
+`max` adds a second decode and source-review artifacts; `accurate` explicitly
+retains the conditioned one-pass path. Cache the verifier before using `max`.
+See [acoustic review](ACOUSTIC_REVIEW.md) for setup, language windows, independent
+prompt settings, required/optional failure behavior and limits. No agreement or
+quality-profile name establishes correctness on a recording.
 
 The default precision remains CPU int8 and CUDA float16 where supported (float32
 otherwise). An explicit faster-whisper precision can be set with
@@ -101,7 +108,8 @@ The accurate profile uses conditioned sequential decoding. Automatic GPU batches
 are available through faster profiles, or an explicit `local_batch_size`. Scribe
 picks the batch size from the GPU tier and current free VRAM, uses sequential
 decoding when too little is free, and retries a failed batch sequentially with the
-same weights. Long batched chunks are split using word timings. Batched decoding
+same weights in the one-pass path. The bounded review path honors an explicit
+batch cap and reports a failure without changing it. Long batched chunks are split using word timings. Batched decoding
 has documented differences, including filler-word omissions in the existing RTX
 4090 comparison; new profile tests do not establish a WER improvement. Set an
 explicit cap in the [user config file](STORAGE.md):

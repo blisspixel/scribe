@@ -14,6 +14,8 @@ an official release artifact.
 The current product contract includes:
 
 - Local-first transcription with explicit OpenAI and OpenRouter opt-ins.
+- Full-model `max` file default with cached local acoustic review, explicit
+  one-pass `accurate`, and uncertainty/source-retention evidence.
 - Defensive OBS recording that requires positive startup evidence and preserves
   detected media on incomplete or failed sessions.
 - Structured transcript and session evidence with complete, partial, failed, and
@@ -238,7 +240,7 @@ Remaining evidence and follow-up work for 2.12.0:
 Exit criteria: speaker labels never fail a transcription, the documented install
 commands work on every claimed platform, and new model/backend promotions are
 backed by measured multilingual quality and resource evidence. Current file
-profiles express an accuracy/resource preference; hermetic policy tests alone do
+profiles and [acoustic review](docs/ACOUSTIC_REVIEW.md) express an accuracy/resource preference; hermetic policy tests alone do
 not demonstrate a WER improvement on a laptop or across languages.
 
 ## Planned release: 2.13.0 maintainability and verification

@@ -75,6 +75,10 @@ def flatten_for_settings(data: dict[str, Any]) -> dict[str, Any]:
         out["default_model"] = transcription["model"]
     if "quality" in transcription:
         out["transcription_quality"] = transcription["quality"]
+    if "verification" in transcription:
+        out["transcription_verification"] = transcription["verification"]
+    if "verification_model" in transcription:
+        out["verification_model"] = transcription["verification_model"]
     if "language" in transcription:
         out["default_language"] = transcription["language"]
     if "auto_detect_language" in transcription:

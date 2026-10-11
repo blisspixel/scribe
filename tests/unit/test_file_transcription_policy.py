@@ -38,7 +38,7 @@ def converter_boundary(monkeypatch):
 def test_accurate_file_model_survives_hardware_tiers(
     vendor, vram, tier_model, tmp_path, converter_boundary
 ):
-    config = ScribeConfig(_env_file=None)
+    config = ScribeConfig(_env_file=None, transcription_quality="accurate")
     gpu = GPUConfig(has_gpu=vendor == "nvidia", model_size=tier_model, gpu_memory_gb=vram)
     engine = Mock(last_transcript=None)
     engine.transcribe.return_value = tmp_path / "out.txt"
@@ -60,7 +60,12 @@ def test_accurate_file_model_survives_hardware_tiers(
 
 
 def test_explicit_cpu_backend_is_cpu_even_on_nvidia(tmp_path, converter_boundary):
-    config = ScribeConfig(local_backend="cpu", local_compute_type="float32", local_batch_size=8)
+    config = ScribeConfig(
+        transcription_quality="accurate",
+        local_backend="cpu",
+        local_compute_type="float32",
+        local_batch_size=8,
+    )
     gpu = GPUConfig(has_gpu=True, gpu_name="NVIDIA", use_fp16=True)
     with (
         patch.object(GPUConfig, "detect", return_value=gpu),
@@ -274,7 +279,7 @@ def test_music_prepass_reuses_decoder_and_emits_one_cpu_guidance(tmp_path, conve
         patch("scribe.core.transcriber.logger") as selector_log,
     ):
         manager.return_value.get_current_model.return_value = None
-        transcriber = Transcriber(ScribeConfig())
+        transcriber = Transcriber(ScribeConfig(transcription_quality="accurate"))
         assert transcriber.choose_method("local") == "local"
         assert transcriber.choose_method("auto") == "local"
         transcriber._transcribe_local(tmp_path / "song.wav", None, music_mode=True)
@@ -296,8 +301,8 @@ def test_music_explicit_language_bypasses_detection(tmp_path, converter_boundary
         patch("scribe.core.transcriber.LocalWhisperTranscriber", return_value=engine),
         patch.object(Transcriber, "_detect_language_for_music") as prepass,
     ):
-        Transcriber(ScribeConfig(default_language="ja"))._transcribe_faster_whisper(
-            tmp_path / "song.wav", "large-v3", "ja", None, music_mode=True
-        )
+        Transcriber(
+            ScribeConfig(transcription_quality="accurate", default_language="ja")
+        )._transcribe_faster_whisper(tmp_path / "song.wav", "large-v3", "ja", None, music_mode=True)
     prepass.assert_not_called()
     engine.transcribe.assert_called_once()

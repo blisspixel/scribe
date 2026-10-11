@@ -18,6 +18,13 @@ from scribe.models.config import ScribeConfig
 from scribe.models.session import TranscriptionSession
 
 
+@pytest.fixture
+def temp_config(temp_config):
+    """These legacy orchestration cases exercise the explicit one-pass workflow."""
+    temp_config.transcription_quality = "accurate"
+    return temp_config
+
+
 class TestTranscriberInitialization:
     """Test Transcriber initialization and setup."""
 

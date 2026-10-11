@@ -3,7 +3,8 @@
 from typing import Literal
 
 TranscriptionMethod = Literal["auto", "local", "openai", "openrouter"]
-FileQuality = Literal["accurate", "balanced", "fast"]
+FileQuality = Literal["max", "accurate", "balanced", "fast"]
+VerificationPolicy = Literal["required", "best-effort", "off"]
 LocalComputeType = Literal["float32", "float16", "int8", "int8_float32", "int8_float16"]
 ModelSize = Literal[
     "tiny",

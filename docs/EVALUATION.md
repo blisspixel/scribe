@@ -60,3 +60,21 @@ The generated `scribe.evaluation/v1` report records the manifest hash, source
 revision, environment, normalization policy, aggregate metrics, and every
 per-sample result. The repository intentionally publishes no numeric accuracy
 or speed claim until the corresponding corpus and report are available.
+
+## Acoustic review evidence
+
+The `max` profile adds comparison evidence, not a reference transcript. Evaluate
+primary and secondary WER/CER separately against frozen licensed references.
+Record language-window coverage, switches, names/numbers/negation, source-time
+alignment, silence/gap behavior, related-checkpoint agreement errors, false
+review alarms and reference-error review recall. Report both flagged and missed
+errors; timestamp bucket overlap alone does not demonstrate acoustic detection.
+Preserve raw primary output before glossary normalization. Synthetic joins test
+boundary plumbing and cannot represent natural code-switching or meeting speech.
+
+Use exact cached checkpoint paths, offline model flags and socket/DNS guards for
+local-only evaluations. Record model hashes, original audio hashes, source tree,
+actual precision, separate model loads/unloads, measured time and memory sampling
+method. Tiny read-speech smoke tests cannot establish default superiority,
+independent-checkpoint correctness, platform performance or an accuracy rate.
+See [acoustic review limits](ACOUSTIC_REVIEW.md).

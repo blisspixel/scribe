@@ -35,9 +35,15 @@ from scribe.cli.dependencies import (
 )
 from scribe.cli.errors import exit_on_cli_error
 from scribe.cli.notes_progress import notes_progress
+from scribe.cli.transcription_review import (
+    apply_review_options,
+    review_errors,
+    review_requires_source,
+    show_review_summary,
+)
 from scribe.cli.voice_session import voice_app
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
-from scribe.models.options import FileQuality, ModelSize, TranscriptionMethod
+from scribe.models.options import FileQuality, ModelSize, TranscriptionMethod, VerificationPolicy
 from scribe.utils.branding import brand_header_markup
 from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
 from scribe.utils.safe_write import atomic_write
@@ -174,6 +180,7 @@ def _write_structured_outputs(
     try:
         from scribe.models.transcript import Transcript
 
+        show_review_summary(console, transcriber)
         transcript = transcriber.last_transcript
         if not isinstance(transcript, Transcript):
             return
@@ -329,6 +336,8 @@ def _persist_music_session(
     if lyrics_path is not None and session.transcript_file != lyrics_path:
         session.add_file(lyrics_path, "transcript")
 
+    for issue in review_errors(session):
+        _add_music_issue(result, issue)
     status = result.get("status", "failed")
     outcome_by_status: dict[str, SessionOutcome] = {
         "success": "success",
@@ -567,7 +576,17 @@ def transcribe_command(
     quality: FileQuality | None = typer.Option(
         None,
         "--quality",
-        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+        help="File profile: max=full large-v3 plus local review (default), accurate=one pass, balanced=turbo, fast=small; explicit --model wins",
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None,
+        "--verification",
+        help="Local acoustic review: required, best-effort, or off; overrides quality",
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None,
+        "--verification-model",
+        help="Already cached local secondary checkpoint; never downloads implicitly",
     ),
     language: str | None = typer.Option(
         None,
@@ -657,6 +676,7 @@ def transcribe_command(
             config.default_model = model
         if quality is not None:
             config.transcription_quality = quality
+        apply_review_options(config, verification, verification_model)
         if language:
             # Validate language code
             from scribe.exceptions import ValidationError
@@ -780,6 +800,9 @@ def transcribe_command(
         # Determine transcription method (local GPU vs OpenAI API)
         transcriber = Transcriber(config)
         workspace.bind(transcriber)
+        transcriber.review_phase_callback = lambda phase: unified_progress.update_phase(
+            "transcribing", 0.0, phase
+        )
         # Honor a configured default (SCRIBE_DEFAULT_METHOD / config.toml) when the
         # caller did not pass --method. An explicit --method always wins.
         effective_method = config.default_method if method == "auto" else method
@@ -919,7 +942,7 @@ def transcribe_command(
 
         # Phase 3: Finishing (85-100%)
         unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
-        artifact_errors: list[str] = []
+        artifact_errors: list[str] = review_errors(session)
 
         # Generate DOCX
         if not no_docx:
@@ -1125,7 +1148,17 @@ def url_command(
     quality: FileQuality | None = typer.Option(
         None,
         "--quality",
-        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+        help="File profile: max=full large-v3 plus local review (default), accurate=one pass, balanced=turbo, fast=small; explicit --model wins",
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None,
+        "--verification",
+        help="Local acoustic review: required, best-effort, or off; overrides quality",
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None,
+        "--verification-model",
+        help="Already cached local secondary checkpoint; never downloads implicitly",
     ),
     language: str | None = typer.Option(
         None,
@@ -1162,7 +1195,9 @@ def url_command(
         help="Glossary name (e.g. finance, tech) or a .txt/.json file for domain terms",
     ),
     keep_download: bool = typer.Option(
-        False, "--keep-download", help="Keep the downloaded file after transcription"
+        False,
+        "--keep-download",
+        help="Keep the downloaded file; acoustic disagreements or incomplete review also retain it",
     ),
     cookies: str | None = typer.Option(
         None,
@@ -1236,6 +1271,7 @@ def url_command(
             config.default_model = model
         if quality is not None:
             config.transcription_quality = quality
+        apply_review_options(config, verification, verification_model)
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.exceptions import ValidationError
@@ -1406,6 +1442,9 @@ def url_command(
         # Determine transcription method
         transcriber = Transcriber(config)
         workspace.bind(transcriber)
+        transcriber.review_phase_callback = lambda phase: unified_progress.update_phase(
+            "transcribing", 0.0, phase
+        )
         effective_method = config.default_method if method == "auto" else method
         chosen_method = transcriber.choose_method(effective_method)
 
@@ -1515,7 +1554,7 @@ def url_command(
         # Phase 3: Finishing (85-100%)
         unified_progress.update_phase("finishing", 0.0, "Creating DOCX")
 
-        artifact_errors: list[str] = []
+        artifact_errors: list[str] = review_errors(session)
         if not no_docx:
             try:
                 docx_path = txt_to_docx(transcript_path)
@@ -1627,6 +1666,10 @@ def url_command(
                 console.print(f"  - {escape(reason)}")
         else:
             console.print("[bold green]Transcription Complete![/bold green]")
+        if review_requires_source(session):
+            console.print(
+                "[yellow]Source audio retained for acoustic review; compare the timed report with the recording.[/yellow]"
+            )
         console.print(f"[dim]Source: {validated_url}[/dim]")
         console.print()
         console.print("[bold cyan]Output Files:[/bold cyan]")
@@ -1685,7 +1728,7 @@ def url_command(
         from scribe.cli.audio_workspace import preserve_download_outputs
 
         recoverable_download_output = preserve_download_outputs(session, downloaded_file)
-        if archive_pending or recoverable_download_output:
+        if archive_pending or recoverable_download_output or review_requires_source(session):
             console.print(
                 "[yellow]Downloaded media and recoverable transcription outputs were retained. "
                 "See the session summary for their paths.[/yellow]"
@@ -1758,6 +1801,16 @@ def record(
         callback=_validate_openrouter_max_spend,
         help=_OPENROUTER_MAX_SPEND_HELP,
     ),
+    model: ModelSize | None = typer.Option(None, "--model", help="Primary Whisper model override"),
+    quality: FileQuality | None = typer.Option(
+        None, "--quality", help="File profile: max, accurate (one pass), balanced, fast"
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None, "--verification", help="Local acoustic review: required, best-effort, off"
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None, "--verification-model", help="Already cached local secondary checkpoint"
+    ),
     notes: bool | None = typer.Option(
         None,
         "--notes/--no-notes",
@@ -1811,6 +1864,12 @@ def record(
     try:
         # Load configuration
         config = _load_transcription_config(openrouter_max_spend)
+        if model is not None:
+            config.default_model = model
+        if quality is not None:
+            config.transcription_quality = quality
+        apply_review_options(config, verification, verification_model)
+
         session_output_dir = config.output_folder
         workspace.keep = config.keep_intermediate_files
 
@@ -1889,11 +1948,14 @@ def record(
         # progress bars for each step which provides more detail during the workflow
         if auto_transcribe:
             console.print("[cyan]Starting automatic transcription...[/cyan]\n")
-            artifact_errors: list[str] = []
+            artifact_errors: list[str] = review_errors(session)
 
             # Determine method and convert
             transcriber = Transcriber(config)
             workspace.bind(transcriber)
+            transcriber.review_phase_callback = lambda phase: console.print(
+                f"[dim]{escape(phase)}[/dim]"
+            )
             effective_method = config.default_method if method == "auto" else method
             chosen_method = transcriber.choose_method(effective_method)
 
@@ -1993,6 +2055,7 @@ def record(
 
             # Structured sidecars (json/vtt/srt/md) so `scribe query` can find these too
             _write_structured_outputs(transcriber, transcript_path, config, None, session)
+            artifact_errors.extend(review_errors(session))
 
             # Generate DOCX
             try:
@@ -2197,7 +2260,17 @@ def batch_transcribe(
     quality: FileQuality | None = typer.Option(
         None,
         "--quality",
-        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+        help="File profile: max=full large-v3 plus local review (default), accurate=one pass, balanced=turbo, fast=small; explicit --model wins",
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None,
+        "--verification",
+        help="Local acoustic review: required, best-effort, or off; overrides quality",
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None,
+        "--verification-model",
+        help="Already cached local secondary checkpoint; never downloads implicitly",
     ),
     language: str | None = typer.Option(
         None,
@@ -2281,6 +2354,7 @@ def batch_transcribe(
             config.default_model = model
         if quality is not None:
             config.transcription_quality = quality
+        apply_review_options(config, verification, verification_model)
         _apply_diarization_options(config, diarize, diarizer, name_speakers)
         if language:
             from scribe.utils.validation import validate_language_code
@@ -2368,11 +2442,14 @@ def batch_transcribe(
                 session = TranscriptionSession.create(meeting_name)
                 session.log_file = get_current_log_file()
                 session.add_file(audio_path, "source")
-                artifact_errors: list[str] = []
+                artifact_errors: list[str] = review_errors(session)
 
                 # Transcribe
                 transcriber = Transcriber(config)
                 workspace.bind(transcriber)
+                transcriber.review_phase_callback = lambda phase: console.print(
+                    f"[dim]{escape(phase)}[/dim]"
+                )
                 effective_method = config.default_method if method == "auto" else method
                 chosen_method = transcriber.choose_method(effective_method)
 
@@ -2426,6 +2503,7 @@ def batch_transcribe(
                 _write_structured_outputs(
                     transcriber, transcript_path, config, output_format, session
                 )
+                artifact_errors.extend(review_errors(session))
 
                 # Generate DOCX
                 if not no_docx:
@@ -2592,7 +2670,17 @@ def music_transcribe(
     quality: FileQuality | None = typer.Option(
         None,
         "--quality",
-        help="File profile: accurate=full large-v3, balanced=turbo, fast=small; explicit --model wins",
+        help="File profile: max=full large-v3 plus local review (default), accurate=one pass, balanced=turbo, fast=small; explicit --model wins",
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None,
+        "--verification",
+        help="Local acoustic review: required, best-effort, or off; overrides quality",
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None,
+        "--verification-model",
+        help="Already cached local secondary checkpoint; never downloads implicitly",
     ),
     language: str | None = typer.Option(
         None,
@@ -2641,6 +2729,7 @@ def music_transcribe(
             config.default_model = model
         if quality is not None:
             config.transcription_quality = quality
+        apply_review_options(config, verification, verification_model)
         if language:
             from scribe.utils.validation import validate_language_code
 
@@ -3204,6 +3293,16 @@ def rec_shortcut(
     method: TranscriptionMethod = typer.Option(
         "auto", "--method", "-m", help=_TRANSCRIPTION_METHOD_HELP
     ),
+    model: ModelSize | None = typer.Option(None, "--model", help="Primary Whisper model override"),
+    quality: FileQuality | None = typer.Option(
+        None, "--quality", help="File profile: max, accurate (one pass), balanced, fast"
+    ),
+    verification: VerificationPolicy | None = typer.Option(
+        None, "--verification", help="Local acoustic review: required, best-effort, off"
+    ),
+    verification_model: ModelSize | None = typer.Option(
+        None, "--verification-model", help="Already cached local secondary checkpoint"
+    ),
     openrouter_max_spend: float | None = typer.Option(
         None,
         "--max-spend",
@@ -3235,6 +3334,10 @@ def rec_shortcut(
         check=check,
         auto_transcribe=True,
         method=method,
+        model=model,
+        quality=quality,
+        verification=verification,
+        verification_model=verification_model,
         openrouter_max_spend=openrouter_max_spend,
         # None = respect the user's config defaults for the paid AI extras
         # (off unless they opted in), rather than forcing them on.

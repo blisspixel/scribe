@@ -1,8 +1,9 @@
 """Shared file-transcription policy, independent of hardware and voice profiles."""
 
-from scribe.models.options import FileQuality, ModelSize
+from scribe.models.options import FileQuality, ModelSize, VerificationPolicy
 
 _PROFILE_MODELS: dict[FileQuality, ModelSize] = {
+    "max": "large-v3",
     "accurate": "large-v3",
     "balanced": "large-v3-turbo",
     "fast": "small",
@@ -12,7 +13,7 @@ _PROFILE_MODELS: dict[FileQuality, ModelSize] = {
 def resolve_local_model(
     configured_model: ModelSize,
     configured_fields: set[str],
-    quality: FileQuality = "accurate",
+    quality: FileQuality = "max",
 ) -> tuple[ModelSize, bool]:
     """An explicit model wins; otherwise use the requested file quality profile.
 
@@ -29,7 +30,21 @@ def resolve_local_batch_size(quality: FileQuality, configured: int | None) -> in
     """Prefer conditioned sequential decoding for accuracy unless explicitly set."""
     if configured is not None:
         return configured
-    return 0 if quality == "accurate" else None
+    return 0 if quality in ("max", "accurate") else None
+
+
+def resolve_verification(
+    quality: FileQuality, configured: VerificationPolicy | None
+) -> VerificationPolicy:
+    """An explicit verification policy wins over the file profile."""
+    return configured if configured is not None else "required" if quality == "max" else "off"
+
+
+def resolve_verifier_model(primary: str, configured: ModelSize | None) -> ModelSize:
+    """Choose a distinct checkpoint by default, preserving explicit choices."""
+    if configured is not None:
+        return configured
+    return "large-v3" if primary in ("turbo", "large-v3-turbo") else "large-v3-turbo"
 
 
 def resolve_local_language(
