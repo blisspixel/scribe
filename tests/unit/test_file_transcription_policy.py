@@ -270,7 +270,7 @@ def test_music_prepass_reuses_decoder_and_emits_one_cpu_guidance(tmp_path):
     assert model.transcribe.call_args_list[1].kwargs["language"] == "es"
     assert transcriber.last_transcript.metadata["language_mode"] == "automatic (music pre-pass)"
     assert transcriber.last_transcript.metadata["language_probability"] == 0.91
-    guidance = [call for call in cpu_log.info.call_args_list if "CPU int8:" in str(call)]
+    guidance = [call for call in cpu_log.warning.call_args_list if "CPU int8:" in str(call)]
     assert len(guidance) == 1
     selector_log.warning.assert_not_called()
 

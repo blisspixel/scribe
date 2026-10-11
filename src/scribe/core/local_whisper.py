@@ -694,7 +694,7 @@ class LocalWhisperTranscriber:
         # Load model and prepare prompt
         self._load_model()
         if self.device == "cpu":
-            logger.info(
+            logger.warning(
                 f"CPU {self.compute_type}: a long recording may take longer than its duration. "
                 f"{local_resource_guidance(self.model_size)}"
             )
