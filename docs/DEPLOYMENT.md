@@ -126,7 +126,8 @@ bash packaging/linux/omarchy/uninstall.sh
 
 `install.sh` installs `scribe[tray]` with Python 3.12 and runs `scribe voice
 omarchy-install`. `uninstall.sh` runs `scribe voice omarchy-remove` and
-`uv tool uninstall scribe`. It leaves `~/.scribe` in place. Upgrade by running
+`uv tool uninstall scribe`. It preserves XDG Scribe directories and legacy `~/.scribe`; see
+[storage paths](STORAGE.md). Upgrade by running
 `install.sh` again. These scripts are not a PyPI, AUR, or Flathub submission,
 and they are not a tested Omarchy installation.
 
@@ -213,7 +214,7 @@ Configuration layers, highest precedence first:
 
 1. CLI flags.
 2. Environment variables and `.env`.
-3. `~/.scribe/config.toml`.
+3. The [user config file](STORAGE.md).
 
 Common environment values:
 
@@ -320,8 +321,9 @@ Do not expose a containerized Scribe command as a public network service without
 ## Backup And Recovery
 
 Back up:
-- `~/.scribe/config.toml`.
-- Custom vocabulary files under `~/.scribe/vocab/`.
+- The [user config file](STORAGE.md).
+- Custom vocabulary in the [user data directory](STORAGE.md), plus any legacy
+  `~/.scribe/vocab/` files.
 - User-selected output folders.
 - Any operational scripts you maintain outside the repo.
 

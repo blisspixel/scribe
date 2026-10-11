@@ -236,7 +236,7 @@ logger = get_logger(__name__)
 MAX_GLOSSARY_BYTES = 5 * 1024 * 1024
 
 # A named glossary must be a single safe token (no separators, no "..") so a name
-# can never resolve outside ~/.scribe/vocab or the bundled preset directory.
+# can never resolve outside the user vocabulary or bundled preset directories.
 _SAFE_GLOSSARY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -494,7 +494,7 @@ class CustomVocabulary:
         """Resolve a glossary by file path or by name.
 
         A value that exists as a file (or looks like a path) is loaded directly.
-        Otherwise it is treated as a named glossary: first ``~/.scribe/vocab/<name>``
+        Otherwise it is treated as a named glossary: first the platform user vocabulary
         (``.txt`` then ``.json``), then a bundled preset shipped with Scribe.
         """
         candidate = Path(name_or_path).expanduser()
@@ -514,14 +514,16 @@ class CustomVocabulary:
                 "'-', '_', or pass a .txt/.json file path."
             )
 
-        for root in (Path.home() / ".scribe" / "vocab", _bundled_glossary_dir()):
+        from scribe.paths import vocabulary_dirs
+
+        for root in (*vocabulary_dirs(), _bundled_glossary_dir()):
             for ext in (".txt", ".json"):
                 path = root / f"{name_or_path}{ext}"
                 if path.exists():
                     return cls.from_file(path)
 
         raise FileNotFoundError(
-            f"No glossary named '{name_or_path}' found (looked in ~/.scribe/vocab and "
+            f"No glossary named '{name_or_path}' found (looked in user vocabulary directories and "
             f"the bundled presets). Pass a .txt/.json path, or run "
             f"`scribe vocab` to see available glossaries."
         )

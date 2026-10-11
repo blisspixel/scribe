@@ -371,13 +371,15 @@ def _install_macos(target: str, args: list[str], desktop: bool) -> list[Path]:
 
 
 def _linux_applications_dir() -> Path:
-    data_home = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(data_home) / "applications"
+    from scribe.paths import data_home
+
+    return data_home() / "applications"
 
 
 def _linux_icon_path() -> Path:
-    data_home = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(data_home) / "icons" / "scribe.png"
+    from scribe.paths import data_home
+
+    return data_home() / "icons" / "scribe.png"
 
 
 def _linux_desktop_entry(target: str, args: list[str], icon: Path) -> str:
@@ -405,7 +407,9 @@ def _create_linux_record_wrapper(fallback: list[str] | None = None) -> Path:
     Prefers 'scribe' on PATH at runtime. Embeds creation-time fallback when needed.
     All paths properly quoted.
     """
-    wrapper = Path.home() / ".scribe" / f"{LAUNCHER_NAME}.sh"
+    from scribe.paths import data_dir
+
+    wrapper = data_dir() / f"{LAUNCHER_NAME}.sh"
     wrapper.parent.mkdir(parents=True, exist_ok=True)
 
     if fallback:
@@ -546,7 +550,10 @@ def _candidate_launcher_paths() -> list[Path]:
             home / "Desktop" / f"{LAUNCHER_NAME}.command",  # legacy
             home / ".scribe" / f"{LAUNCHER_NAME}.command",  # staged adaptive
         ]
+    from scribe.paths import data_dir
+
     return [
+        data_dir() / f"{LAUNCHER_NAME}.sh",
         _linux_applications_dir() / LINUX_DESKTOP_ID,
         home / "Desktop" / LINUX_DESKTOP_ID,
         home / ".scribe" / f"{LAUNCHER_NAME}.sh",  # adaptive wrapper

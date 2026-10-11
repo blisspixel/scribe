@@ -116,6 +116,14 @@ def _service(**kwargs: object) -> VoiceTrayService:
     return service
 
 
+@pytest.fixture(autouse=True)
+def isolated_xdg(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+
 def test_explicit_insert_stores_without_injection() -> None:
     service = _service(explicit_insert=True)
     injected: list[str] = []
@@ -590,16 +598,20 @@ def test_transact_starts_the_owner_once(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     def spawn() -> None:
         starts.append("once")
-        scribe_dir = tmp_path / ".scribe"
+        from scribe.paths import runtime_dir
+
+        scribe_dir = runtime_dir(tmp_path)
         scribe_dir.mkdir(parents=True, exist_ok=True)
         (scribe_dir / "voice-control.sock").write_text("", encoding="utf-8")
-        (scribe_dir / "voice-control.token").write_text("secret\n", encoding="utf-8")
+        write_token(scribe_dir / "voice-control.token", "secret")
 
     monkeypatch.setattr("scribe.voice.control.send_command", send)
     payload = transact("PING", home=tmp_path, spawn=spawn, timeout=1.0)
     assert payload["validated"] is False
     assert starts == ["once"]
     with pytest.raises(ControlError):
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "another-runtime"))
+        (tmp_path / "another-runtime").mkdir(mode=0o700)
         transact("PING", home=tmp_path / "missing", spawn=None, timeout=0.1)
 
 
@@ -656,6 +668,8 @@ def test_microphone_announcement_writes_exact_status(
 
     monkeypatch.setattr(voice_session.subprocess, "run", run)
     voice_session._announce_microphone(True)
-    status = (tmp_path / ".scribe" / "voice-status.txt").read_text(encoding="utf-8")
+    from scribe.paths import state_dir
+
+    status = (state_dir() / "voice-status.txt").read_text(encoding="utf-8")
     assert status == "MICROPHONE ON\n"
     assert calls[0][:3] == ["omarchy-notification-send", "-u", "critical"]

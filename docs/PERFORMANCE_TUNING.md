@@ -104,7 +104,7 @@ decoding when too little is free, and retries a failed batch sequentially with t
 same weights. Long batched chunks are split using word timings. Batched decoding
 has documented differences, including filler-word omissions in the existing RTX
 4090 comparison; new profile tests do not establish a WER improvement. Set an
-explicit cap in `~/.scribe/config.toml`:
+explicit cap in the [user config file](STORAGE.md):
 
 ```toml
 [transcription]

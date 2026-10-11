@@ -101,7 +101,7 @@ derived artifact fails.
 
 1. Explicit command or Python argument.
 2. Feature-specific environment setting.
-3. `~/.scribe/config.toml` provider setting.
+3. The [user config file](STORAGE.md) provider setting.
 4. Built-in feature default.
 
 Provider API keys are resolved only for the selected provider. Local-only mode
@@ -126,7 +126,7 @@ components. They are not bundled into the Python wheel.
 ## State and configuration
 
 Configuration sources are applied in documented precedence order by the config
-models and `~/.scribe/config.toml`. Secrets belong in environment variables or a
+models and the [user config file](STORAGE.md). Secrets belong in environment variables or a
 local untracked `.env`, never in committed configuration.
 
 Persistent state is limited to user-selected outputs and Scribe's local config,

@@ -14,10 +14,11 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 from scribe.exceptions import ValidationError
 from scribe.models.options import FileQuality, LocalComputeType, ModelSize, TranscriptionMethod
+from scribe.paths import default_log_dir
 
 
 class _ScribeUserConfigSource(PydanticBaseSettingsSource):
-    """Pydantic-settings source that reads ~/.scribe/config.toml."""
+    """Pydantic-settings source that reads the platform user config file."""
 
     def __init__(self, settings_cls: type[BaseSettings]) -> None:
         super().__init__(settings_cls)
@@ -68,6 +69,18 @@ def _find_env_file() -> str | None:
     return None
 
 
+def _default_output_folder() -> Path:
+    import sys
+
+    # Keep existing non-Linux settings defaults; the setup wizard already has
+    # its own platform-specific destination. This change is Linux-only.
+    if sys.platform != "linux":
+        return Path.home() / "Videos" / "Transcriptions"
+    from scribe.utils.platform import get_default_output_directory
+
+    return get_default_output_directory()
+
+
 class ScribeConfig(BaseSettings):
     """
     System configuration with validation and environment variable loading.
@@ -101,14 +114,11 @@ class ScribeConfig(BaseSettings):
 
     # Paths
     output_folder: Path = Field(
-        default=Path.home() / "Videos" / "Transcriptions",
+        default_factory=_default_output_folder,
         description="Output directory for transcriptions and recordings",
     )
 
-    log_folder: Path = Field(
-        default_factory=lambda: Path.home() / ".scribe" / "logs",
-        description="Directory for log files",
-    )
+    log_folder: Path = Field(default_factory=default_log_dir, description="Directory for log files")
 
     # Audio settings
     expected_audio_output: str | None = Field(
@@ -334,7 +344,7 @@ class ScribeConfig(BaseSettings):
         description=(
             "Enable automatic meeting notes generation. Off by default because it "
             "makes several paid text-API calls per transcript. Enable automatically "
-            "via SCRIBE_ENABLE_NOTES=true, ~/.scribe/config.toml, or scribe init; or "
+            "via SCRIBE_ENABLE_NOTES=true, the user config file, or scribe init; or "
             "generate on demand with `scribe notes <transcript>`."
         ),
     )
@@ -344,7 +354,7 @@ class ScribeConfig(BaseSettings):
         description=(
             "Enable automatic joke generation. Off by default because it makes paid "
             "text-API calls per transcript. Enable automatically via "
-            "SCRIBE_ENABLE_JOKE=true, ~/.scribe/config.toml, or scribe init; or "
+            "SCRIBE_ENABLE_JOKE=true, the user config file, or scribe init; or "
             "generate on demand with `scribe joke <transcript>`."
         ),
     )
@@ -355,7 +365,7 @@ class ScribeConfig(BaseSettings):
             "Enable automatic meme generation. Off by default because it calls a "
             "paid image-generation API (e.g. xAI Grok Imagine, OpenAI gpt-image-2) "
             "with a multi-attempt QA loop. Enable automatically via "
-            "SCRIBE_ENABLE_MEME=true, ~/.scribe/config.toml, or scribe init; or "
+            "SCRIBE_ENABLE_MEME=true, the user config file, or scribe init; or "
             "generate on demand with `scribe meme <transcript>`."
         ),
     )
@@ -618,10 +628,10 @@ class ScribeConfig(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """
-        Inject ~/.scribe/config.toml between dotenv and file_secret sources.
+        Inject the user config file between dotenv and file_secret sources.
 
         Precedence (highest to lowest): init kwargs > env vars > .env file >
-        ~/.scribe/config.toml > built-in defaults. Lets the wizard persist
+        the user config file > built-in defaults. Lets the wizard persist
         preferences while keeping env vars and CLI flags as overrides.
         """
         return (

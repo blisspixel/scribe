@@ -52,14 +52,16 @@ class VoiceControl(Protocol):
 
 def control_socket_path(home: Path | None = None) -> Path:
     """Return the per-user control socket shared by voice clients."""
-    base = Path.home() if home is None else home
-    return base / ".scribe" / SOCKET_NAME
+    from scribe.paths import runtime_dir
+
+    return runtime_dir(home) / SOCKET_NAME
 
 
 def control_token_path(home: Path | None = None) -> Path:
     """Return the per-user token file that authorizes one control command."""
-    base = Path.home() if home is None else home
-    return base / ".scribe" / TOKEN_NAME
+    from scribe.paths import runtime_dir
+
+    return runtime_dir(home) / TOKEN_NAME
 
 
 def restrict_private(path: Path) -> None:
@@ -195,6 +197,9 @@ class ControlServer:
             raise ControlError("this Python build has no Unix-domain sockets")
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         restrict_private(self.socket_path.parent)
+        from scribe.paths import validate_runtime_file
+
+        validate_runtime_file(self.socket_path, socket_file=True)
         if self.socket_path.exists() or self.socket_path.is_socket():
             self.socket_path.unlink()
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -223,6 +228,9 @@ class ControlServer:
             with suppress(OSError):
                 server.close()
         with suppress(OSError):
+            from scribe.paths import validate_runtime_file
+
+            validate_runtime_file(self.socket_path, socket_file=True)
             if self.socket_path.exists() or self.socket_path.is_socket():
                 self.socket_path.unlink()
 
@@ -273,6 +281,9 @@ def send_command(
     """Send one command and return the decoded response object."""
     if not hasattr(socket, "AF_UNIX"):
         raise ControlError("this Python build has no Unix-domain sockets")
+    from scribe.paths import validate_runtime_file
+
+    validate_runtime_file(socket_path, socket_file=True)
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     client.settimeout(timeout)
     try:
@@ -310,6 +321,9 @@ def transact(
     last_error = "resident voice is not running"
     while time.monotonic() < deadline:
         if socket_path.exists() and token_path.is_file():
+            from scribe.paths import validate_runtime_file
+
+            validate_runtime_file(token_path)
             token = token_path.read_text(encoding="utf-8").strip()
             try:
                 return send_command(socket_path, token, command, timeout=min(2.0, timeout))
@@ -328,7 +342,19 @@ def write_token(path: Path, token: str) -> None:
     """Write the control token so only the current user can read it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     restrict_private(path.parent)
-    path.write_text(token + "\n", encoding="utf-8")
+    from scribe.paths import validate_runtime_file
+
+    validate_runtime_file(path)
+    import sys
+
+    if sys.platform == "linux":
+        descriptor = os.open(
+            path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(token + "\n")
+    else:
+        path.write_text(token + "\n", encoding="utf-8")
     restrict_private(path)
 
 

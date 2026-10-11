@@ -34,9 +34,9 @@ def obs_config_dir() -> Path | None:
     if platform == "macos":
         return Path.home() / "Library" / "Application Support" / "obs-studio"
 
-    xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    config_home = Path(xdg) if xdg else Path.home() / ".config"
-    return config_home / "obs-studio"
+    from scribe.paths import config_home
+
+    return config_home() / "obs-studio"
 
 
 def obs_websocket_config_path() -> Path | None:

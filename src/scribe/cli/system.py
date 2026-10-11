@@ -239,13 +239,16 @@ def show_info(
         f"[/{ScribeTheme.TEXT_MUTED}]"
     )
 
-    from scribe.config_file import CONFIG_PATH
+    from scribe.config_file import CONFIG_PATH, config_read_path
 
-    cfg_state = "present" if CONFIG_PATH.exists() else "defaults"
+    active_config = config_read_path()
+    cfg_state = "present" if active_config.exists() else "defaults"
+    if active_config != CONFIG_PATH:
+        cfg_state += f"; legacy, new saves use {CONFIG_PATH}"
     console.print(
         f"  [{ScribeTheme.TEXT_PRIMARY}]file[/{ScribeTheme.TEXT_PRIMARY}]      "
         f"[{ScribeTheme.TEXT_MUTED}]"
-        f"{escape(str(CONFIG_PATH))} ({cfg_state})[/{ScribeTheme.TEXT_MUTED}]"
+        f"{escape(str(active_config))} ({escape(cfg_state)})[/{ScribeTheme.TEXT_MUTED}]"
     )
     features = (
         f"notes:{'on' if config.enable_notes else 'off'} "
@@ -365,6 +368,20 @@ def run_doctor(console: Console, version: str, live: bool, logger: Logger) -> No
         config = ScribeConfig()
     except Exception:
         config = None
+    from scribe.config_file import CONFIG_PATH, config_read_path
+
+    try:
+        active_config = config_read_path()
+    except OSError as error:
+        console.print(f"[yellow]Could not inspect the config path: {escape(str(error))}[/yellow]")
+    else:
+        if active_config != CONFIG_PATH:
+            console.print(
+                f"[dim]Using legacy config: {escape(str(active_config))}. "
+                f"New settings are saved to {escape(str(CONFIG_PATH))}; "
+                "the legacy file is kept.[/dim]"
+            )
+            console.print()
     diagnostics = SystemDiagnostics(config=config)
     with console.status(
         f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",

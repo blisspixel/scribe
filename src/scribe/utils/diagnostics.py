@@ -519,7 +519,7 @@ class SystemDiagnostics:
                     "`set SCRIBE_OBS_PASSWORD=<password>` or PowerShell "
                     "`$env:SCRIBE_OBS_PASSWORD='<password>'`. On a Linux shell, "
                     "`export SCRIBE_OBS_PASSWORD=<password>`. Persistent config: "
-                    "add [obs].password to ~/.scribe/config.toml."
+                    "add [obs].password to your Scribe config file."
                 ),
             )
         elif obs_running and not websocket_listening:

@@ -781,7 +781,7 @@ class OBSRecorder:
         return (
             f"{prefix}In OBS, open Tools > WebSocket Server Settings > Show Connect Info, "
             "copy the Server Password, then run `scribe init --force` or update "
-            "[obs].password in ~/.scribe/config.toml."
+            "[obs].password in your Scribe config file."
         )
 
     @staticmethod
@@ -869,9 +869,9 @@ class OBSRecorder:
             return Path(appdata) / "obs-studio" if appdata else None
         if is_macos():
             return Path.home() / "Library" / "Application Support" / "obs-studio"
-        xdg = os.environ.get("XDG_CONFIG_HOME", "")
-        config_home = Path(xdg) if xdg else Path.home() / ".config"
-        return config_home / "obs-studio"
+        from scribe.paths import config_home
+
+        return config_home() / "obs-studio"
 
     def _clean_obs_crash_sentinel(self) -> None:
         """Remove OBS crash/unclean-shutdown markers.

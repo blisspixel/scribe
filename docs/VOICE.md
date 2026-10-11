@@ -24,7 +24,7 @@ For a non-project Python environment, install `scribe[tray]` and optionally
 `scribe[kokoro]` using that environment's package installer.
 
 `tray --setup` downloads the selected dictation model, prepares read-aloud assets,
-and writes the resulting settings to `~/.scribe/config.toml`. `tray --check` is
+and writes the resulting settings to the [user config file](STORAGE.md). `tray --check` is
 read-only and reports dependencies, backend selection, platform advisories,
 startup state, resident ownership, and the local diagnostic log path.
 
@@ -144,7 +144,8 @@ does not load a second model. Cloud transcription is not a command on this
 path. The microphone stays off until `scribe voice dictate` or Super+Alt+D.
 Recording state is visible in three places: a red `MICROPHONE ON` banner in
 `scribe voice overlay`, the exact text `MICROPHONE ON` in
-`~/.scribe/voice-status.txt`, and a critical notification. Processing, reading,
+`$XDG_STATE_HOME/scribe/voice-status.txt` (default
+`~/.local/state/scribe/voice-status.txt`), and a critical notification. Processing, reading,
 and errors say the microphone is off.
 
 Install the tray extra, then add only the marked user blocks:
@@ -158,7 +159,8 @@ scribe voice omarchy-install
 
 From a checkout, `bash packaging/linux/omarchy/install.sh` does both steps.
 `bash packaging/linux/omarchy/uninstall.sh` runs `scribe voice omarchy-remove`
-and `uv tool uninstall scribe`. `~/.scribe` is left in place. Upgrade by running
+and `uv tool uninstall scribe`. XDG Scribe directories and legacy `~/.scribe` are left in place; see
+[storage paths](STORAGE.md). Upgrade by running
 the install script again. The scripts are not a package-index submission and
 they are not a tested Omarchy installation.
 
@@ -221,7 +223,8 @@ scribe doctor
 ```
 
 Detached tray events are written to
-`~/.scribe/logs/resident-voice.log`. The log rotates at 1 MB and retains three
+the [platform state log](STORAGE.md) , `resident-voice.log` . The log rotates at 1 MB
+and retains three
 backups. Files and the containing Scribe directory are restricted to the current
 user where the operating system supports permission modes.
 

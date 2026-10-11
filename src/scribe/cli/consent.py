@@ -3,7 +3,7 @@
 Recording laws vary by jurisdiction and some require all-party consent. Scribe
 cannot know the user's situation, so before the first recording it shows a short
 notice and asks the user to confirm they will obtain any legally required consent.
-The acknowledgement is stored once under ``~/.scribe`` so it is not asked again.
+The acknowledgement is stored in the user data directory; legacy markers remain readable.
 
 This is a responsible-use guardrail, not legal advice. It is deliberately
 non-blocking in non-interactive contexts (scheduled jobs, CI) where prompting is
@@ -41,7 +41,9 @@ _ONE_LINE = (
 
 def consent_marker_path() -> Path:
     """Location of the one-time recording-consent acknowledgement marker."""
-    return Path.home() / ".scribe" / "recording_consent_ack"
+    from scribe.paths import data_dir
+
+    return data_dir() / "recording_consent_ack"
 
 
 def _assumed() -> bool:
@@ -57,7 +59,13 @@ def ensure_recording_consent(console: Console) -> bool:
     - Interactive and not yet acknowledged: show the notice and ask once. On yes,
       record the acknowledgement and proceed; on no, do not record.
     """
-    if _assumed() or consent_marker_path().exists():
+    from scribe.paths import legacy_dir
+
+    if (
+        _assumed()
+        or consent_marker_path().exists()
+        or (legacy_dir() / "recording_consent_ack").exists()
+    ):
         return True
 
     if not sys.stdin.isatty():
@@ -78,7 +86,7 @@ def ensure_recording_consent(console: Console) -> bool:
     try:
         marker = consent_marker_path()
         marker.parent.mkdir(parents=True, exist_ok=True)
-        # Lock down ~/.scribe before anything sensitive could ever live there.
+        # Keep the acknowledgement private.
         with contextlib.suppress(OSError):
             os.chmod(marker.parent, 0o700)
         marker.write_text("acknowledged\n", encoding="utf-8")

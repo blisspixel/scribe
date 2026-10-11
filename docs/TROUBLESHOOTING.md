@@ -37,11 +37,12 @@ on Omarchy. If `scribe doctor` still reports it missing, run
 `sudo pacman -S ffmpeg`. Do not use `apt` on Arch.
 
 Experimental Omarchy voice is `scribe voice`, not the tray hotkeys. If the
-microphone state is unclear, read `~/.scribe/voice-status.txt`: it contains
+microphone state is unclear, read `$XDG_STATE_HOME/scribe/voice-status.txt` (default
+`~/.local/state/scribe/voice-status.txt`): it contains
 `MICROPHONE ON` or `MICROPHONE OFF`. `scribe voice check` does not open the
 microphone, and a zero exit is not a tested Omarchy installation. Removal is
 `scribe voice omarchy-remove` or `bash packaging/linux/omarchy/uninstall.sh`.
-That leaves `~/.scribe` in place. Confirm chords with Super+K, then
+That preserves XDG Scribe directories and legacy `~/.scribe`. Confirm chords with Super+K, then
 `hyprctl reload` and `hyprctl configerrors`.
 
 If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:

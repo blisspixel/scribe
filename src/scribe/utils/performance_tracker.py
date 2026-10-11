@@ -61,7 +61,7 @@ Provider-aware:
 
 STORAGE:
 ────────
-Metrics stored in: ~/.scribe/performance/{machine_id}.json
+Metrics stored in the platform user state directory as performance_{machine_id}.json
 
 Example:
 ```json
@@ -296,12 +296,14 @@ class PerformanceTracker:
 
         Args:
             machine_id: Unique machine identifier
-            config_dir: Directory to store performance data (default: ~/.scribe)
+            config_dir: Directory to store performance data (default: platform user state directory)
         """
         self.machine_id = machine_id
 
         if config_dir is None:
-            config_dir = Path.home() / ".scribe"
+            from scribe.paths import state_dir
+
+            config_dir = state_dir()
 
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)

@@ -9,6 +9,11 @@ from rich.console import Console
 from scribe.cli import init as init_wizard
 
 
+@pytest.fixture(autouse=True)
+def isolated_legacy_config(monkeypatch, tmp_path):
+    monkeypatch.setattr("scribe.config_file.LEGACY_CONFIG_PATH", tmp_path / "legacy/config.toml")
+
+
 def _console() -> Console:
     return Console(file=StringIO())
 

@@ -10,7 +10,9 @@ From a checkout, that install uses the checkout. Otherwise it uses the
 `v2.11.0` Git tag.
 
 `uninstall.sh` runs `scribe voice omarchy-remove` and `uv tool uninstall scribe`.
-It leaves `~/.scribe` in place. Upgrade by running `install.sh` again.
+It preserves XDG Scribe config, data, and state directories and legacy `~/.scribe`.
+See [user storage paths](../../../docs/STORAGE.md) before upgrading resident voice.
+Upgrade by running `install.sh` again.
 
 After install, run `scribe voice check`, confirm the chords with Super+K, then
 `hyprctl reload` and `hyprctl configerrors`. A zero exit from the check does

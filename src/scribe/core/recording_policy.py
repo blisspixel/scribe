@@ -191,8 +191,12 @@ def recording_media_candidate_dirs(
 ) -> tuple[Path, ...]:
     """Ordered, deduplicated directories to search for fresh OBS media."""
     home = home or Path.home()
+    from scribe.paths import videos_dir
+
     candidates = [
         Path(primary_dir),
+        videos_dir(home),
+        videos_dir(home) / "OBS",
         home / "Videos",
         home / "Videos" / "OBS",
     ]

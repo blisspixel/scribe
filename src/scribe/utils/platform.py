@@ -139,9 +139,8 @@ The `get_default_output_directory()` function uses PLATFORM CONVENTIONS:
 - macOS uses "Movies" not "Videos"
 - Follows macOS conventions
 
-**Linux:** ~/Videos/Transcriptions
-- Most Linux distros use Videos
-- Follows XDG conventions
+**Linux:** localized XDG Videos directory / Transcriptions
+- Reads user-dirs.dirs safely, with ~/Videos as the fallback
 
 **Why follow conventions?**
 - Users expect files in familiar locations
@@ -507,8 +506,9 @@ def get_default_output_directory() -> Path:
         # macOS: ~/Movies/Transcriptions
         return home / "Movies" / "Transcriptions"
     else:
-        # Linux: ~/Videos/Transcriptions
-        return home / "Videos" / "Transcriptions"
+        from scribe.paths import videos_dir
+
+        return videos_dir(home) / "Transcriptions"
 
 
 def get_temp_directory() -> Path:

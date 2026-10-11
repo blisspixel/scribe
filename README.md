@@ -65,7 +65,8 @@ scribe voice omarchy-install
 A git checkout can run `bash packaging/linux/omarchy/install.sh` instead. That
 script installs the same extra and the Hyprland markers. Removal is
 `bash packaging/linux/omarchy/uninstall.sh`: it drops the markers and the uv
-tool, and it leaves `~/.scribe` in place. Upgrade by running the install script
+tool, and it preserves XDG Scribe directories and legacy `~/.scribe`. Upgrade by
+running the install script
 again. These helpers are not a package-index submission and they are not a
 tested Omarchy installation.
 
@@ -79,7 +80,8 @@ Super+K before relying on them.
 `scribe voice` reuses the resident voice owner. It does not open a second
 microphone or load a second model. The microphone stays off until dictate, and
 recording is marked MICROPHONE ON in the terminal overlay, in
-`~/.scribe/voice-status.txt`, and in a critical notification. Copy, insert, and
+`$XDG_STATE_HOME/scribe/voice-status.txt` (default
+`~/.local/state/scribe/voice-status.txt`), and in a critical notification. Copy, insert, and
 read run only when asked. Insert pastes through Hyprland, not `wtype`. Cloud
 transcription is not available on this command. `scribe voice check` does not
 open the microphone. A successful check is not a tested Omarchy installation:
@@ -160,6 +162,13 @@ Run `scribe rec --check` before an important meeting. The
 [recording guide](docs/RECORDING.md) explains OBS setup, normal and emergency
 control paths, platform requirements, monitoring, safe stop, and recovery. The
 [troubleshooting guide](docs/TROUBLESHOOTING.md) provides symptom-specific fixes.
+
+Linux user files follow XDG config, data, state, and runtime directories. Legacy
+`~/.scribe/config.toml` and vocabulary remain readable. Default output follows
+the localized Videos directory; configured output still wins. Diagnostic logs
+default to the user state directory on Linux and `~/.scribe/logs` elsewhere. See
+[user storage and upgrade guidance](docs/STORAGE.md) for paths, precedence, and
+private runtime requirements.
 
 ## Local and explicit by default
 

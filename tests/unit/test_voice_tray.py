@@ -1311,6 +1311,8 @@ def test_resident_logging_is_bounded_and_idempotent(
     from scribe.voice import tray
 
     monkeypatch.setattr(tray.Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    root = tmp_path / ".local/state/scribe" if sys.platform == "linux" else tmp_path / ".scribe"
     voice_logger = logging.getLogger("scribe.voice")
     original_handlers = list(voice_logger.handlers)
     original_level = voice_logger.level
@@ -1318,7 +1320,7 @@ def test_resident_logging_is_bounded_and_idempotent(
         first = tray._configure_resident_logging(Console(record=True))
         second = tray._configure_resident_logging(Console(record=True))
 
-        assert first == tmp_path / ".scribe" / "logs" / "resident-voice.log"
+        assert first == root / "logs" / "resident-voice.log"
         assert second == first
         matching = [
             handler

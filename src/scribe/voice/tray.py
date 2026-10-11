@@ -208,8 +208,8 @@ def _toggle_startup(service: VoiceTrayService) -> bool:
 
 def _resident_instance_status() -> tuple[str, bool]:
     """Return a diagnostic snapshot without retaining the resident voice lock."""
-    instance_lock = TrayInstanceLock()
     try:
+        instance_lock = TrayInstanceLock()
         acquired = instance_lock.acquire()
     except OSError as error:
         logger.warning("Could not inspect resident voice ownership: %s", error)
@@ -342,8 +342,9 @@ def _brand_windows_process() -> None:  # pragma: no cover - Windows shell brandi
 
 def resident_log_path(home: Path | None = None) -> Path:
     """Return the stable, user-private diagnostic log for resident voice."""
-    base = Path.home() if home is None else home
-    return base / ".scribe" / "logs" / "resident-voice.log"
+    from scribe.paths import state_dir
+
+    return state_dir(home) / "logs" / "resident-voice.log"
 
 
 def _configure_resident_logging(console: Console) -> Path | None:
@@ -383,8 +384,8 @@ def _configure_resident_logging(console: Console) -> Path | None:
 
 def run_tray(console: Console, settings: TraySettings, *, no_tray: bool) -> int:  # pragma: no cover
     """Run the resident voice utility as a tray icon or terminal fallback."""
-    instance_lock = TrayInstanceLock()
     try:
+        instance_lock = TrayInstanceLock()
         acquired = instance_lock.acquire()
     except OSError as error:
         console.print(f"[red]Could not protect the resident tray from duplicates:[/red] {error}")

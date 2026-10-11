@@ -32,7 +32,7 @@ OPENROUTER_CHAT_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _config_provider(feature: str) -> str | None:
-    """Provider chosen in ~/.scribe/config.toml [providers] for a feature, if set.
+    """Provider chosen in the user config [providers] for a feature, if set.
 
     Bridges the setup wizard's vendor choice (written as ``<feature>_provider``)
     to provider selection. Env vars still win; this sits between the env var and
