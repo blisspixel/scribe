@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import stat
 import sys
@@ -16,7 +17,9 @@ from typer.testing import CliRunner
 
 from scribe import config_file, paths
 from scribe.cli import init as init_wizard
+from scribe.cli.system import run_doctor
 from scribe.models.config import ScribeConfig
+from scribe.utils.diagnostics import SystemDiagnostics
 from scribe.utils.vocabulary import CustomVocabulary
 
 _LINUX = sys.platform == "linux"
@@ -38,6 +41,32 @@ def isolated_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("scribe.models.config._find_env_file", lambda: None)
     for variable in ("SCRIBE_OUTPUT_FOLDER", "SCRIBE_LOG_FOLDER", "SCRIBE_SKIP_INIT"):
         monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.mark.parametrize("current_exists", [False, True])
+def test_doctor_explains_legacy_config_without_moving_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, current_exists: bool
+) -> None:
+    legacy = config_file.LEGACY_CONFIG_PATH
+    legacy.parent.mkdir()
+    legacy.write_text('[transcription]\nlanguage = "es"\n', encoding="utf-8")
+    original = legacy.read_bytes()
+    if current_exists:
+        config_file.CONFIG_PATH.parent.mkdir(parents=True)
+        config_file.CONFIG_PATH.write_text('[transcription]\nlanguage = "ja"\n')
+    monkeypatch.setattr(SystemDiagnostics, "run_all_checks", lambda *_args, **_kwargs: [])
+    output = io.StringIO()
+    run_doctor(
+        Console(file=output, width=240, color_system=None), "test", False, logging.getLogger()
+    )
+    text = output.getvalue()
+    assert ("Using legacy config" in text) is not current_exists
+    if not current_exists:
+        assert str(legacy) in text
+        assert str(config_file.CONFIG_PATH) in text
+        assert "the legacy file is kept" in " ".join(text.split())
+        assert not config_file.CONFIG_PATH.exists()
+    assert legacy.read_bytes() == original
 
 
 @pytest.mark.parametrize("value", [None, "", "relative/path", "~/not-expanded"])

@@ -368,6 +368,20 @@ def run_doctor(console: Console, version: str, live: bool, logger: Logger) -> No
         config = ScribeConfig()
     except Exception:
         config = None
+    from scribe.config_file import CONFIG_PATH, config_read_path
+
+    try:
+        active_config = config_read_path()
+    except OSError as error:
+        console.print(f"[yellow]Could not inspect the config path: {escape(str(error))}[/yellow]")
+    else:
+        if active_config != CONFIG_PATH:
+            console.print(
+                f"[dim]Using legacy config: {escape(str(active_config))}. "
+                f"New settings are saved to {escape(str(CONFIG_PATH))}; "
+                "the legacy file is kept.[/dim]"
+            )
+            console.print()
     diagnostics = SystemDiagnostics(config=config)
     with console.status(
         f"[{ScribeTheme.PRIMARY}]Running diagnostics...[/{ScribeTheme.PRIMARY}]",
