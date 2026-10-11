@@ -355,10 +355,11 @@ def test_source_audio_reference_is_not_created_but_download_is(tmp_path: Path) -
 
 
 @pytest.mark.requires_ffmpeg
+@pytest.mark.parametrize("keep", [False, True])
 @pytest.mark.parametrize("explicit", [False, True])
 @pytest.mark.parametrize("format_name", ["wav", "mp3"])
 def test_real_converter_uses_owner_and_preserves_explicit_output_precedence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, explicit: bool, format_name: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, explicit: bool, format_name: str, keep: bool
 ) -> None:
     source = tmp_path / "original.wav"
     with wave.open(str(source), "wb") as wav:
@@ -372,7 +373,7 @@ def test_real_converter_uses_owner_and_preserves_explicit_output_precedence(
             )
         )
     original = source.read_bytes()
-    workspace = AudioWorkspace()
+    workspace = AudioWorkspace(keep=keep)
     factory = Mock(side_effect=workspace.output_for)
     converter = Converter(output_path_factory=factory)
     monkeypatch.setattr(
@@ -396,10 +397,10 @@ def test_real_converter_uses_owner_and_preserves_explicit_output_precedence(
         assert result == output
         factory.assert_not_called()
     else:
-        assert result.parent != source.parent
+        assert (result.parent == source.parent) is keep
         factory.assert_called_once()
         workspace.finish(None, None)
-        assert not result.exists()
+        assert result.exists() is keep
 
 
 @pytest.mark.requires_ffmpeg

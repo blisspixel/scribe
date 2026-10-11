@@ -597,7 +597,8 @@ class Converter:
 
         # Reuse an existing, distinct output only if it is newer than the input.
         if output_file != input_file and output_file.exists():
-            if output_file.stat().st_mtime >= input_file.stat().st_mtime:
+            output_info = output_file.stat()
+            if output_info.st_size > 0 and output_info.st_mtime >= input_file.stat().st_mtime:
                 logger.info(f"Already converted: {output_file.name}")
                 return output_file
 
