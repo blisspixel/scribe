@@ -6011,6 +6011,7 @@ version = "2.11.0"
 source = { editable = "." }
 dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "av" },
     { name = "deal" },
     { name = "faster-whisper" },
     { name = "httpx" },
@@ -6101,6 +6102,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.117.0" },
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
+    { name = "av", specifier = ">=11,<19" },
     { name = "deal", specifier = ">=4.1" },
     { name = "faster-whisper", specifier = ">=0.10.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=2.13.0" },
