@@ -280,7 +280,10 @@ def test_actual_cli_review_terminal_outcome_and_source_retention(
     from scribe.cli.main import app
     from scribe.models.session import TranscriptionSession
 
-    source = audio_file(tmp_path / "source.wav")
+    # A real URL download directory does not contain the configured archive.
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    source = audio_file(source_dir / "source.wav")
     config = ScribeConfig(
         output_folder=tmp_path / "out",
         log_folder=tmp_path / "logs",
@@ -293,7 +296,20 @@ def test_actual_cli_review_terminal_outcome_and_source_retention(
     converter.get_duration.return_value = 3
     converter.convert_to_wav.return_value = source
     session = TranscriptionSession.create("Synthetic")
+    saved_outcomes = []
+    save_summary = session.save_summary
+
+    def save_before_progress(output_dir):
+        path = save_summary(output_dir)
+        saved_outcomes.append(json.loads(path.read_text())["outcome"])
+        return path
+
+    def complete_after_saved_summary(*, partial):
+        assert saved_outcomes and saved_outcomes[-1] == session.outcome
+        assert partial is (session.outcome == "partial")
+
     with (
+        patch.object(session, "save_summary", side_effect=save_before_progress),
         patch("scribe.cli.main._load_transcription_config", return_value=config),
         patch("scribe.cli.main._show_command_banner"),
         patch("scribe.cli.main.setup_logging"),
@@ -321,6 +337,7 @@ def test_actual_cli_review_terminal_outcome_and_source_retention(
         patch("scribe.core.transcriber.Transcriber.cleanup_intermediate_files", return_value=[]),
     ):
         progress.return_value.frame_delay = 0.01
+        progress.return_value.complete.side_effect = complete_after_saved_summary
         downloader.return_value.download.return_value = SimpleNamespace(
             file_path=source, title="Synthetic", duration=3
         )
@@ -328,7 +345,6 @@ def test_actual_cli_review_terminal_outcome_and_source_retention(
             command,
             str(source) if command == "transcribe" else "https://example.invalid/audio.wav",
             "--no-docx",
-            "--keep-all",
         ]
         result = CliRunner().invoke(app, args)
     partial = failure and policy != "best-effort"
@@ -348,7 +364,7 @@ def test_actual_cli_review_terminal_outcome_and_source_retention(
         path.name == "primary-acoustic.json" and path.exists() for path in session.files_created
     )
     assert progress.return_value.stop.called
-    assert progress.return_value.complete.called is not partial
+    progress.return_value.complete.assert_called_once_with(partial=partial)
     summaries = list(config.output_folder.glob("*_session_summary.json"))
     assert summaries and json.loads(summaries[0].read_text())["outcome"] == session.outcome
 
