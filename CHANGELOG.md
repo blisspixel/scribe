@@ -4,13 +4,19 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.11.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.12.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
 ---
 
 ## Unreleased
+
+## [2.12.0] - 2026-10-11
+
+This minor release packages the completed quality, security, and reliability
+changes below. Operational proof remains planned for 2.12.1; desktop validation
+remains planned for 2.13.0, with macOS and Linux resident voice experimental.
 
 ### Security
 

@@ -130,7 +130,7 @@ The optional MLX backend is available through the `mlx` extra:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 ```
 
 Use only on a supported Apple Silicon host. The project still needs fresh-machine
@@ -146,7 +146,7 @@ The optional whisper.cpp adapter is available through the `whispercpp` extra:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 ```
 
 Actual acceleration depends on how the underlying native package was built for
@@ -278,4 +278,4 @@ Store only synthetic or approved benchmark material. Remove local usernames,
 paths, device names, secrets, and real participant or company data before sharing
 a benchmark report.
 
-Version baseline: Scribe 2.11.0.
+Version baseline: Scribe 2.12.0.
