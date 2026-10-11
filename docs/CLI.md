@@ -263,6 +263,14 @@ Every started file, URL, batch item, recording, and music track writes a unique
 and `instrumental`, and retains available artifact and log paths. An evidence-write
 failure is reported separately without replacing the original workflow result.
 
+`files_created` excludes original input references. `files_cleaned` records
+disposed conversions/downloads, while `files_moved` records transcript archive
+source and destination paths. File, URL, batch, and recording conversion cleanup
+only removes files owned by that run. Recoverable partial transcripts survive
+failure. File/URL `--keep-all` retains intermediate audio beside the input without
+replacing an existing conversion; configuration also controls this for batch and
+recording.
+
 Terminal rendering is presentation-only. A closed pipe or unsupported output
 encoding cannot turn completed work into a traceback or erase saved evidence.
 

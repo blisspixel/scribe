@@ -18,6 +18,8 @@ Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpe
 OBS Studio is required only for recording.
 
 ```bash
+# For a private repository, first authenticate Git (not only the GitHub CLI).
+gh auth setup-git
 uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
 uv tool update-shell
 
@@ -25,6 +27,10 @@ scribe init
 scribe doctor
 scribe meeting.mp4
 ```
+
+For a local checkout, `bash packaging/linux/omarchy/install.sh` provides the
+Linux installation path without a private Git URL. Git authentication is only
+needed to fetch private source; it adds no runtime transcription dependency.
 
 Open a new terminal after `uv tool update-shell`. This project is not published
 on PyPI, where an unrelated package uses the same name.
@@ -128,6 +134,13 @@ default; use `--folder ./archive` to search a one-run override.
 Same-name recordings receive separate artifact filenames so earlier transcripts
 and sidecars remain searchable. If a URL transcript cannot be archived, Scribe
 retains the download and transcript and reports the failure.
+
+Disposable audio conversions use an owned temporary folder and are removed even
+when transcription fails. Original media and recoverable partial transcripts
+remain intact. `--keep-all` retains conversions beside the input; existing copies
+are preserved. Session summaries list deleted conversions separately from moved
+transcripts. Logs use a user directory rather than creating `./logs` in the
+current working directory; `SCRIBE_LOG_FOLDER` still overrides the location.
 
 ![Scribe recording settings in a terminal](docs/assets/cli-recording-preview.png)
 

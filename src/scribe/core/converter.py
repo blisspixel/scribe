@@ -81,8 +81,9 @@ class Converter:
     optimized formats for transcription using ffmpeg.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, output_path_factory: Callable[[Path, str], Path] | None = None) -> None:
         """Initialize converter and validate ffmpeg availability."""
+        self.output_path_factory = output_path_factory
         self.ffmpeg_path = get_ffmpeg_path()
         if not self.ffmpeg_path:
             install = ffmpeg_install_command()
@@ -393,7 +394,11 @@ class Converter:
 
         # Generate output filename if not provided
         if output_file is None:
-            output_file = input_file.with_name(f"{input_file.stem}_16k_mono.wav")
+            output_file = (
+                self.output_path_factory(input_file, "_16k_mono.wav")
+                if self.output_path_factory is not None
+                else input_file.with_name(f"{input_file.stem}_16k_mono.wav")
+            )
 
         logger.info(f"Converting {input_file.name} to 16kHz mono WAV...")
 
@@ -582,16 +587,18 @@ class Converter:
             )
 
         if output_file is None:
-            output_file = input_file.with_suffix(".mp3")
-            # If the input is itself an .mp3, the derived name collides with it.
-            # Use a distinct name so we never "convert in place" and return the
-            # untouched input (which skips loudnorm / 16k / mono / bitrate).
-            if output_file == input_file:
-                output_file = input_file.with_name(f"{input_file.stem}_converted.mp3")
+            if self.output_path_factory is not None:
+                output_file = self.output_path_factory(input_file, "_converted.mp3")
+            else:
+                output_file = input_file.with_suffix(".mp3")
+                # Never convert an MP3 in place or reuse the untouched input.
+                if output_file == input_file:
+                    output_file = input_file.with_name(f"{input_file.stem}_converted.mp3")
 
         # Reuse an existing, distinct output only if it is newer than the input.
         if output_file != input_file and output_file.exists():
-            if output_file.stat().st_mtime >= input_file.stat().st_mtime:
+            output_info = output_file.stat()
+            if output_info.st_size > 0 and output_info.st_mtime >= input_file.stat().st_mtime:
                 logger.info(f"Already converted: {output_file.name}")
                 return output_file
 

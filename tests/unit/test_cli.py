@@ -830,7 +830,10 @@ def test_explicit_output_dir_places_transcript_atomically_and_updates_session(tm
     assert session.transcript_file == result
     assert result in session.files_created
     assert transcript not in session.files_created
-    assert transcript.resolve() in session.files_cleaned
+    assert transcript.resolve() not in session.files_cleaned
+    assert session.files_moved == [
+        {"source": str(transcript.resolve()), "destination": str(result)}
+    ]
 
 
 class TestIntegrationScenarios:

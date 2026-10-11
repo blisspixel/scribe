@@ -122,7 +122,7 @@ class TestFileTracking:
         session.add_file(source_file, "source")
 
         assert session.source_file == source_file
-        assert source_file in session.files_created
+        assert source_file not in session.files_created
 
     def test_add_audio_file(self, tmp_path):
         """Test adding audio file."""
@@ -176,7 +176,7 @@ class TestFileTracking:
         session.add_file(audio, "audio")
         session.add_file(transcript, "transcript")
 
-        assert len(session.files_created) == 3
+        assert len(session.files_created) == 2
         assert session.source_file == source
         assert session.audio_file == audio
         assert session.transcript_file == transcript
@@ -485,7 +485,7 @@ class TestSessionIntegration:
 
         # Verify
         assert session.success is True
-        assert len(session.files_created) == 4
+        assert len(session.files_created) == 3
         assert len(session.files_cleaned) == 1
         assert session.duration_seconds is not None
 
