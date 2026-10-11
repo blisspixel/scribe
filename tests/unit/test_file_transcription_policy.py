@@ -17,6 +17,12 @@ from scribe.models.transcript import Transcript, TranscriptSegment
 from scribe.utils.model_selection import resolve_local_language
 
 
+@pytest.fixture
+def converter_boundary(monkeypatch):
+    """Policy tests do not perform audio conversion or require installed FFmpeg."""
+    monkeypatch.setattr("scribe.core.transcriber.Converter", Mock())
+
+
 @pytest.mark.parametrize(
     ("vendor", "vram", "tier_model"),
     [
@@ -29,7 +35,9 @@ from scribe.utils.model_selection import resolve_local_language
         ("nvidia", 24, "large-v3"),
     ],
 )
-def test_accurate_file_model_survives_hardware_tiers(vendor, vram, tier_model, tmp_path):
+def test_accurate_file_model_survives_hardware_tiers(
+    vendor, vram, tier_model, tmp_path, converter_boundary
+):
     config = ScribeConfig(_env_file=None)
     gpu = GPUConfig(has_gpu=vendor == "nvidia", model_size=tier_model, gpu_memory_gb=vram)
     engine = Mock(last_transcript=None)
@@ -51,7 +59,7 @@ def test_accurate_file_model_survives_hardware_tiers(vendor, vram, tier_model, t
     assert constructor.call_args.kwargs["batch_size"] == 0
 
 
-def test_explicit_cpu_backend_is_cpu_even_on_nvidia(tmp_path):
+def test_explicit_cpu_backend_is_cpu_even_on_nvidia(tmp_path, converter_boundary):
     config = ScribeConfig(local_backend="cpu", local_compute_type="float32", local_batch_size=8)
     gpu = GPUConfig(has_gpu=True, gpu_name="NVIDIA", use_fp16=True)
     with (
@@ -69,7 +77,9 @@ def test_explicit_cpu_backend_is_cpu_even_on_nvidia(tmp_path):
     assert gpu.has_gpu is True  # detected hardware remains distinct from execution
 
 
-def test_explicit_unavailable_backend_fails_before_another_engine_runs(tmp_path):
+def test_explicit_unavailable_backend_fails_before_another_engine_runs(
+    tmp_path, converter_boundary
+):
     with (
         patch(
             "scribe.core.backends.registry.backend_availability",
@@ -188,7 +198,9 @@ def test_cli_auto_language_overrides_pinned_language_and_primary(tmp_path):
 
 
 @pytest.mark.parametrize("setting", [{"local_compute_type": "float32"}, {"local_batch_size": 8}])
-def test_native_backend_rejects_unsupported_explicit_execution_setting(setting, tmp_path):
+def test_native_backend_rejects_unsupported_explicit_execution_setting(
+    setting, tmp_path, converter_boundary
+):
     config = ScribeConfig(local_backend="whispercpp", **setting)
     with (
         patch(
@@ -203,7 +215,9 @@ def test_native_backend_rejects_unsupported_explicit_execution_setting(setting, 
 
 
 @pytest.mark.parametrize("backend", ["mlx", "whispercpp"])
-def test_native_music_autodetection_never_loads_faster_whisper(backend, tmp_path):
+def test_native_music_autodetection_never_loads_faster_whisper(
+    backend, tmp_path, converter_boundary
+):
     transcript = Transcript(
         segments=[TranscriptSegment(start=0, end=1, text="Hola")],
         language="es",
@@ -231,7 +245,7 @@ def test_native_music_autodetection_never_loads_faster_whisper(backend, tmp_path
     prepass.assert_not_called()
 
 
-def test_music_prepass_reuses_decoder_and_emits_one_cpu_guidance(tmp_path):
+def test_music_prepass_reuses_decoder_and_emits_one_cpu_guidance(tmp_path, converter_boundary):
     model = Mock()
     model.transcribe.side_effect = [
         (
@@ -275,7 +289,7 @@ def test_music_prepass_reuses_decoder_and_emits_one_cpu_guidance(tmp_path):
     selector_log.warning.assert_not_called()
 
 
-def test_music_explicit_language_bypasses_detection(tmp_path):
+def test_music_explicit_language_bypasses_detection(tmp_path, converter_boundary):
     engine = Mock(last_transcript=None)
     with (
         patch.object(GPUConfig, "detect", return_value=GPUConfig(has_gpu=False)),
