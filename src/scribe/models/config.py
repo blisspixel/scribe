@@ -13,7 +13,13 @@ from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from scribe.exceptions import ValidationError
-from scribe.models.options import FileQuality, LocalComputeType, ModelSize, TranscriptionMethod
+from scribe.models.options import (
+    FileQuality,
+    LocalComputeType,
+    ModelSize,
+    TranscriptionMethod,
+    VerificationPolicy,
+)
 from scribe.paths import default_log_dir
 
 
@@ -132,12 +138,23 @@ class ScribeConfig(BaseSettings):
     )
 
     transcription_quality: FileQuality = Field(
-        default="accurate",
+        default="max",
         description=(
-            "File profile: accurate (full large-v3), balanced (turbo), fast (small). "
+            "File profile: max (full large-v3 plus required local review), "
+            "accurate (one-pass full large-v3), balanced (turbo), fast (small). "
             "An explicit model wins. Resident voice profiles are separate. "
             "Env: SCRIBE_TRANSCRIPTION_QUALITY."
         ),
+    )
+
+    transcription_verification: VerificationPolicy | None = Field(
+        default=None,
+        description="Required, best-effort, or off; unset follows quality (max requires review).",
+    )
+
+    verification_model: ModelSize | None = Field(
+        default=None,
+        description="Cached local review checkpoint; unset chooses turbo, or full large-v3 for a turbo primary.",
     )
 
     default_language: str | None = Field(

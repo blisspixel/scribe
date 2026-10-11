@@ -179,22 +179,27 @@ disabled by default and require positive flags.
 `SCRIBE_LOCAL_ONLY=1` adds a strict cloud-provider guard. `scribe doctor` is local;
 `scribe doctor --live` is the explicit provider-connectivity check.
 
-File transcription defaults to the `accurate` profile: full Whisper large-v3,
-including on CPU, with conditioned sequential faster-whisper decoding. It can
-take longer than the recording on a CPU and needs several GB of free memory.
-Scribe reports the selected model and resource guidance with `scribe info`;
-hardware or a failed run never silently selects a smaller model or a paid API.
-An explicit model setting wins over the profile. Faster profiles are opt-in:
+File transcription defaults to `max`: full Whisper large-v3, recording-wide
+language evidence and a separate cached local acoustic pass. It can take longer
+than the recording on CPU and needs several GB of free memory. The review flags
+disagreements and uncertainty for listening; agreement does not certify accuracy.
+Scribe reports the model and cache requirements with `scribe info`. A missing
+verifier or required report produces partial output while retaining primary text
+and source audio. No smaller primary or paid fallback is silently selected.
 
 ```bash
-scribe transcribe meeting.mp4 --quality balanced  # turbo
-scribe transcribe meeting.mp4 --quality fast      # small
-scribe transcribe meeting.mp4 --model medium     # explicit override
+scribe transcribe meeting.mp4 --quality accurate  # full large-v3, one pass
+scribe transcribe meeting.mp4 --quality balanced  # turbo, opt-in
+scribe transcribe meeting.mp4 --model medium     # explicit primary override
+scribe transcribe meeting.mp4 --verification best-effort
 ```
 
-Set `[transcription] quality = "balanced"` in `~/.scribe/config.toml`, or
-`SCRIBE_TRANSCRIPTION_QUALITY=balanced`, to persist a different file profile.
-Resident voice retains its separate latency profiles. See the
+The default secondary is large-v3-turbo and must already be cached. See
+[acoustic review setup and limits](docs/ACOUSTIC_REVIEW.md). CLI flags override
+`SCRIBE_TRANSCRIPTION_QUALITY`, `SCRIBE_TRANSCRIPTION_VERIFICATION` and
+`SCRIBE_VERIFICATION_MODEL`, which override matching `[transcription]` TOML keys
+`quality`, `verification` and `verification_model`. An explicit primary model or
+backend wins. Resident voice retains its separate profiles. See the
 [model, backend and memory guide](docs/PERFORMANCE_TUNING.md).
 
 File speech language is detected automatically. `--language es` or another

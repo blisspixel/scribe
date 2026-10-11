@@ -39,6 +39,7 @@ def test_record_archives_real_decoder_paths_before_workspace_cleanup(
         output_folder=archive,
         log_folder=tmp_path / "logs",
         local_only=True,
+        transcription_quality="accurate",  # This control isolates one-pass archive ownership.
         enable_notes=False,
         enable_joke=False,
         enable_meme=False,
@@ -57,6 +58,9 @@ def test_record_archives_real_decoder_paths_before_workspace_cleanup(
     monkeypatch.setattr(socket, "getaddrinfo", reject_network)
     real_decoder = Mock(side_effect=AssertionError("No ASR model may load in this test"))
     monkeypatch.setattr("scribe.core.transcriber.LocalWhisperTranscriber", real_decoder)
+    bounded_decoder = Mock(side_effect=AssertionError("No bounded ASR pass may load here"))
+    monkeypatch.setattr("scribe.core.review_engine.bounded_pass", bounded_decoder)
+    monkeypatch.setattr("scribe.core.transcription_review.bounded_pass", bounded_decoder)
 
     class SyntheticRecorder:
         def __init__(self, _config: ScribeConfig) -> None:
@@ -140,6 +144,7 @@ def test_record_archives_real_decoder_paths_before_workspace_cleanup(
     assert all(not path.exists() for path in conversions)
     assert str(conversions[0]) in summary["files_cleaned"]
     real_decoder.assert_not_called()
+    bounded_decoder.assert_not_called()
     if failure in ("conversion", "asr"):
         assert summary["transcript_file"] is None
         assert not conversions[0].parent.exists()

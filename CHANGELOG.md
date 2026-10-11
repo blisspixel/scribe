@@ -25,6 +25,18 @@ milestones that predate this repository's Git history.
   including Whisper large models, is unchanged. Use the base install for
   transcription and `diarize` for the existing pyannote speaker-label backend.
 
+### Added
+
+- Default `max` file profile retains full large-v3 and adds bounded recording-wide
+  language evidence, regional decoding and a separate cached local acoustic pass.
+  Timed review reports preserve raw wording, source hashes, runtime settings,
+  disagreements and uncertainty without claiming verified accuracy. Required
+  review failures retain primary/source artifacts and report partial outcomes;
+  URL review flags retain audio for listening. `accurate` remains the explicit
+  full-model one-pass option. Quality, verification and verifier-model overrides
+  apply to transcription, URL, batch, music and recording commands. No verifier
+  download, cloud fallback, dependency or transcript rewrite is added.
+
 ### Fixed
 
 - CLI conversion files now live in an owned temporary workspace and are removed

@@ -122,6 +122,7 @@ transcription "just work" by handling the complexity of method selection,
 format conversion, error recovery, and resource management transparently.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
@@ -140,12 +141,14 @@ from scribe.models.gpu import GPUConfig
 from scribe.models.options import ModelSize, TranscriptionMethod
 from scribe.models.session import TranscriptionSession
 from scribe.models.transcript import Transcript
+from scribe.models.transcription_review import AcousticPass
 from scribe.utils.files import cleanup_files
 from scribe.utils.logging import get_logger
 from scribe.utils.model_selection import (
     resolve_local_batch_size,
     resolve_local_language,
     resolve_local_model,
+    resolve_verification,
 )
 from scribe.utils.resource_limits import validate_audio_file
 
@@ -222,6 +225,10 @@ class Transcriber:
         # Structured transcript from the most recent transcribe(), so the CLI can
         # write JSON/VTT/SRT/Markdown artifacts without re-parsing the .txt.
         self.last_transcript: Transcript | None = None
+        self.review_phase_callback: Callable[[str], None] | None = None
+        self.review_error: str | None = None
+        self._review_primary: AcousticPass | None = None
+        self._review_source: Path | None = None
         self._cached_diarizer: SpeakerDiarizer | None = None
 
         logger.info(
@@ -527,6 +534,9 @@ class Transcriber:
         # Reset so a stale transcript from a previous call can never be written as
         # this file's structured sidecar if a path forgets to repopulate it.
         self.last_transcript = None
+        self.review_error = None
+        self._review_primary = None
+        self._review_source = session.source_file if session and session.source_file else audio_path
 
         # Validate resource limits
         logger.info("Validating audio file resource limits...")
@@ -559,6 +569,7 @@ class Transcriber:
                     audio_file, session, custom_vocabulary
                 )
 
+            self._complete_acoustic_review(transcript_path, session, music_mode)
             self._apply_term_normalization(transcript_path, custom_vocabulary)
 
             if session:
@@ -597,6 +608,7 @@ class Transcriber:
                     music_mode,
                     e,
                 )
+                self._complete_acoustic_review(transcript_path, session, music_mode)
                 self._apply_term_normalization(transcript_path, custom_vocabulary)
                 return transcript_path
 
@@ -612,6 +624,58 @@ class Transcriber:
                         "fallback_error": str(fallback_error),
                     },
                 )
+
+    def _report_review_phase(self, phase: str) -> None:
+        logger.info("Acoustic review: %s", phase)
+        if self.review_phase_callback is not None:
+            try:
+                self.review_phase_callback(phase)
+            except Exception as error:
+                logger.warning("Could not display acoustic phase: %s", error)
+
+    def _complete_acoustic_review(
+        self, transcript_path: Path, session: TranscriptionSession | None, music_mode: bool
+    ) -> None:
+        from scribe.core.transcription_review import complete_review, unavailable_review
+
+        policy = resolve_verification(
+            self.config.transcription_quality, self.config.transcription_verification
+        )
+        if policy == "off":
+            return
+        if music_mode or self.last_transcript is None:
+            reason = "Acoustic review unavailable for music or an untimed primary transcript"
+            logger.warning(reason)
+            receipt, paths = unavailable_review(
+                self.config,
+                self._review_source or transcript_path,
+                self.last_transcript,
+                transcript_path,
+                reason,
+            )
+        else:
+            # The primary model's context has ended before the independent checkpoint loads.
+            self.release_resources()
+            receipt, paths = complete_review(
+                self.config,
+                self.gpu_config,
+                self._review_source or transcript_path,
+                self.last_transcript,
+                self._review_primary,
+                self._report_review_phase,
+            )
+        self.review_error = receipt.error if policy == "required" else None
+        if session:
+            session.review_source_required = receipt.requires_review
+            if self.review_error:
+                session.artifact_errors.append(self.review_error)
+            for path in paths:
+                session.add_file(path, "acoustic_review")
+        logger.info(
+            "Acoustic review %s; %s spans require review. Agreement is not proof of accuracy.",
+            receipt.status,
+            len(receipt.spans),
+        )
 
     def _apply_term_normalization(
         self, transcript_path: Path, custom_vocabulary: Optional["CustomVocabulary"]
@@ -788,6 +852,32 @@ class Transcriber:
             if force_cpu
             else self.gpu_config
         )
+        if (
+            not music_mode
+            and resolve_verification(
+                self.config.transcription_quality, self.config.transcription_verification
+            )
+            != "off"
+        ):
+            from scribe.core.review_engine import bounded_pass
+            from scribe.core.transcription_review import pass_settings
+
+            acoustic = bounded_pass(
+                self._review_source or audio_path,
+                pass_settings(
+                    self.config,
+                    gpu_config,
+                    model_size,
+                    primary=True,
+                    language=language,
+                    prompt=initial_prompt or "",
+                ),
+                self._report_review_phase,
+            )
+            self._review_primary = acoustic
+            # Reuse the existing writer/diarization path after both acoustic passes.
+            self.last_transcript = acoustic.transcript
+            return self._write_bounded_primary(audio_path, acoustic.transcript, diarizer)
         transcriber = LocalWhisperTranscriber(
             model_size=model_size,
             language=language,
@@ -818,6 +908,31 @@ class Transcriber:
                 language_detection_backend="faster-whisper",
             )
         return transcript_path
+
+    def _write_bounded_primary(
+        self, audio_path: Path, transcript: Transcript, diarizer: "SpeakerDiarizer | None"
+    ) -> Path:
+        from scribe.core.local_whisper import (
+            apply_diarizer_safely,
+            detect_silence_if_needed,
+            write_clean_transcript,
+        )
+
+        if diarizer is not None:
+            transcript = apply_diarizer_safely(
+                diarizer, self._review_source or audio_path, transcript
+            )
+        clean_stem = audio_path.stem
+        for suffix in ("_16k_mono", "_standardized", "_converted"):
+            clean_stem = clean_stem.replace(suffix, "")
+        output_path = audio_path.parent / f"{clean_stem}_transcription.txt"
+        source = self._review_source or audio_path
+        silence_periods = detect_silence_if_needed(
+            source, transcript.duration, self.config.enable_silence_detection
+        )
+        write_clean_transcript(transcript, output_path, source, silence_periods)
+        self.last_transcript = transcript
+        return output_path
 
     def _transcribe_alt_backend(
         self,

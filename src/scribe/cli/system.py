@@ -24,6 +24,8 @@ from scribe.utils.model_selection import (
     resolve_local_batch_size,
     resolve_local_language,
     resolve_local_model,
+    resolve_verification,
+    resolve_verifier_model,
 )
 from scribe.utils.theme import ScribeTheme
 
@@ -210,6 +212,21 @@ def show_info(
         f"  file quality {config.transcription_quality} ({pinned}); faster-whisper {mode}"
     )
     console.print(f"  {escape(local_resource_guidance(effective_model))}")
+    verification = resolve_verification(
+        config.transcription_quality, config.transcription_verification
+    )
+    verifier = resolve_verifier_model(effective_model, config.verification_model)
+    console.print(
+        f"  acoustic review {verification}; secondary {verifier} (cached local weights only)"
+    )
+    if verification != "off":
+        console.print(
+            "  Max requires cached secondary weights; no hidden download. --quality accurate is one pass."
+        )
+        console.print(
+            "  Related Whisper passes can agree on errors; review source audio. Additional CPU work can be slow."
+        )
+
     import psutil  # type: ignore[import-untyped]
 
     memory = psutil.virtual_memory()

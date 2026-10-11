@@ -69,6 +69,8 @@ class TranscriptionSession:
     success: bool = False
     outcome: SessionOutcome = "in_progress"
     error_message: str | None = None
+    artifact_errors: list[str] = field(default_factory=list)
+    review_source_required: bool = False
     duration_seconds: float | None = None
     processing_speed_ratio: float | None = None
 
