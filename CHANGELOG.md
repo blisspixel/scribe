@@ -27,6 +27,12 @@ milestones that predate this repository's Git history.
 
 ### Fixed
 
+- File, URL, and batch transcripts and sidecars now use the configured output
+  folder. All three commands accept `-o` to override it, batch accepts `--format`,
+  and `doctor` checks the same resolved folder and disk. Same-name runs preserve
+  separate complete artifact sets, and failed URL archive copies retain their
+  source transcript and download. Refs #34.
+
 - Bound PyAV below 19 for faster-whisper's current decoder, including fresh
   tool and wheel installations that do not use the project lock. A required CI
   gate installs from package metadata and decodes synthetic audio without a

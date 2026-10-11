@@ -20,6 +20,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -817,28 +818,33 @@ class SystemDiagnostics:
         self.results.append(result)
         return result
 
+    def _output_path(self) -> Path:
+        """Use the same file, environment, and default resolution as the CLI."""
+        if self.config is None:
+            from scribe.models.config import ScribeConfig
+
+            self.config = ScribeConfig()
+        return Path(self.config.output_folder).expanduser()
+
     def check_output_folder(self) -> DiagnosticResult:
         """Check output folder configuration and permissions."""
-        output_folder = os.getenv("SCRIBE_OUTPUT_FOLDER")
-
-        if not output_folder:
+        try:
+            output_path = self._output_path()
+        except Exception as exc:
             result = DiagnosticResult(
                 name="Output Folder",
-                status="warn",
-                message="Not configured",
-                details="Will use default: ./output",
-                fix_suggestion="Set SCRIBE_OUTPUT_FOLDER in your .env file",
+                status="fail",
+                message="Invalid configuration",
+                details=str(exc),
+                fix_suggestion="Check the configured output folder and its permissions",
             )
         else:
-            output_path = Path(output_folder).expanduser()
-
             if output_path.exists():
                 if output_path.is_dir():
-                    # Check write permissions
-                    test_file = output_path / ".scribe_test"
                     try:
-                        test_file.touch()
-                        test_file.unlink()
+                        # A unique probe cannot overwrite a user's existing file.
+                        with tempfile.TemporaryFile(dir=output_path, prefix=".scribe-write-"):
+                            pass
 
                         result = DiagnosticResult(
                             name="Output Folder",
@@ -876,12 +882,12 @@ class SystemDiagnostics:
 
     def check_disk_space(self) -> DiagnosticResult:
         """Check available disk space."""
-        output_folder = os.getenv("SCRIBE_OUTPUT_FOLDER", "./output")
-        output_path = Path(output_folder).expanduser()
-
         try:
+            output_path = self._output_path().resolve()
             # Get disk usage for the output folder's drive
-            check_path = output_path if output_path.exists() else output_path.parent
+            check_path = output_path
+            while not check_path.exists() and check_path.parent != check_path:
+                check_path = check_path.parent
 
             stat = shutil.disk_usage(check_path)
             free_gb = stat.free / (1024**3)

@@ -495,20 +495,23 @@ class TestOutputFolderCheck:
             assert result.status == "pass"
             assert "writable" in result.message
 
-    def test_output_folder_not_configured(self):
-        """Test output folder not configured."""
+    def test_output_folder_uses_resolved_default(self, tmp_path):
+        """An unset environment variable still has a configured default."""
         diagnostics = SystemDiagnostics()
 
-        with patch.dict(os.environ, {}, clear=True):
+        with patch(
+            "scribe.models.config.ScribeConfig",
+            return_value=SimpleNamespace(output_folder=tmp_path),
+        ):
             result = diagnostics.check_output_folder()
 
-            assert result.status == "warn"
-            assert "Not configured" in result.message
+        assert result.status == "pass"
+        assert str(tmp_path) in result.details
 
     def test_output_folder_does_not_exist(self, tmp_path):
         """Test output folder does not exist."""
-        diagnostics = SystemDiagnostics()
         non_existent = tmp_path / "does_not_exist"
+        diagnostics = SystemDiagnostics(config=SimpleNamespace(output_folder=non_existent))
 
         with patch.dict(os.environ, {"SCRIBE_OUTPUT_FOLDER": str(non_existent)}):
             result = diagnostics.check_output_folder()
@@ -516,9 +519,38 @@ class TestOutputFolderCheck:
             assert result.status == "warn"
             assert "Does not exist" in result.message
 
+    def test_resolved_config_wins_and_probe_preserves_existing_file(self, tmp_path):
+        sentinel = tmp_path / ".scribe_test"
+        sentinel.write_text("user data", encoding="utf-8")
+        diagnostics = SystemDiagnostics(config=SimpleNamespace(output_folder=tmp_path))
+        with patch.dict(os.environ, {"SCRIBE_OUTPUT_FOLDER": str(tmp_path / "other")}):
+            result = diagnostics.check_output_folder()
+        assert result.status == "pass"
+        assert result.details == f"Path: {tmp_path}"
+        assert sentinel.read_text(encoding="utf-8") == "user data"
+        assert sorted(path.name for path in tmp_path.iterdir()) == [".scribe_test"]
+
+    def test_invalid_output_configuration_is_reported(self):
+        with patch("scribe.models.config.ScribeConfig", side_effect=ValueError("bad folder")):
+            result = SystemDiagnostics().check_output_folder()
+        assert result.status == "fail"
+        assert result.message == "Invalid configuration"
+
 
 class TestDiskSpaceCheck:
     """Test disk space checking."""
+
+    @patch("shutil.disk_usage")
+    def test_disk_space_uses_configured_drive_and_nearest_existing_ancestor(
+        self, mock_disk_usage, tmp_path
+    ):
+        mock_disk_usage.return_value = SimpleNamespace(free=50 * 1024**3, total=100 * 1024**3)
+        diagnostics = SystemDiagnostics(
+            config=SimpleNamespace(output_folder=tmp_path / "future" / "archive")
+        )
+        with patch.dict(os.environ, {"SCRIBE_OUTPUT_FOLDER": str(tmp_path / "ignored")}):
+            assert diagnostics.check_disk_space().status == "pass"
+        mock_disk_usage.assert_called_once_with(tmp_path)
 
     @patch("shutil.disk_usage")
     def test_plenty_of_space(self, mock_disk_usage):

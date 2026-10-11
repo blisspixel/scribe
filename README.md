@@ -111,6 +111,16 @@ scribe rec "Team Meeting"
 scribe query "action item"
 ```
 
+File, URL, and batch commands save transcripts, sidecars, notes, and session
+summaries in the output folder selected by `scribe init`. `SCRIBE_OUTPUT_FOLDER`
+overrides that setting; `-o PATH` overrides it for one run. For example,
+`scribe batch *.mp4 -o ./archive --format json,md` writes a searchable archive
+without moving the input media. `scribe query` searches the configured folder by
+default; use `--folder ./archive` to search a one-run override.
+Same-name recordings receive separate artifact filenames so earlier transcripts
+and sidecars remain searchable. If a URL transcript cannot be archived, Scribe
+retains the download and transcript and reports the failure.
+
 ![Scribe recording settings in a terminal](docs/assets/cli-recording-preview.png)
 
 Use `scribe --help` or `scribe COMMAND --help` for version-matched options. The
