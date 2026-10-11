@@ -33,11 +33,24 @@ milestones that predate this repository's Git history.
   separate complete artifact sets, and failed URL archive copies retain their
   source transcript and download. Refs #34.
 
+- Send the notes summary as plain text while retaining JSON schemas for
+  breakdown and polish. Accidental JSON summaries render as prose. Notes show
+  phase and elapsed time, omit undiscussed sections, and exclude generated
+  transcript header dates from model evidence. Grounding prompts cover readings
+  and other nonmeeting transcripts without inventing business discussions. Refs #35.
 - Bound PyAV below 19 for faster-whisper's current decoder, including fresh
   tool and wheel installations that do not use the project lock. A required CI
   gate installs from package metadata and decodes synthetic audio without a
   model or API. Versioned install examples include the compatibility override
   and select the appropriate PyTorch backend. Refs #32, #33.
+
+### Changed
+
+- Notes with no selected provider now use local Ollama. CLI, environment, and
+  config provider choices and model overrides remain supported, as does the
+  legacy explicit-key library API. An unhealthy local notes provider never
+  triggers an implicit cloud fallback. Help documents explicit cloud use and
+  source-review limits. Refs #35.
 
 ## [2.11.0] - 2026-10-09
 

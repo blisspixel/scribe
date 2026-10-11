@@ -126,6 +126,30 @@ scribe meme transcript.md --provider xai
 
 The standalone intelligence commands accept TXT, Markdown, and DOCX transcript
 inputs. Select a notes, joke, or meme concept provider with `--provider`.
+Notes default to local Ollama when no provider is selected. An explicit
+`--provider` wins over `SCRIBE_NOTES_PROVIDER`, then `[providers].notes_provider`
+in `~/.scribe/config.toml`. Existing explicit choices stay in effect. A cloud
+notes provider sends the transcript to that provider and can incur charges;
+having an API key alone does not opt notes into cloud use. Local notes do not
+fall back to cloud when Ollama is unavailable, including with optional provider
+health checks enabled. Install and select a suitable local model before running
+notes; `--model` overrides the existing installed-model selection policy.
+
+Notes show Summary 1/3, Breakdown 2/3, and Polish 3/3 with elapsed time. A terminal
+updates one line; redirected output records one line per phase transition.
+Long transcripts identify each chunk before the merged polish phase. Elapsed
+time is measured, not a completion estimate; CPU inference can take minutes.
+
+Detailed Summary is prose. Business and technical sections appear only when
+populated; undiscussed categories may be empty. The prompts distinguish a
+meeting from an interview, lecture, or fictional reading and ask for explicit
+source support. Transcript header dates may come from a filename or the day of
+transcription, so notes omit them as event dates and exclude those headers from
+model evidence. Spoken dates remain in the transcript evidence. These controls
+reduce unsupported claims; they do not verify factual accuracy. Review notes
+against the original transcript before relying on them. Notes retain the existing
+minimum of 100 transcript words.
+
 Configure meme quality with `SCRIBE_MEME_QA_THRESHOLD` and
 `SCRIBE_MEME_QA_ATTEMPTS`. Memes use a separate configurable image provider and
 can incur a separate image-generation charge.

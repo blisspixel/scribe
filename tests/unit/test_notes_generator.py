@@ -38,10 +38,16 @@ class TestNotesGeneratorInit:
         assert generator.config.model == "gpt-5-mini"
 
     def test_init_without_api_key_raises_error(self):
-        """Test that missing API key raises error."""
-        with patch.dict(os.environ, {}, clear=True):
-            # Clear all API keys
-            with pytest.raises(NotesGenerationError, match="No API key found"):
+        """Default notes fail locally when no local model can be selected."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("scribe.providers.factory._config_provider", return_value=None),
+            patch(
+                "scribe.utils.ollama_models.select_default_ollama_model",
+                side_effect=RuntimeError("No installed local model"),
+            ),
+        ):
+            with pytest.raises(NotesGenerationError, match="No installed local model"):
                 NotesGenerator()
 
 
@@ -231,9 +237,9 @@ class TestMarkdownFormatting:
         markdown = generator._format_markdown(summary, breakdown, metadata)
 
         # Check structure
-        assert "# Meeting Notes: Test Meeting" in markdown
-        assert "**Date**: November 11, 2025" in markdown
-        assert "**Duration**: 30 minutes" in markdown
+        assert "# Transcript Notes: Test Meeting" in markdown
+        assert "November 11, 2025" not in markdown
+        assert "**Transcript duration**: 30 minutes" in markdown
         assert "## Detailed Summary" in markdown
         assert "## Current State" in markdown
         assert "**Business:**" in markdown
@@ -316,6 +322,7 @@ class TestNotesGeneratorPipeline:
 
     def test_generate_notes_segmented_path(self, tmp_path):
         generator = self._make_generator()
+        phases = []
         transcript_path = tmp_path / "meeting.txt"
         transcript_path.write_text("content")
         output_path = tmp_path / "meeting_notes.md"
@@ -358,10 +365,19 @@ class TestNotesGeneratorPipeline:
             patch.object(generator, "_format_markdown", return_value="# Notes"),
             patch.object(generator, "_write_notes", return_value=output_path),
         ):
-            result = generator.generate_notes(transcript_path, output_path)
+            result = generator.generate_notes(
+                transcript_path, output_path, progress_callback=phases.append
+            )
 
         assert result == output_path
         mock_merge.assert_called_once()
+        assert phases == [
+            "Summary 1/3 (chunk 1/2)",
+            "Breakdown 2/3 (chunk 1/2)",
+            "Summary 1/3 (chunk 2/2)",
+            "Breakdown 2/3 (chunk 2/2)",
+            "Polish 3/3 (merged chunks)",
+        ]
 
     def test_call_gpt5_api_provider_mode(self):
         provider = Mock()

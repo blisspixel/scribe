@@ -1,131 +1,13 @@
-"""
-Meeting Notes Generator using AI with agentic reasoning.
+"""Generate transcript notes with prose, structured extraction, and review phases.
 
-═══════════════════════════════════════════════════════════════════════════════
-ARCHITECTURAL PATTERN: Multi-Step Reasoning with Map-Reduce
-═══════════════════════════════════════════════════════════════════════════════
-
-This module implements a sophisticated pipeline for generating structured meeting
-notes from transcripts. The key innovation is MULTI-STEP REASONING rather than
-asking the AI to do everything in one shot.
-
-THE PROBLEM WITH SINGLE-STEP GENERATION:
-─────────────────────────────────────────
-Traditional approach: "Here's a transcript, generate notes"
-
-Problems:
-1. **Inconsistent structure**: AI might forget sections or use wrong format
-2. **Missing details**: AI summarizes too aggressively, loses important info
-3. **Poor JSON**: AI mixes prose with JSON, breaks parsing
-4. **Context loss**: Long transcripts exceed context window
-
-Result: Unreliable notes that require manual cleanup.
-
-THE SOLUTION - MULTI-STEP REASONING:
-────────────────────────────────────
-We break notes generation into DISTINCT STEPS:
-
-Step 1: DETAILED SUMMARY (prose)
-  -> AI reads transcript and writes comprehensive summary
-  -> No structure constraints, just capture everything important
-  -> Output: Rich prose with all key points
-
-Step 2: ANALYTICAL BREAKDOWN (structured JSON)
-  -> AI takes summary and extracts structured data
-  -> Strict schema: current_state, drivers, blockers, future_state, next_steps
-  -> Output: Valid JSON with business and technical insights
-
-Step 3: REFINE AND POLISH (improved JSON)
-  -> AI reviews breakdown and improves it
-  -> Adds missing details, fixes inconsistencies
-  -> Output: Polished, complete structured notes
-
-Why this works:
-- Each step has ONE job (easier for AI)
-- Prose step captures details (no premature structure)
-- Structure step focuses on organization (details already captured)
-- Refine step catches mistakes (quality control)
-
-MAP-REDUCE FOR LONG TRANSCRIPTS:
-────────────────────────────────
-For very long transcripts (>100K chars), we use map-reduce:
-
-Map phase:
-  -> Split transcript into overlapping segments
-  -> Generate summary + breakdown for each segment
-  -> Overlap prevents losing context at boundaries
-
-Reduce phase:
-  -> Merge all breakdowns into single structure
-  -> Deduplicate action items
-  -> Combine insights from all segments
-
-This handles transcripts of ANY length without losing content.
-
-WHAT WE ACTUALLY MEASURED:
-──────────────────────────
-Performance on 28.9-minute transcript (1732 seconds of audio):
-
-With OpenAI GPT-5:
-- Step 1 (Summary): ~15 seconds
-- Step 2 (Breakdown): ~10 seconds
-- Step 3 (Refine): ~5 seconds
-- Total: ~30 seconds
-
-With XAI Grok 4.3:
-- Step 1 (Summary): ~8 seconds
-- Step 2 (Breakdown): ~5 seconds
-- Step 3 (Refine): ~2 seconds
-- Total: ~15 seconds (2x faster!)
-
-Cost comparison:
-- Costs vary by provider and model generation
-- Verify live pricing before high-volume runs
-
-THE CLEVER PARTS:
-─────────────────
-1. **JSON repair**: Handles malformed JSON from AI (missing commas, extra text)
-2. **Provider fallback**: Works with OpenAI, XAI, Anthropic, Gemini
-3. **Overlap strategy**: Segments overlap by 10% to prevent context loss
-4. **Validation**: Checks output has all required sections
-5. **Retry logic**: Exponential backoff for transient API failures
-
-THE SIMPLE PARTS:
-─────────────────
-1. **Prompts**: Just well-crafted text prompts (no fancy techniques)
-2. **Structure**: Standard JSON schema (nothing novel)
-3. **Formatting**: Basic markdown generation
-
-LIMITATIONS (HONEST):
-─────────────────────
-1. **No ground truth**: We don't measure if notes are "good"
-2. **Subjective quality**: What makes good notes? We don't know
-3. **No user feedback**: Don't track if users find notes useful
-4. **Simple validation**: Just check JSON structure, not content quality
-5. **No customization**: Same format for all meetings (can't adapt)
-
-POTENTIAL IMPROVEMENTS:
-───────────────────────
-1. **User feedback loop**: Let users rate notes, improve prompts
-2. **Custom templates**: Different formats for different meeting types
-3. **Action item extraction**: Parse and track action items separately
-4. **Speaker attribution**: Link insights to specific speakers
-5. **Confidence scoring**: Rate how confident AI is about each insight
-
-THE VALUE:
-──────────
-Despite limitations, this provides real value:
-- Saves 30-60 minutes of manual note-taking
-- Consistent structure (always has same sections)
-- Captures details humans might miss
-- Works with multiple AI providers (cost optimization)
-
-The multi-step approach produces better notes than single-step generation.
+Long inputs reuse overlapping chunks and a merged breakdown. Schema validation
+checks shape; generated claims still require review against the source transcript.
 """
 
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -135,6 +17,16 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from scribe.exceptions import ScribeError
 from scribe.utils.logging import get_logger
+from scribe.utils.notes_content import (
+    BREAKDOWN_KEYS,
+    BREAKDOWN_SCHEMA,
+    breakdown_prompt,
+    format_notes,
+    refinement_prompt,
+    summary_prompt,
+    summary_prose,
+    transcript_body,
+)
 from scribe.utils.transcript_loader import load_transcript_text
 
 logger = get_logger(__name__)
@@ -176,7 +68,7 @@ class NotesConfig:
 
 class NotesGenerator:
     """
-    Generates structured meeting notes from transcripts using AI providers.
+    Generates transcript notes using AI providers.
 
     Multi-step agentic reasoning:
     1. Generate detailed summary (prose)
@@ -216,12 +108,21 @@ class NotesGenerator:
 
         try:
             from scribe.providers import get_provider
+            from scribe.providers.factory import _config_provider
+
+            # Preserve explicit choices and the legacy explicit-key API. With
+            # no choice, notes must not send a transcript to a paid provider.
+            selected_provider = provider_name
+            if selected_provider is None and api_key is None:
+                selected_provider = (
+                    os.getenv("SCRIBE_NOTES_PROVIDER") or _config_provider("notes") or "ollama"
+                )
 
             self.provider = get_provider(
                 feature="notes",
                 api_key=api_key,
                 model=model or None,
-                provider_name=provider_name,
+                provider_name=selected_provider,
             )
             self.use_provider = True
             logger.info(
@@ -267,13 +168,20 @@ class NotesGenerator:
             pass
         logger.info(f"Initialized NotesGenerator with model={self.config.model}")
 
-    def generate_notes(self, transcript_path: Path, output_path: Path | None = None) -> Path:
+    def generate_notes(
+        self,
+        transcript_path: Path,
+        output_path: Path | None = None,
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> Path:
         """
-        Generate structured meeting notes from transcript.
+        Generate grounded transcript notes.
 
         Args:
             transcript_path: Path to transcript TXT file
             output_path: Optional custom output path
+            progress_callback: Receives phase transitions, without transcript content
 
         Returns:
             Path to generated notes MD file
@@ -295,8 +203,14 @@ class NotesGenerator:
 
         if segments is None:
             # Single-pass path
+            if progress_callback:
+                progress_callback("Summary 1/3")
             summary = self._generate_detailed_summary(transcript_content)
+            if progress_callback:
+                progress_callback("Breakdown 2/3")
             breakdown_initial = self._generate_analytical_breakdown(transcript_content, summary)
+            if progress_callback:
+                progress_callback("Polish 3/3")
             refined_breakdown = self._refine_and_polish(transcript_content, breakdown_initial)
         else:
             # Map-Reduce path with overlap for zero loss
@@ -305,12 +219,18 @@ class NotesGenerator:
             breakdowns: list[dict[str, Any]] = []
             for i, seg in enumerate(segments):
                 logger.info(f"Processing segment {i + 1}/{len(segments)}")
+                if progress_callback:
+                    progress_callback(f"Summary 1/3 (chunk {i + 1}/{len(segments)})")
                 seg_summary = self._generate_detailed_summary(seg)
                 summaries.append(seg_summary)
+                if progress_callback:
+                    progress_callback(f"Breakdown 2/3 (chunk {i + 1}/{len(segments)})")
                 seg_breakdown = self._generate_analytical_breakdown(seg, seg_summary)
                 breakdowns.append(seg_breakdown)
             summary = "\n\n".join(summaries)
             merged = self._merge_breakdowns(breakdowns)
+            if progress_callback:
+                progress_callback("Polish 3/3 (merged chunks)")
             refined_breakdown = self._refine_and_polish(transcript_content, merged)
 
         # Step 5: Validate output
@@ -494,9 +414,12 @@ class NotesGenerator:
                 # Determine max tokens based on phase
                 max_tokens = 4000 if json_schema else 2000
 
-                response = provider.chat_completion_with_json(
-                    messages=messages, json_schema=json_schema, max_tokens=max_tokens
-                )
+                if json_schema is None:
+                    response = provider.chat_completion(messages=messages, max_tokens=max_tokens)
+                else:
+                    response = provider.chat_completion_with_json(
+                        messages=messages, json_schema=json_schema, max_tokens=max_tokens
+                    )
 
                 content = response["content"]
                 usage_info = response.get("usage", {})
@@ -589,8 +512,8 @@ class NotesGenerator:
             f"Read transcript: {len(content)} chars, meeting={metadata.get('meeting_name')}"
         )
         return {
-            "content": content,
-            "meeting_name": metadata.get("meeting_name", "Unknown Meeting"),
+            "content": transcript_body(content),
+            "meeting_name": metadata.get("meeting_name", "Transcript"),
             "date": metadata.get("date", ""),
             "duration": metadata.get("duration", ""),
         }
@@ -630,102 +553,27 @@ class NotesGenerator:
 
     def _generate_detailed_summary(self, transcript: str) -> str:
         logger.info("Generating detailed summary...")
-        prompt = f"""You are analyzing a meeting transcript to create comprehensive meeting notes.
-CRITICAL RULES:
-- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
-- Do not use ANY emojis or emdashes.
-
-TRANSCRIPT:
-{transcript}
-
-Generate a detailed narrative summary covering:
-- Meeting purpose and stated goals
-- Key discussions with participant arguments and rationales
-- Major decisions made, including who owns them and any stated deadlines
-- Dependencies mentioned between teams, systems, or projects
-- Challenges or blockers discussed
-- Follow-up actions or next steps
-
-Use a factual, professional tone. Include specific names, numbers, systems, and dates mentioned.
-Write 2-4 paragraphs. Be comprehensive but concise."""
+        prompt = summary_prompt(transcript)
         try:
             summary, _ = self._call_gpt5_api(
                 prompt, reasoning_effort="medium", verbosity="low", phase="summary"
             )
             logger.info(f"Generated summary: {len(summary)} characters")
-            return summary.strip()
+            return summary_prose(summary)
         except Exception as e:
             raise NotesGenerationError(f"Failed to generate summary: {e}")
 
     def _generate_analytical_breakdown(self, transcript: str, summary: str) -> dict[str, Any]:
         logger.info("Generating analytical breakdown...")
 
-        breakdown_schema = {
-            "type": "object",
-            "properties": {
-                "current_state_business": {"type": "array", "items": {"type": "string"}},
-                "current_state_technical": {"type": "array", "items": {"type": "string"}},
-                "drivers": {"type": "array", "items": {"type": "string"}},
-                "blockers": {"type": "array", "items": {"type": "string"}},
-                "future_state_business": {"type": "array", "items": {"type": "string"}},
-                "future_state_technical": {"type": "array", "items": {"type": "string"}},
-                "next_steps": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": [
-                "current_state_business",
-                "current_state_technical",
-                "drivers",
-                "blockers",
-                "future_state_business",
-                "future_state_technical",
-                "next_steps",
-            ],
-            "additionalProperties": False,
-        }
-
-        prompt = f"""You are creating a structured breakdown of a meeting for business intelligence.
-CRITICAL RULES:
-- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
-- Do not use ANY emojis or emdashes.
-
-TRANSCRIPT:
-{transcript}
-
-SUMMARY:
-{summary}
-
-Create a detailed analytical breakdown with these exact sections:
-
-## Current State
-**Business:** Bullets about business context, progress, stakeholder alignment, contracts, KPIs, operational status, quantitative metrics
-**Technical:** Bullets about architecture, systems, models, infrastructure, performance metrics, active experiments
-
-## Drivers
-Bullets about forces motivating action: business goals, user feedback, leadership priorities, competitive pressures, regulatory factors
-
-## Blockers
-Bullets about issues preventing progress: technical failures, resource gaps, data limitations, legal restrictions, coordination delays
-
-## Future State
-**Business:** Bullets about desired outcomes, roadmap milestones, partnerships, measurable success criteria
-**Technical:** Bullets about target architecture, integrations, automation goals, scalability improvements, AI enhancements
-
-## Next Steps
-Bullets listing actionable items with owners and deadlines where possible
-
-CRITICAL FORMATTING RULES:
-- Use ONLY single-level bullets (no nesting or indentation)
-- Each bullet must be a complete sentence with specific details
-- Include names, tools, metrics, systems, dates, and numbers
-- Avoid vague phrasing; be specific and quantitative
-- Preserve proper nouns and technical terms exactly as stated"""
+        prompt = breakdown_prompt(transcript, summary)
         try:
             response_text, _ = self._call_gpt5_api(
                 prompt,
                 reasoning_effort="low",
                 verbosity="low",
                 phase="breakdown",
-                json_schema=breakdown_schema,
+                json_schema=BREAKDOWN_SCHEMA,
             )
             try:
                 breakdown = cast(dict[str, Any], json.loads(response_text))
@@ -760,58 +608,14 @@ CRITICAL FORMATTING RULES:
     def _refine_and_polish(self, transcript: str, breakdown: dict[str, Any]) -> dict[str, Any]:
         logger.info("Refining and polishing breakdown...")
 
-        breakdown_schema = {
-            "type": "object",
-            "properties": {
-                "current_state_business": {"type": "array", "items": {"type": "string"}},
-                "current_state_technical": {"type": "array", "items": {"type": "string"}},
-                "drivers": {"type": "array", "items": {"type": "string"}},
-                "blockers": {"type": "array", "items": {"type": "string"}},
-                "future_state_business": {"type": "array", "items": {"type": "string"}},
-                "future_state_technical": {"type": "array", "items": {"type": "string"}},
-                "next_steps": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": [
-                "current_state_business",
-                "current_state_technical",
-                "drivers",
-                "blockers",
-                "future_state_business",
-                "future_state_technical",
-                "next_steps",
-            ],
-            "additionalProperties": False,
-        }
-
-        current_breakdown_text = json.dumps(breakdown, indent=2)
-
-        prompt = f"""You are refining meeting notes for maximum detail and accuracy.
-CRITICAL RULES:
-- Output the raw text directly. Do not include any signatures, meta-commentary, or attributions.
-- Do not use ANY emojis or emdashes.
-
-ORIGINAL TRANSCRIPT:
-{transcript}
-
-CURRENT NOTES:
-{current_breakdown_text}
-
-Re-analyze the transcript to:
-1. Identify any missed context, implicit signals, or nuanced information
-2. Add specific details that were omitted (names, numbers, dates, systems)
-3. Expand vague bullets with concrete information
-4. Ensure logical consistency between sections (blockers should align with drivers and next steps)
-5. Verify all quantitative data is included (percentages, counts, durations, costs)
-
-Return the refined breakdown in the same JSON format, with expanded and polished bullets.
-Each bullet should be a complete sentence with maximum detail density."""
+        prompt = refinement_prompt(transcript, breakdown)
         try:
             response_text, _ = self._call_gpt5_api(
                 prompt,
                 reasoning_effort="low",
                 verbosity="low",
                 phase="refinement",
-                json_schema=breakdown_schema,
+                json_schema=BREAKDOWN_SCHEMA,
             )
             try:
                 refined_breakdown = cast(dict[str, Any], json.loads(response_text))
@@ -828,19 +632,11 @@ Each bullet should be a complete sentence with maximum detail density."""
                     )
                     return breakdown
 
-            required = [
-                "current_state_business",
-                "current_state_technical",
-                "drivers",
-                "blockers",
-                "future_state_business",
-                "future_state_technical",
-                "next_steps",
-            ]
-            for key in required:
+            for key in BREAKDOWN_KEYS:
                 if key not in refined_breakdown:
                     logger.debug(f"Refinement lost section {key}, keeping original")
                     refined_breakdown[key] = breakdown.get(key, [])
+            self._validate_breakdown_keys(refined_breakdown)
             return refined_breakdown
         except json.JSONDecodeError as e:
             # This is fine - refinement is optional, original is good enough
@@ -929,19 +725,12 @@ Each bullet should be a complete sentence with maximum detail density."""
     # ---------------- Validation, Formatting, Helpers ----------------
 
     def _validate_breakdown_keys(self, breakdown: dict[str, Any]) -> None:
-        required_keys = [
-            "current_state_business",
-            "current_state_technical",
-            "drivers",
-            "blockers",
-            "future_state_business",
-            "future_state_technical",
-            "next_steps",
-        ]
-        for key in required_keys:
+        for key in BREAKDOWN_KEYS:
             if key not in breakdown:
                 raise ValidationError(f"Missing required section: {key}")
-            if not isinstance(breakdown[key], list):
+            if not isinstance(breakdown[key], list) or not all(
+                isinstance(bullet, str) for bullet in breakdown[key]
+            ):
                 raise ValidationError(f"Section {key} must be a list of strings")
 
     def _validate_output(self, breakdown: dict[str, Any]) -> float:
@@ -1029,66 +818,7 @@ Each bullet should be a complete sentence with maximum detail density."""
     def _format_markdown(
         self, summary: str, breakdown: dict[str, Any], metadata: dict[str, str]
     ) -> str:
-        logger.debug("Formatting output as Markdown...")
-
-        lines: list[str] = []
-        meeting_name = metadata.get("meeting_name", "Meeting Notes")
-        lines.append(f"# Meeting Notes: {meeting_name}")
-        lines.append("")
-        if metadata.get("date"):
-            lines.append(f"**Date**: {metadata['date']}")
-        if metadata.get("duration"):
-            lines.append(f"**Duration**: {metadata['duration']}")
-        lines.append("")
-
-        lines.append("## Detailed Summary")
-        lines.append("")
-        lines.append(summary.strip())
-        lines.append("")
-
-        lines.append("## Current State")
-        lines.append("")
-        lines.append("**Business:**")
-        for bullet in breakdown.get("current_state_business", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-        lines.append("**Technical:**")
-        for bullet in breakdown.get("current_state_technical", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-
-        lines.append("## Drivers")
-        lines.append("")
-        for bullet in breakdown.get("drivers", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-
-        lines.append("## Blockers")
-        lines.append("")
-        for bullet in breakdown.get("blockers", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-
-        lines.append("## Future State")
-        lines.append("")
-        lines.append("**Business:**")
-        for bullet in breakdown.get("future_state_business", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-        lines.append("**Technical:**")
-        for bullet in breakdown.get("future_state_technical", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-
-        lines.append("## Next Steps")
-        lines.append("")
-        for bullet in breakdown.get("next_steps", []):
-            lines.append(f"- {bullet}")
-        lines.append("")
-
-        markdown_content = "\n".join(lines)
-        logger.debug(f"Formatted Markdown: {len(markdown_content)} characters")
-        return markdown_content
+        return format_notes(summary, breakdown, metadata)
 
     def _write_notes(self, content: str, output_path: Path) -> Path:
         try:

@@ -33,6 +33,7 @@ from scribe.cli.dependencies import (
     txt_to_docx,
 )
 from scribe.cli.errors import exit_on_cli_error
+from scribe.cli.notes_progress import notes_progress
 from scribe.cli.voice_session import voice_app
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.options import ModelSize, TranscriptionMethod
@@ -572,7 +573,7 @@ def transcribe_command(
         None,
         "--notes/--no-notes",
         show_default=False,
-        help="Generate meeting notes this run (paid text API); overrides the config default",
+        help="Generate notes this run (local Ollama by default; cloud requires explicit provider config)",
     ),
     keep_all: bool = typer.Option(
         False, "--keep-all", help="Keep all intermediate files (don't cleanup)"
@@ -921,7 +922,12 @@ def transcribe_command(
                     model=config.notes_model,
                     provider_name=None,  # Will use SCRIBE_NOTES_PROVIDER env var
                 )
-                notes_path = notes_generator.generate_notes(transcript_path)
+                notes_path = notes_generator.generate_notes(
+                    transcript_path,
+                    progress_callback=lambda phase: unified_progress.update_phase(
+                        "finishing", 0.2, f"Notes: {phase}"
+                    ),
+                )
                 session.add_file(notes_path, "notes")
             except Exception as e:
                 reason = f"Notes generation failed: {e}"
@@ -1102,7 +1108,7 @@ def url_command(
         None,
         "--notes/--no-notes",
         show_default=False,
-        help="Generate meeting notes this run (paid text API); overrides the config default",
+        help="Generate notes this run (local Ollama by default; cloud requires explicit provider config)",
     ),
     keep_all: bool = typer.Option(
         False, "--keep-all", help="Keep all intermediate files (don't cleanup)"
@@ -1483,7 +1489,12 @@ def url_command(
                 notes_generator = NotesGenerator(
                     api_key=None, model=config.notes_model, provider_name=None
                 )
-                notes_path = notes_generator.generate_notes(transcript_path)
+                notes_path = notes_generator.generate_notes(
+                    transcript_path,
+                    progress_callback=lambda phase: unified_progress.update_phase(
+                        "finishing", 0.2, f"Notes: {phase}"
+                    ),
+                )
                 session.add_file(notes_path, "notes")
             except Exception as e:
                 reason = f"Notes generation failed: {e}"
@@ -1699,7 +1710,7 @@ def record(
         None,
         "--notes/--no-notes",
         show_default=False,
-        help="Generate meeting notes after recording (paid text API); overrides the config default",
+        help="Generate notes after recording (local Ollama by default; cloud requires explicit provider config)",
     ),
     joke: bool | None = typer.Option(
         None,
@@ -1941,7 +1952,10 @@ def record(
                         model=config.notes_model,
                         provider_name=None,
                     )
-                    notes_path = notes_generator.generate_notes(transcript_path)
+                    with notes_progress(console) as report_phase:
+                        notes_path = notes_generator.generate_notes(
+                            transcript_path, progress_callback=report_phase
+                        )
                     if not notes_path:
                         raise RuntimeError("no output file was returned")
                     session.add_file(notes_path, "notes")
@@ -2124,7 +2138,7 @@ def batch_transcribe(
         None,
         "--notes/--no-notes",
         show_default=False,
-        help="Generate meeting notes for each file (paid text API); overrides the config default",
+        help="Generate notes for each file (local Ollama by default; cloud requires explicit provider config)",
     ),
     joke: bool | None = typer.Option(
         None,
@@ -2340,7 +2354,10 @@ def batch_transcribe(
                         from scribe.utils.notes_generator import NotesGenerator
 
                         notes_generator = NotesGenerator(api_key=None, model=config.notes_model)
-                        notes_path = notes_generator.generate_notes(transcript_path)
+                        with notes_progress(console) as report_phase:
+                            notes_path = notes_generator.generate_notes(
+                                transcript_path, progress_callback=report_phase
+                            )
                         session.add_file(notes_path, "notes")
                     except Exception as e:
                         logger.error(f"Notes generation failed: {e}")
@@ -3422,7 +3439,9 @@ def notes(
         None, "--model", help="Model to use (default: provider's notes default)"
     ),
     provider: str | None = typer.Option(
-        None, "--provider", help="AI provider to use (openai, xai, anthropic, gemini, ollama)"
+        None,
+        "--provider",
+        help="Notes provider (default: local Ollama; cloud requires explicit selection)",
     ),
     compare: str | None = typer.Option(
         None,
@@ -3440,18 +3459,21 @@ def notes(
     ),
 ) -> None:
     """
-    Generate structured meeting notes from a transcript.
+    Generate transcript notes with local Ollama by default ($0 provider cost).
 
-    Uses AI (OpenAI, XAI/Grok, Ollama, etc.) to analyze the transcript and create comprehensive notes with:
-    - Detailed summary
-    - Current state (business & technical)
-    - Drivers and blockers
-    - Future state and next steps
+    Requests a prose summary and relevant, transcript-supported sections.
+    Review generated claims against the source. A header date is not an event date.
+    Cloud use requires --provider or an explicitly configured notes provider.
 
-    Example: scribe notes transcript.txt
-    Example: scribe notes transcript.txt --output ./notes/meeting.md
-    Example: scribe notes transcript.txt --provider ollama          # free, local, offline
-    Example: scribe notes transcript.txt --compare openai,ollama:qwen2.5:14b --judge openai
+    \b
+    Examples:
+      scribe notes transcript.txt
+      scribe notes transcript.txt --output ./notes/reading.md
+
+    \b
+    Explicit cloud use (paid, sends transcript):
+      scribe notes transcript.txt --provider openai
+      scribe notes transcript.txt --compare openai,ollama:qwen2.5:14b --judge openai
     """
     try:
         # Validate file is a text file
@@ -3477,8 +3499,6 @@ def notes(
             return
 
         # Generate notes with progress
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-
         from scribe.utils.notes_generator import NotesGenerator
 
         notes_model = model or config.notes_model
@@ -3488,11 +3508,10 @@ def notes(
             provider_name=provider,
         )
 
-        with Progress(
-            SpinnerColumn(), TextColumn("[cyan]{task.description}"), console=console, transient=True
-        ) as progress:
-            progress.add_task("Generating notes...", total=None)
-            notes_path = notes_generator.generate_notes(transcript_file, output)
+        with notes_progress(console) as report_phase:
+            notes_path = notes_generator.generate_notes(
+                transcript_file, output, progress_callback=report_phase
+            )
 
         console.print()
 
