@@ -20,7 +20,7 @@ Install the current GitHub release as a tool:
 
 ```bash
 uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.11.0
+  git+https://github.com/blisspixel/scribe.git@v2.12.0
 uv tool update-shell
 ```
 
@@ -49,7 +49,7 @@ If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
 uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.11.0
+  git+https://github.com/blisspixel/scribe.git@v2.12.0
 ```
 
 For a development checkout:
@@ -142,10 +142,10 @@ Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 
 uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -220,7 +220,7 @@ install the token-free Nemotron extra:
 
 ```bash
 uv tool install --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 scribe info
 ```
 
@@ -264,7 +264,7 @@ Install the tray extra and run its check without starting the resident process:
 
 ```bash
 uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 scribe tray --check
 ```
 
@@ -308,4 +308,4 @@ Python version, command shape with private values replaced, exit code, and the
 smallest relevant sanitized error excerpt. Never attach a real recording unless
 all necessary permissions and an approved transfer method are in place.
 
-Version baseline: Scribe 2.11.0.
+Version baseline: Scribe 2.12.0.

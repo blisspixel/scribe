@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
+uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.12.0
 uv tool update-shell
 scribe init
 scribe info
@@ -74,7 +74,7 @@ is 3.14, which is outside Scribe's `>=3.12,<3.14` range.
 
 ```bash
 omarchy pkg add uv
-uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.11.0
+uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.12.0
 uv tool update-shell
 scribe init
 scribe doctor
@@ -112,7 +112,7 @@ this release was not demonstrated on Omarchy hardware.
 
 ```bash
 uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 scribe voice check
 scribe voice omarchy-install
 ```
@@ -172,13 +172,13 @@ Install tool extras from the Git repository, for example:
 
 ```bash
 uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 uv tool install --with "av<19" --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.11.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is

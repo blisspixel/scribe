@@ -6,7 +6,7 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.11.0 is the current GitHub release. The source repository is ready for
+Version 2.12.0 is the current GitHub release. The source repository is ready for
 public visibility. The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
@@ -65,10 +65,11 @@ The detailed version-sync and release workflow is in
 | 2.9.3 | Released | Keep redirected Windows subcommand help ASCII-only and preserve complete option names | 2.9.2 |
 | 2.10.0 | Released | Local speaker labels and names, faster GPU transcription, and transcript quality fixes | 2.9.3 |
 | 2.11.0 | Released | Experimental Omarchy compositor voice, install and removal packaging, and Linux OBS launch fixes | 2.10.0 |
-| 2.11.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.11.0 |
-| 2.12.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.11.1 evidence gate |
-| 2.13.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.12.0 behavior contract |
-| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.13.0 boundaries and migration design |
+| 2.12.0 | Released | Accuracy-first multilingual file transcription, security updates, and recording, install, storage, and cleanup fixes | 2.11.0 |
+| 2.12.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.12.0 |
+| 2.13.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.12.1 evidence gate |
+| 2.14.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.13.0 behavior contract |
+| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.14.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
 
 2.10.0 shipped local speaker labels, speaker naming, and transcription quality
@@ -84,11 +85,19 @@ focus changes, correct-target insertion, cancellation, device loss, and
 recovery, moved to 2.12.0. Linux voice stays experimental. A green CI run and
 this GitHub release are not that record.
 
-Version numbers after 2.11.1 are planning targets. SemVer impact discovered during
+At the maintainer's request, 2.12.0 releases the completed accuracy-first file
+transcription, security, and reliability changes. Its new configurable acoustic
+review is a backward-compatible capability, so this is a minor release. It does
+not claim completion of the clean-machine, real OBS, or desktop hardware evidence.
+The unchanged operational-proof scope moves to 2.12.1, desktop validation to
+2.13.0, and maintainability to 2.14.0. Linux and macOS resident voice remain
+experimental. No broader package or native binary distribution is introduced.
+
+Version numbers after 2.12.0 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.11.1 operational proof
+## Next release: 2.12.1 operational proof
 
 ### Objective
 
@@ -157,7 +166,7 @@ transcription within the configured spend policy.
 
 No broader package or binary distribution should start before this gate closes.
 
-## Planned release: 2.12.0 desktop validation
+## Planned release: 2.13.0 desktop validation
 
 ### Objective
 
@@ -205,11 +214,11 @@ GitHub release do not close it.
   `scribe voice` path, or it documents the tested fallback and keeps that path
   experimental.
 
-### Local speech models (also 2.12.0)
+### Local speech models (also 2.13.0)
 
 The pluggable diarization layer, token-free Nemotron default, and OpenAI diarized
 output fix shipped in 2.10.0, along with speaker naming and batched GPU decoding.
-Remaining evidence and follow-up work for 2.12.0:
+Remaining evidence and follow-up work for 2.13.0:
 
 1. Replace the pinned Transformers commit in `diarize-nemotron` with a validated
    released version after the diarization compatibility checks, and relock.
@@ -243,7 +252,7 @@ backed by measured multilingual quality and resource evidence. Current file
 profiles and [acoustic review](docs/ACOUSTIC_REVIEW.md) express an accuracy/resource preference; hermetic policy tests alone do
 not demonstrate a WER improvement on a laptop or across languages.
 
-## Planned release: 2.13.0 maintainability and verification
+## Planned release: 2.14.0 maintainability and verification
 
 ### Objective
 
