@@ -20,7 +20,7 @@ remains planned for 2.13.0, with macOS and Linux resident voice experimental.
 
 ### Security
 
-- Updated the supported-release policy to the current 2.11.x GitHub release line.
+- Updated the supported-release policy to the latest stable GitHub release.
 - Updated Mako, multidict, and pytorch-lightning to patched versions and added
   security floors to the pyannote-bearing extras for unlocked installs, including
   both the lightning and pytorch-lightning distributions.
