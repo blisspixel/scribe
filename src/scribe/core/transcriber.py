@@ -242,8 +242,7 @@ class Transcriber:
         if self.gpu_config.has_gpu:
             logger.debug(
                 f"GPU detected: {self.gpu_config.gpu_name}, "
-                f"VRAM: {self.gpu_config.gpu_memory_gb:.1f}GB, "
-                f"Recommended model: {self.gpu_config.model_size}"
+                f"VRAM: {self.gpu_config.gpu_memory_gb:.1f}GB"
             )
 
     def choose_method(

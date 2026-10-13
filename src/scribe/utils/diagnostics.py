@@ -1150,7 +1150,7 @@ class SystemDiagnostics:
                 details=(
                     "Full large-v3 CUDA float16 sequential decoding needs roughly 5 GB free VRAM; "
                     "batching and speaker labels need more. This is planning guidance, not a fit guarantee. "
-                    "Hardware never silently selects a smaller model."
+                    "Hardware does not change the selected model."
                 ),
                 fix_suggestion=(
                     None

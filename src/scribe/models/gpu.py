@@ -26,13 +26,14 @@ class GPUConfig:
         gpu_memory_gb: Total GPU memory in GB
         cuda_available: Whether CUDA is available
         cuda_version: CUDA version string
-        model_size: Recommended Whisper model size
+        model_size: Legacy VRAM tier label. It does not select a Whisper model
+            and is omitted from session records.
         beam_size: Recommended beam search size
         batch_size: Recommended batch size
         use_fp16: Whether to use FP16 precision
         enable_tensor_cores: Whether to enable Tensor Core acceleration
         recommendation: Legacy performance hint; automatic selection remains local
-        reason: Explanation for the recommendation
+        reason: GPU-only explanation. It does not name or recommend a model.
     """
 
     has_gpu: bool
@@ -41,7 +42,7 @@ class GPUConfig:
     cuda_available: bool = False
     cuda_version: str | None = None
 
-    # Optimized settings
+    # Legacy VRAM tier. Not a model choice and not written into session evidence.
     model_size: ModelSize = "base"
     beam_size: int = 5
     batch_size: int = 8
@@ -60,8 +61,9 @@ class GPUConfig:
         This method:
         - Detects CUDA availability
         - Identifies GPU model and VRAM
-        - Selects optimal model size and parameters
+        - Selects beam, batch, and precision settings for the detected GPU
         - Provides a legacy performance hint used by diagnostics
+        - Does not choose a Whisper model
 
         Returns:
             GPUConfig with detection results and optimized settings
@@ -277,7 +279,7 @@ class GPUConfig:
             self.use_fp16 = True
             self.enable_tensor_cores = False
             self.recommendation = "local"
-            self.reason = f"Entry-level GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - can handle local transcription with smaller model"
+            self.reason = f"Entry-level GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - local transcription available"
 
         elif 4 <= vram < 6:
             self.model_size = "small"
@@ -287,7 +289,7 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "local"
             self.reason = (
-                f"Low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - best-fit local model selected"
+                f"Low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - local transcription available"
             )
 
         else:
@@ -299,7 +301,10 @@ class GPUConfig:
             self.enable_tensor_cores = False
             self.recommendation = "local"
             if self.has_gpu:
-                self.reason = f"Very low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - full large-v3 may not fit; CPU remains available"
+                self.reason = (
+                    f"Very low VRAM GPU ({self.gpu_name}, {vram:.1f}GB VRAM) - "
+                    "local CPU transcription remains available"
+                )
             else:
                 self.reason = (
                     f"Insufficient VRAM ({vram:.1f}GB) - local CPU transcription remains available"
@@ -318,7 +323,6 @@ class GPUConfig:
             "gpu_memory_gb": self.gpu_memory_gb,
             "cuda_available": self.cuda_available,
             "cuda_version": self.cuda_version,
-            "model_size": self.model_size,
             "beam_size": self.beam_size,
             "batch_size": self.batch_size,
             "use_fp16": self.use_fp16,

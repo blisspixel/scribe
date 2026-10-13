@@ -184,7 +184,8 @@ GitHub release do not close it.
    not replace it.
 2. Fix platform defects found by live permission, audio-device, hotkey, tray,
    startup, injection, read-aloud, and shutdown tests. On Omarchy, do not bind
-   F9, Super+Ctrl+X, or the Right Alt push-to-talk chord. Do not claim pynput
+   F9 or Super+Ctrl+X, and do not bind Right Alt (many users remap it for layout
+   switching or compose). Do not claim pynput
    global hotkeys. Do not use `wtype` while Super is held: Omarchy injects
    clipboard shortcuts through Hyprland `send_key_state` because a virtual
    keyboard merges with that held modifier. Quickshell is not assumed to host a

@@ -26,6 +26,14 @@ _LINUX = sys.platform == "linux"
 
 
 @pytest.fixture(autouse=True)
+def stable_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Doctor text must not depend on the caller's TERM, COLUMNS, or color flags."""
+    monkeypatch.setenv("TERM", "xterm-256color")
+    for variable in ("COLUMNS", "LINES", "FORCE_COLOR", "NO_COLOR"):
+        monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)

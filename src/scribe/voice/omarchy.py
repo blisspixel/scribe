@@ -2,7 +2,8 @@
 
 Scribe edits only the marked region of the user files ``bindings.lua`` and
 ``autostart.lua``. Packaged files under ``/usr/share/omarchy`` are never
-touched. The chords avoid Omarchy dictation's F9, Super+Ctrl+X, and Right Alt.
+touched. The chords avoid Omarchy dictation's F9 and Super+Ctrl+X. They also
+avoid Right Alt, which many users remap for layout switching or compose.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ AUTOSTART_END = "-- scribe-omarchy-voice: autostart-end"
 # table would quote the whole string as one -e argument and fail to launch.
 BINDINGS_BLOCK = """-- scribe-omarchy-voice: start
 -- Scribe voice is experimental. Confirm these chords with Super+K before relying on them.
--- F9, Super+Ctrl+X, and Right Alt stay with Omarchy dictation.
+-- F9 and Super+Ctrl+X stay with Omarchy dictation (Voxtype).
+-- Scribe also avoids Right Alt, which many users remap for layout switching or compose.
 o.bind("SUPER + ALT + D", "Scribe dictate", "scribe voice dictate")
 o.bind("SUPER + ALT + SHIFT + D", "Scribe cancel dictation", "scribe voice cancel")
 o.bind("SUPER + ALT + Y", "Scribe copy transcript", "scribe voice copy")
