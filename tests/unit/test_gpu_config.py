@@ -52,8 +52,8 @@ class TestGPUConfigDetection:
         assert config.recommendation == "local"
         assert "Local CPU transcription is available" in config.reason
 
-    def test_low_vram_gpu_uses_best_fit_local_model(self):
-        """Older NVIDIA GPUs should still get the best-fitting local model by default."""
+    def test_low_vram_gpu_keeps_a_batch_tier_without_recording_a_model(self):
+        """VRAM still sizes batching. The tier label is not session evidence."""
         config = GPUConfig(
             has_gpu=True,
             gpu_name="NVIDIA GeForce GTX 1660",
@@ -65,6 +65,9 @@ class TestGPUConfigDetection:
 
         assert config.model_size == "medium"
         assert config.recommendation == "local"
+        assert "model_size" not in config.to_dict()
+        assert "smaller model" not in config.reason
+        assert "medium" not in config.reason
 
     @patch("torch.cuda.get_device_properties")
     @patch("torch.cuda.get_device_name")
@@ -185,6 +188,37 @@ class TestGPUConfigDetection:
         assert high_end.is_high_end() is True
         assert high_end.to_dict()["gpu_name"] == "NVIDIA A100"
         assert GPUConfig(has_gpu=True, gpu_name=None, gpu_memory_gb=0.0).is_high_end() is False
+
+
+def test_doctor_six_gb_gpu_details_do_not_say_smaller_model(monkeypatch):
+    """Doctor describes the GPU. It does not recommend a smaller model."""
+    config = GPUConfig(
+        has_gpu=True,
+        gpu_name="NVIDIA GeForce GTX 1660",
+        gpu_memory_gb=6.0,
+        cuda_available=True,
+        cuda_version="12.4",
+    )
+    config._configure_for_gpu()
+
+    def detect(_cls):
+        return config
+
+    monkeypatch.setattr(GPUConfig, "detect", classmethod(detect))
+    monkeypatch.setattr(GPUConfig, "query_free_memory_gb", staticmethod(lambda: 4.0))
+
+    from scribe.utils.diagnostics import SystemDiagnostics
+
+    diagnostics = SystemDiagnostics(config=None)
+    parts: list[str] = []
+    for check in (diagnostics.check_cuda, diagnostics.check_gpu, diagnostics.check_gpu_memory):
+        result = check()
+        parts.extend(
+            part for part in (result.message, result.details, result.fix_suggestion) if part
+        )
+    blob = "\n".join(parts).lower()
+    assert "smaller model" not in blob
+    assert "medium" not in blob
 
 
 def test_rocm_cuda_api_does_not_authorize_ctranslate2_cuda():

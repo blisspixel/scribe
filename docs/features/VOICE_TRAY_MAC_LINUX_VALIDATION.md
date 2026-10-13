@@ -73,8 +73,9 @@ Wayland global hooks are not assumed to work. Record:
 - The exact `scribe tray --check` advisory.
 - Whether Quickshell showed a tray icon. Absence is an expected result, not a
   failed parity check.
-- Confirmation that F9, Super+Ctrl+X, and Right Alt push-to-talk still belong to
-  Omarchy dictation when that backend is installed.
+- Confirmation that F9 and Super+Ctrl+X still belong to Omarchy dictation when
+  that backend is installed. Right Alt is not an Omarchy dictation key; confirm
+  Scribe did not bind it, because many users remap it for layout or compose.
 - A tested terminal workflow for transcription and `scribe rec --check`. Do not
   count an XDG autostart file as a Hyprland binding.
 - Startup, microphone, read-aloud, and text-injection limitations observed live.

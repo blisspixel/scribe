@@ -129,14 +129,15 @@ complete.
 | macOS | Grant Input Monitoring and Microphone to the launching binary; typed injection also needs Accessibility; fully quit and relaunch after permission changes |
 | Linux X11 | Use a graphical `DISPLAY`; ensure the desktop has an AppIndicator or StatusNotifier host, or use `--no-tray` |
 | Linux Wayland | pynput does not register compositor bindings. Portal GlobalShortcuts support varies by desktop |
-| Omarchy | `scribe voice` is the experimental compositor path. Leave F9, Super+Ctrl+X, and Right Alt push-to-talk to Omarchy dictation. A check exit is not hardware validation |
+| Omarchy | `scribe voice` is the experimental compositor path. Leave F9 and Super+Ctrl+X to Omarchy dictation. Scribe also avoids Right Alt, which many users remap for layout switching or compose. A check exit is not hardware validation |
 | Headless or SSH | Tray icons and global desktop hotkeys are unsupported |
 
 ## Omarchy
 
-Omarchy already has a dictation path. When a backend such as Voxtype or
-Superwhisper is installed, F9 is push-to-talk, Super+Ctrl+X toggles dictation,
-and holding Right Alt starts it. Scribe must not take those keys.
+Omarchy already has a dictation path. When a backend such as Voxtype is
+installed, F9 is push-to-talk and Super+Ctrl+X toggles dictation. Right Alt is
+not an Omarchy dictation binding; many users remap it for layout switching or
+compose, so Scribe does not take it either.
 
 `scribe voice` is the experimental local path for this desktop. It talks to the
 one resident `VoiceTrayService`. It does not open a second microphone and it

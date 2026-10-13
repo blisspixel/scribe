@@ -72,8 +72,9 @@ tested Omarchy installation.
 
 FFmpeg, yt-dlp, and OBS are already on a standard Omarchy install. `scribe rec`
 records through OBS. That is separate from Omarchy's Alt+Print Screen capture.
-Desktop dictation stays with Omarchy (F9, Super+Ctrl+X, and Right Alt when a
-dictation backend is installed). Scribe's chords are Super+Alt+D, Super+Alt+Shift+D,
+Desktop dictation stays with Omarchy (F9 and Super+Ctrl+X when a dictation
+backend is installed). Scribe also avoids Right Alt, which many users remap for
+layout switching or compose. Scribe's chords are Super+Alt+D, Super+Alt+Shift+D,
 Super+Alt+Y, Super+Alt+I, Super+Alt+A, and Super+Alt+O. Confirm them with
 Super+K before relying on them.
 
@@ -246,8 +247,9 @@ The full Python tray is live-validated on Windows. macOS and Linux remain
 experimental until their hardware validation records are complete. On Omarchy,
 `scribe voice` is the compositor path: Hyprland owns the shortcuts and a
 terminal overlay shows recording state. That path is experimental and was not
-demonstrated on Omarchy hardware. The tray does not take F9, Super+Ctrl+X, or
-Right Alt. Installation, hotkeys, permissions, single-instance ownership, and
+demonstrated on Omarchy hardware. The tray does not take F9 or Super+Ctrl+X.
+It also avoids Right Alt, which many users remap for layout switching or
+compose. Installation, hotkeys, permissions, single-instance ownership, and
 recovery are in the [resident voice guide](docs/VOICE.md).
 
 ## Reliable outcomes

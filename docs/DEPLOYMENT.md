@@ -95,13 +95,16 @@ Hardware:
   acceleration path for those GPUs.
 - NVIDIA machines can use the default CUDA backend. Speaker labels that need
   PyTorch still want `uv tool install --torch-backend auto`.
-- Scribe picks a smaller Whisper model when the machine cannot run the
-  `large-v3` preference. `scribe info` shows the model that will run.
+- Scribe keeps full `large-v3` for the default `max` profile on every machine.
+  If it cannot fit, Scribe stops with an actionable error; choose
+  `--quality balanced`, `--quality fast`, or `--model` yourself. `scribe info`
+  shows the model that will run.
 
 Recording uses OBS, not Omarchy's Alt+Print Screen capture. See the
-[recording guide](RECORDING.md#linux). Leave F9, Super+Ctrl+X, and the Right Alt
-push-to-talk chord to Omarchy dictation when that backend is installed. The
-resident tray does not register Hyprland bindings.
+[recording guide](RECORDING.md#linux). F9 and Super+Ctrl+X stay with Omarchy
+dictation (Voxtype) when that backend is installed. Scribe also avoids Right
+Alt, which many users remap for layout switching or compose. The resident tray
+does not register Hyprland bindings.
 
 ### Experimental Omarchy voice
 

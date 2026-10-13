@@ -12,6 +12,17 @@ milestones that predate this repository's Git history.
 
 ## Unreleased
 
+### Fixed
+
+- Deployment docs state that the default `max` profile keeps full large-v3 and
+  stops with an error when it does not fit, instead of picking a smaller model.
+- Session `gpu_info` and `scribe doctor` no longer carry GPUConfig's legacy
+  recommended model or the "smaller model" phrase.
+- Omarchy docs no longer describe Right Alt as an Omarchy dictation key. The
+  `alt_r` binding guard is unchanged.
+- The Omarchy overlay and legacy-config doctor tests no longer depend on the
+  caller's `TERM` or `COLUMNS`.
+
 ## [2.12.0] - 2026-10-11
 
 This minor release packages the completed quality, security, and reliability

@@ -50,6 +50,14 @@ from scribe.voice.wayland_paste import (
 )
 
 
+@pytest.fixture(autouse=True)
+def stable_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overlay text must not depend on the caller's TERM, COLUMNS, or color flags."""
+    monkeypatch.setenv("TERM", "xterm-256color")
+    for variable in ("COLUMNS", "LINES", "FORCE_COLOR", "NO_COLOR"):
+        monkeypatch.delenv(variable, raising=False)
+
+
 class _Stream:
     def __init__(self) -> None:
         self.stopped = False

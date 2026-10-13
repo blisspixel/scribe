@@ -309,6 +309,63 @@ class TestTranscriptionMethods:
         assert mock_local_class.call_args.kwargs["batch_size"] == 0
 
     @patch("scribe.core.transcriber.LocalWhisperTranscriber")
+    def test_six_gb_gpu_session_records_only_the_resolved_model(
+        self,
+        mock_local_class,
+        temp_config: ScribeConfig,
+        sample_audio: Path,
+    ):
+        """A 6 GB profile must not record a model other than the resolver's choice."""
+        import json
+
+        from scribe.models.gpu import GPUConfig
+        from scribe.utils.model_selection import resolve_local_model
+
+        transcriber = Transcriber(temp_config)
+        gpu = GPUConfig(
+            has_gpu=True,
+            gpu_name="NVIDIA GeForce GTX 1660",
+            gpu_memory_gb=6.0,
+            cuda_available=True,
+        )
+        gpu._configure_for_gpu()
+        assert gpu.model_size == "medium"
+        transcriber.gpu_config = gpu
+
+        mock_local = Mock()
+        mock_local.transcribe.return_value = sample_audio.parent / "transcript.txt"
+        mock_local.last_transcript = None
+        mock_local_class.return_value = mock_local
+
+        session = TranscriptionSession.create("six-gb")
+        transcriber._transcribe_local(sample_audio, session, None, False)
+
+        expected, _adjusted = resolve_local_model(
+            temp_config.default_model,
+            set(temp_config.model_fields_set),
+            temp_config.transcription_quality,
+        )
+        assert session.model_used is not None
+        assert session.model_used.endswith(f"-{expected}")
+        assert expected != "medium"
+        record = json.dumps(session.to_dict())
+        remainder = record.replace(session.model_used, "")
+        for identity in (
+            "large-v3-turbo",
+            "large-v3",
+            "large-v2",
+            "medium",
+            "small",
+            "tiny",
+            "turbo",
+            "base",
+        ):
+            assert identity not in remainder
+        assert session.gpu_info is not None
+        assert "model_size" not in session.gpu_info
+        assert "smaller model" not in record
+
+    @patch("scribe.core.transcriber.LocalWhisperTranscriber")
     def test_transcribe_local_respects_explicit_model_override(
         self,
         mock_local_class,
