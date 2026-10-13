@@ -322,7 +322,12 @@ def test_terminal_progress_uses_one_task_with_elapsed_column():
     assert progress_class.call_args.kwargs["refresh_per_second"] == 4
 
 
-def test_notes_cli_connects_phase_display_to_generator(tmp_path: Path):
+@pytest.mark.parametrize("force_color", ["0", "1"])
+def test_notes_cli_connects_phase_display_to_generator(tmp_path: Path, monkeypatch, force_color):
+    monkeypatch.setenv("FORCE_COLOR", force_color)
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setenv("COLUMNS", "20")
     transcript = tmp_path / "fiction.txt"
     transcript.write_text(STORY)
     output = tmp_path / "fiction_notes.md"
@@ -336,7 +341,14 @@ def test_notes_cli_connects_phase_display_to_generator(tmp_path: Path):
 
     with patch("scribe.utils.notes_generator.NotesGenerator") as generator:
         generator.return_value.generate_notes.side_effect = generate
-        result = CliRunner().invoke(app, ["notes", str(transcript)], color=False)
+        result = CliRunner().invoke(
+            app,
+            ["notes", str(transcript)],
+            color=False,
+            # This assertion covers redirected progress. Rich also reads the
+            # shell environment, independently of Click's color option.
+            env={"FORCE_COLOR": None, "NO_COLOR": None, "TERM": "dumb", "COLUMNS": "120"},
+        )
     assert result.exit_code == 0, result.output
     assert result.output.count("Summary 1/3") == 1
     assert result.output.count("Breakdown 2/3") == 1
