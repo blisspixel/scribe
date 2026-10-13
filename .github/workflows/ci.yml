@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+  schedule:
+    - cron: '41 9 * * *' # 02:41 PT nightly: includes the Windows/macOS smoke
 
 permissions:
   contents: read
@@ -105,6 +109,11 @@ jobs:
   # ---------------------------------------------------------------------------
   platform-smoke:
     name: Platform Smoke (${{ matrix.os }})
+    # Hosted Windows (2x) / macOS (10x): nightly, v* tags, manual dispatch, or PRs labelled `windows`.
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || startsWith(github.ref, 'refs/tags/')
+      || contains(github.event.pull_request.labels.*.name, 'windows')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -357,6 +366,11 @@ jobs:
   # ---------------------------------------------------------------------------
   native-tray:
     name: Native Tray Source Contract (Windows amd64)
+    # Hosted Windows (2x) / macOS (10x): nightly, v* tags, manual dispatch, or PRs labelled `windows`.
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || startsWith(github.ref, 'refs/tags/')
+      || contains(github.event.pull_request.labels.*.name, 'windows')
     runs-on: windows-latest
     timeout-minutes: 10
 
@@ -479,14 +493,20 @@ jobs:
           for result in "${{ needs.lint-and-types.result }}" \
                         "${{ needs.toolchain-check.result }}" \
                         "${{ needs.test.result }}" \
-                        "${{ needs.platform-smoke.result }}" \
                         "${{ needs.coverage.result }}" \
                         "${{ needs.security.result }}" \
                         "${{ needs.package.result }}" \
                         "${{ needs.fresh-tool-install.result }}" \
-                        "${{ needs.native-tray.result }}" \
                         "${{ needs.native-audio.result }}"; do
             if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          done
+          # Platform smoke and native tray are skipped on ordinary pushes and PRs
+          # (nightly, v* tags, dispatch or the `windows` label only); skipped is fine there.
+          for result in "${{ needs.platform-smoke.result }}" \
+                        "${{ needs.native-tray.result }}"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
               failed=1
             fi
           done
