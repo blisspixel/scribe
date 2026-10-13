@@ -14,6 +14,8 @@ milestones that predate this repository's Git history.
 
 ### Fixed
 
+- The redirected notes progress test pins its terminal environment and checks
+  inherited `FORCE_COLOR=0` and `FORCE_COLOR=1` without changing CLI rendering.
 - Deployment docs state that the default `max` profile keeps full large-v3 and
   stops with an error when it does not fit, instead of picking a smaller model.
 - Session `gpu_info` and `scribe doctor` no longer carry GPUConfig's legacy
