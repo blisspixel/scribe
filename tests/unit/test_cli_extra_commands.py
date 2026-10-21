@@ -109,6 +109,7 @@ def test_url_marks_requested_notes_failure_partial(tmp_path: Path) -> None:
             "scribe.utils.notes_generator.NotesGenerator",
             side_effect=RuntimeError("provider unavailable"),
         ),
+        patch("scribe.cli.main.logger.warning") as warning_log,
     ):
         downloader_class.return_value.download.return_value = SimpleNamespace(
             file_path=downloaded_file,
@@ -134,6 +135,9 @@ def test_url_marks_requested_notes_failure_partial(tmp_path: Path) -> None:
     assert data["outcome"] == "partial"
     assert data["success"] is False
     assert data["error_message"] == "Notes generation failed: provider unavailable"
+    assert not any(
+        "already saved before a later error" in str(call) for call in warning_log.call_args_list
+    )
 
 
 def test_transcribe_marks_requested_notes_failure_partial(tmp_path: Path) -> None:
@@ -159,6 +163,7 @@ def test_transcribe_marks_requested_notes_failure_partial(tmp_path: Path) -> Non
             "scribe.utils.notes_generator.NotesGenerator",
             side_effect=RuntimeError("provider unavailable"),
         ),
+        patch("scribe.cli.main.logger.warning") as warning_log,
     ):
         result = CliRunner().invoke(
             app,
@@ -179,6 +184,9 @@ def test_transcribe_marks_requested_notes_failure_partial(tmp_path: Path) -> Non
     assert data["outcome"] == "partial"
     assert data["success"] is False
     assert data["error_message"] == "Notes generation failed: provider unavailable"
+    assert not any(
+        "already saved before a later error" in str(call) for call in warning_log.call_args_list
+    )
 
 
 def test_url_post_save_output_failure_does_not_rewrite_success(tmp_path: Path) -> None:

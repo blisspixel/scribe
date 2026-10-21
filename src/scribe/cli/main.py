@@ -617,6 +617,7 @@ def transcribe_command(
     config: ScribeConfigType | None = None
     session: TranscriptionSessionType | None = None
     summary_saved = False
+    incomplete_run = False
     workspace = AudioWorkspace()
     try:
         from scribe.utils.vocabulary import CustomVocabulary
@@ -1045,8 +1046,7 @@ def transcribe_command(
 
         console.print()
 
-        if artifact_errors:
-            raise typer.Exit(1)
+        incomplete_run = bool(artifact_errors)
 
     except ScribeError as e:
         _persist_terminal_session_error(
@@ -1072,6 +1072,9 @@ def transcribe_command(
             else:
                 unified_progress.stop()
         workspace.finish(session, config.output_folder if config else None)
+    # Raise after the handlers. An in-try Exit is logged as a post-save error.
+    if incomplete_run:
+        raise typer.Exit(1)
 
 
 @app.command(name="url")
@@ -1201,6 +1204,7 @@ def url_command(
     config = None
     session: TranscriptionSessionType | None = None
     summary_saved = False
+    incomplete_run = False
     workspace = AudioWorkspace()
     archive_pending = False
     try:
@@ -1650,8 +1654,7 @@ def url_command(
 
         console.print()
 
-        if artifact_errors:
-            raise typer.Exit(1)
+        incomplete_run = bool(artifact_errors)
 
     except ScribeError as e:
         _persist_terminal_session_error(
@@ -1706,6 +1709,9 @@ def url_command(
                             "Could not refresh session summary after URL cleanup: %s",
                             summary_err,
                         )
+    # Raise after the handlers. An in-try Exit is logged as a post-save error.
+    if incomplete_run:
+        raise typer.Exit(1)
 
 
 def _run_obs_preflight() -> int:

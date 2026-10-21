@@ -148,7 +148,8 @@ the [voice guide](VOICE.md#omarchy).
 
 Required:
 - Python 3.11 through 3.14. Python 3.14 is the default. Python 3.15 stays
-  unsupported until torch and CTranslate2 publish cp315 wheels; see
+  unsupported until CTranslate2 and ONNX Runtime publish cp315 wheels. Torch
+  wheels on the stable PyTorch index do not lift that cap; see
   [ADR-001](adr/ADR-001-python-312-baseline.md). Arch and Omarchy ship Python
   3.14 as `python`, and that interpreter is supported. Install with uv as in
   [Omarchy](#omarchy).

@@ -253,7 +253,10 @@ Batch and music commands continue through later inputs by default. Use
 
 A complete run exits 0. Missing files, failed items, partial music segments, or
 requested artifacts that could not be generated produce a final summary and exit
-1. A confirmed instrumental track is a successful outcome.
+1. A confirmed instrumental track is a successful outcome. A planned partial
+exit keeps the saved partial outcome and is not logged as a later session error.
+An unexpected failure after that summary is saved is still logged and does not
+rewrite the saved outcome.
 
 ## Exit codes and evidence
 

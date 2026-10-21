@@ -1486,7 +1486,7 @@ class OBSRecorder:
         Includes a deadman timer: after the user sends stop, if OBS doesn't
         confirm within 30 seconds we return anyway (the file is probably fine).
         Also handles the no-TTY case (piped stdin / CI) by allowing Ctrl-C
-        or the process_timeout to end the recording.
+        or the recording duration limit to end the recording.
         """
         from rich.panel import Panel
 
@@ -1816,7 +1816,7 @@ class OBSRecorder:
             signal.signal(signal.SIGINT, _sigint_handler)
         except ValueError:
             # Not in main thread - Ctrl-C can't be wired, but typed
-            # stop commands and process_timeout still work
+            # stop commands and the recording duration limit still work
             logger.debug("Cannot install SIGINT handler (not main thread)")
 
         def _listen() -> None:

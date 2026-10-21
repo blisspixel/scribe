@@ -85,6 +85,10 @@ class TestPythonVersionCheck:
 
         assert result.status == "fail"
         assert "not supported" in result.message
+        assert result.details is not None
+        assert "CTranslate2" in result.details
+        assert "ONNX Runtime" in result.details
+        assert "do not lift that cap" in result.details
         assert result.fix_suggestion is not None
         assert "3.14" in result.fix_suggestion
 

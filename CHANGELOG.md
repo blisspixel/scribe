@@ -10,6 +10,23 @@ milestones that predate this repository's Git history.
 
 ## [Unreleased]
 
+### Fixed
+
+- A completed partial `scribe transcribe` or `scribe url` run no longer logs its
+  own exit as a later session error. Those commands still exit 1 when a requested
+  output is incomplete. An unexpected failure after the summary is saved is still
+  logged, and the saved outcome stays in place.
+
+### Changed
+
+- Python 3.15 remains unsupported. The support statement now names CTranslate2
+  and ONNX Runtime as the cp315 blockers. Torch wheels on the stable PyTorch
+  index do not lift the `>=3.11,<3.15` cap, and free-threaded 3.15 is not
+  supported. A 2026-10-20 index check found no cp315 or abi3 wheels for
+  CTranslate2 4.8.3 or ONNX Runtime 1.31.0. faster-whisper 1.2.1 requires both.
+  PyPI torch 2.14.1 has no cp315 wheel. The stable PyTorch CPU, cu130, and cu126
+  indexes have torch 2.14.1 cp315 wheels. The cu128 index has none.
+
 ## [2.13.0] - 2026-10-20
 
 This minor release ships the terminal interface, notes honesty, opt-in source

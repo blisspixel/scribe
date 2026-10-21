@@ -15,8 +15,9 @@ opt-ins.
 ## Quick start
 
 Scribe requires Python 3.11 through 3.14, [uv](https://docs.astral.sh/uv/), and FFmpeg.
-Python 3.14 is the default. Python 3.15 stays unsupported until torch and
-CTranslate2 publish cp315 wheels.
+Python 3.14 is the default. Python 3.15 stays unsupported until CTranslate2 and
+ONNX Runtime publish cp315 wheels. Torch wheels on the stable PyTorch index do
+not lift that cap.
 OBS Studio is required only for recording.
 
 ```bash

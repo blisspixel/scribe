@@ -6,7 +6,8 @@ build-backend = "maturin"
 name = "scribe-audio-core"
 version = "0.1.0"
 description = "Native Rust extension for high-performance audio processing"
-# The cap stays until torch and CTranslate2 publish cp315 wheels.
+# Kept aligned with the application. The cap stays until CTranslate2 and
+# ONNX Runtime publish cp315 wheels.
 requires-python = ">=3.11,<3.15"
 authors = [{name = "Nick Seal"}]
 license = "Apache-2.0"

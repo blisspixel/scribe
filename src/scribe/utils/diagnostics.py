@@ -302,8 +302,9 @@ class SystemDiagnostics:
                 status="fail",
                 message=f"Python {version_str} is not supported",
                 details=(
-                    "Python 3.15 stays unsupported until torch and CTranslate2 "
-                    "publish cp315 wheels."
+                    "Python 3.15 stays unsupported until CTranslate2 and ONNX Runtime "
+                    "publish cp315 wheels. Torch wheels on the stable PyTorch index "
+                    "do not lift that cap."
                 ),
                 fix_suggestion="Install with `uv tool install --python 3.14`.",
             )

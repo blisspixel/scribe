@@ -7,7 +7,8 @@ name = "scribe"
 version = "2.13.0"
 description = "Local-first speech transcription, meeting notes, and recording tools"
 readme = "README.md"
-# The cap stays until torch and CTranslate2 publish cp315 wheels.
+# The cap stays until CTranslate2 and ONNX Runtime publish cp315 wheels.
+# Torch wheels on the stable PyTorch index do not lift it.
 requires-python = ">=3.11,<3.15"
 authors = [
     {name = "Nick Seal"}

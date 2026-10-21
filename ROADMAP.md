@@ -34,7 +34,8 @@ The current product contract includes:
   owner. A GitHub release does not validate microphone selection, focus changes,
   correct-target insertion, cancellation, device loss, or recovery.
 - Python 3.11 through 3.14. Python 3.14 is the default runtime. Python 3.15
-  stays unsupported until torch and CTranslate2 publish cp315 wheels. See
+  stays unsupported until CTranslate2 and ONNX Runtime publish cp315 wheels.
+  Torch wheels on the stable PyTorch index do not lift that cap. See
   [ADR-001](docs/adr/ADR-001-python-312-baseline.md).
 
 ## Planning rules
@@ -177,6 +178,60 @@ transcription within the configured spend policy.
   changelog, and command help agree with observed behavior.
 
 No broader package or binary distribution should start before this gate closes.
+
+### Supporting evidence from installed 2.13.0
+
+These observations were made on 2026-10-20 with the published `v2.13.0` tool
+(`f3d000034c342677573fbc1cbc5f47545cd53420`) on one Windows machine. The
+interpreter was Python 3.14.7. The install command was `uv tool install --with
+"av<19" --torch-backend auto --python 3.14` from that tag. This is supporting
+evidence. The 2.13.1 gate remains open until the same checks pass on the exact
+release commit, from a clean install, and on macOS and Omarchy.
+
+Shown on that Windows install:
+
+- `scribe doctor` exited 0. Live provider checks were skipped. The machine
+  reported Python 3.14.7, CUDA 13.0, an RTX 4090, faster-whisper on NVIDIA,
+  FFmpeg, FFprobe, yt-dlp, a configured OBS WebSocket, and a writable output
+  folder.
+- `scribe rec --check` passed. The WebSocket answered, recording was inactive,
+  the OBS process was running, and authentication was required.
+- The normal OBS WebSocket path advanced the output counters and a new media
+  file grew. The typed stop command stopped the capture. The process exited 0,
+  OBS was idle afterward, and ffprobe reported about 10.1 seconds. The proof
+  media was deleted. Scribe pointed OBS at the proof folder for that capture
+  and left it there. The proof harness restored the previous OBS record
+  directory afterward.
+- An earlier capture in the same session ran for about 100 seconds because the
+  external stop injection missed the console. It was safety-stopped and
+  deleted. The 10.1-second capture above is the successful stop path.
+- Local transcription of authorized synthetic speech at the default `max`
+  quality exited 0. The session outcome was success, the method was local, the
+  model was faster-whisper large-v3, acoustic review completed with no flagged
+  spans, and the requested structured outputs were written. The synthetic
+  sentence was recognized.
+- An authorized OpenRouter run of the same clip used `--max-spend 0.25`. The
+  CLI announced that per-run guard and `openai/whisper-large-v3`. `scribe info`
+  still showed the configured $5.00 reported-cost guard. The run exited 1 with
+  outcome partial because recording-wide primary language diagnostics are
+  unavailable for that native/cloud primary. Acoustic review was partial, with
+  one flagged span. The published tool environment had no `scribe_audio_core`
+  module, so chunking used the portable duration path. That same run logged its
+  own exit as a later session error. The logging defect is fixed under
+  Unreleased and still needs to be shown on a later candidate.
+
+Still required before 2.13.1:
+
+- A clean uninstall and reinstall from the documented tag.
+- The emergency path with an unreachable, non-recording OBS process and a
+  growing file, without adopting another capture.
+- An unexpected stop that retains the media and ends as non-success.
+- Stop and finalization through every safe control path.
+- `scribe doctor --live`, without exposing the key or the balance.
+- Request metadata beyond the CLI announcement and the session summary.
+- The Windows checks repeated on the exact 2.13.1 candidate.
+- macOS and Omarchy clean installs, with OBS evidence. The Omarchy record
+  includes a Hyprland PipeWire capture.
 
 ## Planned release: 2.14.0 desktop validation
 

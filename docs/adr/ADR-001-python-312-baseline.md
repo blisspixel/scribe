@@ -23,9 +23,19 @@ Python 3.15 was still prerelease on the same date. The official schedule targets
 3.15.0 final for 2026-10-01. A CPython 3.15.0rc1 wheel-only probe failed because
 Torch 2.13 had no `cp315` wheel, so the required base graph was unsatisfiable.
 
+Python 3.15.0 final shipped on 2026-10-09. A 2026-10-20 index check found no
+`cp315` or abi3 wheels for CTranslate2 4.8.3 or ONNX Runtime 1.31.0 across their
+releases. faster-whisper 1.2.1 requires both. PyPI torch 2.14.1 has no `cp315`
+wheel. The stable PyTorch CPU, cu130, and cu126 indexes have torch 2.14.1
+`cp315` wheels for the desktop targets, including free-threaded builds. The
+cu128 index has none. Publication of those Torch wheels is not a wheel-only
+install of the Scribe base graph, and it is not a free-threaded support claim.
+The optional ML extras were not probed.
+
 ## Decision
 - Set `requires-python = ">=3.11,<3.15"` in both project metadata files. The cap
-  stays until torch and CTranslate2 publish cp315 wheels.
+  stays until CTranslate2 and ONNX Runtime publish cp315 wheels and a wheel-only
+  base install resolves. Torch wheels on the stable PyTorch index do not lift it.
 - Run the CI-safe unit suite on Python 3.11, 3.12, 3.13, and 3.14.
 - Use Python 3.14 as the default runtime for `.python-version`, single-version
   CI jobs, coverage, and documented installs, including Omarchy.
@@ -33,7 +43,8 @@ Torch 2.13 had no `cp315` wheel, so the required base graph was unsatisfiable.
   NumPy 2.5 stubs use PEP 695 `type` statements and mypy parses those stubs with
   the configured version. The Python 3.11 CI job runs `compileall` on
   `src/scribe`, so 3.12-only syntax still fails before the tag.
-- Do not claim Python 3.15 support from a syntax-only or prerelease probe.
+- Do not claim Python 3.15 support, including free-threaded 3.15, from a
+  syntax-only probe, a prerelease probe, or the PyTorch index alone.
 - NumPy 2.5 requires Python 3.12. The lock selects NumPy 2.4.6 below 3.12 and
   NumPy 2.5.4 on 3.12 and newer. Numba 0.68.0 and llvmlite 0.50.0 move with it.
 - On 2026-10-20, a locked Windows sync on Python 3.14.7 installed NumPy 2.5.4,
