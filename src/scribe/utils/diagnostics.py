@@ -1,7 +1,7 @@
 """Local-first diagnostics used by `scribe doctor` and support bundles.
 
 Default diagnostics are local-only and safe to run without spending money or
-calling provider APIs. They inspect Python 3.12 readiness, critical packages,
+calling provider APIs. They inspect Python 3.11 through 3.14 readiness, critical packages,
 dependency-audit status, FFmpeg/FFprobe/yt-dlp, OBS settings, CUDA/GPU state,
 local transcription and notes readiness, writable output folders, disk and temp
 space, environment files, configuration conflicts, system resources, and voice
@@ -289,43 +289,31 @@ class SystemDiagnostics:
         version = sys.version_info
         version_str = f"{version.major}.{version.minor}.{version.micro}"
 
-        if version.major == 3 and 12 <= version.minor < 14:
+        if version.major == 3 and 11 <= version.minor <= 14:
             result = DiagnosticResult(
                 name="Python Version",
                 status="pass",
                 message=f"Python {version_str}",
-                details="Supported Python detected",
+                details="Supported Python detected (3.11 through 3.14). 3.14 is the default.",
             )
-        elif version.major == 3 and version.minor >= 14:
+        elif version.major == 3 and version.minor >= 15:
             result = DiagnosticResult(
                 name="Python Version",
                 status="fail",
                 message=f"Python {version_str} is not supported",
                 details=(
-                    "The native transcription dependency graph is validated only on "
-                    "Python 3.12 and 3.13."
+                    "Python 3.15 stays unsupported until torch and CTranslate2 "
+                    "publish cp315 wheels."
                 ),
-                fix_suggestion=(
-                    "Install with `uv tool install --python 3.12` (or 3.13). "
-                    "Arch and Omarchy ship Python 3.14 as `python`; do not install "
-                    "Scribe onto that interpreter."
-                ),
-            )
-        elif version.major == 3 and version.minor >= 10:
-            result = DiagnosticResult(
-                name="Python Version",
-                status="warn",
-                message=f"Python {version_str}",
-                details="Python 3.12+ recommended",
-                fix_suggestion="Upgrade to Python 3.12 or newer for full feature support",
+                fix_suggestion="Install with `uv tool install --python 3.14`.",
             )
         else:
             result = DiagnosticResult(
                 name="Python Version",
                 status="fail",
                 message=f"Python {version_str}",
-                details="Python 3.12+ required",
-                fix_suggestion="Install Python 3.12 or newer from python.org",
+                details="Python 3.11 through 3.14 is required. Python 3.10 is end of life.",
+                fix_suggestion="Install Python 3.14 from python.org, or use uv's Python 3.14.",
             )
 
         self.results.append(result)
@@ -570,7 +558,7 @@ class SystemDiagnostics:
                     details += " This PyTorch build includes CUDA despite no detected NVIDIA GPU."
                     fix = (
                         "To remove unused CUDA packages, reinstall Scribe using uv tool install "
-                        "--force --python 3.12 --torch-backend auto with the original Scribe source."
+                        "--force --python 3.14 --torch-backend auto with the original Scribe source."
                     )
             except ImportError:
                 pass

@@ -7,11 +7,10 @@ axes, exactly as designed:
 
 - **cost**   - $0.00 for local (Ollama), real dollars for cloud providers.
 - **latency** - wall-clock per provider.
-- **quality** - a *hybrid* score:
-    * objective structured-fidelity (always, free, deterministic, fully offline):
-      did the model return valid JSON with the required, non-empty sections?
-    * an opt-in LLM-as-judge rubric (coverage / faithfulness / structure) when a
-      judge provider is supplied.
+- **shape** - schema compliance of a single-call extraction probe. Valid empty
+  arrays are valid. Shape is not factual quality.
+- **judge** - an opt-in faithfulness score. A missing or failed judge is
+  unassessed and is never filled in from the shape score.
 
 This mirrors Scribe's existing bake-off pattern (``joke_bakeoff`` /
 ``meme_bakeoff``) but emits a scorecard instead of picking a single winner.
@@ -27,7 +26,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeGuard
 
 from scribe.providers import get_provider
 
@@ -41,8 +40,9 @@ _CLOUD_PREFERENCE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("gemini", ("GEMINI_API_KEY", "SCRIBE_GEMINI_API_KEY")),
 )
 
-# Structured notes schema the eval scores against. Aligned with Scribe's notes
-# output and the user's framing (decisions + action items + key claims).
+# Single-call extraction probe. This is not the seven-section production notes
+# contract. Shape compliance here is not factual quality.
+EXTRACTION_PROBE = "single-call extraction probe"
 EVAL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -75,7 +75,7 @@ class EvalResult:
     latency_sec: float
     cost_usd: float | None
     cost_source: str | None
-    struct_score: float  # 0-100, objective structured fidelity
+    struct_score: float  # 0-100 schema compliance of the extraction probe
     struct_detail: dict[str, Any] = field(default_factory=dict)
     judge_score: float | None = None  # 1-10 averaged rubric, if judged
     judge_detail: dict[str, Any] | None = None
@@ -160,42 +160,44 @@ def _coerce_json(text: str) -> dict[str, Any] | None:
 
 
 def objective_struct_score(content: str) -> tuple[float, dict[str, Any]]:
-    """
-    Score structured fidelity deterministically (0-100), no model needed.
+    """Score schema compliance of the extraction probe, from 0 to 100.
 
-    Components:
-    - json_valid (40): output parses to a JSON object.
-    - required_present (30): fraction of required sections present as lists.
-    - non_empty (30): fraction of required sections that are non-empty.
+    A required section counts only when it is present as a list of strings.
+    An empty list is valid. Non-empty lists do not raise the score. The result
+    is not a factual-quality score.
     """
     parsed = _coerce_json(content)
     detail: dict[str, Any] = {
         "json_valid": parsed is not None,
-        "required_present": 0.0,
-        "non_empty": 0.0,
+        "pipeline": EXTRACTION_PROBE,
+        "sections_valid": 0,
+        "rejected": [],
         "total_items": 0,
     }
     if parsed is None:
+        detail["rejected"].append("Output is not a JSON object.")
         return 0.0, detail
 
-    present = 0
-    non_empty = 0
+    valid = 0
     total_items = 0
+    rejected: list[str] = []
     for key in _REQUIRED_SECTIONS:
         value = parsed.get(key)
-        if isinstance(value, list):
-            present += 1
-            if value:
-                non_empty += 1
-                total_items += len(value)
+        if not isinstance(value, list):
+            rejected.append(f"{key} is missing or is not a list.")
+            continue
+        bad = [item for item in value if not isinstance(item, str)]
+        if bad:
+            rejected.append(f"{key} contains a non-string item.")
+            continue
+        valid += 1
+        total_items += len(value)
 
-    n = len(_REQUIRED_SECTIONS)
-    detail["required_present"] = present / n
-    detail["non_empty"] = non_empty / n
+    count = len(_REQUIRED_SECTIONS)
+    detail["sections_valid"] = valid
+    detail["rejected"] = rejected
     detail["total_items"] = total_items
-
-    score = 40.0 + 30.0 * (present / n) + 30.0 * (non_empty / n)
-    return round(score, 1), detail
+    return round(100.0 * valid / count, 1), detail
 
 
 def generate_notes_breakdown(
@@ -250,6 +252,11 @@ def generate_notes_breakdown(
         struct_detail=struct_detail,
         content=content,
     )
+
+
+def _is_score(value: object) -> TypeGuard[int | float]:
+    """True for a numeric judge axis. Booleans are not scores."""
+    return not isinstance(value, bool) and isinstance(value, int | float)
 
 
 def _judge_results(results: list[EvalResult], transcript: str, judge_spec: str) -> None:
@@ -328,16 +335,20 @@ def _judge_results(results: list[EvalResult], transcript: str, judge_spec: str) 
         entry = by_candidate.get(i + 1)
         if not entry:
             continue
-        axes = [entry.get("coverage"), entry.get("faithfulness"), entry.get("structure")]
-        nums = [float(a) for a in axes if isinstance(a, int | float)]
-        if nums:
-            result.judge_score = round(sum(nums) / len(nums), 1)
-            result.judge_detail = {
-                "coverage": entry.get("coverage"),
-                "faithfulness": entry.get("faithfulness"),
-                "structure": entry.get("structure"),
-                "judge": judge_spec,
-            }
+        coverage = entry.get("coverage")
+        faithfulness = entry.get("faithfulness")
+        structure = entry.get("structure")
+        if not (_is_score(coverage) and _is_score(faithfulness) and _is_score(structure)):
+            continue
+        result.judge_score = round(
+            (float(coverage) + float(faithfulness) + float(structure)) / 3, 1
+        )
+        result.judge_detail = {
+            "coverage": entry.get("coverage"),
+            "faithfulness": entry.get("faithfulness"),
+            "structure": entry.get("structure"),
+            "judge": judge_spec,
+        }
 
 
 def run_notes_eval(
@@ -348,8 +359,8 @@ def run_notes_eval(
     """
     Evaluate ``specs`` on ``transcript`` and return scored results.
 
-    Objective structured-fidelity is always computed. If ``judge_spec`` is given,
-    an LLM-judge rubric is layered on top (the hybrid scoring mode).
+    Shape compliance of the extraction probe is always computed. If ``judge_spec``
+    is given, a separate judge score is added. Shape never fills a missing judge.
     """
     results = [generate_notes_breakdown(spec, transcript) for spec in specs]
     if judge_spec:
@@ -430,47 +441,68 @@ def resolve_compare_plan(
     return specs, judge
 
 
+def _judge_value(result: EvalResult) -> float | None:
+    if result.judge_score is None:
+        return None
+    return result.judge_score
+
+
 def summarize_verdict(results: list[EvalResult]) -> str | None:
-    """Plain-English bottom line: is the free local model worth it?"""
+    """Compare judge scores only. Shape compliance never picks a winner."""
     ok = [r for r in results if r.ok]
     locals_ = [r for r in ok if r.provider == "ollama"]
     if not locals_:
         return None
 
-    def quality(r: EvalResult) -> float:
-        # Prefer the judge verdict when present; else fold struct % onto a 1-10 scale.
-        return r.judge_score if r.judge_score is not None else r.struct_score / 10.0
-
-    best_local = max(locals_, key=quality)
     clouds = [r for r in ok if r.provider != "ollama"]
+    judged_locals = [r for r in locals_ if _judge_value(r) is not None]
+    judged_clouds = [r for r in clouds if _judge_value(r) is not None]
     if not clouds:
+        if judged_locals and len(judged_locals) == len(locals_):
+            best_local = max(judged_locals, key=lambda item: item.judge_score or 0)
+            return (
+                f"Local {best_local.model} judge score {best_local.judge_score:.1f} "
+                "at $0.00. Fully offline. Shape compliance is not factual quality."
+            )
         return (
-            f"Local {best_local.model} scored {best_local.struct_score:.0f}% structure "
-            f"at $0.00 - fully offline."
+            "Local comparison stayed offline at $0.00. Factual quality was not assessed. "
+            "Shape compliance is not a quality score."
         )
 
-    best_cloud = max(clouds, key=quality)
-    gap = quality(best_cloud) - quality(best_local)
+    if len(judged_locals) != len(locals_) or len(judged_clouds) != len(clouds):
+        return (
+            "Factual quality was not compared. A missing, failed, or partial judge "
+            "leaves quality unassessed. Shape compliance is not a quality score."
+        )
+
+    best_local = max(judged_locals, key=lambda item: item.judge_score or 0)
+    best_cloud = max(judged_clouds, key=lambda item: item.judge_score or 0)
+    gap = (best_cloud.judge_score or 0) - (best_local.judge_score or 0)
     cloud_cost = "" if best_cloud.cost_usd is None else f" (~${best_cloud.cost_usd:.4f}/run)"
     if gap <= 1.0:
         return (
-            f"Local {best_local.model} is worth it - comparable quality to "
-            f"{best_cloud.model}{cloud_cost} at $0.00. Set SCRIBE_NOTES_PROVIDER=ollama."
+            f"Local {best_local.model} is worth it on the judge score versus "
+            f"{best_cloud.model}{cloud_cost} at $0.00. "
+            "Schema compliance was not used as quality."
         )
     return (
-        f"{best_cloud.model}{cloud_cost} still leads on quality; "
-        f"{best_local.model} is the free offline fallback."
+        f"{best_cloud.model}{cloud_cost} still leads on the judge score; "
+        f"{best_local.model} is the free offline fallback. "
+        "Schema compliance was not used as quality."
     )
 
 
 def format_scorecard(results: list[EvalResult]) -> str:
-    """Render results as a fixed-width plain-text scorecard (judge column if present)."""
+    """Render cost, latency, shape, and judge scores as separate columns."""
     judged = any(r.judge_score is not None for r in results)
-
-    header = f"{'model':<34} {'cost':>10} {'time':>8} {'struct':>7}"
+    header = f"{'model':<34} {'cost':>10} {'time':>8} {'shape':>7}"
     if judged:
         header += f" {'judge':>6}"
-    lines = [header, "-" * len(header)]
+    lines = [
+        f"Pipeline: {EXTRACTION_PROBE}. Shape is schema compliance, not factual quality.",
+        header,
+        "-" * len(header),
+    ]
 
     for r in results:
         if not r.ok:
@@ -485,7 +517,10 @@ def format_scorecard(results: list[EvalResult]) -> str:
             cost = f"${r.cost_usd:.4f}"
         row = f"{label:<34} {cost:>10} {r.latency_sec:>7.1f}s {r.struct_score:>6.1f}%"
         if judged:
-            row += f" {('' if r.judge_score is None else f'{r.judge_score:.1f}'):>6}"
+            cell = "n/a" if r.judge_score is None else f"{r.judge_score:.1f}"
+            row += f" {cell:>6}"
         lines.append(row)
 
+    if judged and any(r.ok and r.judge_score is None for r in results):
+        lines.append("Missing judge scores were not assessed and were not filled from shape.")
     return "\n".join(lines)

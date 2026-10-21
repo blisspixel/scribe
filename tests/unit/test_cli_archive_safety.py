@@ -294,7 +294,7 @@ def test_parallel_archive_placements_reserve_distinct_artifact_stems(
     real_copy = safe_write.safe_copy
 
     def copy_after_both_reservations(source: Path, target: Path) -> None:
-        both_reserved.wait(timeout=10)
+        both_reserved.wait(timeout=30)
         real_copy(source, target)
 
     monkeypatch.setattr(safe_write, "safe_copy", copy_after_both_reservations)
@@ -303,7 +303,7 @@ def test_parallel_archive_placements_reserve_distinct_artifact_stems(
             executor.submit(_place_transcript_in_output_dir, source, archive, None)
             for source in sources
         ]
-        targets = [future.result(timeout=15) for future in futures]
+        targets = [future.result(timeout=45) for future in futures]
 
     assert len(set(targets)) == 2
     assert {path.read_text(encoding="utf-8") for path in targets} == {

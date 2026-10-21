@@ -152,8 +152,8 @@ and errors say the microphone is off.
 Install the tray extra, then add only the marked user blocks:
 
 ```bash
-uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --force --python 3.14 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 scribe voice check
 scribe voice omarchy-install
 ```

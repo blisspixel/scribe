@@ -8,20 +8,21 @@ pull-request expectations, and licensing.
 
 - Git
 - [uv](https://docs.astral.sh/uv/)
-- Python 3.12 or 3.13
+- Python 3.11, 3.12, 3.13, or 3.14
 - FFmpeg for conversion and the full coverage suite
 - Optional platform tools for the feature being changed, such as OBS, Go, Rust,
   CUDA, or an Apple Silicon environment
 
-Python 3.12 is the reproducible development baseline. CI also runs the unit suite
-on Python 3.13.
+Python 3.14 is the default runtime. CI also runs the unit suite on Python 3.11,
+3.12, and 3.13. Ruff targets 3.11. mypy targets 3.12 so it can read the NumPy
+2.5 stubs installed on that default. The 3.11 job compileall-checks `src/scribe`.
 
 ## Setup
 
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-uv sync --locked --python 3.12 --group dev
+uv sync --locked --python 3.14 --group dev
 uv run pre-commit install --install-hooks
 uv run scribe doctor
 ```
@@ -158,7 +159,7 @@ Roadmap targets are planning labels, not delivery dates. Keep work under the
 lockfile, install examples, changelog, and roadmap state in one release candidate
 commit.
 
-Version 2.12.0 is the current GitHub release. The source repository is ready for
+Version 2.13.0 is the current GitHub release. The source repository is ready for
 public visibility. No PyPI package or native binary has been published. Broader
 package and binary distribution remains gated by the live platform evidence in
 the roadmap.

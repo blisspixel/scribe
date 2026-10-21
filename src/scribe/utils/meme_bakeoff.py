@@ -4,7 +4,7 @@ Meme concept bake-off: Get concepts from multiple providers and pick the best.
 
 import logging
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 from scribe.providers import get_provider
 
@@ -17,7 +17,10 @@ class MemeBakeoffConfig(Protocol):
     spice_level: int
 
 
-def run_meme_bakeoff[ConfigT: MemeBakeoffConfig](
+ConfigT = TypeVar("ConfigT", bound=MemeBakeoffConfig)
+
+
+def run_meme_bakeoff(
     transcript: str,
     config: ConfigT,
     analyze_concept: Callable[[Any, str, ConfigT, bool], dict[str, Any] | None],

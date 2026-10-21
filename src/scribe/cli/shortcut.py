@@ -424,7 +424,7 @@ fi
     echo "[Scribe Quick Record] 'scribe' not found on PATH."
     echo ""
     echo "Recommended (makes the launcher durable):"
-    echo "  uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git"
+    echo "  uv tool install --python 3.14 git+https://github.com/blisspixel/scribe.git"
     echo "  # ensure ~/.local/bin or equivalent is in PATH"
     echo ""
     echo "Then re-run the launcher or 'scribe shortcut'."
@@ -637,7 +637,7 @@ def run_shortcut(console: Console, desktop: bool | None, remove: bool) -> None:
             "[yellow]Note:[/yellow] The resolved 'scribe' at creation time looks like a "
             "project/venv path. For a shortcut that 'just works' after updates, "
             "install globally first:\n"
-            "  uv tool install --python 3.12 git+https://github.com/blisspixel/scribe.git\n"
+            "  uv tool install --python 3.14 git+https://github.com/blisspixel/scribe.git\n"
             "  uv tool update-shell\n"
             "Then re-run `scribe shortcut --desktop`."
         )

@@ -31,7 +31,7 @@ jobs:
   # This is the required static quality gate.
   # ---------------------------------------------------------------------------
   lint-and-types:
-    name: Lint + Format + Types (Python 3.12)
+    name: Lint + Format + Types (Python 3.14)
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -47,11 +47,11 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Sync environment (dev group)
-        run: uv sync --locked --python 3.12 --group dev
+        run: uv sync --locked --python 3.14 --group dev
 
       - name: Ruff format check
         run: uv run ruff format --check src tests
@@ -73,14 +73,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -98,6 +98,7 @@ jobs:
         run: |
           uv run --python ${{ matrix.python-version }} python -c \
             "import sys; expected = tuple(map(int, '${{ matrix.python-version }}'.split('.'))); assert sys.version_info[:2] == expected, (sys.version_info[:2], expected)"
+          uv run --python ${{ matrix.python-version }} python -m compileall -q src/scribe
           uv run --python ${{ matrix.python-version }} pytest tests/unit \
             -m "not gpu and not slow and not requires_openai and not requires_ffmpeg and not requires_whisperx and not requires_pillow" \
             --maxfail=1 -q
@@ -126,7 +127,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -134,11 +135,11 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Sync environment (dev group)
-        run: uv sync --locked --python 3.12 --group dev
+        run: uv sync --locked --python 3.14 --group dev
 
       - name: Run native platform contracts
         run: >-
@@ -155,7 +156,7 @@ jobs:
   # Fails the build on a coverage regression.
   # ---------------------------------------------------------------------------
   coverage:
-    name: Coverage (Python 3.12)
+    name: Coverage (Python 3.14)
     runs-on: ubuntu-latest
     needs: [lint-and-types]  # Only run if static checks passed
 
@@ -164,7 +165,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -172,8 +173,8 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Install ffmpeg
         # The full tests/ tree (e2e + conversion tests) drives the real Converter,
@@ -182,7 +183,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Sync environment (dev group)
-        run: uv sync --locked --python 3.12 --group dev
+        run: uv sync --locked --python 3.14 --group dev
 
       - name: Run tests with coverage (fail under 81%)
         run: |
@@ -216,7 +217,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -224,11 +225,11 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Sync environment (dev group)
-        run: uv sync --locked --python 3.12 --group dev
+        run: uv sync --locked --python 3.14 --group dev
 
       - name: Run pip-audit (blocking, zero exceptions)
         run: uv run pip-audit --local --progress-spinner off --desc on
@@ -265,16 +266,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Sync + pre-commit install
         run: |
-          uv sync --locked --python 3.12 --group dev
+          uv sync --locked --python 3.14 --group dev
           uv run pre-commit install --install-hooks
 
       - name: Run pre-commit
@@ -289,7 +290,7 @@ jobs:
   # installs without workspace packages, and smokes the installed entry point.
   # ---------------------------------------------------------------------------
   package:
-    name: Release Artifact Contract (Python 3.12)
+    name: Release Artifact Contract (Python 3.14)
     runs-on: ubuntu-latest
 
     steps:
@@ -297,7 +298,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -305,8 +306,8 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Build and inspect root wheel
         shell: bash
@@ -314,13 +315,13 @@ jobs:
           uv build --clear --package scribe --out-dir .agent/build
           wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
           test -n "$wheel"
-          python_path=$(uv python find 3.12)
+          python_path=$(uv python find 3.14)
           "$python_path" scripts/check_release_artifact.py "$wheel"
 
       - name: Install artifact without workspace packages
         shell: bash
         run: |
-          uv sync --locked --python 3.12 --group dev --no-install-workspace
+          uv sync --locked --python 3.14 --group dev --no-install-workspace
           wheel=$(find .agent/build -maxdepth 1 -name 'scribe-*.whl' ! -name 'scribe_audio_core-*' -print -quit)
           uv pip install --python .venv/bin/python --no-deps --reinstall "$wheel"
           cd .agent
@@ -332,7 +333,7 @@ jobs:
   # Exercise the actual upstream decoder without downloading a model.
   # ---------------------------------------------------------------------------
   fresh-tool-install:
-    name: Fresh Tool Install (Python 3.12)
+    name: Fresh Tool Install (Python 3.14)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -346,14 +347,14 @@ jobs:
           echo "UV_TOOL_BIN_DIR=$RUNNER_TEMP/scribe-bin" >> "$GITHUB_ENV"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: pyproject.toml
 
       - name: Install from the checkout without the project lock
-        run: uv tool install --python 3.12 --torch-backend auto .
+        run: uv tool install --python 3.14 --torch-backend auto .
 
       - name: Exercise the installed entry point and decoder
         run: |
@@ -437,7 +438,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.33"
           enable-cache: true
@@ -445,11 +446,11 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Setup Python 3.12
-        run: uv python install 3.12
+      - name: Setup Python 3.14
+        run: uv python install 3.14
 
       - name: Sync environment (dev group)
-        run: uv sync --locked --python 3.12 --group dev
+        run: uv sync --locked --python 3.14 --group dev
 
       - name: Run mutmut over the pure core (advisory, time-boxed)
         # Scope, tests, and runner are configured in [tool.mutmut]. The job-level

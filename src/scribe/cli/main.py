@@ -35,6 +35,7 @@ from scribe.cli.dependencies import (
 )
 from scribe.cli.errors import exit_on_cli_error
 from scribe.cli.notes_progress import notes_progress
+from scribe.cli.root_help import root_help_text
 from scribe.cli.transcription_review import (
     apply_review_options,
     review_errors,
@@ -44,7 +45,6 @@ from scribe.cli.transcription_review import (
 from scribe.cli.voice_session import voice_app
 from scribe.exceptions import ProcessError, ScribeError, TranscriptionError
 from scribe.models.options import FileQuality, ModelSize, TranscriptionMethod, VerificationPolicy
-from scribe.utils.branding import brand_header_markup
 from scribe.utils.logging import console, get_current_log_file, get_logger, setup_logging
 from scribe.utils.safe_write import atomic_write
 from scribe.utils.theme import ScribeTheme, file_uri
@@ -207,18 +207,8 @@ def _write_structured_outputs(
 
 
 def _show_command_banner(console: Any) -> None:
-    """Show animated banner + version before a command runs."""
-    from scribe.utils.banner import show_banner
-
-    if show_banner(console):
-        console.print(f"  [{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]")
-    else:
-        console.print()
-        console.print(
-            f"{brand_header_markup('scribe', fallback_color=ScribeTheme.PRIMARY_BRIGHT)} "
-            f"[{ScribeTheme.TEXT_MUTED}]{__version__}[/{ScribeTheme.TEXT_MUTED}]"
-        )
-    console.print()
+    """Commands start on their own content. The wordmark is not shown here."""
+    del console
 
 
 def _resolve_feature(override: bool | None, config_default: bool) -> bool:
@@ -436,54 +426,17 @@ class CleanGroup(typer.core.TyperGroup):
     """Custom group with minimal, elite-tier help formatting."""
 
     def format_help(self, _: Any, __: Any) -> None:
-        """Override to provide clean, minimal help."""
+        """Show start-here help. The wordmark appears only for a bare invocation."""
         from rich.console import Console
 
-        console = Console()
+        from scribe.utils.banner import show_banner
 
-        _show_command_banner(console)
-
-        console.print()
-
-        # Commands - simple aligned list
-        cmds = [
-            ("transcribe FILE  ", "transcribe audio/video"),
-            ("url LINK         ", "transcribe from URL"),
-            ("batch FILES      ", "process multiple files"),
-            ("rec NAME         ", "record via OBS"),
-            ("record NAME      ", "advanced OBS recording"),
-            ("music FILE       ", "extract lyrics"),
-            ("notes TRANSCRIPT ", "meeting notes"),
-            ("joke TRANSCRIPT ", "generate joke"),
-            ("meme TRANSCRIPT ", "generate meme"),
-            ("query TEXT       ", "search transcripts"),
-            ("vocab            ", "domain glossaries"),
-            ("listen           ", "dictate (speech to type)"),
-            ("tray             ", "resident voice hotkeys"),
-            ("voice            ", "experimental local voice controls"),
-            ("say FILE         ", "read a file aloud"),
-            ("clean FILE       ", "remove silence / trim"),
-            ("compare          ", "compare AI providers"),
-            ("health           ", "provider health check"),
-            ("doctor           ", "diagnostics"),
-            ("info             ", "configuration"),
-            ("init             ", "first-run setup"),
-            ("shortcut         ", "install Quick Record launcher"),
-            ("support-bundle   ", "create a diagnostic bundle"),
-            ("version          ", "show version"),
-            ("help             ", "show this help"),
-        ]
-
-        for cmd, desc in cmds:
-            console.print(
-                f"  [{ScribeTheme.PRIMARY}]{cmd}[/{ScribeTheme.PRIMARY}][{ScribeTheme.TEXT_MUTED}]{desc}[/{ScribeTheme.TEXT_MUTED}]"
-            )
-
-        console.print()
-        console.print(
-            f"[{ScribeTheme.TEXT_MUTED}]scribe <cmd> -h for options[/{ScribeTheme.TEXT_MUTED}]"
-        )
-        console.print()
+        help_console = Console()
+        if len(sys.argv) <= 1:
+            show_banner(help_console)
+            help_console.print()
+        for line in root_help_text(__version__).splitlines():
+            help_console.print(line, style="default", highlight=False)
 
 
 app = typer.Typer(
@@ -3660,6 +3613,11 @@ def notes(
         "--judge",
         help="Judge for --compare: 'auto' (default), 'none', or e.g. 'openai'.",
     ),
+    evidence: bool = typer.Option(
+        False,
+        "--evidence",
+        help="Attach validated source references to next steps and write an evidence sidecar",
+    ),
 ) -> None:
     """
     Generate transcript notes with local Ollama by default ($0 provider cost).
@@ -3713,7 +3671,10 @@ def notes(
 
         with notes_progress(console) as report_phase:
             notes_path = notes_generator.generate_notes(
-                transcript_file, output, progress_callback=report_phase
+                transcript_file,
+                output,
+                progress_callback=report_phase,
+                evidence=evidence,
             )
 
         console.print()
@@ -3756,7 +3717,11 @@ def _run_notes_comparison(
         raise typer.Exit(1)
 
     transcript_text = load_transcript_text(transcript_file)
-    plan = ", ".join(specs) + (f"   judge={judge}" if judge else "   (objective only)")
+    if judge:
+        plan_suffix = f"   judge={judge}"
+    else:
+        plan_suffix = "   (shape only; factual quality not assessed)"
+    plan = ", ".join(specs) + plan_suffix
     console.print(f"[dim]comparing:[/dim] {plan}")
     console.print()
 
@@ -3799,10 +3764,11 @@ def compare(
     ),
 ) -> None:
     """
-    Compare note-generation providers and print a cost / latency / quality scorecard.
+    Compare note-generation providers on cost, latency, and shape.
 
-    Quality is scored objectively (free, offline) plus an optional LLM judge, and a
-    one-line verdict tells you whether the free local model is worth it.
+    Shape is schema compliance of a single-call extraction probe, not factual
+    quality and not the production notes pipeline. An optional judge reports
+    faithfulness separately. A missing judge is not assessed.
 
     Examples:
         scribe compare meeting.md                 # smart: cloud vs best local, auto-judged
@@ -3979,7 +3945,9 @@ def init_command(
     CLI flags continue to override these values.
     """
     from scribe.cli.init import run_wizard
+    from scribe.utils.banner import show_banner
 
+    show_banner(console)
     run_wizard(console=console, force=force)
 
 

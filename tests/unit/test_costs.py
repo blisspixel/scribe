@@ -1,5 +1,7 @@
 """Tests for provider cost helpers."""
 
+from datetime import date
+
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -8,6 +10,7 @@ from scribe.utils.costs import (
     USD_TICKS_PER_DOLLAR,
     add_cost_fields,
     estimate_text_cost_usd,
+    gemini_text_pricing,
     usd_from_ticks,
 )
 
@@ -15,6 +18,18 @@ from scribe.utils.costs import (
 def test_usd_from_ticks():
     """Test converting xAI USD ticks to dollars."""
     assert usd_from_ticks(37_756_000) == 0.0037756
+
+
+def test_gemini_price_steps_follow_the_published_dates():
+    flash_now = gemini_text_pricing("gemini-3.8-flash", on=date(2026, 10, 20))
+    flash_later = gemini_text_pricing("gemini-3.8-flash", on=date(2027, 1, 1))
+    argon_now = gemini_text_pricing("gemini-4-argon", on=date(2026, 11, 30))
+    argon_later = gemini_text_pricing("gemini-4-argon", on=date(2026, 12, 1))
+    assert flash_now is not None and flash_now.input_per_million == 0.75
+    assert flash_later is not None and flash_later.output_per_million == 7.50
+    assert argon_now is not None and argon_now.input_per_million == 2.0
+    assert argon_later is not None and argon_later.output_per_million == 20.0
+    assert gemini_text_pricing("gemini-3.5-flash") is None
 
 
 def test_estimate_text_cost_usd_for_grok_43():

@@ -14,13 +14,13 @@ issue, or support bundle.
 
 ## Installation and command discovery
 
-Scribe requires Python 3.12 or 3.13, FFmpeg, and uv.
+Scribe requires Python 3.11 through 3.14, FFmpeg, and uv. Python 3.14 is the default.
 
 Install the current GitHub release as a tool:
 
 ```bash
-uv tool install --force --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.12.0
+uv tool install --force --python 3.14 \
+  git+https://github.com/blisspixel/scribe.git@v2.13.0
 uv tool update-shell
 ```
 
@@ -30,9 +30,9 @@ run `uv tool list` and follow the path guidance printed by uv.
 No package named `scribe` has been published for this project. Do not use a bare
 `pip install scribe`, which can install an unrelated package.
 
-On Omarchy and Arch, `/usr/bin/python` is 3.14. `scribe doctor` fails that
-interpreter on purpose. Install `uv` with `omarchy pkg add uv` or
-`sudo pacman -S uv`, then reinstall with `--python 3.12`. FFmpeg is preinstalled
+On Omarchy and Arch, `/usr/bin/python` is 3.14, which Scribe supports. Install
+`uv` with `omarchy pkg add uv` or `sudo pacman -S uv`, then install with
+`--python 3.14` so the tool stays in uv's environment. FFmpeg is preinstalled
 on Omarchy. If `scribe doctor` still reports it missing, run
 `sudo pacman -S ffmpeg`. Do not use `apt` on Arch.
 
@@ -48,8 +48,8 @@ That preserves XDG Scribe directories and legacy `~/.scribe`. Confirm chords wit
 If a cloud-synced home directory prevents hardlinks, reinstall with copy mode:
 
 ```bash
-uv tool install --force --link-mode copy --python 3.12 \
-  git+https://github.com/blisspixel/scribe.git@v2.12.0
+uv tool install --force --link-mode copy --python 3.14 \
+  git+https://github.com/blisspixel/scribe.git@v2.13.0
 ```
 
 For a development checkout:
@@ -141,11 +141,11 @@ scribe transcribe sample.wav --method local --model base
 Install the applicable extra from this repository, then run diagnostics:
 
 ```bash
-uv tool install --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --force --python 3.14 \
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 
-uv tool install --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --force --python 3.14 \
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 ```
 
 MLX is for supported Apple Silicon systems. whisper.cpp support depends on the
@@ -219,8 +219,8 @@ Run `scribe info` and read the `speaker labels` line. If it reports no backend,
 install the token-free Nemotron extra:
 
 ```bash
-uv tool install --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --force --python 3.14 --torch-backend auto \
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 scribe info
 ```
 
@@ -263,8 +263,8 @@ ollama stop MODEL_NAME
 Install the tray extra and run its check without starting the resident process:
 
 ```bash
-uv tool install --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --force --python 3.14 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 scribe tray --check
 ```
 
@@ -308,4 +308,4 @@ Python version, command shape with private values replaced, exit code, and the
 smallest relevant sanitized error excerpt. Never attach a real recording unless
 all necessary permissions and an approved transfer method are in place.
 
-Version baseline: Scribe 2.12.0.
+Version baseline: Scribe 2.13.0.

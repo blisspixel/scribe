@@ -56,10 +56,29 @@ class TestPythonVersionCheck:
             assert result.status == "pass"
             assert "3.12.11" in result.message
 
-    def test_python_314_fails_with_supported_range(self):
-        """Test an interpreter above the native-wheel range fails clearly."""
+    def test_python_314_is_supported(self):
         diagnostics = SystemDiagnostics()
-        mock_version = type("version_info", (), {"major": 3, "minor": 14, "micro": 4})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 14, "micro": 0})()
+
+        with patch("sys.version_info", mock_version):
+            result = diagnostics.check_python_version()
+
+        assert result.status == "pass"
+        assert "3.14.0" in result.message
+
+    def test_python_311_is_supported(self):
+        diagnostics = SystemDiagnostics()
+        mock_version = type("version_info", (), {"major": 3, "minor": 11, "micro": 0})()
+
+        with patch("sys.version_info", mock_version):
+            result = diagnostics.check_python_version()
+
+        assert result.status == "pass"
+        assert "3.11.0" in result.message
+
+    def test_python_315_is_blocked_on_native_wheels(self):
+        diagnostics = SystemDiagnostics()
+        mock_version = type("version_info", (), {"major": 3, "minor": 15, "micro": 0})()
 
         with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
@@ -67,33 +86,19 @@ class TestPythonVersionCheck:
         assert result.status == "fail"
         assert "not supported" in result.message
         assert result.fix_suggestion is not None
-        assert "uv tool install --python 3.12" in result.fix_suggestion
-        assert "Omarchy" in result.fix_suggestion
-
-    def test_python_310_or_311(self):
-        """Test Python 3.10-3.11 warns (below the 3.12 floor)."""
-        diagnostics = SystemDiagnostics()
-
-        mock_version = type("version_info", (), {"major": 3, "minor": 11, "micro": 0})()
-
-        with patch("sys.version_info", mock_version):
-            result = diagnostics.check_python_version()
-
-            assert result.status == "warn"
-            assert "3.11.0" in result.message
-            assert result.fix_suggestion is not None
+        assert "3.14" in result.fix_suggestion
 
     def test_python_too_old(self):
-        """Test Python < 3.10 fails."""
+        """Test Python 3.10 and older fail."""
         diagnostics = SystemDiagnostics()
 
-        mock_version = type("version_info", (), {"major": 3, "minor": 9, "micro": 0})()
+        mock_version = type("version_info", (), {"major": 3, "minor": 10, "micro": 0})()
 
         with patch("sys.version_info", mock_version):
             result = diagnostics.check_python_version()
 
             assert result.status == "fail"
-            assert "3.9.0" in result.message
+            assert "3.10.0" in result.message
             assert result.fix_suggestion is not None
 
 

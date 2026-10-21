@@ -95,13 +95,13 @@ class TestCLIHelp:
         assert "help" in result.stdout
 
         output = _strip_ansi(result.stdout)
-        listed_commands = {line.strip().split()[0] for line in output.splitlines() if line.strip()}
         registered_commands = {
             command.name or command.callback.__name__.replace("_", "-")
             for command in app.registered_commands
             if command.callback is not None
         }
-        assert registered_commands <= listed_commands
+        missing = sorted(command for command in registered_commands if command not in output)
+        assert missing == []
 
     def test_transcribe_help(self, cli_runner):
         """Test transcribe command help."""

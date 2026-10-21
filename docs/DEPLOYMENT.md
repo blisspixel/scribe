@@ -28,7 +28,7 @@ Not supported as product surfaces:
 Use a global uv tool install when you want `scribe` available from any folder:
 
 ```bash
-uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.12.0
+uv tool install --with "av<19" --torch-backend auto --python 3.14 git+https://github.com/blisspixel/scribe.git@v2.13.0
 uv tool update-shell
 scribe init
 scribe info
@@ -70,19 +70,18 @@ Omarchy 4 is the Linux desktop reference: Arch Linux, Hyprland on Wayland,
 Quickshell, PipeWire with WirePlumber, and `uwsm`. A standard install already
 includes FFmpeg, yt-dlp, OBS Studio (`/usr/bin/obs`), `wl-clipboard`, `wtype`,
 and the Hyprland screen-sharing portal. It does not include uv. Its `python`
-is 3.14, which is outside Scribe's `>=3.12,<3.14` range.
+is 3.14, which is inside Scribe's `>=3.11,<3.15` range.
 
 ```bash
 omarchy pkg add uv
-uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.12.0
+uv tool install --with "av<19" --torch-backend auto --python 3.14 git+https://github.com/blisspixel/scribe.git@v2.13.0
 uv tool update-shell
 scribe init
 scribe doctor
 ```
 
-`sudo pacman -S uv` is the same install. Pass `--python 3.12` even though uv
-can select a compatible interpreter on its own. Do not install Scribe onto
-`/usr/bin/python` or a Mise-selected 3.14.
+`sudo pacman -S uv` is the same install. Pass `--python 3.14`. Do not pip-install
+Scribe onto `/usr/bin/python`; keep the tool in the uv environment.
 
 Open a new terminal after `uv tool update-shell`. Foot is the default terminal.
 `scribe doctor` should find FFmpeg without an extra package. If a machine is
@@ -114,8 +113,8 @@ transcription is not a `scribe voice` option. Linux voice stays experimental:
 this release was not demonstrated on Omarchy hardware.
 
 ```bash
-uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --with "av<19" --torch-backend auto --force --python 3.14 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 scribe voice check
 scribe voice omarchy-install
 ```
@@ -127,7 +126,7 @@ bash packaging/linux/omarchy/install.sh
 bash packaging/linux/omarchy/uninstall.sh
 ```
 
-`install.sh` installs `scribe[tray]` with Python 3.12 and runs `scribe voice
+`install.sh` installs `scribe[tray]` with Python 3.14 and runs `scribe voice
 omarchy-install`. `uninstall.sh` runs `scribe voice omarchy-remove` and
 `uv tool uninstall scribe`. It preserves XDG Scribe directories and legacy `~/.scribe`; see
 [storage paths](STORAGE.md). Upgrade by running
@@ -142,16 +141,16 @@ stay in `~/.config/hypr/bindings.lua`, and the serve autostart stays in
 not edited.
 
 `scribe voice check` does not open the microphone. Exit 0 means the interpreter
-is 3.12 or 3.13 and `sounddevice` imports. It does not validate hardware. See
+is 3.11 through 3.14 and `sounddevice` imports. It does not validate hardware. See
 the [voice guide](VOICE.md#omarchy).
 
 ## Workstation Requirements
 
 Required:
-- Python 3.12 or 3.13. Python 3.12 remains the recommended GPU baseline. Python
-  3.14 and 3.15 are not yet in the supported runtime matrix; see
-  [ADR-001](adr/ADR-001-python-312-baseline.md) for current probe evidence.
-  Arch and Omarchy ship Python 3.14 as `python`. Use uv's 3.12, as in
+- Python 3.11 through 3.14. Python 3.14 is the default. Python 3.15 stays
+  unsupported until torch and CTranslate2 publish cp315 wheels; see
+  [ADR-001](adr/ADR-001-python-312-baseline.md). Arch and Omarchy ship Python
+  3.14 as `python`, and that interpreter is supported. Install with uv as in
   [Omarchy](#omarchy).
 - uv.
 - FFmpeg.
@@ -174,14 +173,14 @@ Optional:
 Install tool extras from the Git repository, for example:
 
 ```bash
-uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
-uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
-uv tool install --with "av<19" --force --python 3.12 --torch-backend auto \
-  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
-uv tool install --with "av<19" --torch-backend auto --force --python 3.12 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --with "av<19" --torch-backend auto --force --python 3.14 \
+  "scribe[mlx] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+uv tool install --with "av<19" --torch-backend auto --force --python 3.14 \
+  "scribe[whispercpp] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+uv tool install --with "av<19" --force --python 3.14 --torch-backend auto \
+  "scribe[diarize-nemotron] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+uv tool install --with "av<19" --torch-backend auto --force --python 3.14 \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 ```
 
 The current base install includes the PyTorch and faster-whisper stack, so it is
@@ -312,7 +311,7 @@ uv run scribe batch D:\incoming\*.mp4 --no-notes --no-joke --no-meme
 Containers are useful for reproducible local or batch environments, but Scribe does not ship an official container interface.
 
 If you build a container:
-- Use Python 3.12 or newer.
+- Use Python 3.11 through 3.14. Python 3.14 is the default.
 - Install FFmpeg.
 - Mount media and output directories explicitly.
 - Pass API keys through your secret manager, not image layers.

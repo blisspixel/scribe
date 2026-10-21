@@ -8,6 +8,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 from scribe.providers.base import ProviderConfig
+from scribe.providers.gemini_provider import reject_retired_gemini_model
+
+
+def test_retired_gemini_alias_names_its_replacement():
+    with pytest.raises(ValueError, match=r"gemini-3\.8-flash"):
+        reject_retired_gemini_model("gemini-3.5-flash")
+    with pytest.raises(ValueError, match=r"gemini-3\.5-flash-lite"):
+        reject_retired_gemini_model("gemini-2.5-flash-lite")
 
 
 @pytest.fixture
@@ -16,7 +24,7 @@ def gemini_config():
     return ProviderConfig(
         provider_name="gemini",
         api_key="test-gemini-key",
-        model="gemini-3.5-flash",
+        model="gemini-3.8-flash",
     )
 
 
@@ -117,7 +125,7 @@ class TestGeminiProvider:
         assert result["content"] == "Test response"
         assert result["usage"]["prompt_tokens"] == 10
         assert result["usage"]["completion_tokens"] == 20
-        assert result["model"] == "gemini-3.5-flash"
+        assert result["model"] == "gemini-3.8-flash"
 
     def test_generate_image_converts_size(self, gemini_config, mock_google_genai):
         """Test that image generation converts size to aspect ratio."""
@@ -155,7 +163,15 @@ class TestGeminiProvider:
         # Verify aspect ratio was set
         call_kwargs = mock_client.models.generate_content.call_args[1]
         assert "config" in call_kwargs
-        assert call_kwargs["model"] == "gemini-3.1-flash-image"
+        assert call_kwargs["model"] == "gemini-nano-banana-2.1"
+
+        provider.generate_image("A robot", model="gemini-3.1-flash-image")
+        explicit = mock_client.models.generate_content.call_args[1]
+        assert explicit["model"] == "gemini-3.1-flash-image"
+
+        provider.generate_image("A robot", model="imagen-other")
+        fallback = mock_client.models.generate_content.call_args[1]
+        assert fallback["model"] == "gemini-nano-banana-2.1"
 
     def test_generate_image_no_images_error(self, gemini_config, mock_google_genai):
         """Test error when no images are returned."""

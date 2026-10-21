@@ -44,7 +44,16 @@ challenges, and follow-up actions only when explicitly discussed. Preserve state
 numbers, and dates accurately; do not turn a character's actions into meeting decisions."""
 
 
-def breakdown_prompt(transcript: str, summary: str) -> str:
+def breakdown_prompt(transcript: str, summary: str, *, evidence_catalog: str | None = None) -> str:
+    evidence = ""
+    if evidence_catalog:
+        evidence = f"""
+
+{evidence_catalog}
+
+For next_steps only, each item is an object with text, source_id, and quote.
+Every other category stays an array of strings. Empty arrays are valid.
+"""
     return f"""Organize transcript-supported information into structured notes.
 {GROUNDING_RULES}
 
@@ -66,10 +75,21 @@ Use these categories only for information actually discussed:
   only if stated. Narrative events are not follow-up actions.
 Use an empty array for every irrelevant or undiscussed category. All arrays may be empty
 for a reading or lecture; the narrative summary still captures the content. Never invent
-material to populate a category. Preserve proper nouns and quantitative details exactly."""
+material to populate a category. Preserve proper nouns and quantitative details exactly.{evidence}"""
 
 
-def refinement_prompt(transcript: str, breakdown: dict[str, Any]) -> str:
+def refinement_prompt(
+    transcript: str, breakdown: dict[str, Any], *, evidence_catalog: str | None = None
+) -> str:
+    evidence = ""
+    if evidence_catalog:
+        evidence = f"""
+
+{evidence_catalog}
+
+Keep next_steps as objects with text, source_id, and quote. Drop a next step whose
+quote is not verbatim in the named source. Do not invent timestamps.
+"""
     return f"""Review structured notes against their source transcript for accuracy.
 {GROUNDING_RULES}
 
@@ -82,7 +102,7 @@ CURRENT NOTES (may contain errors):
 Return the same JSON shape. Remove unsupported claims and irrelevant business or technical
 content. Keep undiscussed categories as empty arrays. Correct errors and add omitted details
 only when explicit in the transcript. Do not add implicit signals or speculative context.
-Preserve stated names, quantities, dates, owners, and deadlines without inventing any."""
+Preserve stated names, quantities, dates, owners, and deadlines without inventing any.{evidence}"""
 
 
 def transcript_body(content: str) -> str:

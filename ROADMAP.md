@@ -6,7 +6,7 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.12.0 is the current GitHub release. The source repository is ready for
+Version 2.13.0 is the current GitHub release. The source repository is ready for
 public visibility. The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
@@ -28,12 +28,13 @@ The current product contract includes:
 - Live-validated Windows resident voice.
 - Experimental macOS and Linux resident voice pending hardware evidence.
 - Omarchy (Arch, Hyprland, Quickshell, and PipeWire) is the Linux desktop
-  reference. The distro Python is 3.14 and is not a supported interpreter.
+  reference. The distro Python is 3.14 and is a supported interpreter. Hardware
+  proof of the Omarchy voice path is still outstanding.
 - Experimental Omarchy compositor voice (`scribe voice`) reuses that resident
   owner. A GitHub release does not validate microphone selection, focus changes,
   correct-target insertion, cancellation, device loss, or recovery.
-- Python 3.12 and 3.13 support. New interpreter support requires the complete
-  dependency, CI, and platform matrix in
+- Python 3.11 through 3.14. Python 3.14 is the default runtime. Python 3.15
+  stays unsupported until torch and CTranslate2 publish cp315 wheels. See
   [ADR-001](docs/adr/ADR-001-python-312-baseline.md).
 
 ## Planning rules
@@ -66,10 +67,11 @@ The detailed version-sync and release workflow is in
 | 2.10.0 | Released | Local speaker labels and names, faster GPU transcription, and transcript quality fixes | 2.9.3 |
 | 2.11.0 | Released | Experimental Omarchy compositor voice, install and removal packaging, and Linux OBS launch fixes | 2.10.0 |
 | 2.12.0 | Released | Accuracy-first multilingual file transcription, security updates, and recording, install, storage, and cleanup fixes | 2.11.0 |
-| 2.12.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.12.0 |
-| 2.13.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.12.1 evidence gate |
-| 2.14.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.13.0 behavior contract |
-| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.14.0 boundaries and migration design |
+| 2.13.0 | Released | Terminal interface, notes honesty and opt-in source references, current Gemini pins, Python 3.11-3.14, and the aiohttp audit fix | 2.12.0 |
+| 2.13.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.13.0 |
+| 2.14.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.13.1 evidence gate |
+| 2.15.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.14.0 behavior contract |
+| 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.15.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
 
 2.10.0 shipped local speaker labels, speaker naming, and transcription quality
@@ -93,11 +95,21 @@ The unchanged operational-proof scope moves to 2.12.1, desktop validation to
 2.13.0, and maintainability to 2.14.0. Linux and macOS resident voice remain
 experimental. No broader package or native binary distribution is introduced.
 
-Version numbers after 2.12.0 are planning targets. SemVer impact discovered during
+At the maintainer's request, 2.13.0 then ships the terminal interface, notes
+comparison honesty, opt-in source-linked next steps, current Gemini model pins,
+the Python 3.11 through 3.14 runtime, and the aiohttp advisory fix. Retired
+Gemini ids fail with a named replacement. Evidence mode is off unless
+`scribe notes --evidence` is passed. A matching quote is not a factual-quality
+or acoustic-accuracy claim. This release does not claim the clean-machine, real
+OBS, or desktop hardware record. That unchanged operational-proof scope moves
+from 2.12.1 to 2.13.1, desktop validation to 2.14.0, and maintainability to
+2.15.0.
+
+Version numbers after 2.13.0 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.12.1 operational proof
+## Next release: 2.13.1 operational proof
 
 ### Objective
 
@@ -112,7 +124,7 @@ transcription within the configured spend policy.
    and produced artifact types.
 2. Run a clean install on Windows, macOS, and Omarchy, followed by `scribe init`,
    `scribe doctor`, and `scribe rec --check`. On Omarchy, install `uv` first and
-   pass `--python 3.12`. Confirm the preinstalled FFmpeg, yt-dlp, and
+   pass `--python 3.14`. Confirm the preinstalled FFmpeg, yt-dlp, and
    `/usr/bin/obs` before treating a missing tool as a Scribe defect. Another
    Linux distribution may be recorded as well, and it does not replace the
    Omarchy record.
@@ -142,8 +154,8 @@ transcription within the configured spend policy.
 ### Exit criteria
 
 - Clean installation and upgrade work from the documented versioned GitHub
-  source on each claimed core platform. The Omarchy install uses uv-managed
-  Python 3.12 or 3.13 and does not use the distro Python 3.14.
+  source on each claimed core platform. The Omarchy install uses Python 3.14
+  and records whether that interpreter is uv-managed or the distro Python.
 - Omarchy OBS evidence includes a Hyprland PipeWire capture, and the docs keep
   that path distinct from Omarchy's own screen recorder.
 - The Omarchy proof does not use the resident tray or F9. Those keys stay with
@@ -166,7 +178,7 @@ transcription within the configured spend policy.
 
 No broader package or binary distribution should start before this gate closes.
 
-## Planned release: 2.13.0 desktop validation
+## Planned release: 2.14.0 desktop validation
 
 ### Objective
 
@@ -215,11 +227,11 @@ GitHub release do not close it.
   `scribe voice` path, or it documents the tested fallback and keeps that path
   experimental.
 
-### Local speech models (also 2.13.0)
+### Local speech models (also 2.14.0)
 
 The pluggable diarization layer, token-free Nemotron default, and OpenAI diarized
 output fix shipped in 2.10.0, along with speaker naming and batched GPU decoding.
-Remaining evidence and follow-up work for 2.13.0:
+Remaining evidence and follow-up work for 2.14.0:
 
 1. Replace the pinned Transformers commit in `diarize-nemotron` with a validated
    released version after the diarization compatibility checks, and relock.
@@ -253,7 +265,7 @@ backed by measured multilingual quality and resource evidence. Current file
 profiles and [acoustic review](docs/ACOUSTIC_REVIEW.md) express an accuracy/resource preference; hermetic policy tests alone do
 not demonstrate a WER improvement on a laptop or across languages.
 
-## Planned release: 2.14.0 maintainability and verification
+## Planned release: 2.15.0 maintainability and verification
 
 ### Objective
 

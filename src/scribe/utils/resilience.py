@@ -106,7 +106,7 @@ def circuit_breaker_allows_request(
     return (now - snapshot.opened_at) >= recovery_timeout
 
 
-def run_fallback_chain[T](
+def run_fallback_chain(
     strategies: Sequence[Callable[[], T]],
     *,
     on_error: Callable[[BaseException, int], None] | None = None,

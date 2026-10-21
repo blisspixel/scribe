@@ -12,7 +12,7 @@ Every change to `main` must pass:
 
 - Ruff formatting and linting.
 - Strict mypy for `src/scribe`.
-- Python 3.12 and 3.13 unit tests.
+- Python 3.11, 3.12, 3.13, and 3.14 unit tests.
 - The combined statement-and-branch coverage gate at or above 81 percent.
 - Windows and macOS platform smoke tests.
 - Pre-commit repository hygiene checks.

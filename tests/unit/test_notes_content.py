@@ -333,7 +333,7 @@ def test_notes_cli_connects_phase_display_to_generator(tmp_path: Path, monkeypat
     output = tmp_path / "fiction_notes.md"
     output.write_text(SUMMARY)
 
-    def generate(path, destination, *, progress_callback):
+    def generate(path, destination, *, progress_callback, evidence=False):
         assert path == transcript
         for phase in ("Summary 1/3", "Breakdown 2/3", "Polish 3/3"):
             progress_callback(phase)

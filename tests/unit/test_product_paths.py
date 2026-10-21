@@ -161,7 +161,7 @@ def test_legacy_config_read_and_first_run_do_not_migrate_or_overwrite(tmp_path: 
     assert settings.auto_detect_language is False
     assert settings.primary_language == "ja"
     assert settings.local_compute_type == "int8"
-    assert init_wizard._default_output_folder() == str(output_folder)
+    assert Path(init_wizard._default_output_folder()) == output_folder
     assert init_wizard.maybe_prompt_first_run() is False
     result = init_wizard.run_wizard(Console(file=io.StringIO()))
     assert result == legacy

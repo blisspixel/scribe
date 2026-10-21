@@ -25,13 +25,15 @@ credential when applicable and remove the data from history before publication.
 
 ## Development setup
 
-Scribe uses Python 3.12 as the reproducible development baseline and also tests
-Python 3.13.
+Scribe supports Python 3.11 through 3.14. Python 3.14 is the default runtime.
+CI runs the unit suite on 3.11, 3.12, 3.13, and 3.14. Ruff stays on the 3.11
+syntax floor. mypy targets 3.12 so it can read NumPy 2.5 stubs. The 3.11 job
+compileall-checks `src/scribe`.
 
 ```bash
 git clone https://github.com/blisspixel/scribe.git
 cd scribe
-uv sync --locked --python 3.12 --group dev
+uv sync --locked --python 3.14 --group dev
 uv run pre-commit install --install-hooks
 ```
 

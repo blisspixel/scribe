@@ -1,36 +1,41 @@
 """
 Google Gemini provider implementation.
 
-Supports Gemini 2.5 and Gemini 3 model families with automatic parameter adaptation.
-
-Gemini 3 Features:
-- Dynamic thinking with thinking_level (low/high) for reasoning control
-- 1M token context window, 64k output
-- Knowledge cutoff: January 2025
-- Media resolution control for images/video/PDFs
-- Thought signatures for maintaining reasoning context
-
-Gemini 2.5 Features:
-- Legacy thinking_budget parameter (0 to disable)
-- Flexible temperature tuning
-- Flash models for speed, Pro for quality
-
-Model Selection:
-- gemini-3.5-flash: Stable model for reasoning and multimodal tasks
-- gemini-2.5-flash: Fast, cost-effective for simple tasks
-- gemini-2.5-pro: Balanced quality and speed
+Current text default is ``gemini-3.8-flash``. The flagship is ``gemini-4-argon``
+and the budget model is ``gemini-3.5-flash-lite``. Image generation defaults to
+``gemini-nano-banana-2.1``. Retired ids fail with the replacement name.
 """
+
+from __future__ import annotations
 
 import io
 from typing import Any, cast
 
 from scribe.providers.base import AIProvider, ProviderConfig
 
+RETIRED_GEMINI_MODELS = {
+    "gemini-3.5-flash": "gemini-3.8-flash",
+    "gemini-3.6-flash": "gemini-3.8-flash",
+    "gemini-3.7-flash": "gemini-3.8-flash",
+    "gemini-2.5-flash": "gemini-3.8-flash",
+    "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-2.5-pro": "gemini-4-argon",
+    "gemini-2.0-flash": "gemini-3.8-flash",
+}
+
+
+def reject_retired_gemini_model(model: str) -> None:
+    """Fail closed when a configured id is a retired model or a silent alias."""
+    replacement = RETIRED_GEMINI_MODELS.get(model.strip())
+    if replacement is not None:
+        raise ValueError(f"{model} is retired and is not used. Use {replacement} instead.")
+
 
 class GeminiProvider(AIProvider):
     """Google Gemini API provider."""
 
     def __init__(self, config: ProviderConfig) -> None:
+        reject_retired_gemini_model(config.model)
         super().__init__(config)
 
         try:
@@ -52,11 +57,7 @@ class GeminiProvider(AIProvider):
         temperature: float | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """
-        Create a chat completion using Gemini.
-
-        Supports both Gemini 2.5 and Gemini 3 models with automatic parameter adaptation.
-        """
+        """Create a chat completion using the configured Gemini model."""
 
         # Convert OpenAI-style messages to Gemini format
         # Gemini uses system_instruction separately and contents for user/assistant
@@ -82,11 +83,13 @@ class GeminiProvider(AIProvider):
         if system_instruction:
             config_params["system_instruction"] = system_instruction
 
-        # Gemini 3.5 and later reject deprecated sampling parameters. Gemini 2.5
+        # Gemini 3 and later reject deprecated sampling parameters. Known Gemini 2
+        # ids are retired before this method runs; an unrecognized Gemini 2 id
         # still accepts explicit temperature tuning.
-        is_gemini_3 = "gemini-3" in self.config.model.lower()
+        model_name = self.config.model.lower()
+        legacy_sampling = "gemini-2" in model_name or "gemini-1" in model_name
 
-        if temperature is not None and not is_gemini_3:
+        if temperature is not None and legacy_sampling:
             config_params["temperature"] = temperature
 
         if max_tokens:
@@ -96,7 +99,7 @@ class GeminiProvider(AIProvider):
         # Gemini 3 uses thinking_config with thinking_level: "low", "high" (Pro)
         # or "minimal", "low", "medium", "high" (Flash)
         # Default is "high" for maximum reasoning
-        if is_gemini_3:
+        if not legacy_sampling:
             thinking_level = kwargs.get("thinking_level", "high")
             if kwargs.get("disable_thinking", False):
                 # Use "low" for Pro, "minimal" for Flash
@@ -181,11 +184,10 @@ class GeminiProvider(AIProvider):
         if "2048" in size or kwargs.get("quality") == "hd":
             image_size = "2K"
 
-        requested_model = str(kwargs.get("model", "gemini-3.1-flash-image"))
+        requested_model = str(kwargs.get("model", "gemini-nano-banana-2.1"))
+        reject_retired_gemini_model(requested_model)
         model = (
-            requested_model
-            if requested_model.startswith("gemini-") and "image" in requested_model
-            else "gemini-3.1-flash-image"
+            requested_model if requested_model.startswith("gemini-") else "gemini-nano-banana-2.1"
         )
         config = cast(Any, self.types.GenerateContentConfig)(
             response_modalities=["IMAGE"],

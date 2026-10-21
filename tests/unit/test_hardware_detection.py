@@ -63,14 +63,23 @@ def test_detect_hardware_real_call_is_well_formed():
     assert info.memory_gb >= 0.0
 
 
+def _linux_pci_device(tmp_path):
+    """Create a fake PCI sysfs node. Windows rejects the colon in the name."""
+    device = tmp_path / "0000:04:00.0"
+    try:
+        device.mkdir()
+    except OSError as error:
+        pytest.skip(f"this platform cannot create a PCI sysfs directory name: {error}")
+    return device
+
+
 @pytest.mark.parametrize(
     ("vendor_id", "vendor"), [("0x1002", "amd"), ("0x8086", "intel"), ("0x10de", "nvidia")]
 )
 def test_linux_physical_gpu_without_ml_driver(tmp_path, vendor_id, vendor):
     from scribe.core.backends.hardware import _detect_linux_gpu
 
-    device = tmp_path / "0000:04:00.0"
-    device.mkdir()
+    device = _linux_pci_device(tmp_path)
     (device / "class").write_text("0x030000\n")
     (device / "vendor").write_text(vendor_id + "\n")
     (device / "device").write_text("0x15bf\n")
@@ -84,8 +93,7 @@ def test_linux_physical_gpu_without_ml_driver(tmp_path, vendor_id, vendor):
 def test_linux_does_not_treat_amd_cpu_as_gpu(tmp_path):
     from scribe.core.backends.hardware import _detect_linux_gpu
 
-    device = tmp_path / "0000:04:00.0"
-    device.mkdir()
+    device = _linux_pci_device(tmp_path)
     (device / "class").write_text("0x060000\n")
     (device / "vendor").write_text("0x1002\n")
     with patch("scribe.core.backends.hardware.platform.system", return_value="Linux"):

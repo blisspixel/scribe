@@ -69,7 +69,7 @@ The representative Wayland record is Omarchy: Arch, Hyprland, and Quickshell.
 Wayland global hooks are not assumed to work. Record:
 
 - Omarchy version, Hyprland session, Quickshell, Python version reported by
-  `scribe doctor`, and the exact `uv tool install --python 3.12` command.
+  `scribe doctor`, and the exact `uv tool install --python 3.14` command.
 - The exact `scribe tray --check` advisory.
 - Whether Quickshell showed a tray icon. Absence is an expected result, not a
   failed parity check.

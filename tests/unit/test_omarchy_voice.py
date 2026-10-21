@@ -303,8 +303,18 @@ def test_voice_check_cannot_claim_validation() -> None:
     assert "does not validate hardware" in text
     assert "Cloud transcription stays opt-in" in text
 
-    outside = build_voice_check(
+    current = build_voice_check(
         python_version=(3, 14),
+        sounddevice_available=False,
+        omarchy_detected=False,
+        bindings_text="",
+        autostart_text="",
+    )
+    assert current.python_ok is True
+    assert "inside Scribe's 3.11 through 3.14 range." in "\n".join(current.lines)
+
+    outside = build_voice_check(
+        python_version=(3, 15),
         sounddevice_available=False,
         omarchy_detected=False,
         bindings_text="",
@@ -312,7 +322,7 @@ def test_voice_check_cannot_claim_validation() -> None:
     )
     assert outside.python_ok is False
     assert outside.hardware_validated is False
-    assert "3.14" in "\n".join(outside.lines)
+    assert "outside Scribe's 3.11 through 3.14 range." in "\n".join(outside.lines)
 
 
 def test_overlay_makes_microphone_state_unmistakable() -> None:
@@ -396,7 +406,7 @@ def test_packaging_scripts_do_not_delete_user_data_or_publish() -> None:
     root = Path(__file__).resolve().parents[2]
     install = (root / "packaging" / "linux" / "omarchy" / "install.sh").read_text(encoding="utf-8")
     remove = (root / "packaging" / "linux" / "omarchy" / "uninstall.sh").read_text(encoding="utf-8")
-    assert "uv tool install --python 3.12 --force" in install
+    assert "uv tool install --python 3.14 --force" in install
     assert "scribe[tray] @" in install
     assert "scribe voice omarchy-install" in install
     assert "not a tested Omarchy install" in install
@@ -430,14 +440,23 @@ def test_insert_reports_unconfirmed_paste() -> None:
     assert service.insert_last_transcript() == "copied"
 
 
-def test_voice_check_command_refuses_python_314(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "version_info", (3, 14, 0, "final", 0))
+def test_voice_check_command_accepts_python_314_and_refuses_315(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("OMARCHY_PATH", raising=False)
     monkeypatch.setattr(voice_session.importlib.util, "find_spec", lambda _name: object())
+    monkeypatch.setattr(sys, "version_info", (3, 14, 0, "final", 0))
+    supported = Console(record=True, width=100, force_terminal=False)
+    assert run_voice_check(supported) == 0
+    supported_text = supported.export_text()
+    assert "inside" in supported_text
+    assert "does not validate hardware" in supported_text
+    assert "not a tested Omarchy installation" in supported_text
+
+    monkeypatch.setattr(sys, "version_info", (3, 15, 0, "final", 0))
     printer = Console(record=True, width=100, force_terminal=False)
     assert run_voice_check(printer) == 1
     text = printer.export_text()
-    assert "does not validate hardware" in text
     assert "outside" in text
     assert "not a tested Omarchy installation" in text
 

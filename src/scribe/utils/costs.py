@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 import deal
 
 USD_TICKS_PER_DOLLAR = 10_000_000_000
-MODEL_PRICING_LAST_REVIEWED = "2026-05-06"
+MODEL_PRICING_LAST_REVIEWED = "2026-10-20"
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,34 @@ TEXT_MODEL_PRICING: dict[str, TextModelPricing] = {
         input_per_million=1.25,
         output_per_million=2.50,
     ),
+    "gemini-3.5-flash-lite": TextModelPricing(input_per_million=0.30, output_per_million=2.50),
 }
+
+# Introductory prices end on these dates. The later row is the following price.
+_GEMINI_PRICE_STEPS: dict[str, tuple[tuple[date, TextModelPricing], TextModelPricing]] = {
+    "gemini-4-argon": (
+        (date(2026, 12, 1), TextModelPricing(input_per_million=2.0, output_per_million=10.0)),
+        TextModelPricing(input_per_million=4.0, output_per_million=20.0),
+    ),
+    "gemini-3.8-flash": (
+        (date(2027, 1, 1), TextModelPricing(input_per_million=0.75, output_per_million=3.75)),
+        TextModelPricing(input_per_million=1.50, output_per_million=7.50),
+    ),
+    "google/gemini-3.8-flash": (
+        (date(2027, 1, 1), TextModelPricing(input_per_million=0.75, output_per_million=3.75)),
+        TextModelPricing(input_per_million=1.50, output_per_million=7.50),
+    ),
+}
+
+
+def gemini_text_pricing(model: str, *, on: date | None = None) -> TextModelPricing | None:
+    """Return the Gemini list price in effect on ``on`` (today when omitted)."""
+    steps = _GEMINI_PRICE_STEPS.get(model.lower())
+    if steps is None:
+        return None
+    (until, introductory), later = steps
+    current = on or date.today()
+    return introductory if current < until else later
 
 
 @deal.pre(lambda cost_in_usd_ticks: cost_in_usd_ticks is None or cost_in_usd_ticks >= 0)
@@ -60,7 +88,7 @@ def estimate_text_cost_usd(
     completion_tokens: int | float,
 ) -> float | None:
     """Estimate text request cost when exact provider billing data is unavailable."""
-    pricing = TEXT_MODEL_PRICING.get(model.lower())
+    pricing = TEXT_MODEL_PRICING.get(model.lower()) or gemini_text_pricing(model)
     if pricing is None:
         return None
 

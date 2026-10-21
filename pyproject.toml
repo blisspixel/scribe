@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.12.0"
+version = "2.13.0"
 description = "Local-first speech transcription, meeting notes, and recording tools"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+# The cap stays until torch and CTranslate2 publish cp315 wheels.
+requires-python = ">=3.11,<3.15"
 authors = [
     {name = "Nick Seal"}
 ]
@@ -20,8 +21,10 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -149,7 +152,7 @@ scribe = ["py.typed", "assets/icons/*", "assets/glossaries/*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 exclude = [
     ".git",
     ".mypy_cache",
@@ -244,6 +247,9 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.mypy]
+# NumPy 2.5 stubs use PEP 695 type statements. mypy parses those stubs with
+# this setting, so 3.11 cannot typecheck the 3.14 environment. Ruff stays on
+# py311, and the 3.11 CI job compileall-checks src/scribe.
 python_version = "3.12"
 strict = true
 warn_return_any = true
@@ -331,7 +337,7 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     # NOTE: Coverage flags are deliberately omitted here.
-    # The dedicated "Coverage (Python 3.12)" CI job passes --cov + --cov-fail-under=81 explicitly.
+    # The dedicated "Coverage (Python 3.14)" CI job passes --cov + --cov-fail-under=81 explicitly.
     # Keeping them out of global addopts ensures the lightweight matrix "Tests (Python X)" jobs
     # (which run only tests/unit with limited markers) stay fast and do not incorrectly enforce
     # the full-suite coverage gate on a partial run. Local developers can still pass --cov manually.

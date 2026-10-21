@@ -27,6 +27,16 @@ from scribe.utils.notes_content import (
     summary_prose,
     transcript_body,
 )
+from scribe.utils.notes_evidence import (
+    SourceSnapshot,
+    catalog_for_prompt,
+    evidence_breakdown_schema,
+    evidence_lines,
+    load_snapshot,
+    merge_step_objects,
+    resolve_next_steps,
+    write_sidecar,
+)
 from scribe.utils.transcript_loader import load_transcript_text
 
 logger = get_logger(__name__)
@@ -105,6 +115,7 @@ class NotesGenerator:
         # Try to use provider system
         self.provider = None
         self.use_provider = False
+        self._evidence_snapshot: SourceSnapshot | None = None
 
         try:
             from scribe.providers import get_provider
@@ -174,6 +185,7 @@ class NotesGenerator:
         output_path: Path | None = None,
         *,
         progress_callback: Callable[[str], None] | None = None,
+        evidence: bool = False,
     ) -> Path:
         """
         Generate grounded transcript notes.
@@ -182,12 +194,14 @@ class NotesGenerator:
             transcript_path: Path to transcript TXT file
             output_path: Optional custom output path
             progress_callback: Receives phase transitions, without transcript content
+            evidence: When true, ask for next-step source ids and validate them locally
 
         Returns:
             Path to generated notes MD file
         """
         logger.info(f"Starting notes generation for: {transcript_path}")
         start_time = time.time()
+        self._evidence_snapshot = load_snapshot(transcript_path) if evidence else None
 
         # Step 1: Read and validate transcript
         transcript_data = self._read_transcript(transcript_path)
@@ -233,9 +247,17 @@ class NotesGenerator:
                 progress_callback("Polish 3/3 (merged chunks)")
             refined_breakdown = self._refine_and_polish(transcript_content, merged)
 
-        # Step 5: Validate output
-        confidence = self._validate_output(refined_breakdown)
-        logger.info(f"Validation confidence: {confidence:.3f}")
+        # Step 5: Structure/detail diagnostic. This is not factual confidence.
+        structure_detail = self._validate_output(refined_breakdown)
+        logger.info("Structure/detail diagnostic: %.3f", structure_detail)
+        evidence_steps = None
+        if self._evidence_snapshot is not None:
+            evidence_steps = resolve_next_steps(
+                self._evidence_snapshot, refined_breakdown.get("next_steps")
+            )
+            refined_breakdown["next_steps"] = evidence_lines(
+                self._evidence_snapshot, evidence_steps
+            )
 
         # Step 6: Format as Markdown
         markdown_content = self._format_markdown(summary, refined_breakdown, transcript_data)
@@ -246,11 +268,17 @@ class NotesGenerator:
             output_path = transcript_path.parent / f"{base_name}_notes.md"
 
         final_path = self._write_notes(markdown_content, output_path)
+        if self._evidence_snapshot is not None and evidence_steps is not None:
+            write_sidecar(
+                final_path.with_suffix(".evidence.json"),
+                self._evidence_snapshot,
+                evidence_steps,
+            )
 
         total_duration = time.time() - start_time
         summary_metrics = {
             "total_duration_sec": round(total_duration, 2),
-            "confidence_score": round(confidence, 3),
+            "structure_detail_score": round(structure_detail, 3),
             "output_file": str(final_path),
             "transcript_length_chars": len(transcript_content),
         }
@@ -566,14 +594,19 @@ class NotesGenerator:
     def _generate_analytical_breakdown(self, transcript: str, summary: str) -> dict[str, Any]:
         logger.info("Generating analytical breakdown...")
 
-        prompt = breakdown_prompt(transcript, summary)
+        snapshot = self._evidence_snapshot_or_none()
+        catalog = catalog_for_prompt(snapshot) if snapshot is not None else None
+        prompt = breakdown_prompt(transcript, summary, evidence_catalog=catalog)
+        schema = (
+            evidence_breakdown_schema(BREAKDOWN_SCHEMA) if catalog is not None else BREAKDOWN_SCHEMA
+        )
         try:
             response_text, _ = self._call_gpt5_api(
                 prompt,
                 reasoning_effort="low",
                 verbosity="low",
                 phase="breakdown",
-                json_schema=BREAKDOWN_SCHEMA,
+                json_schema=schema,
             )
             try:
                 breakdown = cast(dict[str, Any], json.loads(response_text))
@@ -608,14 +641,19 @@ class NotesGenerator:
     def _refine_and_polish(self, transcript: str, breakdown: dict[str, Any]) -> dict[str, Any]:
         logger.info("Refining and polishing breakdown...")
 
-        prompt = refinement_prompt(transcript, breakdown)
+        snapshot = self._evidence_snapshot_or_none()
+        catalog = catalog_for_prompt(snapshot) if snapshot is not None else None
+        prompt = refinement_prompt(transcript, breakdown, evidence_catalog=catalog)
+        schema = (
+            evidence_breakdown_schema(BREAKDOWN_SCHEMA) if catalog is not None else BREAKDOWN_SCHEMA
+        )
         try:
             response_text, _ = self._call_gpt5_api(
                 prompt,
                 reasoning_effort="low",
                 verbosity="low",
                 phase="refinement",
-                json_schema=BREAKDOWN_SCHEMA,
+                json_schema=schema,
             )
             try:
                 refined_breakdown = cast(dict[str, Any], json.loads(response_text))
@@ -711,34 +749,64 @@ class NotesGenerator:
             "future_state_technical",
             "next_steps",
         ]
-        merged: dict[str, list[str]] = {k: [] for k in keys}
+        merged: dict[str, list[Any]] = {k: [] for k in keys}
         seen: dict[str, set[str]] = {k: set() for k in keys}
+        next_step_parts: list[list[Any]] = []
         for b in parts:
+            next_step_parts.append(list(b.get("next_steps", [])))
             for k in keys:
+                if k == "next_steps":
+                    continue
                 for bullet in b.get(k, []):
-                    s = (bullet or "").strip()
+                    if not isinstance(bullet, str):
+                        continue
+                    s = bullet.strip()
                     if s and s not in seen[k]:
                         merged[k].append(s)
                         seen[k].add(s)
+        if self._evidence_snapshot_or_none() is not None:
+            merged["next_steps"] = merge_step_objects(next_step_parts)
+        else:
+            for bullet in (item for part in next_step_parts for item in part):
+                if not isinstance(bullet, str):
+                    continue
+                s = bullet.strip()
+                if s and s not in seen["next_steps"]:
+                    merged["next_steps"].append(s)
+                    seen["next_steps"].add(s)
         return merged
 
     # ---------------- Validation, Formatting, Helpers ----------------
 
+    def _evidence_snapshot_or_none(self) -> Any:
+        """Return the evidence snapshot, including for partially built test objects."""
+        return getattr(self, "_evidence_snapshot", None)
+
     def _validate_breakdown_keys(self, breakdown: dict[str, Any]) -> None:
+        evidence = self._evidence_snapshot_or_none() is not None
         for key in BREAKDOWN_KEYS:
             if key not in breakdown:
                 raise ValidationError(f"Missing required section: {key}")
-            if not isinstance(breakdown[key], list) or not all(
-                isinstance(bullet, str) for bullet in breakdown[key]
+            values = breakdown[key]
+            if key == "next_steps" and evidence:
+                if not isinstance(values, list):
+                    raise ValidationError("Section next_steps must be a list")
+                # Item shape is checked locally. A string or partial object is
+                # unverified, not a reason to discard the rest of the note.
+                continue
+            if not isinstance(values, list) or not all(
+                isinstance(bullet, str) for bullet in values
             ):
                 raise ValidationError(f"Section {key} must be a list of strings")
 
     def _validate_output(self, breakdown: dict[str, Any]) -> float:
         """
-        Soft validation for presence and detail density.
-        Returns confidence score (0.0-1.0).
+        Structure and detail diagnostic from 0 to 1.
+
+        This counts section shape and bullet detail. It is not a factual
+        confidence score and it is not a source-faithfulness verdict.
         """
-        logger.debug("Validating output quality...")
+        logger.debug("Scoring structure and detail...")
 
         confidence_score = 0.0
         max_score = 100.0
@@ -811,7 +879,8 @@ class NotesGenerator:
         final_confidence = min(confidence_score / max_score, 1.0)
         logger.debug(
             f"Validation complete: {sections_found}/{len(required_sections)} sections, "
-            f"{quality_bullets}/{total_bullets} quality bullets, confidence={final_confidence:.3f}"
+            f"{quality_bullets}/{total_bullets} quality bullets, "
+            f"structure_detail={final_confidence:.3f}"
         )
         return final_confidence
 

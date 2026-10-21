@@ -78,13 +78,33 @@ class TestObjectiveStructScore:
     def test_missing_sections_scores_lower(self):
         partial = json.dumps({"decisions": ["x"], "action_items": [], "key_claims": ["y"]})
         score, detail = objective_struct_score(partial)
-        # 3 of 5 present, 2 of 5 non-empty -> 40 + 30*0.6 + 30*0.4 = 70.0
-        assert score == 70.0
+        assert score == 60.0
         assert detail["json_valid"] is True
+        assert detail["rejected"]
 
-    def test_empty_object_gets_validity_only(self):
-        score, _ = objective_struct_score("{}")
-        assert score == 40.0
+    def test_valid_empty_arrays_are_not_penalized(self):
+        empty = json.dumps(
+            {
+                key: []
+                for key in ("decisions", "action_items", "key_claims", "blockers", "next_steps")
+            }
+        )
+        score, detail = objective_struct_score(empty)
+        assert score == 100.0
+        assert detail["total_items"] == 0
+        assert detail["rejected"] == []
+
+    def test_non_string_item_is_rejected_without_a_quality_claim(self):
+        payload = json.loads(_FULL)
+        payload["action_items"] = [{"owner": "invented"}]
+        score, detail = objective_struct_score(json.dumps(payload))
+        assert score == 80.0
+        assert any("action_items" in item for item in detail["rejected"])
+
+    def test_empty_object_has_no_valid_sections(self):
+        score, detail = objective_struct_score("{}")
+        assert score == 0.0
+        assert detail["rejected"]
 
     def test_think_block_is_stripped(self):
         # Reasoning models (e.g. some Gemma/Qwen builds) emit <think> with braces
@@ -204,10 +224,26 @@ class TestSummarizeVerdict:
     def test_no_locals_returns_none(self):
         assert summarize_verdict([_result("openai", "gpt-5.5", 100.0, judge=9.0)]) is None
 
-    def test_local_only_reports_offline(self):
+    def test_local_only_does_not_treat_shape_as_quality(self):
         verdict = summarize_verdict([_result("ollama", "qwen2.5:14b", 94.0)])
-        assert "fully offline" in verdict
-        assert "94%" in verdict
+        assert verdict is not None
+        assert "not assessed" in verdict
+        assert "94" not in verdict
+
+    def test_missing_judge_is_not_compared(self):
+        results = [
+            _result("openai", "gpt-5.5", 100.0, judge=9.0, cost=0.012),
+            _result("ollama", "qwen2.5:14b", 100.0),
+        ]
+        verdict = summarize_verdict(results)
+        assert verdict is not None
+        assert "not compared" in verdict
+
+    def test_scorecard_names_the_probe_and_separates_shape(self):
+        card = format_scorecard([_result("ollama", "qwen2.5:14b", 100.0)])
+        assert "single-call extraction probe" in card
+        assert "not factual quality" in card
+        assert "shape" in card
 
     def test_local_worth_it_when_close(self):
         results = [

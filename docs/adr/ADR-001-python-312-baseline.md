@@ -1,7 +1,7 @@
 # ADR-001: Python 3.12 Development Baseline
 
 ## Status
-Accepted in 2026; amended 2026-09-01
+Accepted in 2026; amended 2026-10-20
 
 ## Context
 Scribe is a **local-first desktop CLI** with heavy native dependencies:
@@ -12,8 +12,8 @@ Scribe is a **local-first desktop CLI** with heavy native dependencies:
 Python 3.12 remains the most conservative Windows GPU baseline, and Python 3.13
 has a validated wheel set. A Windows Python 3.14 install probe on 2026-07-28
 failed because the universal optional-ML graph selected NumPy and CTranslate2
-releases without compatible CPython 3.14 wheels. Standard and free-threaded 3.14
-support therefore remain unproven for the stack that defines Scribe's value.
+releases without compatible CPython 3.14 wheels. Free-threaded 3.14 and the
+optional ML extras were not re-probed on 2026-10-20. The base graph was.
 
 A Windows wheel-only probe on 2026-09-01 found that the base dependency graph
 now resolves on Python 3.14.7. That is necessary but not sufficient evidence:
@@ -24,15 +24,23 @@ Python 3.15 was still prerelease on the same date. The official schedule targets
 Torch 2.13 had no `cp315` wheel, so the required base graph was unsatisfiable.
 
 ## Decision
-- Set `requires-python = ">=3.12,<3.14"` in pyproject.toml.
-- Run the CI-safe unit suite on every declared standard CPython version: 3.12
-  and 3.13.
-- Add Python 3.14 only after CI validates installation and runtime behavior on
-  the declared platform matrix.
-- Reconsider Python 3.15 after its final release and compatible native wheels are
-  available. Do not claim support from a prerelease syntax-only probe.
-- `.python-version` file pins `3.12` for local development consistency (uv + pyenv compatible).
-- No chasing of bleeding-edge runtime versions that would break the primary Windows + NVIDIA user base.
+- Set `requires-python = ">=3.11,<3.15"` in both project metadata files. The cap
+  stays until torch and CTranslate2 publish cp315 wheels.
+- Run the CI-safe unit suite on Python 3.11, 3.12, 3.13, and 3.14.
+- Use Python 3.14 as the default runtime for `.python-version`, single-version
+  CI jobs, coverage, and documented installs, including Omarchy.
+- Keep Ruff `target-version` on 3.11. Set mypy `python_version` to 3.12 because
+  NumPy 2.5 stubs use PEP 695 `type` statements and mypy parses those stubs with
+  the configured version. The Python 3.11 CI job runs `compileall` on
+  `src/scribe`, so 3.12-only syntax still fails before the tag.
+- Do not claim Python 3.15 support from a syntax-only or prerelease probe.
+- NumPy 2.5 requires Python 3.12. The lock selects NumPy 2.4.6 below 3.12 and
+  NumPy 2.5.4 on 3.12 and newer. Numba 0.68.0 and llvmlite 0.50.0 move with it.
+- On 2026-10-20, a locked Windows sync on Python 3.14.7 installed NumPy 2.5.4,
+  Torch 2.13.0, and CTranslate2 4.8.1 with source builds disabled for NumPy,
+  SciPy, Numba, llvmlite, and Torch. That wheel install is the evidence for
+  declaring standard 3.14 on the base graph. CI on the release commit is still
+  required before the tag.
 
 ## Consequences
 ### Positive

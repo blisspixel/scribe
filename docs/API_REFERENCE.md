@@ -6,8 +6,8 @@ they are internal interfaces in the 2.x series and can change without a separate
 deprecation cycle. Prefer [CLI.md](CLI.md) for automation that needs a stable
 contract.
 
-All examples assume Scribe is installed from this repository and Python 3.12 or
-3.13 is active.
+All examples assume Scribe is installed from this repository and Python 3.11
+through 3.14 is active. Python 3.14 is the default.
 
 ## Transcription orchestration
 
@@ -257,4 +257,4 @@ Public CLI failures are normalized through the exception types in
 with implementation changes. Pin an exact Scribe commit and add integration tests
 if an application imports these modules directly.
 
-Version baseline: Scribe 2.12.0.
+Version baseline: Scribe 2.13.0.

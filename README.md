@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/blisspixel/scribe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/blisspixel/scribe/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11 through 3.14](https://img.shields.io/badge/python-3.11%20through%203.14-blue.svg)](https://www.python.org/downloads/)
 
 Local-first speech transcription, meeting notes, and defensive OBS recording for
 Windows, macOS, and Linux.
@@ -14,13 +14,15 @@ opt-ins.
 
 ## Quick start
 
-Scribe requires Python 3.12 or 3.13, [uv](https://docs.astral.sh/uv/), and FFmpeg.
+Scribe requires Python 3.11 through 3.14, [uv](https://docs.astral.sh/uv/), and FFmpeg.
+Python 3.14 is the default. Python 3.15 stays unsupported until torch and
+CTranslate2 publish cp315 wheels.
 OBS Studio is required only for recording.
 
 ```bash
 # For a private repository, first authenticate Git (not only the GitHub CLI).
 gh auth setup-git
-uv tool install --with "av<19" --torch-backend auto --python 3.12 git+https://github.com/blisspixel/scribe.git@v2.12.0
+uv tool install --with "av<19" --torch-backend auto --python 3.14 git+https://github.com/blisspixel/scribe.git@v2.13.0
 uv tool update-shell
 
 scribe init
@@ -49,12 +51,12 @@ and installed footprint. Model weights are a separate download on first use.
 
 Omarchy is the Linux desktop this project is set up for: Arch, Hyprland,
 Quickshell, PipeWire, and a preinstalled OBS Studio. Its `python` is 3.14, which
-Scribe does not run. Install uv, then pin the tool to Python 3.12:
+is inside Scribe's supported range. Install uv, then pin the tool to Python 3.14:
 
 ```bash
 omarchy pkg add uv
-uv tool install --with "av<19" --torch-backend auto --python 3.12 --force \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.12.0"
+uv tool install --with "av<19" --torch-backend auto --python 3.14 --force \
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
 uv tool update-shell
 scribe init
 scribe doctor
@@ -277,7 +279,7 @@ diagnostic bundle for review before sharing.
 
 ## Project status
 
-Version 2.12.0 is the current GitHub release. It is not published on PyPI.
+Version 2.13.0 is the current GitHub release. It is not published on PyPI.
 Linux compositor voice is experimental and is not a tested Omarchy installation.
 CI
 enforces Ruff, strict mypy, an 81 percent combined

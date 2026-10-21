@@ -17,7 +17,7 @@ def _write_wheel(
     *,
     requirements: tuple[str, ...] = ("deal>=4.1",),
     version: str = PROJECT_VERSION,
-    requires_python: str = "<3.14,>=3.12",
+    requires_python: str = ">=3.11,<3.15",
     packaged_version: str | None = None,
     license_expression: str | None = "Apache-2.0",
     license_file: str | None = "LICENSE",
@@ -203,7 +203,7 @@ def _write_licensed_repository(path: Path, *, expression: str = "MIT") -> None:
     (path / "LICENSE").write_text("terms\n", encoding="utf-8")
     (path / "pyproject.toml").write_text(
         f'[project]\nname = "scribe"\nversion = "{PROJECT_VERSION}"\n'
-        f'requires-python = ">=3.12,<3.14"\nlicense = "{expression}"\n',
+        f'requires-python = ">=3.11,<3.15"\nlicense = "{expression}"\n',
         encoding="utf-8",
     )
     (path / "src" / "scribe" / "__init__.py").write_text(

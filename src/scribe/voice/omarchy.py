@@ -158,7 +158,7 @@ def build_voice_check(
     autostart_text: str,
 ) -> VoiceCheckReport:
     """Describe install readiness. This function cannot mark hardware as validated."""
-    python_ok = python_version[0] == 3 and python_version[1] in {12, 13}
+    python_ok = python_version[0] == 3 and 11 <= python_version[1] <= 14
     bindings_installed = MARKER_START in bindings_text and MARKER_END in bindings_text
     autostart_installed = AUTOSTART_START in autostart_text and AUTOSTART_END in autostart_text
     lines = [
@@ -168,7 +168,9 @@ def build_voice_check(
         "insertion, cancellation, device loss, and recovery.",
         f"Python {python_version[0]}.{python_version[1]} is "
         + (
-            "inside Scribe's 3.12/3.13 range." if python_ok else "outside Scribe's 3.12/3.13 range."
+            "inside Scribe's 3.11 through 3.14 range."
+            if python_ok
+            else "outside Scribe's 3.11 through 3.14 range."
         ),
         "sounddevice is " + ("importable." if sounddevice_available else "not installed."),
         "Omarchy was " + ("detected." if omarchy_detected else "not detected."),

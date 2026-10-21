@@ -4,13 +4,71 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.12.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.13.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
----
+## [Unreleased]
 
-## Unreleased
+## [2.13.0] - 2026-10-20
+
+This minor release ships the terminal interface, notes honesty, opt-in source
+references, current Gemini pins, and the Python 3.11 through 3.14 runtime.
+Operational proof remains planned for 2.13.1. It does not claim a clean-machine
+install, a real OBS recording, or desktop hardware validation.
+
+### Security
+
+- Restored the all-markers dependency audit by locking aiohttp 3.14.5, which
+  replaces 3.14.3. yarl 1.25.1 moved with it. The same audit also moved certifi
+  to 2026.10.19 and Pillow to 13.0.0. It still checks every registry version
+  and does not ignore advisories.
+- Moved the tray module from the Go 1.27.2 pin requested for this release to Go
+  1.27.3, published 2026-10-19, which includes the crypto/x509 mitigation for
+  CVE-2026-111943.
+
+### Added
+
+- `scribe notes --evidence` asks the selected notes provider, in the existing
+  breakdown and polish calls, for a source id and a short verbatim quote on each
+  next step. Scribe checks those references locally and writes a
+  `scribe.notes-evidence/v1` sidecar. Unverified bullets are omitted and counted.
+  Withdrawn or non-commitment wording stays visible and is not a confirmed
+  commitment. A cited span with an acoustic-review warning stays labeled source
+  review. Text inputs state that audio timing is unavailable. Timestamps come
+  only from validated source spans. The flag is off by default, so plain notes
+  are unchanged. A matching quote is navigable evidence, not a factual-quality
+  or acoustic-accuracy claim.
+
+### Changed
+
+- Root help leads with Start here, then groups commands on an aligned column,
+  and fits 80 columns and 25 lines. A static one-colour wordmark appears only
+  for a bare `scribe` or `scribe init`. `--help`, pipes, `NO_COLOR`,
+  `FORCE_COLOR=0`, `CI`, and `SCRIBE_BANNER=off` print no banner.
+- Interface colours use terminal theme roles. The recording overlay stays bold
+  white on red and still says MICROPHONE ON.
+- Notes comparison reports schema compliance for the single-call extraction
+  probe. Empty sections are valid. Shape is not factual quality. A missing,
+  failed, or partial judge is not assessed and is not filled from the shape
+  score. The production structure diagnostic is logged as
+  `structure_detail_score`.
+- Gemini joke, meme, notes, and speaker defaults are `gemini-3.8-flash`. Image
+  generation defaults to `gemini-nano-banana-2.1` and still accepts an explicit
+  `gemini-3.1-flash-image`. Retired ids, including `gemini-3.5-flash` and
+  `gemini-2.5-flash-lite`, fail at startup and name the replacement. Text prices
+  follow the published 2026-10-13 steps, including the Argon change on
+  2026-12-01 and the Flash change on 2027-01-01.
+- Supported Python is 3.11 through 3.14. Python 3.14 is the default, including
+  for the Omarchy install. Python 3.15 stays unsupported until torch and
+  CTranslate2 publish cp315 wheels. Ruff stays on the 3.11 syntax floor. mypy
+  targets 3.12 because NumPy 2.5 stubs use PEP 695 syntax. The 3.11 CI job
+  compileall-checks `src/scribe`, so that syntax still fails on 3.11.
+  CI uses setup-uv v10.3.0. The lock resolves NumPy 2.4.6 on Python 3.11 and
+  NumPy 2.5.4 on Python 3.12 and newer, with Numba 0.68.0 and llvmlite 0.50.0.
+  SciPy 1.18.0 stays on Python 3.12 and newer; Python 3.11 resolves SciPy 1.17.1.
+  A locked Windows sync on Python 3.14.7 installed those wheels without building
+  NumPy, SciPy, Numba, llvmlite, or Torch from source.
 
 ### Fixed
 

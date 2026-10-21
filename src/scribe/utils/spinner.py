@@ -88,8 +88,6 @@ class SpinnerProgress:
                 shimmer_markup(
                     self.message,
                     phase=phase,
-                    base_color=ScribeTheme.TEXT_MUTED,
-                    highlight_color="#d0d0ff",
                     width=self._shimmer_width,
                 )
                 + "..."

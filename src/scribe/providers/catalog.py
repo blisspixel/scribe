@@ -42,11 +42,11 @@ _DEFAULT_MODELS: dict[str, dict[str, str | None]] = {
         "transcribe": None,
     },
     "gemini": {
-        "joke": "gemini-3.5-flash",
-        "meme": "gemini-3.5-flash",
-        "meme_image": "gemini-3.1-flash-image",
-        "notes": "gemini-3.5-flash",
-        "speakers": "gemini-3.5-flash",
+        "joke": "gemini-3.8-flash",
+        "meme": "gemini-3.8-flash",
+        "meme_image": "gemini-nano-banana-2.1",
+        "notes": "gemini-3.8-flash",
+        "speakers": "gemini-3.8-flash",
         "transcribe": None,
     },
     # Ollama models are machine-dependent. These values are last-resort
