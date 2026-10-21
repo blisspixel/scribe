@@ -16,6 +16,8 @@ milestones that predate this repository's Git history.
   own exit as a later session error. Those commands still exit 1 when a requested
   output is incomplete. An unexpected failure after the summary is saved is still
   logged, and the saved outcome stays in place.
+- A valid Gemini key in `scribe doctor --live` is reported as configured and
+  valid. The diagnostic result no longer contains any part of the key.
 
 ### Changed
 

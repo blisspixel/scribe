@@ -5,6 +5,7 @@ Tests diagnostic checks for environment, dependencies, and configuration.
 """
 
 import os
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
@@ -496,6 +497,31 @@ class TestAdditionalProviders:
         assert key not in str(results)
         assert key[:8] not in str(results)
         assert key[-4:] not in str(results)
+
+    def test_gemini_success_omits_key_material(self):
+        key = "AIza-private-gemini-key-material-9876"
+        models = MagicMock()
+        models.list.return_value = []
+        client = MagicMock()
+        client.models = models
+        genai = MagicMock()
+        genai.Client.return_value = client
+        diagnostics = SystemDiagnostics()
+
+        with (
+            patch.dict(sys.modules, {"google": MagicMock(), "google.genai": genai}),
+            patch.dict(os.environ, {"GEMINI_API_KEY": key}, clear=True),
+        ):
+            results = diagnostics.check_additional_providers()
+
+        rendered = repr(results)
+        assert key not in rendered
+        assert key[:8] not in rendered
+        assert key[-4:] not in rendered
+        gemini = next(result for result in results if result.name == "Gemini API Key")
+        assert gemini.status == "pass"
+        assert gemini.message == "Valid"
+        assert gemini.details == "A Gemini API key is configured and valid."
 
 
 class TestOutputFolderCheck:

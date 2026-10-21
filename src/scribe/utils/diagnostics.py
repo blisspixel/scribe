@@ -1225,7 +1225,7 @@ class SystemDiagnostics:
                         name="Gemini API Key",
                         status="pass",
                         message="Valid",
-                        details=f"Key: {gemini_key[:8]}...{gemini_key[-4:]}",
+                        details="A Gemini API key is configured and valid.",
                     )
                 )
             except Exception as e:

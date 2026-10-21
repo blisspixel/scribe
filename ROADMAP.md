@@ -219,17 +219,33 @@ Shown on that Windows install:
   module, so chunking used the portable duration path. That same run logged its
   own exit as a later session error. The logging defect is fixed under
   Unreleased and still needs to be shown on a later candidate.
+- On 2026-10-21, `scribe doctor --live` from this workspace tree exited 0 with
+  22 passed checks and 2 warnings. OpenRouter was valid, and no provider hard
+  cap at or below the configured $5.00 guard was reported. The guidance names
+  that guard and tells the user to set a provider key limit. The output
+  contained no API key and no account balance. OpenAI was valid. Anthropic was
+  configured. Gemini was not configured. XAI could not be verified. This was
+  the workspace tree at package version 2.13.0, including the Gemini
+  diagnostic fix that is not in the installed v2.13.0 tag.
+- An unexpected OBS stop on the installed 2.13.0 tool, while Scribe was still
+  waiting, exited 1. Counters had advanced and the file had grown. The session
+  outcome was failed, success was false, and the saved error said the partial
+  recording was preserved. ffprobe reported about 9.9 seconds. The proof media
+  was deleted, OBS was left idle, and the previous record directory was restored.
 
 Still required before 2.13.1:
 
 - A clean uninstall and reinstall from the documented tag.
 - The emergency path with an unreachable, non-recording OBS process and a
-  growing file, without adopting another capture.
-- An unexpected stop that retains the media and ends as non-success.
-- Stop and finalization through every safe control path.
-- `scribe doctor --live`, without exposing the key or the balance.
+  growing file, without adopting another capture. That path can start a second
+  OBS instance, and its stop can fall back to a manual request, so it stays
+  unrun until the stop is guaranteed.
+- Ctrl-C and the recording-duration limit. Typed stop and an external
+  unexpected stop are the two control results above. The duration limit's
+  minimum is six minutes, so it has not been used for a short proof.
 - Request metadata beyond the CLI announcement and the session summary.
-- The Windows checks repeated on the exact 2.13.1 candidate.
+- The Windows checks repeated on the exact 2.13.1 candidate, including
+  `scribe doctor --live` and the unexpected-stop result.
 - macOS and Omarchy clean installs, with OBS evidence. The Omarchy record
   includes a Hyprland PipeWire capture.
 
@@ -241,7 +257,10 @@ Make the desktop support statement evidence-based across recording and resident
 voice, with tested fallbacks where an operating system cannot provide parity.
 2.11.0 added the experimental `scribe voice` control plane. This release is the
 live record that can promote or further limit that path. Source, CI, and a
-GitHub release do not close it.
+GitHub release do not close it. Issue #66, the optional content-free Omarchy
+status indicator, is a later feature and stays outside 2.13.1. A claim that the
+indicator reflects a live microphone waits for this release's Omarchy voice
+record.
 
 ### Order of operations
 
@@ -370,8 +389,9 @@ default dependencies and installation commands may change.
    messages before changing dependency metadata.
 4. Build clean-install, upgrade, downgrade, and removal tests for every supported
    profile and platform.
-5. Add Python 3.14 or 3.15 only when required wheels resolve and the full CI and
-   runtime matrix passes. Interpreter release status alone is insufficient.
+5. Keep Python 3.15 unsupported until CTranslate2 and ONNX Runtime publish cp315
+   wheels and the full CI and runtime matrix passes. Python 3.14 is already the
+   default. Interpreter release status alone is insufficient.
 6. Publish a migration guide from 2.x commands and extras, including a rollback
    path that preserves user configuration and recordings.
 
