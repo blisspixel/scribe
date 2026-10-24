@@ -10,6 +10,13 @@ milestones that predate this repository's Git history.
 
 ## [Unreleased]
 
+### Added
+
+- `AGENTS.md` tells sessions to finish or park leftover branches, worktrees,
+  and pull requests before starting a parallel attempt, and to remove a
+  worktree or branch only when its work is merged, contained in main, or
+  pushed.
+
 ## [2.13.1] - 2026-10-24
 
 This patch closes the dependency advisories that turned scheduled CI red and

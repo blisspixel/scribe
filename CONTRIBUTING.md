@@ -6,6 +6,8 @@ local-first defaults, explicit cloud boundaries, and truthful failure reporting.
 ## Before opening a change
 
 - Search existing issues and pull requests.
+- Read [AGENTS.md](AGENTS.md) before starting a session. It covers leftover
+  work, handoff, and cleanup.
 - Open an issue before a large feature or architectural change.
 - Keep changes focused. Separate unrelated fixes.
 - Read [Responsible Use](docs/RESPONSIBLE_USE.md) and
