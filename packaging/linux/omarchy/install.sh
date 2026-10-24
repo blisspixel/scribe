@@ -22,7 +22,7 @@ if [[ -f "${ROOT}/pyproject.toml" ]] && grep -q 'name = "scribe"' "${ROOT}/pypro
   uv tool install --python 3.14 --force --torch-backend auto "scribe[tray] @ ${ROOT}"
 else
   uv tool install --python 3.14 --force --torch-backend auto --with "av<19" \
-    "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+    "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.1"
 fi
 
 uv tool update-shell || true

@@ -4,11 +4,38 @@ All notable changes to Scribe are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version 2.13.0 is the current GitHub release. Version 2.8.1 was the first. Scribe
+Version 2.13.1 is the current GitHub release. Version 2.8.1 was the first. Scribe
 is not published on PyPI. Older versioned sections describe development
 milestones that predate this repository's Git history.
 
 ## [Unreleased]
+
+## [2.13.1] - 2026-10-24
+
+This patch closes the dependency advisories that turned scheduled CI red and
+requires Pillow 13 in installable package metadata. It also ships the
+partial-exit log fix and the Gemini diagnostic redaction. Operational proof
+remains planned for 2.13.2. It does not claim a clean-machine install, a real
+OBS recording, or desktop hardware validation.
+
+### Security
+
+- Locked filelock 4.2.4 replaces 3.32.0. The patched line starts at 4.2.1 and
+  closes CVE-2026-112940, CVE-2026-112913, and CVE-2026-112907 in the SQLite
+  reader/writer lock. filelock is a direct dependency because Torch and
+  Hugging Face Hub install it, so an unlocked tool install cannot stay on
+  3.32.0.
+- Locked virtualenv 21.14.13 replaces 21.14.5. The patched line starts at
+  21.14.9 and closes CVE-2026-113722, CVE-2026-113725, and the other 21.14.5
+  activation advisories. The floor is in the developer group. The installed
+  transcription tool does not depend on virtualenv.
+- Locked setuptools 84.2.1 replaces 83.0.0. The patched line starts at 84.1.0
+  and closes GHSA-xmj3-9gf7-h52w, a Windows wheel-install path escape. The
+  floor is in the build backend and in package metadata because Torch installs
+  setuptools.
+- Base and tray metadata now require Pillow 13.0.0 or newer. The lock already
+  had 13.0.0. Provider image bytes must be a single-frame PNG, JPEG, or WebP
+  before Scribe draws on them or sends them to a vision call.
 
 ### Fixed
 

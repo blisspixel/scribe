@@ -12,10 +12,18 @@ import scripts.check_release_artifact as artifact_check
 PROJECT_VERSION = artifact_check._declared_project_version()
 
 
+_SECURE_REQUIREMENTS = (
+    "deal>=4.1",
+    "Pillow>=13.0.0",
+    "filelock>=4.2.1",
+    "setuptools>=84.1.0",
+)
+
+
 def _write_wheel(
     path: Path,
     *,
-    requirements: tuple[str, ...] = ("deal>=4.1",),
+    requirements: tuple[str, ...] = _SECURE_REQUIREMENTS,
     version: str = PROJECT_VERSION,
     requires_python: str = ">=3.11,<3.15",
     packaged_version: str | None = None,
@@ -66,7 +74,7 @@ def _run_check(repo_root: Path, wheel: Path) -> subprocess.CompletedProcess[str]
 def test_release_artifact_check_accepts_portable_wheel(tmp_path):
     repo_root = Path(__file__).resolve().parents[2]
     wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
-    _write_wheel(wheel, requirements=("deal>=4.1", "typer>=0.9"))
+    _write_wheel(wheel, requirements=(*_SECURE_REQUIREMENTS, "typer>=0.9"))
 
     result = _run_check(repo_root, wheel)
 
@@ -77,7 +85,7 @@ def test_release_artifact_check_accepts_portable_wheel(tmp_path):
 def test_release_artifact_check_accepts_build_directory(tmp_path):
     repo_root = Path(__file__).resolve().parents[2]
     wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
-    _write_wheel(wheel, requirements=("deal>=4.1", "typer>=0.9"))
+    _write_wheel(wheel, requirements=(*_SECURE_REQUIREMENTS, "typer>=0.9"))
 
     result = _run_check(repo_root, tmp_path)
 
@@ -121,6 +129,26 @@ def test_release_artifact_check_rejects_native_payload_in_portable_wheel(tmp_pat
     assert result.returncode == 1
     assert "platform-native payload" in result.stderr
     assert "scribe-tray.exe" in result.stderr
+
+
+def test_release_artifact_check_rejects_pillow_below_the_security_floor(tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    wheel = tmp_path / "scribe-2.8.1-py3-none-any.whl"
+    _write_wheel(
+        wheel,
+        requirements=(
+            "deal>=4.1",
+            "Pillow>=10.0.0",
+            "filelock>=4.2.1",
+            "setuptools>=84.1.0",
+        ),
+    )
+
+    result = _run_check(repo_root, wheel)
+
+    assert result.returncode == 1
+    assert "Pillow>=10.0.0" in result.stderr
+    assert ">=13.0.0" in result.stderr
 
 
 def test_release_artifact_check_rejects_missing_runtime_requirement(tmp_path):

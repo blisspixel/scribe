@@ -205,18 +205,22 @@ def test_mutation_testing_uses_current_schema_and_does_not_mask_crashes() -> Non
 def test_readme_cli_preview_is_a_bounded_png_without_personal_source_data() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
     preview_relative = "docs/assets/cli-recording-preview.png"
+    notes_relative = "docs/assets/cli-notes-preview.png"
     assert preview_relative in readme
+    assert notes_relative in readme
+    assert "gh auth setup-git" not in readme
 
-    preview = REPOSITORY_ROOT / preview_relative
-    image = preview.read_bytes()
-    assert image.startswith(b"\x89PNG\r\n\x1a\n")
-    assert 10_000 < len(image) < 2_000_000
+    for relative in (preview_relative, notes_relative):
+        image = (REPOSITORY_ROOT / relative).read_bytes()
+        assert image.startswith(b"\x89PNG\r\n\x1a\n")
+        assert 10_000 < len(image) < 2_000_000
 
     capture_script = (REPOSITORY_ROOT / "scripts" / "capture_cli_preview.py").read_text(
         encoding="utf-8"
     )
     assert '"./recordings"' in capture_script
     assert "OneDrive" in capture_script
+    assert "Sample meeting" in capture_script
     assert "C:\\Users\\" not in capture_script
 
 

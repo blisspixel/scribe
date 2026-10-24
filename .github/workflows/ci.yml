@@ -360,6 +360,7 @@ jobs:
         run: |
           "$UV_TOOL_BIN_DIR/scribe" --version
           "$UV_TOOL_DIR/scribe/bin/python" scripts/check_local_decode.py
+          "$UV_TOOL_DIR/scribe/bin/python" scripts/check_installed_requirements.py
 
   # ---------------------------------------------------------------------------
   # Native Tray Source Contract

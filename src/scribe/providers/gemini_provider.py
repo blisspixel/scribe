@@ -211,10 +211,9 @@ class GeminiProvider(AIProvider):
 
     def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
         """Analyze an image using Gemini vision."""
-        from PIL import Image
+        from scribe.utils.images import open_provider_image
 
-        # Convert bytes to PIL Image
-        image = Image.open(io.BytesIO(image_data))
+        image = open_provider_image(image_data)
 
         # Generate content with image and text
         response = cast(Any, self.client.models).generate_content(

@@ -16,7 +16,6 @@ def test_meme_compositor_initializes_platform_font_paths():
     assert compositor.font_path is None
 
 
-@pytest.mark.requires_pillow
 def test_overlay_text_draws_top_and_bottom_captions():
     image = Mock()
     image.copy.return_value = Mock(size=(800, 600))
@@ -40,7 +39,6 @@ def test_overlay_text_draws_top_and_bottom_captions():
     assert bottom_call.kwargs["position"] == "bottom"
 
 
-@pytest.mark.requires_pillow
 def test_overlay_text_falls_back_to_default_font_when_truetype_fails():
     image = Mock()
     image.copy.return_value = Mock(size=(400, 400))

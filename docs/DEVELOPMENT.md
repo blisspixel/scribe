@@ -159,8 +159,8 @@ Roadmap targets are planning labels, not delivery dates. Keep work under the
 lockfile, install examples, changelog, and roadmap state in one release candidate
 commit.
 
-Version 2.13.0 is the current GitHub release. The source repository is ready for
-public visibility. No PyPI package or native binary has been published. Broader
+Version 2.13.1 is the current GitHub release. The source repository is public.
+No PyPI package or native binary has been published. Broader
 package and binary distribution remains gated by the live platform evidence in
 the roadmap.
 

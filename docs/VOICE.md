@@ -153,7 +153,7 @@ Install the tray extra, then add only the marked user blocks:
 
 ```bash
 uv tool install --force --python 3.14 \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.1"
 scribe voice check
 scribe voice omarchy-install
 ```

@@ -15,6 +15,7 @@ from rich.terminal_theme import TerminalTheme
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PREVIEW_PATH = REPOSITORY_ROOT / "docs" / "assets" / "cli-recording-preview.png"
+NOTES_PREVIEW_PATH = REPOSITORY_ROOT / "docs" / "assets" / "cli-notes-preview.png"
 
 _TERMINAL_THEME = TerminalTheme(
     background=(10, 14, 26),
@@ -95,7 +96,7 @@ _HTML_TEMPLATE = """\
         <span class="dot yellow"></span>
         <span class="dot green"></span>
       </div>
-      <div class="title">scribe record</div>
+      <div class="title">{title}</div>
     </div>
     <pre>{code}</pre>
   </div>
@@ -180,7 +181,7 @@ def _capture_recording_prompt(temp_root: Path) -> str:
     return output.rstrip()
 
 
-def _render_html(output: str) -> str:
+def _render_html(output: str, *, title: str = "scribe record") -> str:
     decoder = AnsiDecoder()
     console = Console(
         file=io.StringIO(),
@@ -195,8 +196,69 @@ def _render_html(output: str) -> str:
     return console.export_html(
         theme=_TERMINAL_THEME,
         inline_styles=True,
-        code_format=_HTML_TEMPLATE,
+        code_format=_HTML_TEMPLATE.replace("{title}", title),
     )
+
+
+def _sample_notes() -> str:
+    """Synthetic notes in the real notes layout. No personal names or paths."""
+
+    from scribe.utils.notes_content import format_notes
+
+    return format_notes(
+        (
+            "The group agreed to keep transcription on the machine. Cloud notes "
+            "stay an explicit choice, and generated claims still need source review."
+        ),
+        {
+            "current_state_business": ["Recordings stay in the selected output folder."],
+            "current_state_technical": ["The default file profile is local faster-whisper."],
+            "drivers": ["The team wants a searchable transcript without uploading audio."],
+            "blockers": ["A clean macOS and Omarchy recording record is still outstanding."],
+            "future_state_business": ["New installs use the documented GitHub release."],
+            "future_state_technical": [
+                "Desktop voice remains experimental until hardware evidence exists."
+            ],
+            "next_steps": [
+                "Reinstall from the documented release before the next recording.",
+                "Review generated notes against the transcript before sharing them.",
+            ],
+        },
+        {"meeting_name": "Sample meeting", "duration": "12 minutes"},
+    )
+
+
+def capture_notes_preview() -> Path:
+    """Render the synthetic notes sample and return the PNG path."""
+
+    NOTES_PREVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+    output = "scribe sample-meeting.wav --notes\n\n" + _sample_notes()
+    temp_parent = REPOSITORY_ROOT / ".agent"
+    temp_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="notes-preview-", dir=temp_parent) as temp_dir:
+        html_path = Path(temp_dir) / "cli-notes-preview.html"
+        html_path.write_text(_render_html(output, title="scribe notes"), encoding="utf-8")
+        subprocess.run(  # noqa: S603 - executes the resolved, bundled Edge binary only
+            [
+                str(_edge_path()),
+                "--headless=new",
+                "--disable-gpu",
+                "--hide-scrollbars",
+                "--window-size=1060,920",
+                f"--screenshot={NOTES_PREVIEW_PATH}",
+                html_path.as_uri(),
+            ],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+
+    image = NOTES_PREVIEW_PATH.read_bytes()
+    if not image.startswith(b"\x89PNG\r\n\x1a\n") or len(image) < 10_000:
+        raise RuntimeError("Notes preview renderer did not create a valid PNG")
+    return NOTES_PREVIEW_PATH
 
 
 def capture_preview() -> Path:
@@ -234,4 +296,7 @@ def capture_preview() -> Path:
 
 
 if __name__ == "__main__":
-    print(capture_preview())
+    if len(sys.argv) > 1 and sys.argv[1] == "notes":
+        print(capture_notes_preview())
+    else:
+        print(capture_preview())

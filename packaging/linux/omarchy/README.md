@@ -7,7 +7,7 @@ Omarchy installation.
 `install.sh` requires `uv` (`omarchy pkg add uv` or `sudo pacman -S uv`). It
 installs `scribe[tray]` on Python 3.14, then runs `scribe voice omarchy-install`.
 From a checkout, that install uses the checkout. Otherwise it uses the
-`v2.13.0` Git tag.
+`v2.13.1` Git tag.
 
 `uninstall.sh` runs `scribe voice omarchy-remove` and `uv tool uninstall scribe`.
 It preserves XDG Scribe config, data, and state directories and legacy `~/.scribe`.

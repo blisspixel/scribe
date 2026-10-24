@@ -14,6 +14,13 @@ from pathlib import Path, PurePosixPath
 
 WORKSPACE_ONLY_REQUIREMENTS = {"scribe-audio-core"}
 REQUIRED_RUNTIME_REQUIREMENTS = {"deal"}
+# Unlocked installs read these floors from the wheel. The universal lock is not
+# enough: `uv tool install` resolves package metadata on its own.
+SECURITY_REQUIREMENT_FLOORS = {
+    "pillow": ">=13.0.0",
+    "filelock": ">=4.2.1",
+    "setuptools": ">=84.1.0",
+}
 REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
 NATIVE_ARTIFACT_SUFFIXES = frozenset({".dll", ".dylib", ".exe", ".pyd", ".so"})
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +87,28 @@ def _repository_license_files() -> list[Path]:
     for pattern in ("LICENSE*", "COPYING*"):
         candidates.extend(path for path in REPOSITORY_ROOT.glob(pattern) if path.is_file())
     return sorted(set(candidates))
+
+
+def _require_security_floors(requirements: list[str]) -> None:
+    found = {name: [] for name in SECURITY_REQUIREMENT_FLOORS}
+    for requirement in requirements:
+        bare = requirement.split(";", 1)[0].strip()
+        name = _normalized_requirement_name(bare)
+        if name in found:
+            found[name].append(bare.replace(" ", ""))
+    missing = [name for name, specs in found.items() if not specs]
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"Wheel is missing security floor: {joined}")
+    weak = [
+        f"{name} ({spec}; required {SECURITY_REQUIREMENT_FLOORS[name]})"
+        for name, specs in found.items()
+        for spec in specs
+        if SECURITY_REQUIREMENT_FLOORS[name] not in spec
+    ]
+    if weak:
+        joined = ", ".join(weak)
+        raise ValueError(f"Wheel security floor is below the patched release: {joined}")
 
 
 def _normalized_requirement_name(requirement: str) -> str:
@@ -205,6 +234,7 @@ def check_wheel(wheel_path: Path) -> None:
         if missing_runtime_requirements:
             joined = ", ".join(missing_runtime_requirements)
             raise ValueError(f"Wheel is missing required runtime dependency: {joined}")
+        _require_security_floors(requirements)
 
         parser = configparser.ConfigParser()
         parser.read_string(wheel.read(entry_point_names[0]).decode("utf-8"))

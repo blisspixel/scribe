@@ -21,9 +21,7 @@ not lift that cap.
 OBS Studio is required only for recording.
 
 ```bash
-# For a private repository, first authenticate Git (not only the GitHub CLI).
-gh auth setup-git
-uv tool install --with "av<19" --torch-backend auto --python 3.14 git+https://github.com/blisspixel/scribe.git@v2.13.0
+uv tool install --with "av<19" --torch-backend auto --python 3.14 git+https://github.com/blisspixel/scribe.git@v2.13.1
 uv tool update-shell
 
 scribe init
@@ -32,8 +30,7 @@ scribe meeting.mp4
 ```
 
 For a local checkout, `bash packaging/linux/omarchy/install.sh` provides the
-Linux installation path without a private Git URL. Git authentication is only
-needed to fetch private source; it adds no runtime transcription dependency.
+Linux installation path.
 
 Open a new terminal after `uv tool update-shell`. This project is not published
 on PyPI, where an unrelated package uses the same name.
@@ -57,7 +54,7 @@ is inside Scribe's supported range. Install uv, then pin the tool to Python 3.14
 ```bash
 omarchy pkg add uv
 uv tool install --with "av<19" --torch-backend auto --python 3.14 --force \
-  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.0"
+  "scribe[tray] @ git+https://github.com/blisspixel/scribe.git@v2.13.1"
 uv tool update-shell
 scribe init
 scribe doctor
@@ -149,6 +146,11 @@ transcripts. Logs use a user directory rather than creating `./logs` in the
 current working directory; `SCRIBE_LOG_FOLDER` still overrides the location.
 
 ![Scribe recording settings in a terminal](docs/assets/cli-recording-preview.png)
+
+![Sample transcript notes](docs/assets/cli-notes-preview.png)
+
+The notes image is a synthetic sample in the real notes layout. It is not a
+recording of a person.
 
 Use `scribe --help` or `scribe COMMAND --help` for version-matched options. The
 [CLI guide](docs/CLI.md) covers commands, common flags, exit behavior, and session
@@ -275,12 +277,13 @@ diagnostic bundle for review before sharing.
 - [Release process](docs/RELEASE_PROCESS.md)
 - [Responsible use](docs/RESPONSIBLE_USE.md)
 - [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 - [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md)
 - [Complete documentation index](docs/README.md)
 
 ## Project status
 
-Version 2.13.0 is the current GitHub release. It is not published on PyPI.
+Version 2.13.1 is the current GitHub release. It is not published on PyPI.
 Linux compositor voice is experimental and is not a tested Omarchy installation.
 CI
 enforces Ruff, strict mypy, an 81 percent combined

@@ -6,8 +6,8 @@ roadmap records only unfinished work and the evidence required to ship it.
 
 ## Current position
 
-Version 2.13.0 is the current GitHub release. The source repository is ready for
-public visibility. The supported package remains the versioned GitHub wheel and
+Version 2.13.1 is the current GitHub release. The source repository is public.
+The supported package remains the versioned GitHub wheel and
 source distribution. Scribe is not published on PyPI, and no native executable is
 an official release artifact.
 
@@ -69,8 +69,9 @@ The detailed version-sync and release workflow is in
 | 2.11.0 | Released | Experimental Omarchy compositor voice, install and removal packaging, and Linux OBS launch fixes | 2.10.0 |
 | 2.12.0 | Released | Accuracy-first multilingual file transcription, security updates, and recording, install, storage, and cleanup fixes | 2.11.0 |
 | 2.13.0 | Released | Terminal interface, notes honesty and opt-in source references, current Gemini pins, Python 3.11-3.14, and the aiohttp audit fix | 2.12.0 |
-| 2.13.1 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.13.0 |
-| 2.14.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.13.1 evidence gate |
+| 2.13.1 | Released | Close the filelock, virtualenv, and setuptools advisories and require Pillow 13 in package metadata | 2.13.0 |
+| 2.13.2 | Next | Produce clean-machine and real OBS evidence; fix every release-blocking finding | 2.13.1 |
+| 2.14.0 | Planned | Validate desktop recording and resident voice on real hardware, including Omarchy | 2.13.2 evidence gate |
 | 2.15.0 | Planned | Reduce orchestration complexity and deepen failure-path verification | 2.14.0 behavior contract |
 | 3.0.0 | Gated | Redesign dependency extras and interpreter support without weakening local workflows | 2.15.0 boundaries and migration design |
 | 3.1.0 | Conditional | Distribute signed native components only if measured evidence justifies them | 3.0.0 package contract and native decision gate |
@@ -106,11 +107,21 @@ OBS, or desktop hardware record. That unchanged operational-proof scope moves
 from 2.12.1 to 2.13.1, desktop validation to 2.14.0, and maintainability to
 2.15.0.
 
-Version numbers after 2.13.0 are planning targets. SemVer impact discovered during
+2.13.1 then shipped ahead of that proof because scheduled CI was red. The
+October 24 audit named filelock 3.32.0, virtualenv 21.14.5, and setuptools
+83.0.0. The release locks filelock 4.2.4, virtualenv 21.14.13, and setuptools
+84.2.1, and it requires Pillow 13.0.0 in package metadata. Pillow 13.0.0 was
+already the locked wheel. The partial-exit log fix and the Gemini diagnostic
+redaction ship in the same patch. The unchanged operational-proof scope moves
+from 2.13.1 to 2.13.2. Desktop validation stays 2.14.0 and now depends on
+2.13.2. Issue #66, the optional content-free Omarchy status indicator, stays
+outside this patch and with the 2.14.0 desktop record.
+
+Version numbers after 2.13.1 are planning targets. SemVer impact discovered during
 implementation can change a target, but the reason and replacement target must be
 recorded here before release preparation.
 
-## Next release: 2.13.1 operational proof
+## Next release: 2.13.2 operational proof
 
 ### Objective
 
@@ -185,7 +196,7 @@ These observations were made on 2026-10-20 with the published `v2.13.0` tool
 (`f3d000034c342677573fbc1cbc5f47545cd53420`) on one Windows machine. The
 interpreter was Python 3.14.7. The install command was `uv tool install --with
 "av<19" --torch-backend auto --python 3.14` from that tag. This is supporting
-evidence. The 2.13.1 gate remains open until the same checks pass on the exact
+evidence. The 2.13.2 gate remains open until the same checks pass on the exact
 release commit, from a clean install, and on macOS and Omarchy.
 
 Shown on that Windows install:
@@ -217,8 +228,8 @@ Shown on that Windows install:
   unavailable for that native/cloud primary. Acoustic review was partial, with
   one flagged span. The published tool environment had no `scribe_audio_core`
   module, so chunking used the portable duration path. That same run logged its
-  own exit as a later session error. The logging defect is fixed under
-  Unreleased and still needs to be shown on a later candidate.
+  own exit as a later session error. That logging defect is fixed in 2.13.1
+  and still needs to be shown on the 2.13.2 candidate.
 - On 2026-10-21, `scribe doctor --live` from this workspace tree exited 0 with
   22 passed checks and 2 warnings. OpenRouter was valid, and no provider hard
   cap at or below the configured $5.00 guard was reported. The guidance names
@@ -233,7 +244,7 @@ Shown on that Windows install:
   recording was preserved. ffprobe reported about 9.9 seconds. The proof media
   was deleted, OBS was left idle, and the previous record directory was restored.
 
-Still required before 2.13.1:
+Still required before 2.13.2:
 
 - A clean uninstall and reinstall from the documented tag.
 - The emergency path with an unreachable, non-recording OBS process and a
@@ -244,7 +255,7 @@ Still required before 2.13.1:
   unexpected stop are the two control results above. The duration limit's
   minimum is six minutes, so it has not been used for a short proof.
 - Request metadata beyond the CLI announcement and the session summary.
-- The Windows checks repeated on the exact 2.13.1 candidate, including
+- The Windows checks repeated on the exact 2.13.2 candidate, including
   `scribe doctor --live` and the unexpected-stop result.
 - macOS and Omarchy clean installs, with OBS evidence. The Omarchy record
   includes a Hyprland PipeWire capture.
@@ -258,7 +269,7 @@ voice, with tested fallbacks where an operating system cannot provide parity.
 2.11.0 added the experimental `scribe voice` control plane. This release is the
 live record that can promote or further limit that path. Source, CI, and a
 GitHub release do not close it. Issue #66, the optional content-free Omarchy
-status indicator, is a later feature and stays outside 2.13.1. A claim that the
+status indicator, is a later feature and stays outside 2.13.2. A claim that the
 indicator reflects a live microphone waits for this release's Omarchy voice
 record.
 

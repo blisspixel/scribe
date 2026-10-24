@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=83.0", "wheel"]
+requires = ["setuptools>=84.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "2.13.0"
+version = "2.13.1"
 description = "Local-first speech transcription, meeting notes, and recording tools"
 readme = "README.md"
 # The cap stays until CTranslate2 and ONNX Runtime publish cp315 wheels.
@@ -48,7 +48,14 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "tqdm>=4.65.0",
     "python-docx>=1.0.0",
-    "Pillow>=10.0.0",
+    # Pillow 13 fixes the image decoder advisories. The lock already had 13.0.0;
+    # this floor stops an unlocked install from resolving 12.3.0.
+    "Pillow>=13.0.0",
+    # Torch and Hugging Face Hub install filelock. 4.2.1 closes the SQLite
+    # lock advisories in 3.32.0 through 4.2.0.
+    "filelock>=4.2.1",
+    # Torch installs setuptools. 84.1.0 closes GHSA-xmj3-9gf7-h52w.
+    "setuptools>=84.1.0",
     "obsws-python>=1.5.0",
     "httpx>=0.24.0",
     "tenacity>=8.2.0",
@@ -123,7 +130,7 @@ tray = [
     "pyperclip>=1.8.2",
     "pyttsx3>=2.90",
     "pystray>=0.19.5",
-    "Pillow>=10.0.0",
+    "Pillow>=13.0.0",
 ]
 
 # High-quality local neural read-aloud via Kokoro (82M, ONNX, runs on CPU). An
@@ -317,6 +324,9 @@ dev = [
     "pre-commit>=4.0",
     "pip>=26.2",  # Fix PYSEC-2026-3721 in the developer audit environment
     "pip-audit>=2.7",
+    # virtualenv is a developer tool, not a transcription dependency.
+    # 21.14.9 closes the 21.14.5 activation advisories.
+    "virtualenv>=21.14.9",
     "msgpack>=1.2.1",  # Pin above GHSA-6v7p-g79w-8964 until cachecontrol raises its floor
     "mutmut>=3.0",  # mutation testing (Linux/WSL only); advisory CI job, see [tool.mutmut]
     "types-tqdm",

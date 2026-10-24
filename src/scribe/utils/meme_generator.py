@@ -829,12 +829,10 @@ def _generate_meme_image(
 
         # Handle text overlay if using local mode
         if use_local_text and (top_text or bottom_text):
-            # Load image
-            import io
+            # Decode only a single-frame PNG, JPEG, or WebP before drawing.
+            from scribe.utils.images import open_provider_image
 
-            from PIL import Image
-
-            base_image = Image.open(io.BytesIO(image_bytes))
+            base_image = open_provider_image(image_bytes)
 
             # Overlay text locally using Pillow
             from scribe.utils.meme_compositor import MemeCompositor

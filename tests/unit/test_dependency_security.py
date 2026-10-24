@@ -19,6 +19,18 @@ SECURITY_RELEASES = {
     "lightning": ("2.6.5", "2.6.6"),
     "pytorch-lightning": ("2.6.5", "2.6.6"),
 }
+DIRECT_SECURITY_FLOORS = {
+    "pillow": ("12.3.0", "13.0.0"),
+    "filelock": ("4.2.0", "4.2.1"),
+    "setuptools": ("84.0.0", "84.1.0"),
+}
+DEV_SECURITY_FLOORS = {
+    "virtualenv": ("21.14.8", "21.14.9"),
+}
+LOCK_SECURITY_FLOORS = {
+    **DIRECT_SECURITY_FLOORS,
+    **DEV_SECURITY_FLOORS,
+}
 
 
 def test_published_optional_metadata_excludes_vulnerable_releases():
@@ -46,9 +58,46 @@ def test_unused_whisperx_extra_is_retired_without_removing_whisper_models():
     assert {name for name, _ in packages}.isdisjoint({"whisperx", "nltk"})
 
 
+def _named_requirements(requirements: list[str]) -> dict[str, Requirement]:
+    return {
+        canonicalize_name(requirement.name): requirement
+        for requirement in map(Requirement, requirements)
+    }
+
+
+def test_direct_metadata_rejects_vulnerable_releases_and_accepts_the_fix():
+    configuration = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    project = configuration["project"]
+    base = _named_requirements(project["dependencies"])
+    tray = _named_requirements(project["optional-dependencies"]["tray"])
+    build = _named_requirements(configuration["build-system"]["requires"])
+    dev = _named_requirements(configuration["dependency-groups"]["dev"])
+
+    for name, (vulnerable, fixed) in DIRECT_SECURITY_FLOORS.items():
+        requirement = base[name]
+        assert requirement.marker is None
+        assert Version(vulnerable) not in requirement.specifier
+        assert Version(fixed) in requirement.specifier
+    pillow = tray["pillow"]
+    assert Version("12.3.0") not in pillow.specifier
+    assert Version("13.0.0") in pillow.specifier
+    assert pillow.marker is None
+
+    setuptools = build["setuptools"]
+    assert Version("83.0.0") not in setuptools.specifier
+    assert Version("84.1.0") in setuptools.specifier
+
+    for name, (vulnerable, fixed) in DEV_SECURITY_FLOORS.items():
+        requirement = dev[name]
+        assert requirement.marker is None
+        assert Version(vulnerable) not in requirement.specifier
+        assert Version(fixed) in requirement.specifier
+        assert name not in base
+
+
 def test_every_locked_variant_meets_primary_advisory_floors():
     packages, _ = audit_lock.registry_inventory(ROOT / "uv.lock")
-    for name, (_, fixed) in SECURITY_RELEASES.items():
+    for name, (_, fixed) in {**SECURITY_RELEASES, **LOCK_SECURITY_FLOORS}.items():
         versions = [Version(version) for package, version in packages if package == name]
         assert versions
         assert all(version >= Version(fixed) for version in versions)

@@ -692,7 +692,7 @@ class TestMemeGeneratorHelpers:
 
         with (
             patch.dict(os.environ, {"SCRIBE_MEME_TEXT_METHOD": "local"}, clear=False),
-            patch("PIL.Image.open", return_value=Mock()),
+            patch("scribe.utils.images.open_provider_image", return_value=Mock()),
             patch(
                 "scribe.utils.meme_compositor.MemeCompositor.overlay_text", return_value=final_image
             ),
